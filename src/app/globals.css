@@ -1,0 +1,171 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================================================
+   STOCKFLOW DESIGN TOKENS — storefront (Mode A palette)
+   FRONTEND-AI-RULES.md §3 — chỉ dùng Ink+Blue. KHÔNG caramel.
+   ==========================================================================*/
+
+/* Light (mặc định) */
+:root {
+  color-scheme: light;
+  --bg-base: #f3f4f6;
+  --bg-surface: #ffffff;
+  --bg-subtle: #f7f8fa;
+  --bg-muted: #eef0f3;
+  --border-default: #dadde1;
+  --border-strong: #c5cad1;
+  --ink-primary: #1a1b18;
+  --ink-secondary: #5c5e58;
+  --ink-tertiary: #8a8c85;
+  --ink-inverse: #ffffff;
+  --brand: #1a1b18;
+  --brand-hover: #000000;
+  --accent: #1e88e5;
+  --positive: #1f9d55;
+  --info: #2b7fc4;
+  --warning: #d98207;
+  --danger: #d23b3b;
+  --neutral: #6b6e68;
+  --muted: #9a9c95;
+  --special: #7c5cbf;
+  /* storefront: airy spacing (FRONTEND-AI-RULES §5) */
+  --card-pad: 24px;
+  --card-radius: var(--r-lg);
+  --el-gap: 12px;
+  --card-shadow: var(--sh-md);
+  --card-border: none;
+  /* radius */
+  --r-sm: 4px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  --r-full: 9999px;
+  /* shadows */
+  --sh-sm: 0 1px 2px rgba(26,27,24,0.06), 0 1px 3px rgba(26,27,24,0.08);
+  --sh-md: 0 4px 12px rgba(26,27,24,0.08);
+  --sh-lg: 0 12px 32px rgba(26,27,24,0.14);
+}
+
+/* Dark */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-base: #0e0f11;
+  --bg-surface: #17181b;
+  --bg-subtle: #1f2124;
+  --bg-muted: #2a2c30;
+  --border-default: #2e3034;
+  --border-strong: #3d4045;
+  --ink-primary: #f4f4f1;
+  --ink-secondary: #a8aaa3;
+  --ink-tertiary: #76786f;
+  --ink-inverse: #1a1b18;
+  --brand: #f4f4f1;
+  --brand-hover: #ffffff;
+  --accent: #4ea6f0;
+}
+
+/* ============================================================================
+   TAILWIND v4 @theme
+   ==========================================================================*/
+@theme inline {
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-xl: var(--r-xl);
+  --radius-full: var(--r-full);
+  --color-bg-base: var(--bg-base);
+  --color-bg-surface: var(--bg-surface);
+  --color-bg-subtle: var(--bg-subtle);
+  --color-bg-muted: var(--bg-muted);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+  --color-ink-primary: var(--ink-primary);
+  --color-ink-secondary: var(--ink-secondary);
+  --color-ink-tertiary: var(--ink-tertiary);
+  --color-ink-inverse: var(--ink-inverse);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-accent: var(--accent);
+  --color-positive: var(--positive);
+  --color-info: var(--info);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-neutral: var(--neutral);
+  --color-muted-tone: var(--muted);
+  --color-special: var(--special);
+  /* shadcn mapping */
+  --background: var(--bg-base);
+  --foreground: var(--ink-primary);
+  --card: var(--bg-surface);
+  --card-foreground: var(--ink-primary);
+  --popover: var(--bg-surface);
+  --popover-foreground: var(--ink-primary);
+  --primary: var(--brand);
+  --primary-foreground: var(--ink-inverse);
+  --secondary: var(--bg-subtle);
+  --secondary-foreground: var(--ink-primary);
+  --muted: var(--bg-muted);
+  --muted-foreground: var(--ink-tertiary);
+  --accent-bg: var(--bg-subtle);
+  --accent-foreground: var(--ink-primary);
+  --destructive: var(--danger);
+  --border: var(--border-default);
+  --input: var(--border-default);
+  --ring: var(--brand);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --chart-1: var(--positive);
+  --chart-2: var(--info);
+  --chart-3: var(--warning);
+  --chart-4: var(--special);
+  --chart-5: var(--danger);
+}
+
+@layer base {
+  * {
+    @apply border-border-default outline-brand/50;
+  }
+  body {
+    @apply bg-bg-base text-ink-primary antialiased;
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    line-height: 1.6;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  :focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
