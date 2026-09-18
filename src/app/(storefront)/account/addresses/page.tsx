@@ -1,20 +1,73 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { Plus } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
-
-import { AddressBook } from "@/components/storefront/address-book";
-
-const addresses = [{ id: "a1", name: "Nguyễn An", phone: "0900000000", line1: "12 Nguyễn Huệ", ward: "Bến Nghé", district: "Quận 1", province: "TP. Hồ Chí Minh", default: true }, { id: "a2", name: "Nguyễn An", phone: "0900000000", line1: "1 Võ Văn Ngân", ward: "Linh Chiểu", district: "Thủ Đức", province: "TP. Hồ Chí Minh" }];
+import { Button } from "@/components/ui/button";
+import { PageContainer, PageHeader, EmptyState } from "@/components/shared";
+import { AddressBook } from "@/features/customer/components/address-book";
+import { useAddresses } from "@/features/customer/queries";
+import { useDeleteAddress as useDeleteMutation, useSetAddressDefault as useSetDefaultMutation } from "@/features/customer/mutations";
 
 export default function AddressesPage() {
   const router = useRouter();
 
+  const { data: addresses, isLoading, error } = useAddresses();
+  const deleteMutation = useDeleteMutation();
+  const setDefaultMutation = useSetDefaultMutation();
+
+  const handleEdit = (id: string) => {
+    router.push(`${STORE_ROUTES.account.addresses}/${id}/edit`);
+  };
+
+  const handleDelete = (id: string) => {
+    deleteMutation.mutate(id);
+  };
+
+  const handleSetDefault = (id: string) => {
+    setDefaultMutation.mutate(id);
+  };
+
   return (
-    <section className="mx-auto w-full max-w-4xl space-y-4 px-4 py-8 sm:px-6 lg:px-8">
-      <div><h1 className="font-display text-3xl font-bold">Sổ địa chỉ</h1><p className="text-ink-secondary">Địa chỉ Việt Nam 3 cấp cho checkout.</p></div>
-      <AddressBook addresses={addresses} onEdit={(id) => router.push(`${STORE_ROUTES.account.addresses}/${id}/edit`)} onDelete={() => undefined} onSetDefault={() => undefined} />
-    </section>
+    <PageContainer className="max-w-5xl">
+      <PageHeader
+        title="Sổ địa chỉ"
+        subtitle="Quản lý địa chỉ nhận hàng và thanh toán của bạn."
+        actions={
+          <Button onClick={() => router.push(`${STORE_ROUTES.account.addresses}/new`)} className="rounded-full">
+            <Plus className="mr-2 size-4" />
+            Thêm địa chỉ mới
+          </Button>
+        }
+      />
+
+      {isLoading ? (
+        <div className="flex justify-center p-8 text-ink-secondary">Đang tải...</div>
+      ) : error ? (
+        <div className="flex justify-center p-8 text-danger">Lỗi: {(error as Error).message}</div>
+      ) : addresses?.length === 0 ? (
+        <div className="mt-8">
+          <EmptyState
+            title="Sổ địa chỉ của bạn đang trống"
+            description="Hãy thêm địa chỉ để thanh toán nhanh hơn trong những lần mua hàng tới."
+            action={
+              <Button onClick={() => router.push(`${STORE_ROUTES.account.addresses}/new`)} className="rounded-full">
+                Thêm địa chỉ đầu tiên
+              </Button>
+            }
+          />
+        </div>
+      ) : (
+        <div className="mt-8">
+          <AddressBook
+            addresses={addresses ?? []}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onSetDefault={handleSetDefault}
+          />
+        </div>
+      )}
+    </PageContainer>
   );
 }

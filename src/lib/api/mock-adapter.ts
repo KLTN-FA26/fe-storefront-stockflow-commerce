@@ -97,7 +97,7 @@ async function mockAdapter(config: AxiosRequestConfig): Promise<MockResponse> {
   const matched = matchRoute(method, url);
   if (!matched) {
     console.warn(`[mock-adapter] No handler for ${method} ${url}`);
-    return { status: 404, data: { message: "Not found" }, headers: {} };
+    return { status: 404, data: { message: `No handler for ${method} ${url}` }, headers: {} };
   }
 
   // Simulate latency

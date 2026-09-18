@@ -1,44 +1,76 @@
 "use client";
 
-import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter, useParams } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
-
-import { useVietnamAddresses } from "@/hooks/use-vietnam-addresses";
-
 import { Button } from "@/components/ui/button";
-import { AddressForm } from "@/components/storefront/address-form";
+import { PageContainer, PageHeader, Skeleton } from "@/components/shared";
+import { AddressForm } from "@/features/customer/components/address-form";
+import { useUpdateAddress } from "@/features/customer/mutations";
+import { useAddresses } from "@/features/customer/queries";
+import type { AddressFormValues } from "@/features/customer/schemas";
 
-interface PageProps {
-  params: Promise<{ id: string }>;
-}
+export default function EditAddressPage() {
+  const router = useRouter();
+  const params = useParams();
+  const id = params.id as string;
+  
+  const { data: addresses, isLoading } = useAddresses();
+  const updateMutation = useUpdateAddress();
 
-export default function EditAddressPage({ params }: PageProps) {
-  void params;
-  const [address, setAddress] = useState({
-    name: "Nguyễn An",
-    phone: "0900000000",
-    province: "",
-    ward: "",
-    line1: "12 Nguyễn Huệ",
-  });
-  const { provinces, wards, loading } = useVietnamAddresses(address.province);
+  const address = addresses?.find((a) => a.id === id);
+
+  const handleSubmit = (data: AddressFormValues) => {
+    updateMutation.mutate(
+      { id, data },
+      {
+        onSuccess: () => {
+          router.push(STORE_ROUTES.account.addresses);
+        },
+      }
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <PageContainer className="max-w-3xl">
+        <Skeleton className="h-8 w-48 mb-6" />
+        <Skeleton className="h-[400px] w-full rounded-xl" />
+      </PageContainer>
+    );
+  }
+
+  if (!address) {
+    return (
+      <PageContainer className="max-w-3xl">
+        <div className="p-8 text-center text-danger font-medium">Không tìm thấy địa chỉ!</div>
+      </PageContainer>
+    );
+  }
 
   return (
-    <section className="mx-auto w-full max-w-3xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
-      <div>
-        <p className="text-sm font-semibold uppercase tracking-wide text-accent">Sổ địa chỉ</p>
-        <h1 className="font-display text-3xl font-bold">Chỉnh sửa địa chỉ</h1>
-        <p className="mt-2 text-ink-secondary">Cập nhật thông tin nhận hàng dùng cho checkout.</p>
-      </div>
-      <AddressForm value={address} provinces={provinces} wards={wards} loading={loading} onChange={setAddress} />
-      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-        <Button asChild variant="secondary" className="rounded-full">
-          <Link href={STORE_ROUTES.account.addresses}>Hủy</Link>
+    <PageContainer className="max-w-3xl">
+      <div className="flex items-center gap-4 mb-6">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => router.back()}
+          className="rounded-full"
+        >
+          <ArrowLeft className="size-5" />
         </Button>
-        <Button className="rounded-full">Lưu địa chỉ</Button>
+        <PageHeader title="Sửa địa chỉ" />
       </div>
-    </section>
+
+      <div className="w-full">
+        <AddressForm
+          defaultValues={address}
+          onSubmit={handleSubmit}
+          isSubmitting={updateMutation.isPending}
+        />
+      </div>
+    </PageContainer>
   );
 }

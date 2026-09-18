@@ -437,6 +437,131 @@ export function registerAllMockRoutes(): void {
   });
 
   /* ====================================================================
+   * Module 18 — Customer Address (Storefront)
+   * ==================================================================*/
+
+  registerMockRoute("GET", "/customers/me/addresses", async () => {
+    const { customers } = MOCK_DATA;
+    // Hardcode CUS-0010 for storefront testing (người dùng đang login)
+    const customer = customers?.find((c) => c.customerId === "CUS-0010");
+    if (!customer) return { status: 404, data: { message: "Customer CUS-0010 not found in mock data" }, headers: {} };
+    
+    // Map từ CustomerAddress (DB) sang Address (Frontend DTO)
+    const mapped = customer.addresses.map(a => ({
+      id: a.addressId,
+      recipientName: a.recipientName,
+      recipientPhone: a.phone,
+      province: a.address.province,
+      city: a.address.district || "", 
+      ward: a.address.ward,
+      line1: a.address.street,
+      postalCode: a.address.postalCode,
+      country: a.address.country,
+      isDefault: a.isDefaultShipping
+    }));
+    return { status: 200, data: mapped, headers: {} };
+  });
+
+  registerMockRoute("POST", "/customers/me/addresses", async (config) => {
+    const { customers } = MOCK_DATA;
+    const body = typeof config.data === "string" ? JSON.parse(config.data) : config.data;
+    const customer = customers.find((c) => c.customerId === "CUS-0010");
+    if (!customer) return { status: 404, data: { message: "Not found" }, headers: {} };
+    
+    if (body.isDefault) {
+      customer.addresses.forEach(a => { a.isDefaultShipping = false; a.isDefaultBilling = false; });
+    }
+    
+    const newAddress = {
+      addressId: `ADDR-${Date.now()}`,
+      customerId: "CUS-0010",
+      label: "Nhà riêng",
+      recipientName: body.recipientName,
+      phone: body.recipientPhone,
+      address: {
+        street: body.line1,
+        ward: body.ward,
+        district: body.city,
+        province: body.province,
+        postalCode: body.postalCode,
+        country: body.country,
+      },
+      isDefaultShipping: body.isDefault,
+      isDefaultBilling: body.isDefault,
+    };
+    customer.addresses.push(newAddress);
+    return { status: 201, data: body, headers: {} };
+  });
+
+  registerMockRoute("PUT", "/customers/me/addresses/:id", async (config) => {
+    const { customers } = MOCK_DATA;
+    const { id } = (config as Record<string, unknown>)._mockParams as Record<string, string>;
+    const body = typeof config.data === "string" ? JSON.parse(config.data) : config.data;
+    const customer = customers.find((c) => c.customerId === "CUS-0010");
+    if (!customer) return { status: 404, data: { message: "Not found" }, headers: {} };
+    
+    const index = customer.addresses.findIndex(a => a.addressId === id);
+    if (index === -1) return { status: 404, data: { message: "Address not found" }, headers: {} };
+    
+    if (body.isDefault) {
+      customer.addresses.forEach(a => { a.isDefaultShipping = false; a.isDefaultBilling = false; });
+    }
+    
+    const targetAddress = customer.addresses[index]!;
+    customer.addresses[index] = {
+      addressId: targetAddress.addressId,
+      customerId: targetAddress.customerId,
+      label: targetAddress.label,
+      recipientName: body.recipientName,
+      phone: body.recipientPhone,
+      address: {
+        street: body.line1,
+        ward: body.ward,
+        district: body.city,
+        province: body.province,
+        postalCode: body.postalCode,
+        country: body.country,
+      },
+      isDefaultShipping: body.isDefault || targetAddress.isDefaultShipping,
+      isDefaultBilling: body.isDefault || targetAddress.isDefaultBilling,
+    };
+    return { status: 200, data: body, headers: {} };
+  });
+
+  registerMockRoute("DELETE", "/customers/me/addresses/:id", async (config) => {
+    const { customers } = MOCK_DATA;
+    const { id } = (config as Record<string, unknown>)._mockParams as Record<string, string>;
+    const customer = customers.find((c) => c.customerId === "CUS-0010");
+    if (!customer) return { status: 404, data: { message: "Not found" }, headers: {} };
+    
+    const index = customer.addresses.findIndex(a => a.addressId === id);
+    if (index === -1) return { status: 404, data: { message: "Address not found" }, headers: {} };
+    
+    const targetAddress = customer.addresses[index]!;
+    if (targetAddress.isDefaultShipping) {
+      return { status: 400, data: { message: "Không thể xoá địa chỉ mặc định" }, headers: {} };
+    }
+    
+    customer.addresses.splice(index, 1);
+    return { status: 200, data: { success: true }, headers: {} };
+  });
+
+  registerMockRoute("PATCH", "/customers/me/addresses/:id/default", async (config) => {
+    const { customers } = MOCK_DATA;
+    const { id } = (config as Record<string, unknown>)._mockParams as Record<string, string>;
+    const customer = customers.find((c) => c.customerId === "CUS-0010");
+    if (!customer) return { status: 404, data: { message: "Not found" }, headers: {} };
+    
+    const address = customer.addresses.find(a => a.addressId === id);
+    if (!address) return { status: 404, data: { message: "Address not found" }, headers: {} };
+    
+    customer.addresses.forEach(a => { a.isDefaultShipping = false; a.isDefaultBilling = false; });
+    address.isDefaultShipping = true;
+    address.isDefaultBilling = true;
+    return { status: 200, data: { success: true }, headers: {} };
+  });
+
+  /* ====================================================================
    * Staff Users (for admin user management)
    * ==================================================================*/
 
