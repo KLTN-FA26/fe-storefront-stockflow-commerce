@@ -16,7 +16,7 @@ export interface AddressOption {
   label: string;
 }
 
-const API_BASE = "https://provinces.open-api.vn/api/v2";
+const API_BASE = process.env.NEXT_PUBLIC_VIETNAM_PROVINCES_API_URL || "https://provinces.open-api.vn/api/v2";
 
 function toOptions(items: ProvinceApiItem[] | undefined): AddressOption[] {
   return (items ?? []).map((item) => ({ value: String(item.code), label: item.name }));

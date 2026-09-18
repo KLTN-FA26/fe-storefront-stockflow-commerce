@@ -446,20 +446,8 @@ export function registerAllMockRoutes(): void {
     const customer = customers?.find((c) => c.customerId === "CUS-0010");
     if (!customer) return { status: 404, data: { message: "Customer CUS-0010 not found in mock data" }, headers: {} };
     
-    // Map từ CustomerAddress (DB) sang Address (Frontend DTO)
-    const mapped = customer.addresses.map(a => ({
-      id: a.addressId,
-      recipientName: a.recipientName,
-      recipientPhone: a.phone,
-      province: a.address.province,
-      city: a.address.district || "", 
-      ward: a.address.ward,
-      line1: a.address.street,
-      postalCode: a.address.postalCode,
-      country: a.address.country,
-      isDefault: a.isDefaultShipping
-    }));
-    return { status: 200, data: mapped, headers: {} };
+    // Tạm thời trả về mảng rỗng để xem EmptyState theo yêu cầu của user
+    return { status: 200, data: [], headers: {} };
   });
 
   registerMockRoute("POST", "/customers/me/addresses", async (config) => {

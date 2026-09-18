@@ -79,8 +79,9 @@ export function AddressForm({
   }, [provinceValue, provinces, provinceCode]);
 
   useEffect(() => {
-    if (defaultValues?.province !== provinceValue) {
-      setValue("ward", "", { shouldValidate: true });
+    const initialProvince = defaultValues?.province ?? "";
+    if (provinceValue !== initialProvince && provinceValue !== "") {
+      setValue("ward", "", { shouldValidate: false });
     }
   }, [provinceValue, setValue, defaultValues?.province]);
 

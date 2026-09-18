@@ -35,10 +35,12 @@ export default function AddressesPage() {
         title="Sổ địa chỉ"
         subtitle="Quản lý địa chỉ nhận hàng và thanh toán của bạn."
         actions={
-          <Button onClick={() => router.push(`${STORE_ROUTES.account.addresses}/new`)} className="rounded-full">
-            <Plus className="mr-2 size-4" />
-            Thêm địa chỉ mới
-          </Button>
+          addresses && addresses.length > 0 ? (
+            <Button onClick={() => router.push(`${STORE_ROUTES.account.addresses}/new`)} className="rounded-full">
+              <Plus className="mr-2 size-4" />
+              Thêm địa chỉ mới
+            </Button>
+          ) : undefined
         }
       />
 
