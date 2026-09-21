@@ -55,6 +55,15 @@ export function registerAllMockRoutes(): void {
     return { status: 200, data: mockCustomerProfile, headers: {} };
   });
 
+  registerMockRoute("PUT", "/v1/identity/auth/password", async (config) => {
+    const body = typeof config.data === "string" ? JSON.parse(config.data) : config.data;
+    return {
+      status: 200,
+      data: { revokedSessions: body?.logoutOtherDevices ? 2 : 0 },
+      headers: {},
+    };
+  });
+
   /* ====================================================================
    * Module 01 — Products / SKUs / Categories / Suppliers
    * ==================================================================*/
