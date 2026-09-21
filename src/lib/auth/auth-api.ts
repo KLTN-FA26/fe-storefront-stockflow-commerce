@@ -6,6 +6,7 @@
  */
 
 import { api } from "@/lib/api/client";
+import { z } from "zod";
 
 export interface LoginRequest {
   username: string;
@@ -18,9 +19,15 @@ export interface LoginResponse {
   expiresInSeconds: number;
 }
 
+export const loginResponseSchema = z.object({
+  accessToken: z.string().min(1),
+  tokenType: z.string().min(1),
+  expiresInSeconds: z.number().finite().positive(),
+});
+
 export async function loginApi(credentials: LoginRequest): Promise<LoginResponse> {
   const { data } = await api.post<LoginResponse>("/v1/identity/auth/login", credentials);
-  return data;
+  return loginResponseSchema.parse(data);
 }
 
 export async function logoutApi(): Promise<void> {
@@ -33,5 +40,5 @@ export async function logoutApi(): Promise<void> {
 
 export async function mockLoginApi(credentials: LoginRequest): Promise<LoginResponse> {
   const { data } = await api.post<LoginResponse>("/v1/identity/auth/login", credentials);
-  return data;
+  return loginResponseSchema.parse(data);
 }

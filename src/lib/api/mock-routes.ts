@@ -9,6 +9,86 @@
 
 import { MOCK_DATA, registerMockRoute, paginate } from "./mock-adapter";
 
+export function mockPasswordResponse(body: unknown) {
+  const request = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const fieldErrors = [];
+  if (typeof request.currentPassword !== "string" || request.currentPassword.trim() === "") {
+    fieldErrors.push({
+      field: "currentPassword",
+      message: "currentPassword is required",
+      code: "NotBlank",
+    });
+  }
+  if (typeof request.newPassword !== "string" || request.newPassword.trim() === "") {
+    fieldErrors.push({
+      field: "newPassword",
+      message: "newPassword is required",
+      code: "NotBlank",
+    });
+  } else if (
+    request.newPassword.length < 10 ||
+    request.newPassword.length > 72 ||
+    !/[A-Z]/.test(request.newPassword) ||
+    !/[a-z]/.test(request.newPassword) ||
+    !/\d/.test(request.newPassword)
+  ) {
+    fieldErrors.push({
+      field: "newPassword",
+      message: "newPassword must contain upper-case, lower-case and digit characters",
+      code: "Pattern",
+    });
+  }
+  if (fieldErrors.length > 0) {
+    return {
+      status: 400,
+      data: {
+        success: false,
+        errorCode: "VALIDATION_FAILED",
+        message: "Dữ liệu không hợp lệ",
+        fieldErrors,
+        correlationId: "mock-password-validation",
+        timestamp: new Date().toISOString(),
+      },
+      headers: {},
+    };
+  }
+  if (request.currentPassword !== "CurrentPass123") {
+    return {
+      status: 400,
+      data: {
+        success: false,
+        errorCode: "INVALID_CURRENT_PASSWORD",
+        message: "Mật khẩu hiện tại không đúng",
+        correlationId: "mock-password-current",
+        timestamp: new Date().toISOString(),
+      },
+      headers: {},
+    };
+  }
+  if (request.newPassword === request.currentPassword) {
+    return {
+      status: 400,
+      data: {
+        success: false,
+        errorCode: "PASSWORD_UNCHANGED",
+        message: "Mật khẩu mới phải khác mật khẩu hiện tại",
+        correlationId: "mock-password-unchanged",
+        timestamp: new Date().toISOString(),
+      },
+      headers: {},
+    };
+  }
+  return {
+    status: 200,
+    data: {
+      success: true,
+      data: { revokedSessions: request.logoutOtherDevices ? 2 : 0 },
+      timestamp: new Date().toISOString(),
+    },
+    headers: {},
+  };
+}
+
 export function registerAllMockRoutes(): void {
   /* ====================================================================
    * Module 18 — Customer profile (self-service)
@@ -57,11 +137,7 @@ export function registerAllMockRoutes(): void {
 
   registerMockRoute("PUT", "/v1/identity/auth/password", async (config) => {
     const body = typeof config.data === "string" ? JSON.parse(config.data) : config.data;
-    return {
-      status: 200,
-      data: { revokedSessions: body?.logoutOtherDevices ? 2 : 0 },
-      headers: {},
-    };
+    return mockPasswordResponse(body);
   });
 
   /* ====================================================================

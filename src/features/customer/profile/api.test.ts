@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api/client";
 
 import { getCustomerProfile, updateCustomerProfile } from "./api";
-import { customerProfileSchema } from "./schemas";
+import { customerProfileFormSchema, customerProfileSchema } from "./schemas";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -28,6 +28,24 @@ describe("customer profile API boundary", () => {
 
   it("rejects an invalid profile DTO instead of fabricating fields", () => {
     expect(() => customerProfileSchema.parse({ ...profile, version: "3" })).toThrow();
+  });
+
+  it.each(["0912345678", "+84912345678", "024 3825 1234", "(024)-3825.1234"])(
+    "accepts a backend-valid Vietnamese phone: %s",
+    (phone) => {
+      expect(customerProfileFormSchema.parse({ fullName: "Nguyễn Hoài Nam", phone }).phone).toBe(
+        phone,
+      );
+    },
+  );
+
+  it("accepts an optional blank phone and rejects an invalid number", () => {
+    expect(customerProfileFormSchema.parse({ fullName: "Nguyễn Hoài Nam", phone: "" }).phone).toBe(
+      "",
+    );
+    expect(() =>
+      customerProfileFormSchema.parse({ fullName: "Nguyễn Hoài Nam", phone: "12345" }),
+    ).toThrow();
   });
 
   it("sends only editable fields and the current version", async () => {

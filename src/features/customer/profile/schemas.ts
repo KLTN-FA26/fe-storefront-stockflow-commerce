@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { phone, requiredString } from "@/lib/validation/primitives";
+import { requiredString, vietnamPhone } from "@/lib/validation/primitives";
 
 export const customerProfileSchema = z
   .object({
@@ -16,12 +16,7 @@ export const customerProfileSchema = z
   })
   .strict();
 
-const profilePhoneSchema = z
-  .string()
-  .trim()
-  .refine((value) => value === "" || phone.safeParse(value).success, {
-    message: "Số điện thoại không hợp lệ",
-  });
+const profilePhoneSchema = vietnamPhone.trim();
 
 export const customerProfileFormSchema = z.object({
   fullName: requiredString("Họ và tên là bắt buộc").max(200, "Họ và tên tối đa 200 ký tự"),
@@ -30,7 +25,7 @@ export const customerProfileFormSchema = z.object({
 
 export const customerProfileUpdateSchema = z.object({
   fullName: z.string().trim().min(1).max(200),
-  phone: z.string().trim().nullable(),
+  phone: vietnamPhone.transform((value) => value.trim()).nullable(),
   version: z.number().int().nonnegative(),
 });
 

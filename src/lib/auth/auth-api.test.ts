@@ -30,4 +30,15 @@ describe("auth API contract", () => {
 
     expect(post).toHaveBeenCalledWith("/v1/identity/auth/logout");
   });
+
+  it.each([
+    { tokenType: "Bearer", expiresInSeconds: 28_800 },
+    { accessToken: "", tokenType: "Bearer", expiresInSeconds: 28_800 },
+    { accessToken: "access", tokenType: "Bearer", expiresInSeconds: "28800" },
+  ])("rejects malformed login payloads at the API boundary", async (data) => {
+    vi.spyOn(api, "post").mockResolvedValueOnce({ data });
+    await expect(
+      loginApi({ username: "customer@example.com", password: "Password1234" }),
+    ).rejects.toThrow();
+  });
 });

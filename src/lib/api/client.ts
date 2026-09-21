@@ -16,6 +16,7 @@
  */
 
 import axios, { type AxiosError, type AxiosResponse } from "axios";
+import { APP_ROUTES } from "@/constants";
 import { ApiError, type ApiErrorBody } from "./error";
 import { useAuthStore } from "@/lib/auth/auth-store";
 
@@ -73,7 +74,7 @@ function unwrapSuccess(response: AxiosResponse<unknown>): AxiosResponse<unknown>
 function logoutAfterUnauthorized(): void {
   useAuthStore.getState().logout();
 
-  if (typeof window !== "undefined") window.location.replace("/login");
+  if (typeof window !== "undefined") window.location.replace(APP_ROUTES.login);
 }
 
 api.interceptors.response.use(unwrapSuccess, (err: AxiosError<ApiErrorBody>) => {
