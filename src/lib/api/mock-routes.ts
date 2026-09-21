@@ -11,6 +11,51 @@ import { MOCK_DATA, registerMockRoute, paginate } from "./mock-adapter";
 
 export function registerAllMockRoutes(): void {
   /* ====================================================================
+   * Module 18 — Customer profile (self-service)
+   * ==================================================================*/
+
+  let mockCustomerProfile = {
+    customerId: "CUS-0010",
+    userId: "USER-CUS-0010",
+    fullName: "Nguyễn Hoài Nam",
+    email: "nam.nguyen@example.vn",
+    phone: "+84908111222",
+    segmentId: null,
+    status: "ACTIVE",
+    version: 0,
+    createdAt: "2026-01-10T02:00:00Z",
+  };
+
+  registerMockRoute("GET", "/v1/customers/me", async () => ({
+    status: 200,
+    data: mockCustomerProfile,
+    headers: {},
+  }));
+
+  registerMockRoute("PUT", "/v1/customers/me", async (config) => {
+    const body = typeof config.data === "string" ? JSON.parse(config.data) : config.data;
+    if (body?.version !== mockCustomerProfile.version) {
+      return {
+        status: 409,
+        data: {
+          errorCode: "OPTIMISTIC_LOCK",
+          message: "Thông tin đã được cập nhật ở nơi khác",
+          correlationId: "mock-customer-conflict",
+        },
+        headers: {},
+      };
+    }
+
+    mockCustomerProfile = {
+      ...mockCustomerProfile,
+      fullName: body.fullName,
+      phone: body.phone,
+      version: mockCustomerProfile.version + 1,
+    };
+    return { status: 200, data: mockCustomerProfile, headers: {} };
+  });
+
+  /* ====================================================================
    * Module 01 — Products / SKUs / Categories / Suppliers
    * ==================================================================*/
 
