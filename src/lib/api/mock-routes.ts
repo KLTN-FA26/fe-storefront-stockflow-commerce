@@ -428,26 +428,105 @@ export function registerAllMockRoutes(): void {
     return { status: 200, data: paginate(filtered, page, pageSize), headers: {} };
   });
 
+  // ── /orders/me MUST be registered BEFORE /orders/:id to avoid :id matching "me" ──
+
+  const paginateMyOrders = (
+    items: typeof MOCK_DATA.orders,
+    page: number,
+    size: number,
+  ): {
+    items: typeof MOCK_DATA.orders;
+    page: number;
+    size: number;
+    totalElements: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+  } => {
+    const start = page * size;
+    const sliced = items.slice(start, start + size);
+    return {
+      items: sliced,
+      page,
+      size,
+      totalElements: items.length,
+      totalPages: Math.max(1, Math.ceil(items.length / size)),
+      hasNext: start + size < items.length,
+      hasPrevious: page > 0,
+    };
+  };
+
+  // GET /orders/me — BE 0-indexed pagination. DEMO_CUSTOMER_ID = "CUS-0005".
+  registerMockRoute("GET", "/orders/me", async (config) => {
+    const { orders } = MOCK_DATA;
+    const params = new URLSearchParams(config.url?.split("?")[1] ?? "");
+    const page = Math.max(0, Number(params.get("page")) || 0); // BE 0-indexed
+    const size = Number(params.get("size")) || 10;
+
+    const mine = orders.filter((o) => o.customerId === "CUS-0005");
+    return { status: 200, data: paginateMyOrders(mine, page, size), headers: {} };
+  });
+
   registerMockRoute("GET", "/orders/:id", async (config) => {
     const { orders } = MOCK_DATA;
     const { id } = (config as Record<string, unknown>)._mockParams as Record<string, string>;
     const order = orders.find((o) => o.orderId === id);
-    if (!order) return { status: 404, data: { message: "Order not found" }, headers: {} };
+    // Cùng 404 cho đơn không tồn tại lẫn đơn của khách khác — không leak ownership.
+    if (!order || order.customerId !== "CUS-0005") {
+      return { status: 404, data: { message: "Order not found" }, headers: {} };
+    }
     return { status: 200, data: order, headers: {} };
+  });
+
+  // POST /orders/:id/cancellation — 404 nếu không phải đơn của khách (cùng shape với GET 404),
+  // 409 nếu trạng thái không cho phép huỷ, thành công thì set status = "Cancelled".
+  registerMockRoute("POST", "/orders/:id/cancellation", async (config) => {
+    const { orders } = MOCK_DATA;
+    const { id } = (config as Record<string, unknown>)._mockParams as Record<string, string>;
+    const order = orders.find((o) => o.orderId === id);
+    if (!order || order.customerId !== "CUS-0005") {
+      return { status: 404, data: { message: "Order not found" }, headers: {} };
+    }
+    if (
+      order.status === "Shipped" ||
+      order.status === "In Transit" ||
+      order.status === "Delivered" ||
+      order.status === "Completed" ||
+      order.status === "Cancelled"
+    ) {
+      return {
+        status: 409,
+        data: { code: "CONFLICT", message: "Đơn hàng không thể huỷ ở trạng thái hiện tại" },
+        headers: {},
+      };
+    }
+    order.status = "Cancelled";
+    return { status: 200, data: { success: true }, headers: {} };
   });
 
   /* ====================================================================
    * Module 18 — Customer Address (Storefront)
    * ==================================================================*/
 
+  // Legacy alias — kept for backward compat. Previously hard-coded `data: []`.
+  // Now mirrors GET /v1/customers/:id/addresses so created addresses are visible.
   registerMockRoute("GET", "/customers/me/addresses", async () => {
     const { customers } = MOCK_DATA;
-    // Hardcode CUS-0010 for storefront testing (người dùng đang login)
     const customer = customers?.find((c) => c.customerId === "CUS-0010");
-    if (!customer) return { status: 404, data: { message: "Customer CUS-0010 not found in mock data" }, headers: {} };
-    
-    // Tạm thời trả về mảng rỗng để xem EmptyState theo yêu cầu của user
-    return { status: 200, data: [], headers: {} };
+    if (!customer)
+      return {
+        status: 404,
+        data: { message: "Customer CUS-0010 not found in mock data" },
+        headers: {},
+      };
+    return {
+      status: 200,
+      data: (customer.addresses as unknown as unknown[]).map(
+         
+        toDto as unknown as (v: unknown) => unknown,
+      ),
+      headers: {},
+    };
   });
 
   registerMockRoute("POST", "/customers/me/addresses", async (config) => {
@@ -455,11 +534,14 @@ export function registerAllMockRoutes(): void {
     const body = typeof config.data === "string" ? JSON.parse(config.data) : config.data;
     const customer = customers.find((c) => c.customerId === "CUS-0010");
     if (!customer) return { status: 404, data: { message: "Not found" }, headers: {} };
-    
+
     if (body.isDefault) {
-      customer.addresses.forEach(a => { a.isDefaultShipping = false; a.isDefaultBilling = false; });
+      customer.addresses.forEach((a) => {
+        a.isDefaultShipping = false;
+        a.isDefaultBilling = false;
+      });
     }
-    
+
     const newAddress = {
       addressId: `ADDR-${Date.now()}`,
       customerId: "CUS-0010",
@@ -487,14 +569,17 @@ export function registerAllMockRoutes(): void {
     const body = typeof config.data === "string" ? JSON.parse(config.data) : config.data;
     const customer = customers.find((c) => c.customerId === "CUS-0010");
     if (!customer) return { status: 404, data: { message: "Not found" }, headers: {} };
-    
-    const index = customer.addresses.findIndex(a => a.addressId === id);
+
+    const index = customer.addresses.findIndex((a) => a.addressId === id);
     if (index === -1) return { status: 404, data: { message: "Address not found" }, headers: {} };
-    
+
     if (body.isDefault) {
-      customer.addresses.forEach(a => { a.isDefaultShipping = false; a.isDefaultBilling = false; });
+      customer.addresses.forEach((a) => {
+        a.isDefaultShipping = false;
+        a.isDefaultBilling = false;
+      });
     }
-    
+
     const targetAddress = customer.addresses[index]!;
     customer.addresses[index] = {
       addressId: targetAddress.addressId,
@@ -521,15 +606,15 @@ export function registerAllMockRoutes(): void {
     const { id } = (config as Record<string, unknown>)._mockParams as Record<string, string>;
     const customer = customers.find((c) => c.customerId === "CUS-0010");
     if (!customer) return { status: 404, data: { message: "Not found" }, headers: {} };
-    
-    const index = customer.addresses.findIndex(a => a.addressId === id);
+
+    const index = customer.addresses.findIndex((a) => a.addressId === id);
     if (index === -1) return { status: 404, data: { message: "Address not found" }, headers: {} };
-    
+
     const targetAddress = customer.addresses[index]!;
     if (targetAddress.isDefaultShipping) {
       return { status: 400, data: { message: "Không thể xoá địa chỉ mặc định" }, headers: {} };
     }
-    
+
     customer.addresses.splice(index, 1);
     return { status: 200, data: { success: true }, headers: {} };
   });
@@ -539,15 +624,224 @@ export function registerAllMockRoutes(): void {
     const { id } = (config as Record<string, unknown>)._mockParams as Record<string, string>;
     const customer = customers.find((c) => c.customerId === "CUS-0010");
     if (!customer) return { status: 404, data: { message: "Not found" }, headers: {} };
-    
-    const address = customer.addresses.find(a => a.addressId === id);
+
+    const address = customer.addresses.find((a) => a.addressId === id);
     if (!address) return { status: 404, data: { message: "Address not found" }, headers: {} };
-    
-    customer.addresses.forEach(a => { a.isDefaultShipping = false; a.isDefaultBilling = false; });
+
+    customer.addresses.forEach((a) => {
+      a.isDefaultShipping = false;
+      a.isDefaultBilling = false;
+    });
     address.isDefaultShipping = true;
     address.isDefaultBilling = true;
     return { status: 200, data: { success: true }, headers: {} };
   });
+
+  /* ── Alias for real BE contract /v1/customers/{id}/addresses (FE api.ts) ──
+   * When USE_MOCK=true the new FE layer calls /v1/customers/me + /v1/customers/{id}/addresses.
+   * These handlers mirror the legacy /customers/me/addresses handlers above but use
+   * the new DTO shape so the BE contract works under mock too. They intentionally
+   * return raw data (no envelope) — envelope.ts fallback handles both shapes,
+   * and real BE will return ApiResponse envelope which is also handled.
+   */
+  // Province → code for provinces.open-api.vn (v2). BE thật phải lưu mã này,
+  // mock tạm map theo tên để FE edit vẫn fetch đủ wards qua API ngoài.
+  const PROVINCE_CODE_BY_NAME: Record<string, string> = {
+    "TP. Hồ Chí Minh": "79",
+    "Hà Nội": "01",
+    "Bình Dương": "74",
+    "Đà Nẵng": "48",
+    "Cần Thơ": "92",
+    "Hải Phòng": "31",
+    "Khánh Hòa": "56",
+    // fallback cho mock province lạ (VD Guangdong) — giữ HCM để không 404
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function toDto(a: any) {
+    // Map legacy mock shape → CustomerAddressResponse DTO expected by FE.
+    // BE thật trả provinceCode/wardCode số (open-api), mock chỉ có tên nên map tỉnh
+    // qua bảng trên; ward tạm hash để qua zod, edit sẽ được inject vào effectiveWards
+    // kèm full list fetch từ /p/{provinceCode}?depth=2.
+    const wardCode = `W-${a.address.ward.replace(/\W+/g, "").slice(0, 8).toUpperCase() || "WARD"}`;
+    const provCode = PROVINCE_CODE_BY_NAME[a.address.province] ?? "79";
+    return {
+      addressId: a.addressId,
+      customerId: a.customerId,
+      type: "SHIPPING" as const,
+      recipientName: a.recipientName,
+      phone: a.phone,
+      line1: a.address.street,
+      line2: a.address.district ?? null,
+      wardCode,
+      wardName: a.address.ward,
+      provinceCode: provCode,
+      provinceName: a.address.province,
+      countryCode: a.address.country ?? "VN",
+      postalCode: a.address.postalCode ?? null,
+      defaultAddress: !!a.isDefaultShipping,
+      version: 0,
+    };
+  }
+
+  registerMockRoute("GET", "/v1/customers/me", async () => {
+    const c = MOCK_DATA.customers.find((x) => x.customerId === "CUS-0010");
+    if (!c) return { status: 404, data: { message: "Not found" }, headers: {} };
+    return {
+      status: 200,
+      data: {
+        customerId: c.customerId,
+        userId: "00000000-0000-4000-a000-000000000010",
+        fullName: c.fullName,
+        email: c.email,
+        phone: c.phone ?? null,
+        segmentId: null,
+        status: c.status,
+        version: 0,
+        createdAt: c.createdAt,
+      },
+      headers: {},
+    };
+  });
+
+  registerMockRoute("GET", "/v1/customers/:customerId/addresses", async (config) => {
+    const { customerId } = (config as Record<string, unknown>)._mockParams as Record<
+      string,
+      string
+    >;
+    const cid = customerId === "me" ? "CUS-0010" : customerId;
+    const c = MOCK_DATA.customers.find((x) => x.customerId === cid);
+    if (!c) return { status: 404, data: { message: "Customer not found" }, headers: {} };
+    return {
+      status: 200,
+      data: (c.addresses as unknown as unknown[]).map(toDto as unknown as (v: unknown) => unknown),
+      headers: {},
+    };
+  });
+
+  registerMockRoute("POST", "/v1/customers/:customerId/addresses", async (config) => {
+    const { customerId } = (config as Record<string, unknown>)._mockParams as Record<
+      string,
+      string
+    >;
+    const cid = customerId === "me" ? "CUS-0010" : customerId;
+    const c = MOCK_DATA.customers.find((x) => x.customerId === cid);
+    if (!c) return { status: 404, data: { message: "Not found" }, headers: {} };
+    const body = typeof config.data === "string" ? JSON.parse(config.data) : config.data;
+    if (body.defaultAddress)
+      c.addresses.forEach((a) => {
+        a.isDefaultShipping = false;
+        a.isDefaultBilling = false;
+      });
+    const created = {
+      addressId: `ADDR-${Date.now()}`,
+      customerId: (typeof cid !== "undefined" ? cid : customerId)!,
+      label: "Nhà riêng",
+      recipientName: body.recipientName,
+      phone: body.phone,
+      address: {
+        street: body.line1,
+        ward: body.wardName,
+        district: body.line2 ?? "",
+        province: body.provinceName,
+        postalCode: body.postalCode ?? "",
+        country: body.countryCode ?? "VN",
+      },
+      isDefaultShipping: !!body.defaultAddress,
+      isDefaultBilling: !!body.defaultAddress,
+    };
+    (c.addresses as unknown as typeof c.addresses).push(
+      created as unknown as (typeof c.addresses)[number],
+    );
+    return {
+      status: 201,
+      data: (toDto as unknown as (v: unknown) => unknown)(created),
+      headers: {},
+    };
+  });
+
+  registerMockRoute("PUT", "/v1/customers/:customerId/addresses/:addressId", async (config) => {
+    const { customerId, addressId } = (config as Record<string, unknown>)._mockParams as Record<
+      string,
+      string
+    >;
+    const cid = customerId === "me" ? "CUS-0010" : customerId;
+    const c = MOCK_DATA.customers.find((x) => x.customerId === cid);
+    if (!c) return { status: 404, data: { message: "Not found" }, headers: {} };
+    const idx = c.addresses.findIndex((a) => a.addressId === addressId);
+    if (idx === -1) return { status: 404, data: { message: "Address not found" }, headers: {} };
+    const body = typeof config.data === "string" ? JSON.parse(config.data) : config.data;
+    if (body.defaultAddress)
+      c.addresses.forEach((a) => {
+        a.isDefaultShipping = false;
+        a.isDefaultBilling = false;
+      });
+    const prev = c.addresses[idx]!;
+    c.addresses[idx] = {
+      addressId: prev.addressId,
+      customerId: prev.customerId,
+      label: prev.label,
+      recipientName: body.recipientName ?? prev.recipientName,
+      phone: body.phone ?? prev.phone,
+      address: {
+        street: body.line1 ?? prev.address.street,
+        ward: body.wardName ?? prev.address.ward,
+        district: body.line2 ?? prev.address.district,
+        province: body.provinceName ?? prev.address.province,
+        postalCode: body.postalCode ?? prev.address.postalCode,
+        country: body.countryCode ?? prev.address.country,
+      },
+      isDefaultShipping: body.defaultAddress ?? prev.isDefaultShipping,
+      isDefaultBilling: body.defaultAddress ?? prev.isDefaultBilling,
+    };
+    return {
+      status: 200,
+      data: (toDto as unknown as (v: unknown) => unknown)(c.addresses[idx]!),
+      headers: {},
+    };
+  });
+
+  registerMockRoute("DELETE", "/v1/customers/:customerId/addresses/:addressId", async (config) => {
+    const { customerId, addressId } = (config as Record<string, unknown>)._mockParams as Record<
+      string,
+      string
+    >;
+    const cid = customerId === "me" ? "CUS-0010" : customerId;
+    const c = MOCK_DATA.customers.find((x) => x.customerId === cid);
+    if (!c) return { status: 404, data: { message: "Not found" }, headers: {} };
+    const idx = c.addresses.findIndex((a) => a.addressId === addressId);
+    if (idx === -1) return { status: 404, data: { message: "Address not found" }, headers: {} };
+    if (c.addresses[idx]!.isDefaultShipping)
+      return { status: 400, data: { message: "Không thể xoá địa chỉ mặc định" }, headers: {} };
+    c.addresses.splice(idx, 1);
+    return { status: 204, data: null, headers: {} };
+  });
+
+  registerMockRoute(
+    "POST",
+    "/v1/customers/:customerId/addresses/:addressId/default",
+    async (config) => {
+      const { customerId, addressId } = (config as Record<string, unknown>)._mockParams as Record<
+        string,
+        string
+      >;
+      const cid = customerId === "me" ? "CUS-0010" : customerId;
+    const c = MOCK_DATA.customers.find((x) => x.customerId === cid);
+      if (!c) return { status: 404, data: { message: "Not found" }, headers: {} };
+      const addr = c.addresses.find((a) => a.addressId === addressId);
+      if (!addr) return { status: 404, data: { message: "Address not found" }, headers: {} };
+      c.addresses.forEach((a) => {
+        a.isDefaultShipping = false;
+        a.isDefaultBilling = false;
+      });
+      addr.isDefaultShipping = true;
+      addr.isDefaultBilling = true;
+      return {
+        status: 200,
+        data: (toDto as unknown as (v: unknown) => unknown)(addr),
+        headers: {},
+      };
+    },
+  );
 
   /* ====================================================================
    * Staff Users (for admin user management)

@@ -1,21 +1,13 @@
-/**
- * Normalised API error.
- *
- * Every axios error is converted into an ApiError so consuming code never
- * needs to inspect raw AxiosError shapes.
- *
- * `fieldErrors` (when present) maps directly to react-hook-form `setError`:
- *   for (const [k, msg] of Object.entries(e.fieldErrors))
- *     form.setError(k as Path<T>, { type: "server", message: msg });
- */
-
 import { type AxiosError } from "axios";
 
 export interface ApiErrorBody {
   code?: string;
+  errorCode?: string;
   message?: string;
-  fieldErrors?: Record<string, string>;
+  fieldErrors?:
+    Record<string, string> | Array<{ field: string; message: string; code?: string | null }>;
   traceId?: string;
+  correlationId?: string;
 }
 
 export class ApiError extends Error {
@@ -39,9 +31,8 @@ export class ApiError extends Error {
     this.traceId = traceId;
   }
 
-  /** Create from an AxiosError (used in response interceptor). */
   static from(err: AxiosError<ApiErrorBody>): ApiError {
-    const data = err.response?.data;
+    const data = err.response?.data as (ApiErrorBody & { fieldErrors?: unknown }) | undefined;
     const status = err.response?.status ?? 0;
 
     if (!err.response) {
@@ -52,12 +43,26 @@ export class ApiError extends Error {
       );
     }
 
+    // BE sends { errorCode, fieldErrors: [{field,message}] } — normalize to Record
+    let fieldErrors: Record<string, string> | undefined;
+    const raw = data?.fieldErrors;
+    if (Array.isArray(raw)) {
+      const rec: Record<string, string> = {};
+      for (const e of raw as Array<{ field: string; message: string }>) {
+        if (e?.field) rec[e.field] = e.message;
+      }
+      if (Object.keys(rec).length) fieldErrors = rec;
+    } else if (raw && typeof raw === "object") {
+      fieldErrors = raw as Record<string, string>;
+    }
+
+    const code = data?.errorCode ?? data?.code ?? `HTTP_${status}`;
     return new ApiError(
       status,
-      data?.code ?? `HTTP_${status}`,
+      code,
       data?.message ?? err.message ?? "Đã xảy ra lỗi",
-      data?.fieldErrors,
-      data?.traceId,
+      fieldErrors,
+      data?.correlationId ?? data?.traceId,
     );
   }
 

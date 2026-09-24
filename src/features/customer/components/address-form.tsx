@@ -1,9 +1,10 @@
 "use client";
+/* eslint-disable react-hooks/incompatible-library */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { ChevronsUpDown } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -20,106 +21,144 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 
-import { addressSchema, type AddressFormValues } from "../schemas";
+import { saveAddressInputSchema, type SaveAddressInput } from "../schemas";
 import { useVietnamAddresses } from "@/hooks/use-vietnam-addresses";
 
-interface AddressOption {
-  value: string;
-  label: string;
-}
-
 interface AddressFormProps {
-  defaultValues?: Partial<AddressFormValues>;
-  onSubmit: (data: AddressFormValues) => void;
+  defaultValues?: Partial<SaveAddressInput>;
+  onSubmit: (data: SaveAddressInput) => void;
   isSubmitting?: boolean;
 }
 
-export function AddressForm({
-  defaultValues,
-  onSubmit,
-  isSubmitting = false,
-}: AddressFormProps) {
+export function AddressForm({ defaultValues, onSubmit, isSubmitting = false }: AddressFormProps) {
   const {
     register,
     handleSubmit,
     setValue,
+    reset,
     watch,
     formState: { errors },
-  } = useForm<AddressFormValues>({
-    resolver: zodResolver(addressSchema) as any,
+  } = useForm<SaveAddressInput>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- zod v4 / hookform-resolvers mismatch
+    resolver: zodResolver(saveAddressInputSchema as any),
     defaultValues: {
+      type: "SHIPPING",
       recipientName: "",
-      recipientPhone: "",
-      province: "",
-      city: "",
-      ward: "",
+      phone: "",
       line1: "",
+      line2: "",
+      wardCode: "",
+      wardName: "",
+      provinceCode: "",
+      provinceName: "",
+      countryCode: "VN",
       postalCode: "",
-      country: "Vietnam",
-      isDefault: false,
+      defaultAddress: false,
       ...defaultValues,
     },
   });
 
-  const provinceValue = watch("province");
-  const wardValue = watch("ward");
-
-  const [provinceCode, setProvinceCode] = useState("");
-  const { provinces, wards, loading } = useVietnamAddresses(provinceCode);
-
+  // Re-sync form when parent passes new defaultValues (edit page: address loads async).
+  // Without this, react-hook-form keeps the empty initial defaults forever.
+  const defaultsKey = JSON.stringify(defaultValues ?? {});
   useEffect(() => {
-    if (provinceValue && provinces.length > 0) {
-      const match = provinces.find((p) => p.label === provinceValue);
-      if (match && match.value !== provinceCode) {
-        setProvinceCode(match.value);
-      }
-    } else if (!provinceValue && provinceCode !== "") {
-      setProvinceCode("");
+    if (defaultValues && Object.keys(defaultValues).length > 0) {
+      reset((prev) => ({ ...prev, ...defaultValues }) as SaveAddressInput);
     }
-  }, [provinceValue, provinces, provinceCode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultsKey, reset]);
 
+  const provinceCodeWatch = watch("provinceCode");
+
+  const provinceNameWatch = watch("provinceName");
+  const wardCodeWatch = watch("wardCode");
+  const wardNameWatch = watch("wardName");
+  const defaultAddressWatch = watch("defaultAddress");
+
+  const [activeProvinceCode, setActiveProvinceCode] = useState(provinceCodeWatch ?? "");
+  const { provinces, wards, loading } = useVietnamAddresses(activeProvinceCode);
+
+  // Keep activeProvinceCode in sync when user picks province or when form is reset from parent
   useEffect(() => {
-    const initialProvince = defaultValues?.province ?? "";
-    if (provinceValue !== initialProvince && provinceValue !== "") {
-      setValue("ward", "", { shouldValidate: false });
+    if (provinceCodeWatch && provinceCodeWatch !== activeProvinceCode) {
+      setActiveProvinceCode(provinceCodeWatch);
+    } else if (!provinceCodeWatch && activeProvinceCode !== "") {
+      setActiveProvinceCode("");
     }
-  }, [provinceValue, setValue, defaultValues?.province]);
+  }, [provinceCodeWatch, activeProvinceCode]);
 
-  const mappedProvinces = provinces.map((p) => ({ value: p.label, label: p.label }));
-  const mappedWards = wards.map((w) => ({ value: w.label, label: w.label }));
+  // Ensure the edit-saved value is still shown even when BE/mock wardCode
+  // does not match open-api (e.g. mock "W-PHNGPHMNG" vs real numeric codes).
+  // Otherwise the combobox appears empty while the trigger still shows displayValue,
+  // and opening it renders "Không tìm thấy." until user changes province.
+  const effectiveProvinces = useMemo(() => {
+    if (
+      provinceCodeWatch &&
+      provinceNameWatch &&
+      !provinces.some((o) => o.value === provinceCodeWatch)
+    ) {
+      return [{ value: provinceCodeWatch, label: provinceNameWatch }, ...provinces];
+    }
+    return provinces;
+  }, [provinces, provinceCodeWatch, provinceNameWatch]);
+
+  const effectiveWards = useMemo(() => {
+    if (wardCodeWatch && wardNameWatch && !wards.some((o) => o.value === wardCodeWatch)) {
+      return [{ value: wardCodeWatch, label: wardNameWatch }, ...wards];
+    }
+    return wards;
+  }, [wards, wardCodeWatch, wardNameWatch]);
+
+  const handleProvinceSelect = (code: string, label: string) => {
+    const prev = provinceCodeWatch;
+    setValue("provinceCode", code, { shouldValidate: true });
+    setValue("provinceName", label, { shouldValidate: true });
+    setActiveProvinceCode(code);
+    if (prev && prev !== code) {
+      setValue("wardCode", "", { shouldValidate: false });
+      setValue("wardName", "", { shouldValidate: false });
+    }
+  };
+
+  const handleWardSelect = (code: string, label: string) => {
+    setValue("wardCode", code, { shouldValidate: true });
+    setValue("wardName", label, { shouldValidate: true });
+  };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit as any)} className="space-y-6">
-      <div className="grid gap-4 rounded-xl bg-bg-surface p-[var(--card-pad)] shadow-sm border border-border-default sm:grid-cols-2">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      <div className="bg-bg-surface border-border-default grid gap-4 rounded-xl border p-[var(--card-pad)] shadow-sm sm:grid-cols-2">
         <Field label="Người nhận" error={errors.recipientName?.message}>
           <Input placeholder="Nguyễn Văn A" {...register("recipientName")} />
         </Field>
 
-        <Field label="Số điện thoại" error={errors.recipientPhone?.message}>
-          <Input placeholder="0900000000" {...register("recipientPhone")} />
+        <Field label="Số điện thoại" error={errors.phone?.message}>
+          <Input placeholder="0900000000" {...register("phone")} />
         </Field>
 
         <ComboboxField
           label="Tỉnh/Thành"
-          value={provinceValue}
-          options={mappedProvinces}
+          value={provinceCodeWatch ?? ""}
+          displayValue={provinceNameWatch ?? ""}
+          options={effectiveProvinces}
           loading={loading && provinces.length === 0}
-          onChange={(val) => setValue("province", val, { shouldValidate: true })}
-          error={errors.province?.message}
+          onSelect={handleProvinceSelect}
+          error={errors.provinceName?.message ?? errors.provinceCode?.message}
         />
 
-        <Field label="Thành phố trực thuộc tỉnh (Không bắt buộc)" error={errors.city?.message}>
-          <Input placeholder="Ví dụ: TP. Thủ Đức" {...register("city")} />
+        <Field label="Đường/ấp thêm (không bắt buộc)" error={errors.line2?.message}>
+          <Input placeholder="Ví dụ: TP. Thủ Đức" {...register("line2")} />
         </Field>
 
         <ComboboxField
           label="Phường/Xã"
-          value={wardValue}
-          options={mappedWards}
-          loading={loading && provinceCode !== "" && wards.length === 0}
-          disabled={!provinceValue}
-          onChange={(val) => setValue("ward", val, { shouldValidate: true })}
-          error={errors.ward?.message}
+          value={wardCodeWatch ?? ""}
+          displayValue={wardNameWatch ?? ""}
+          options={effectiveWards}
+          loading={loading && !!activeProvinceCode && wards.length === 0}
+          disabled={!provinceCodeWatch}
+          onSelect={handleWardSelect}
+          error={errors.wardName?.message ?? errors.wardCode?.message}
         />
 
         <Field label="Địa chỉ chi tiết" error={errors.line1?.message}>
@@ -134,12 +173,12 @@ export function AddressForm({
       <div className="flex items-center space-x-2">
         <Checkbox
           id="isDefault"
-          checked={watch("isDefault")}
-          onCheckedChange={(checked) => setValue("isDefault", checked === true)}
+          checked={!!defaultAddressWatch}
+          onCheckedChange={(checked) => setValue("defaultAddress", checked === true)}
         />
         <Label
           htmlFor="isDefault"
-          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+          className="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
         >
           Đặt làm địa chỉ mặc định
         </Label>
@@ -167,7 +206,7 @@ function Field({
     <div className="space-y-2">
       <Label className={cn(error && "text-danger")}>{label}</Label>
       {children}
-      {error && <p className="text-xs text-danger">{error}</p>}
+      {error && <p className="text-danger text-xs">{error}</p>}
     </div>
   );
 }
@@ -175,23 +214,25 @@ function Field({
 function ComboboxField({
   label,
   value,
+  displayValue,
   options,
   loading,
   disabled,
   error,
-  onChange,
+  onSelect,
 }: {
   label: string;
   value: string;
-  options: AddressOption[];
+  displayValue: string;
+  options: { value: string; label: string }[];
   loading: boolean;
-  disabled?: boolean | undefined;
+  disabled?: boolean;
   error?: string | undefined;
-  onChange: (value: string) => void;
+  onSelect: (code: string, label: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const selected = options.find((option) => option.value === value);
-  const isDisabled = disabled || loading || options.length === 0;
+  const selected = options.find((o) => o.value === value);
+  const isDisabled = Boolean(disabled);
 
   return (
     <div className="space-y-2">
@@ -205,18 +246,22 @@ function ComboboxField({
             aria-expanded={open}
             disabled={isDisabled}
             className={cn(
-              "h-10 w-full justify-between rounded-[var(--r-md)] border-border-default bg-bg-surface px-3 font-normal text-ink-primary shadow-sm hover:bg-bg-subtle",
-              error && "border-danger focus-visible:ring-danger"
+              "border-border-default bg-bg-surface text-ink-primary hover:bg-bg-subtle h-10 w-full justify-between rounded-[var(--r-md)] px-3 font-normal shadow-sm",
+              error && "border-danger focus-visible:ring-danger",
             )}
           >
-            <span className={cn("truncate", !selected && "text-ink-tertiary")}>
-              {selected?.label ?? (loading ? "Đang tải..." : `Chọn ${label.toLowerCase()}`)}
+            <span
+              className={cn("truncate", !selected?.label && !displayValue && "text-ink-tertiary")}
+            >
+              {selected?.label ||
+                displayValue ||
+                (loading ? "Đang tải..." : `Chọn ${label.toLowerCase()}`)}
             </span>
-            <ChevronsUpDown className="ml-2 size-4 shrink-0 text-ink-tertiary" />
+            <ChevronsUpDown className="text-ink-tertiary ml-2 size-4 shrink-0" />
           </Button>
         </PopoverTrigger>
         <PopoverContent
-          className="w-[--radix-popover-trigger-width] border-border-default bg-bg-surface p-1 text-ink-primary shadow-md"
+          className="border-border-default bg-bg-surface text-ink-primary w-[--radix-popover-trigger-width] p-1 shadow-md"
           align="start"
         >
           <Command className="bg-bg-surface text-ink-primary">
@@ -234,7 +279,7 @@ function ComboboxField({
                     data-checked={option.value === value}
                     className="text-ink-primary data-selected:bg-bg-muted data-selected:text-ink-primary"
                     onSelect={() => {
-                      onChange(option.value);
+                      onSelect(option.value, option.label);
                       setOpen(false);
                     }}
                   >
@@ -246,7 +291,7 @@ function ComboboxField({
           </Command>
         </PopoverContent>
       </Popover>
-      {error && <p className="text-xs text-danger">{error}</p>}
+      {error && <p className="text-danger text-xs">{error}</p>}
     </div>
   );
 }
