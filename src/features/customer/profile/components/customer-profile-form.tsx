@@ -33,6 +33,8 @@ export function CustomerProfileForm() {
   const updateMutation = useUpdateCustomerProfile();
   const [serverError, setServerError] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
+  const [reloadError, setReloadError] = useState(false);
+  const [isReloading, setIsReloading] = useState(false);
   const form = useForm<CustomerProfileFormValues>({
     resolver: zodResolver(customerProfileFormSchema),
     defaultValues: { fullName: "", phone: "" },
@@ -46,16 +48,27 @@ export function CustomerProfileForm() {
   }, [form, form.formState.isDirty, profileQuery.data]);
 
   const reloadLatest = async () => {
-    const result = await profileQuery.refetch();
-    if (result.data) {
+    if (isReloading || profileQuery.isFetching) return;
+    setIsReloading(true);
+    try {
+      const result = await profileQuery.refetch();
+      if (!result.isSuccess) {
+        setReloadError(true);
+        return;
+      }
       form.reset(formValues(result.data));
       setConflict(false);
+      setReloadError(false);
       setServerError(null);
+    } catch {
+      setReloadError(true);
+    } finally {
+      setIsReloading(false);
     }
   };
 
   const onSubmit = form.handleSubmit((values) => {
-    if (!profileQuery.data || updateMutation.isPending) return;
+    if (!profileQuery.data || updateMutation.isPending || conflict) return;
     setServerError(null);
     setConflict(false);
 
@@ -148,10 +161,32 @@ export function CustomerProfileForm() {
         <Alert tone="warning" title="Thông tin đã thay đổi ở nơi khác" className="mb-5">
           <div className="flex flex-wrap items-center gap-3">
             <span>Hãy tải dữ liệu mới nhất trước khi lưu tiếp.</span>
-            <Button type="button" variant="outline" size="sm" onClick={() => void reloadLatest()}>
-              <RefreshCw className="size-4" /> Tải lại dữ liệu
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isReloading || profileQuery.isFetching}
+              aria-busy={isReloading}
+              onClick={() => void reloadLatest()}
+            >
+              {isReloading ? (
+                <>
+                  <LoaderCircle className="size-4 animate-spin" />
+                  <span role="status">Đang tải lại...</span>
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="size-4" /> Tải lại dữ liệu
+                </>
+              )}
             </Button>
           </div>
+        </Alert>
+      )}
+
+      {reloadError && (
+        <Alert tone="danger" title="Không thể tải dữ liệu mới nhất" className="mb-5">
+          <span role="alert">Bản nháp của bạn vẫn được giữ nguyên. Vui lòng thử lại.</span>
         </Alert>
       )}
 

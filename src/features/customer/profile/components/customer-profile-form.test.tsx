@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error";
+import { ToastProvider } from "@/components/shared/Toast";
 
 import { customerProfileKeys } from "../queries";
 import { CustomerProfileForm } from "./customer-profile-form";
@@ -122,6 +123,139 @@ describe("CustomerProfileForm", () => {
     expect(await screen.findByText(/đã thay đổi ở nơi khác/i)).toBeInTheDocument();
     expect(put).toHaveBeenCalledTimes(1);
     expect(screen.getByDisplayValue("Bản nháp cục bộ")).toBeInTheDocument();
+  });
+
+  it("preserves the draft and conflict when reloading fails with a cached profile", async () => {
+    const user = userEvent.setup();
+    const reloadError = new ApiError(0, "NETWORK_ERROR", "Mất kết nối");
+    let rejectReload!: (error: ApiError) => void;
+    const get = vi
+      .spyOn(api, "get")
+      .mockResolvedValueOnce({ data: profile })
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectReload = reject;
+          }),
+      );
+    const put = vi
+      .spyOn(api, "put")
+      .mockRejectedValueOnce(new ApiError(409, "OPTIMISTIC_LOCK", "Đã thay đổi ở nơi khác"));
+    const { queryClient } = renderProfile();
+    render(<ToastProvider />);
+
+    const fullName = await screen.findByRole("textbox", { name: "Họ và tên" });
+    await waitFor(() => expect(fullName).toHaveValue(profile.fullName));
+    await user.clear(fullName);
+    await user.type(fullName, "Bản nháp cục bộ");
+    await user.click(screen.getByRole("button", { name: "Lưu thay đổi" }));
+
+    expect(await screen.findByText(/thông tin đã thay đổi ở nơi khác/i)).toBeVisible();
+    expect(fullName).toHaveValue("Bản nháp cục bộ");
+    expect(screen.getByRole("button", { name: "Lưu thay đổi" })).toBeDisabled();
+    expect(put).toHaveBeenCalledExactlyOnceWith("/v1/customers/me", {
+      fullName: "Bản nháp cục bộ",
+      phone: profile.phone,
+      version: 3,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Tải lại dữ liệu" }));
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+    const pendingReload = screen.getByRole("button", { name: "Đang tải lại..." });
+    expect(pendingReload).toBeDisabled();
+    expect(pendingReload).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("status")).toHaveTextContent("Đang tải lại...");
+    await user.click(pendingReload);
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(get.mock.calls.map(([path]) => path)).toEqual(["/v1/customers/me", "/v1/customers/me"]);
+    await act(async () => {
+      rejectReload(reloadError);
+      // Flush Query notifications and reloadLatest's continuation before checking the UI.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await waitFor(() => {
+      expect(queryClient.getQueryState(customerProfileKeys.profile())).toMatchObject({
+        status: "error",
+        fetchStatus: "idle",
+        error: reloadError,
+      });
+    });
+
+    // A failed refetch retains the last successful data. Keep this real cache behavior
+    // so treating stale result.data as a successful reload cannot pass this test.
+    expect(queryClient.getQueryData(customerProfileKeys.profile())).toEqual(profile);
+    expect.soft(screen.getByRole("textbox", { name: "Họ và tên" })).toHaveValue("Bản nháp cục bộ");
+    expect
+      .soft(screen.getByRole("textbox", { name: "Họ và tên" }))
+      .not.toHaveValue(profile.fullName);
+    expect.soft(screen.queryByText(/thông tin đã thay đổi ở nơi khác/i)).toBeVisible();
+    expect.soft(screen.getByRole("button", { name: "Lưu thay đổi" })).toBeDisabled();
+    expect
+      .soft(screen.queryByText(/mất kết nối|không.*(?:tải|kết nối)|tải.*thất bại/i))
+      .toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Lưu thay đổi" }));
+    expect.soft(put).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears the reload error and conflict only after a successful retry, then saves the new version", async () => {
+    const user = userEvent.setup();
+    const latestProfile = { ...profile, fullName: "Tên mới từ server", version: 4 };
+    let resolveReload!: (value: { data: typeof profile }) => void;
+    const get = vi
+      .spyOn(api, "get")
+      .mockResolvedValueOnce({ data: profile })
+      .mockRejectedValueOnce(new ApiError(0, "NETWORK_ERROR", "Mất kết nối"))
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveReload = resolve;
+          }),
+      );
+    const put = vi
+      .spyOn(api, "put")
+      .mockRejectedValueOnce(new ApiError(409, "OPTIMISTIC_LOCK", "Đã thay đổi ở nơi khác"))
+      .mockResolvedValueOnce({
+        data: { ...latestProfile, fullName: "Bản sửa sau tải lại", version: 5 },
+      });
+    const { queryClient } = renderProfile();
+    const fullName = await screen.findByDisplayValue(profile.fullName);
+    await user.clear(fullName);
+    await user.type(fullName, "Bản nháp cục bộ");
+    await user.click(screen.getByRole("button", { name: "Lưu thay đổi" }));
+    await user.click(await screen.findByRole("button", { name: "Tải lại dữ liệu" }));
+    expect(await screen.findByText("Không thể tải dữ liệu mới nhất")).toBeVisible();
+    expect(screen.queryByText("Không thể lưu thông tin")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Tải lại dữ liệu" }));
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(3));
+    expect(fullName).toHaveValue("Bản nháp cục bộ");
+    expect(screen.getByText("Không thể tải dữ liệu mới nhất")).toBeVisible();
+    expect(screen.getByText("Thông tin đã thay đổi ở nơi khác")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Lưu thay đổi" })).toBeDisabled();
+    await act(async () => {
+      resolveReload({ data: latestProfile });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    await waitFor(() => expect(fullName).toHaveValue(latestProfile.fullName));
+    expect(queryClient.getQueryData(customerProfileKeys.profile())).toEqual(latestProfile);
+    expect(screen.queryByText("Thông tin đã thay đổi ở nơi khác")).not.toBeInTheDocument();
+    expect(screen.queryByText("Không thể tải dữ liệu mới nhất")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Đang tải lại..." })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lưu thay đổi" })).toBeEnabled();
+
+    await user.clear(fullName);
+    await user.type(fullName, "Bản sửa sau tải lại");
+    await user.click(screen.getByRole("button", { name: "Lưu thay đổi" }));
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(2));
+    expect(put).toHaveBeenLastCalledWith("/v1/customers/me", {
+      fullName: "Bản sửa sau tải lại",
+      phone: latestProfile.phone,
+      version: 4,
+    });
+    await waitFor(() =>
+      expect(queryClient.getQueryData(customerProfileKeys.profile())).toMatchObject({ version: 5 }),
+    );
   });
 
   it("distinguishes a missing customer profile from a generic fetch error", async () => {
