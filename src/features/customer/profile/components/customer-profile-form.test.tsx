@@ -258,6 +258,210 @@ describe("CustomerProfileForm", () => {
     );
   });
 
+  it("keeps the dirty form mounted when a background refetch returns CUSTOMER_NOT_FOUND with cached data", async () => {
+    const user = userEvent.setup();
+    const refetchError = new ApiError(404, "CUSTOMER_NOT_FOUND", "Không tìm thấy hồ sơ");
+    const get = vi
+      .spyOn(api, "get")
+      .mockResolvedValueOnce({ data: profile })
+      .mockRejectedValueOnce(refetchError);
+    const { queryClient } = renderProfile();
+    const fullName = await screen.findByDisplayValue(profile.fullName);
+    const form = fullName.closest("form");
+    expect(form).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Số điện thoại" })).toHaveValue(profile.phone);
+
+    await user.clear(fullName);
+    await user.type(fullName, "Bản nháp cục bộ");
+    expect(fullName).toHaveValue("Bản nháp cục bộ");
+
+    // Refetch the real mounted query without submitting or using the conflict reload flow.
+    await act(async () => {
+      await queryClient.refetchQueries({
+        queryKey: customerProfileKeys.profile(),
+        exact: true,
+        type: "active",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await waitFor(() => {
+      expect(queryClient.getQueryState(customerProfileKeys.profile())).toMatchObject({
+        status: "error",
+        fetchStatus: "idle",
+        error: refetchError,
+        data: profile,
+      });
+    });
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(get.mock.calls.map(([path]) => path)).toEqual(["/v1/customers/me", "/v1/customers/me"]);
+    expect(queryClient.getQueryData(customerProfileKeys.profile())).toEqual(profile);
+
+    expect.soft(form).toBeInTheDocument();
+    expect
+      .soft(screen.queryByRole("textbox", { name: "Họ và tên" }))
+      .toHaveValue("Bản nháp cục bộ");
+    // Also check the original input: replacing it with a new form must not hide a reset.
+    expect.soft(fullName).toHaveValue("Bản nháp cục bộ");
+    expect.soft(screen.queryByText("Chưa có hồ sơ khách hàng")).not.toBeInTheDocument();
+    expect.soft(screen.queryByRole("textbox", { name: "Họ và tên" })).toBeInTheDocument();
+    expect.soft(screen.queryByRole("textbox", { name: "Số điện thoại" })).toBeInTheDocument();
+  });
+
+  it("keeps a dirty draft tied to its original version after a background success changes another field", async () => {
+    const user = userEvent.setup();
+    const latestProfile = { ...profile, phone: "0912345678", version: 4 };
+    vi.spyOn(api, "get")
+      .mockResolvedValueOnce({ data: profile })
+      .mockResolvedValueOnce({ data: latestProfile });
+    // Model a server that rejects version 3 but accepts version 4. Sending the new
+    // cached version with the old phone would silently overwrite the remote edit.
+    const put = vi.spyOn(api, "put").mockImplementationOnce(async (_, body) => {
+      const update = body as { fullName: string; phone: string; version: number };
+      if (update.version !== latestProfile.version) {
+        throw new ApiError(409, "OPTIMISTIC_LOCK", "Đã thay đổi ở nơi khác");
+      }
+      return { data: { ...latestProfile, ...update, version: 5 } };
+    });
+    const { queryClient } = renderProfile();
+    const fullName = await screen.findByDisplayValue(profile.fullName);
+    await user.clear(fullName);
+    await user.type(fullName, "Bản nháp cục bộ");
+
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: customerProfileKeys.profile(), exact: true });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(queryClient.getQueryData(customerProfileKeys.profile())).toEqual(latestProfile);
+    expect(fullName).toHaveValue("Bản nháp cục bộ");
+    expect(screen.getByRole("textbox", { name: "Số điện thoại" })).toHaveValue(profile.phone);
+
+    await user.click(screen.getByRole("button", { name: "Lưu thay đổi" }));
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    expect.soft(put).toHaveBeenCalledWith("/v1/customers/me", {
+      fullName: "Bản nháp cục bộ",
+      phone: profile.phone,
+      version: 3,
+    });
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Đã lưu") ?? screen.queryByText("Thông tin đã thay đổi ở nơi khác"),
+      ).toBeInTheDocument(),
+    );
+    expect.soft(screen.queryByText("Thông tin đã thay đổi ở nơi khác")).toBeVisible();
+    expect.soft(screen.getByRole("button", { name: "Lưu thay đổi" })).toBeDisabled();
+    expect.soft(queryClient.getQueryData(customerProfileKeys.profile())).toEqual(latestProfile);
+  });
+
+  it.each(["success", "error"] as const)(
+    "allows manual reload after a background %s finishes while conflict is visible",
+    async (outcome) => {
+      const user = userEvent.setup();
+      const backgroundProfile = { ...profile, fullName: "Tên từ background", version: 4 };
+      const manualProfile = { ...profile, fullName: "Tên tải lại thủ công", version: 5 };
+      let resolveBackground!: (value: { data: typeof profile }) => void;
+      let rejectBackground!: (error: ApiError) => void;
+      const get = vi
+        .spyOn(api, "get")
+        .mockResolvedValueOnce({ data: profile })
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve, reject) => {
+              resolveBackground = resolve;
+              rejectBackground = reject;
+            }),
+        )
+        .mockResolvedValueOnce({ data: manualProfile });
+      vi.spyOn(api, "put").mockRejectedValueOnce(
+        new ApiError(409, "OPTIMISTIC_LOCK", "Đã thay đổi ở nơi khác"),
+      );
+      const { queryClient } = renderProfile();
+      const fullName = await screen.findByDisplayValue(profile.fullName);
+      await user.clear(fullName);
+      await user.type(fullName, "Bản nháp cục bộ");
+      await user.click(screen.getByRole("button", { name: "Lưu thay đổi" }));
+      const reload = await screen.findByRole("button", { name: "Tải lại dữ liệu" });
+
+      let backgroundFetch!: Promise<void>;
+      await act(async () => {
+        backgroundFetch = queryClient.refetchQueries({
+          queryKey: customerProfileKeys.profile(),
+          exact: true,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      await waitFor(() => expect(reload).toBeDisabled());
+      await user.click(reload);
+      expect(get).toHaveBeenCalledTimes(2);
+      expect(fullName).toHaveValue("Bản nháp cục bộ");
+      expect(screen.getByRole("button", { name: "Lưu thay đổi" })).toBeDisabled();
+
+      await act(async () => {
+        if (outcome === "success") resolveBackground({ data: backgroundProfile });
+        else rejectBackground(new ApiError(0, "NETWORK_ERROR", "Mất kết nối"));
+        await backgroundFetch;
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      await waitFor(() => expect(reload).toBeEnabled());
+      expect(fullName).toHaveValue("Bản nháp cục bộ");
+      expect(screen.getByText("Thông tin đã thay đổi ở nơi khác")).toBeVisible();
+      expect(screen.getByRole("button", { name: "Lưu thay đổi" })).toBeDisabled();
+      await user.click(reload);
+      await waitFor(() => expect(fullName).toHaveValue(manualProfile.fullName));
+      expect(get).toHaveBeenCalledTimes(3);
+      expect(screen.queryByText("Thông tin đã thay đổi ở nơi khác")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Lưu thay đổi" })).toBeEnabled();
+    },
+  );
+
+  it("keeps save and reload errors separate across a new conflict cycle", async () => {
+    const user = userEvent.setup();
+    const latestProfile = { ...profile, fullName: "Tên mới", version: 4 };
+    const nextProfile = { ...latestProfile, fullName: "Tên mới hơn", version: 5 };
+    vi.spyOn(api, "get")
+      .mockResolvedValueOnce({ data: profile })
+      .mockRejectedValueOnce(new ApiError(0, "NETWORK_ERROR", "Mất kết nối"))
+      .mockResolvedValueOnce({ data: latestProfile })
+      .mockResolvedValueOnce({ data: nextProfile });
+    const put = vi
+      .spyOn(api, "put")
+      .mockRejectedValueOnce(new ApiError(409, "OPTIMISTIC_LOCK", "Đã thay đổi ở nơi khác"))
+      .mockRejectedValueOnce(new ApiError(500, "INTERNAL_ERROR", "Lưu thất bại"))
+      .mockRejectedValueOnce(new ApiError(409, "OPTIMISTIC_LOCK", "Đã thay đổi lần nữa"));
+    renderProfile();
+    const fullName = await screen.findByDisplayValue(profile.fullName);
+    await user.clear(fullName);
+    await user.type(fullName, "Bản nháp cục bộ");
+    await user.click(screen.getByRole("button", { name: "Lưu thay đổi" }));
+    await user.click(await screen.findByRole("button", { name: "Tải lại dữ liệu" }));
+    expect(await screen.findByText("Không thể tải dữ liệu mới nhất")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Tải lại dữ liệu" }));
+    await waitFor(() => expect(fullName).toHaveValue(latestProfile.fullName));
+
+    await user.clear(fullName);
+    await user.type(fullName, "Bản nháp lần hai");
+    await user.click(screen.getByRole("button", { name: "Lưu thay đổi" }));
+    expect(await screen.findByText("Lưu thất bại")).toBeVisible();
+    expect(screen.getByText("Không thể lưu thông tin")).toBeVisible();
+    expect(screen.queryByText("Không thể tải dữ liệu mới nhất")).not.toBeInTheDocument();
+    expect(fullName).toHaveValue("Bản nháp lần hai");
+
+    await user.click(screen.getByRole("button", { name: "Lưu thay đổi" }));
+    expect(await screen.findByText("Thông tin đã thay đổi ở nơi khác")).toBeVisible();
+    expect(screen.queryByText("Không thể lưu thông tin")).not.toBeInTheDocument();
+    expect(screen.queryByText("Không thể tải dữ liệu mới nhất")).not.toBeInTheDocument();
+    expect(fullName).toHaveValue("Bản nháp lần hai");
+    expect(screen.getByRole("button", { name: "Lưu thay đổi" })).toBeDisabled();
+    expect(put).toHaveBeenLastCalledWith("/v1/customers/me", {
+      fullName: "Bản nháp lần hai",
+      phone: profile.phone,
+      version: 4,
+    });
+    await user.click(screen.getByRole("button", { name: "Tải lại dữ liệu" }));
+    await waitFor(() => expect(fullName).toHaveValue(nextProfile.fullName));
+    expect(screen.queryByText("Thông tin đã thay đổi ở nơi khác")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lưu thay đổi" })).toBeEnabled();
+  });
+
   it("distinguishes a missing customer profile from a generic fetch error", async () => {
     vi.spyOn(api, "get").mockRejectedValueOnce(
       new ApiError(404, "CUSTOMER_NOT_FOUND", "Không tìm thấy hồ sơ"),

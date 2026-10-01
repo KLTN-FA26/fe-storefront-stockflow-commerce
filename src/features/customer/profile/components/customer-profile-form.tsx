@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { AlertCircle, CheckCircle2, LoaderCircle, RefreshCw } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -35,6 +35,8 @@ export function CustomerProfileForm() {
   const [conflict, setConflict] = useState(false);
   const [reloadError, setReloadError] = useState(false);
   const [isReloading, setIsReloading] = useState(false);
+  // Keep the version paired with the server snapshot used to reset the form.
+  const baseVersion = useRef<CustomerProfile["version"] | null>(null);
   const form = useForm<CustomerProfileFormValues>({
     resolver: zodResolver(customerProfileFormSchema),
     defaultValues: { fullName: "", phone: "" },
@@ -44,6 +46,7 @@ export function CustomerProfileForm() {
   useEffect(() => {
     if (profileQuery.data && !form.formState.isDirty) {
       form.reset(formValues(profileQuery.data));
+      baseVersion.current = profileQuery.data.version;
     }
   }, [form, form.formState.isDirty, profileQuery.data]);
 
@@ -57,6 +60,7 @@ export function CustomerProfileForm() {
         return;
       }
       form.reset(formValues(result.data));
+      baseVersion.current = result.data.version;
       setConflict(false);
       setReloadError(false);
       setServerError(null);
@@ -67,47 +71,55 @@ export function CustomerProfileForm() {
     }
   };
 
-  const onSubmit = form.handleSubmit((values) => {
-    if (!profileQuery.data || updateMutation.isPending || conflict) return;
-    setServerError(null);
-    setConflict(false);
+  const onSubmit = (event: FormEvent<HTMLFormElement>) =>
+    form.handleSubmit((values) => {
+      if (
+        !profileQuery.data ||
+        baseVersion.current === null ||
+        updateMutation.isPending ||
+        conflict
+      )
+        return;
+      setServerError(null);
+      setConflict(false);
 
-    updateMutation.mutate(
-      {
-        fullName: values.fullName.trim(),
-        phone: values.phone.trim() || null,
-        version: profileQuery.data.version,
-      },
-      {
-        onSuccess: (profile) => {
-          form.reset(formValues(profile));
-          toast.success("Đã cập nhật thông tin tài khoản");
+      updateMutation.mutate(
+        {
+          fullName: values.fullName.trim(),
+          phone: values.phone.trim() || null,
+          version: baseVersion.current,
         },
-        onError: (error) => {
-          if (error.code === "OPTIMISTIC_LOCK") {
-            setConflict(true);
-            return;
-          }
-
-          const fieldErrors = error.fieldErrors ?? {};
-          let mappedFieldError = false;
-          for (const field of ["fullName", "phone"] as const) {
-            const message = fieldErrors[field];
-            if (message) {
-              form.setError(field, { type: "server", message });
-              mappedFieldError = true;
+        {
+          onSuccess: (profile) => {
+            form.reset(formValues(profile));
+            baseVersion.current = profile.version;
+            toast.success("Đã cập nhật thông tin tài khoản");
+          },
+          onError: (error) => {
+            if (error.code === "OPTIMISTIC_LOCK") {
+              setConflict(true);
+              return;
             }
-          }
-          if (
-            !mappedFieldError ||
-            Object.keys(fieldErrors).some((field) => !["fullName", "phone"].includes(field))
-          ) {
-            setServerError(error.message);
-          }
+
+            const fieldErrors = error.fieldErrors ?? {};
+            let mappedFieldError = false;
+            for (const field of ["fullName", "phone"] as const) {
+              const message = fieldErrors[field];
+              if (message) {
+                form.setError(field, { type: "server", message });
+                mappedFieldError = true;
+              }
+            }
+            if (
+              !mappedFieldError ||
+              Object.keys(fieldErrors).some((field) => !["fullName", "phone"].includes(field))
+            ) {
+              setServerError(error.message);
+            }
+          },
         },
-      },
-    );
-  });
+      );
+    })(event);
 
   if (profileQuery.isLoading) {
     return (
@@ -119,7 +131,7 @@ export function CustomerProfileForm() {
     );
   }
 
-  if (profileQuery.error && (isCustomerNotFound(profileQuery.error) || !profileQuery.data)) {
+  if (profileQuery.error && !profileQuery.data) {
     if (isCustomerNotFound(profileQuery.error)) {
       return (
         <Alert tone="warning" title="Chưa có hồ sơ khách hàng">
