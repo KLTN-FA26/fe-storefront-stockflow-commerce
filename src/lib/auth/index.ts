@@ -4,7 +4,7 @@ export { PERMISSIONS, can, permissionsFor } from "./permissions";
 export type { Permission } from "./permissions";
 export { useAuthStore } from "./auth-store";
 export type { AuthUser, AuthTokens } from "./auth-store";
-export { loginApi, mockLoginApi, refreshTokenApi, logoutApi } from "./auth-api";
+export { loginApi, mockLoginApi, logoutApi } from "./auth-api";
 export { setAuthCookie, removeAuthCookie, getAuthCookie } from "./auth-cookie";
 export { Can, useCan } from "./components/Can";
 export { RoleSwitcher } from "./components/RoleSwitcher";

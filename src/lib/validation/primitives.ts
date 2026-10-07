@@ -39,3 +39,10 @@ export const email = z.string().email("Email không hợp lệ");
 export const phone = z
   .string()
   .regex(/^(\+84|0)\d{9,10}$/, "Số điện thoại không hợp lệ");
+
+/** Matches backend VietnamPhoneValidator: mobile/landline, optional separators and +84/84. */
+export const vietnamPhone = z.string().refine((value) => {
+  if (value.trim() === "") return true;
+  const compact = value.replace(/[\s.\-()]/g, "");
+  return /^(?:\+?84|0)(?:[35789]\d{8}|2\d{9})$/.test(compact);
+}, "Số điện thoại không hợp lệ");

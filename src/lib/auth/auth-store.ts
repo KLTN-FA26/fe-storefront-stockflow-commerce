@@ -1,14 +1,14 @@
 /**
  * Auth store — zustand with persist.
  *
- * Stores JWT tokens received from Spring Boot backend.
+ * Stores the access token received from the Spring Boot backend.
  * Token is attached to every axios request via interceptor in client.ts.
  *
  * Flow:
- *   1. User submits credentials → POST /api/auth/login (Spring Boot)
- *   2. Spring Boot returns { accessToken, refreshToken, user }
- *   3. FE stores tokens here → axios interceptor attaches Authorization header
- *   4. On 401 → try refresh token → if fail → logout + redirect /login
+ *   1. User submits credentials → POST /api/v1/identity/auth/login
+ *   2. Spring Boot returns { accessToken, tokenType, expiresInSeconds }
+ *   3. FE stores the access token → axios interceptor attaches Authorization header
+ *   4. On 401 → logout + redirect /login; server sessions are the revocation source of truth
  *   5. Next.js middleware checks token existence → redirect if missing
  */
 
@@ -29,7 +29,8 @@ export interface AuthUser {
 
 export interface AuthTokens {
   accessToken: string;
-  refreshToken: string;
+  tokenType: string;
+  expiresInSeconds: number;
 }
 
 interface AuthState {
@@ -46,8 +47,7 @@ interface AuthState {
   effectiveRoles: () => RoleName[];
 
   /* ── Actions ────────────────────────────────────────────────────── */
-  login: (user: AuthUser, tokens: AuthTokens) => void;
-  updateTokens: (tokens: AuthTokens) => void;
+  login: (user: AuthUser | null, tokens: AuthTokens) => void;
   logout: () => void;
 }
 
@@ -75,11 +75,6 @@ export const useAuthStore = create<AuthState>()(
         set({ user, tokens, isAuthenticated: true, impersonatedRole: null });
       },
 
-      updateTokens: (tokens) => {
-        setAuthCookie(tokens.accessToken);
-        set({ tokens });
-      },
-
       logout: () => {
         removeAuthCookie();
         set({
@@ -92,11 +87,30 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "stockflow-auth",
+      version: 1,
       storage: createJSONStorage(() =>
         typeof window !== "undefined"
           ? localStorage
           : { getItem: () => null, setItem: () => {}, removeItem: () => {} },
       ),
+      migrate: (persisted) => {
+        const state = persisted as Partial<AuthState> & {
+          tokens?: Partial<AuthTokens> & { refreshToken?: unknown };
+        };
+        const rawTokens = state.tokens;
+        if (!rawTokens?.accessToken) {
+          return { user: null, tokens: null, isAuthenticated: false };
+        }
+        return {
+          user: state.user ?? null,
+          tokens: {
+            accessToken: rawTokens.accessToken,
+            tokenType: rawTokens.tokenType ?? "Bearer",
+            expiresInSeconds: rawTokens.expiresInSeconds ?? 0,
+          },
+          isAuthenticated: state.isAuthenticated === true,
+        };
+      },
       partialize: (state) => ({
         user: state.user,
         tokens: state.tokens,
