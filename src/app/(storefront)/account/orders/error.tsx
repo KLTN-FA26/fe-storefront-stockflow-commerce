@@ -1,20 +1,24 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+
+import { STORE_ROUTES } from "@/constants";
+import { Alert, PageContainer } from "@/components/shared";
 import { Button } from "@/components/ui/button";
-import { PageContainer } from "@/components/shared";
+import { describeError } from "@/features/order";
 
 export default function OrdersError({ error, reset }: { error: Error; reset: () => void }) {
-  const router = useRouter();
   return (
-    <PageContainer className="max-w-4xl text-center">
-      <h2 className="font-display text-ink-primary text-2xl font-bold">Đã xảy ra lỗi</h2>
-      <p className="text-ink-secondary mt-2">{error.message}</p>
-      <div className="mt-6 flex justify-center gap-3">
-        <Button variant="outline" className="rounded-full" onClick={() => router.back()}>
-          Quay lại
+    <PageContainer className="max-w-4xl space-y-6">
+      <Alert tone="danger" title="Không hiển thị được danh sách đơn hàng">
+        {describeError(error)}
+      </Alert>
+      <div className="flex flex-wrap gap-3">
+        {/* A link, not router.back(): opened from a bookmark or a new tab there is no "back". */}
+        <Button asChild variant="outline" className="min-h-11 rounded-full px-4">
+          <Link href={STORE_ROUTES.account.home}>Về tài khoản</Link>
         </Button>
-        <Button className="rounded-full" onClick={() => reset()}>
+        <Button className="min-h-11 rounded-full px-4" onClick={() => reset()}>
           Thử lại
         </Button>
       </div>
