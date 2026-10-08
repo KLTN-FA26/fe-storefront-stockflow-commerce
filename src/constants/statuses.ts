@@ -88,49 +88,9 @@ export const INVOICE_STATUS = {
   PAID: "Paid",
 } as const satisfies Record<string, InvoiceStatus>;
 
-// ─── ORDER ───────────────────────────────────────────────────────────────────
-
-export const ORDER_STATUSES = [
-  "Draft",
-  "Pending Payment",
-  "Payment Failed",
-  "Confirmed",
-  "In Production",
-  "On Hold",
-  "Ready to Fulfill",
-  "Picking",
-  "Partially Fulfilled",
-  "Packed",
-  "Shipped",
-  "In Transit",
-  "Delivery Failed",
-  "Delivered",
-  "Return Requested",
-  "Returned",
-  "Refunded",
-  "Partially Refunded",
-  "Completed",
-  "Cancelled",
-  "Closed",
-] as const;
-
-export const ORDER_STATUS = {
-  CANCELLED: "Cancelled",
-  COMPLETED: "Completed",
-  CONFIRMED: "Confirmed",
-  DELIVERED: "Delivered",
-  DRAFT: "Draft",
-  IN_PRODUCTION: "In Production",
-  PAYMENT_FAILED: "Payment Failed",
-  PENDING_PAYMENT: "Pending Payment",
-  READY_TO_FULFILL: "Ready to Fulfill",
-  SHIPPED: "Shipped",
-} as const satisfies Record<string, OrderStatus>;
-
 export type PoStatus = (typeof PO_STATUSES)[number];
 export type ReceiptStatus = (typeof RECEIPT_STATUSES)[number];
 export type ProductStatus = (typeof PRODUCT_STATUSES)[number];
 export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number];
 export type SkuStatus = (typeof SKU_STATUSES)[number];
 export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
-export type OrderStatus = (typeof ORDER_STATUSES)[number];
