@@ -108,9 +108,9 @@ async function mockAdapter(config: AxiosRequestConfig): Promise<MockResponse> {
     return {
       status: 500,
       data: {
-        code: "MOCK_RANDOM_ERROR",
+        errorCode: "MOCK_RANDOM_ERROR",
         message: "Lỗi ngẫu nhiên từ mock server (5% chance)",
-        traceId: `mock-${Date.now()}`,
+        correlationId: `mock-${Date.now()}`,
       },
       headers: {},
     };

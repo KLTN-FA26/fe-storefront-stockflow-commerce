@@ -8,7 +8,7 @@
  */
 
 const COOKIE_NAME = "stockflow-auth-token";
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
+const COOKIE_MAX_AGE = 60 * 60 * 8; // Keep the presence cookie within the default token lifetime.
 
 /** Set the auth cookie after successful login. */
 export function setAuthCookie(accessToken: string): void {

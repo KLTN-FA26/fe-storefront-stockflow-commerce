@@ -9,7 +9,137 @@
 
 import { MOCK_DATA, registerMockRoute, paginate } from "./mock-adapter";
 
+export function mockPasswordResponse(body: unknown) {
+  const request = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const fieldErrors = [];
+  if (typeof request.currentPassword !== "string" || request.currentPassword.trim() === "") {
+    fieldErrors.push({
+      field: "currentPassword",
+      message: "currentPassword is required",
+      code: "NotBlank",
+    });
+  }
+  if (typeof request.newPassword !== "string" || request.newPassword.trim() === "") {
+    fieldErrors.push({
+      field: "newPassword",
+      message: "newPassword is required",
+      code: "NotBlank",
+    });
+  } else if (
+    request.newPassword.length < 10 ||
+    request.newPassword.length > 72 ||
+    !/[A-Z]/.test(request.newPassword) ||
+    !/[a-z]/.test(request.newPassword) ||
+    !/\d/.test(request.newPassword)
+  ) {
+    fieldErrors.push({
+      field: "newPassword",
+      message: "newPassword must contain upper-case, lower-case and digit characters",
+      code: "Pattern",
+    });
+  }
+  if (fieldErrors.length > 0) {
+    return {
+      status: 400,
+      data: {
+        success: false,
+        errorCode: "VALIDATION_FAILED",
+        message: "Dữ liệu không hợp lệ",
+        fieldErrors,
+        correlationId: "mock-password-validation",
+        timestamp: new Date().toISOString(),
+      },
+      headers: {},
+    };
+  }
+  if (request.currentPassword !== "CurrentPass123") {
+    return {
+      status: 400,
+      data: {
+        success: false,
+        errorCode: "INVALID_CURRENT_PASSWORD",
+        message: "Mật khẩu hiện tại không đúng",
+        correlationId: "mock-password-current",
+        timestamp: new Date().toISOString(),
+      },
+      headers: {},
+    };
+  }
+  if (request.newPassword === request.currentPassword) {
+    return {
+      status: 400,
+      data: {
+        success: false,
+        errorCode: "PASSWORD_UNCHANGED",
+        message: "Mật khẩu mới phải khác mật khẩu hiện tại",
+        correlationId: "mock-password-unchanged",
+        timestamp: new Date().toISOString(),
+      },
+      headers: {},
+    };
+  }
+  return {
+    status: 200,
+    data: {
+      success: true,
+      data: { revokedSessions: request.logoutOtherDevices ? 2 : 0 },
+      timestamp: new Date().toISOString(),
+    },
+    headers: {},
+  };
+}
+
 export function registerAllMockRoutes(): void {
+  /* ====================================================================
+   * Module 18 — Customer profile (self-service)
+   * ==================================================================*/
+
+  let mockCustomerProfile = {
+    customerId: "CUS-0010",
+    userId: "USER-CUS-0010",
+    fullName: "Nguyễn Hoài Nam",
+    email: "nam.nguyen@example.vn",
+    phone: "+84908111222",
+    segmentId: null,
+    status: "ACTIVE",
+    version: 0,
+    createdAt: "2026-01-10T02:00:00Z",
+  };
+
+  registerMockRoute("GET", "/v1/customers/me", async () => ({
+    status: 200,
+    data: mockCustomerProfile,
+    headers: {},
+  }));
+
+  registerMockRoute("PUT", "/v1/customers/me", async (config) => {
+    const body = typeof config.data === "string" ? JSON.parse(config.data) : config.data;
+    if (body?.version !== mockCustomerProfile.version) {
+      return {
+        status: 409,
+        data: {
+          errorCode: "OPTIMISTIC_LOCK",
+          message: "Thông tin đã được cập nhật ở nơi khác",
+          correlationId: "mock-customer-conflict",
+        },
+        headers: {},
+      };
+    }
+
+    mockCustomerProfile = {
+      ...mockCustomerProfile,
+      fullName: body.fullName,
+      phone: body.phone,
+      version: mockCustomerProfile.version + 1,
+    };
+    return { status: 200, data: mockCustomerProfile, headers: {} };
+  });
+
+  registerMockRoute("PUT", "/v1/identity/auth/password", async (config) => {
+    const body = typeof config.data === "string" ? JSON.parse(config.data) : config.data;
+    return mockPasswordResponse(body);
+  });
+
   /* ====================================================================
    * Module 01 — Products / SKUs / Categories / Suppliers
    * ==================================================================*/
@@ -496,7 +626,7 @@ export function registerAllMockRoutes(): void {
     ) {
       return {
         status: 409,
-        data: { code: "CONFLICT", message: "Đơn hàng không thể huỷ ở trạng thái hiện tại" },
+        data: { errorCode: "CONFLICT", message: "Đơn hàng không thể huỷ ở trạng thái hiện tại" },
         headers: {},
       };
     }
@@ -856,10 +986,10 @@ export function registerAllMockRoutes(): void {
    * Auth routes (handled by auth-api.ts, registered here for completeness)
    * ==================================================================*/
 
-  registerMockRoute("POST", "/auth/login", async (config) => {
+  registerMockRoute("POST", "/v1/identity/auth/login", async (config) => {
     const { staffUsers } = MOCK_DATA;
     const body = typeof config.data === "string" ? JSON.parse(config.data) : config.data;
-    const user = staffUsers.find((u) => u.userId === body?.userId || u.email === body?.email);
+    const user = staffUsers.find((u) => u.email === body?.username);
 
     if (!user) {
       return { status: 401, data: { message: "Email hoặc mật khẩu không đúng" }, headers: {} };
@@ -869,31 +999,14 @@ export function registerAllMockRoutes(): void {
       status: 200,
       data: {
         accessToken: `mock-access-${user.userId}-${Date.now()}`,
-        refreshToken: `mock-refresh-${user.userId}-${Date.now()}`,
-        user: {
-          userId: user.userId,
-          fullName: user.fullName,
-          email: user.email,
-          roles: user.roles,
-          warehouseIds: user.warehouseIds,
-        },
+        tokenType: "Bearer",
+        expiresInSeconds: 8 * 60 * 60,
       },
       headers: {},
     };
   });
 
-  registerMockRoute("POST", "/auth/refresh", async () => {
-    return {
-      status: 200,
-      data: {
-        accessToken: `mock-access-refreshed-${Date.now()}`,
-        refreshToken: `mock-refresh-refreshed-${Date.now()}`,
-      },
-      headers: {},
-    };
-  });
-
-  registerMockRoute("POST", "/auth/logout", async () => {
+  registerMockRoute("POST", "/v1/identity/auth/logout", async () => {
     return { status: 200, data: { message: "Logged out" }, headers: {} };
   });
 }

@@ -3,7 +3,8 @@
  *
  * Interceptors:
  *  - Request: attach JWT token (Authorization: Bearer) + warehouse header.
- *  - Response: normalise errors into ApiError. On 401 → try refresh → logout.
+ *  - Response: unwrap the backend ApiResponse envelope and normalise errors.
+ *    On 401 → logout and redirect; there is no refresh-token flow.
  *
  * When USE_MOCK=true the mock adapter (mock-adapter.ts) replaces
  * the default adapter so every call resolves against mock-data — component
@@ -14,8 +15,10 @@
  * rewrites "/api/:path*" to the real backend on the server side.
  */
 
-import axios, { type AxiosError } from "axios";
+import axios, { type AxiosError, type AxiosResponse } from "axios";
+import { APP_ROUTES } from "@/constants";
 import { ApiError, type ApiErrorBody } from "./error";
+import { useAuthStore } from "@/lib/auth/auth-store";
 
 export const api = axios.create({
   baseURL: "/api",
@@ -48,78 +51,33 @@ api.interceptors.request.use((cfg) => {
 
 /* ── Response interceptor ────────────────────────────────────────────── */
 
-let isRefreshing = false;
-let refreshSubscribers: ((token: string) => void)[] = [];
-
-function onTokenRefreshed(token: string) {
-  refreshSubscribers.forEach((cb) => cb(token));
-  refreshSubscribers = [];
+interface ApiSuccessEnvelope {
+  success: true;
+  data: unknown;
 }
 
-api.interceptors.response.use(
-  (res) => res,
-  async (err: AxiosError<ApiErrorBody>) => {
-    const originalRequest = err.config;
+function isApiSuccessEnvelope(value: unknown): value is ApiSuccessEnvelope {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "success" in value &&
+    value.success === true &&
+    "data" in value
+  );
+}
 
-    // 401 → try refresh token (skip if already refreshing or if it's the refresh call itself)
-    if (
-      err.response?.status === 401 &&
-      originalRequest &&
-      !originalRequest.url?.includes("/auth/") &&
-      !(originalRequest as unknown as Record<string, unknown>)._retry
-    ) {
-      if (isRefreshing) {
-        // Queue this request until refresh completes
-        return new Promise((resolve) => {
-          refreshSubscribers.push((token: string) => {
-            originalRequest.headers.set("Authorization", `Bearer ${token}`);
-            resolve(api(originalRequest));
-          });
-        });
-      }
+function unwrapSuccess(response: AxiosResponse<unknown>): AxiosResponse<unknown> {
+  if (isApiSuccessEnvelope(response.data)) response.data = response.data.data;
+  return response;
+}
 
-      (originalRequest as unknown as Record<string, unknown>)._retry = true;
-      isRefreshing = true;
+function logoutAfterUnauthorized(): void {
+  useAuthStore.getState().logout();
 
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { useAuthStore } = require("@/lib/auth/auth-store");
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { refreshTokenApi } = require("@/lib/auth/auth-api");
-        const refreshToken = useAuthStore.getState().tokens?.refreshToken;
+  if (typeof window !== "undefined") window.location.replace(APP_ROUTES.login);
+}
 
-        if (!refreshToken) throw new Error("No refresh token");
-
-        const newTokens = await refreshTokenApi(refreshToken);
-        useAuthStore.getState().updateTokens(newTokens);
-
-        onTokenRefreshed(newTokens.accessToken);
-        isRefreshing = false;
-
-        originalRequest.headers.set("Authorization", `Bearer ${newTokens.accessToken}`);
-        return api(originalRequest);
-      } catch {
-        isRefreshing = false;
-        refreshSubscribers = [];
-
-        // Refresh failed → logout
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const { useAuthStore } = require("@/lib/auth/auth-store");
-          useAuthStore.getState().logout();
-        } catch {
-          /* noop */
-        }
-
-        // Redirect to login (client-side only, external navigation)
-        if (typeof window !== "undefined") {
-          window.location.replace("/login");
-        }
-
-        return Promise.reject(ApiError.from(err));
-      }
-    }
-
-    return Promise.reject(ApiError.from(err));
-  },
-);
+api.interceptors.response.use(unwrapSuccess, (err: AxiosError<ApiErrorBody>) => {
+  if (err.response?.status === 401) logoutAfterUnauthorized();
+  return Promise.reject(ApiError.from(err));
+});
