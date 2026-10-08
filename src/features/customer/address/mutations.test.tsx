@@ -17,7 +17,7 @@ function setup() {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
-  return { invalidate, wrapper };
+  return { queryClient, invalidate, wrapper };
 }
 
 const input = { customerId: "CUS-0010", addressId: "6f1c2a3b-4d5e-4f60-8a71-0b2c3d4e5f60" };
@@ -25,13 +25,16 @@ const input = { customerId: "CUS-0010", addressId: "6f1c2a3b-4d5e-4f60-8a71-0b2c
 describe("address mutations keep the list in sync", () => {
   it("re-reads the list after a successful delete", async () => {
     vi.spyOn(api, "delete").mockResolvedValueOnce({ data: null, status: 204 });
-    const { invalidate, wrapper } = setup();
+    const { queryClient, invalidate, wrapper } = setup();
+    queryClient.setQueryData(customerAddressKeys.customerId(), input.customerId);
     const { result } = renderHook(() => useDeleteAddress(), { wrapper });
 
     result.current.mutate(input);
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: customerAddressKeys.all });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: customerAddressKeys.lists() });
+    // customerId never changes for a session: no extra GET /customers/me after a mutation.
+    expect(queryClient.getQueryState(customerAddressKeys.customerId())?.isInvalidated).toBe(false);
   });
 
   it("re-reads the list when the address was already removed elsewhere (404)", async () => {
@@ -44,6 +47,6 @@ describe("address mutations keep the list in sync", () => {
     result.current.mutate(input);
 
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: customerAddressKeys.all });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: customerAddressKeys.lists() });
   });
 });

@@ -24,7 +24,7 @@ function useAddressMutation<TInput, TResult>(
     onError: (error) => {
       if (toastError) toast.error(describeError(error));
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: customerAddressKeys.all }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: customerAddressKeys.lists() }),
   });
 }
 

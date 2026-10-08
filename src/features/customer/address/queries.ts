@@ -6,8 +6,10 @@ import { getMyCustomerId, listAddresses } from "./api";
 
 export const customerAddressKeys = {
   all: ["customer-addresses"] as const,
-  customerId: () => [...customerAddressKeys.all, "customer-id"] as const,
-  list: (customerId: string) => [...customerAddressKeys.all, "list", customerId] as const,
+  lists: () => [...customerAddressKeys.all, "list"] as const,
+  list: (customerId: string) => [...customerAddressKeys.lists(), customerId] as const,
+  // Outside `all` so address mutations do not re-fetch /customers/me.
+  customerId: () => ["customer-address-owner"] as const,
 };
 
 /**
