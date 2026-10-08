@@ -1,5 +1,11 @@
 "use client";
 
+// TODO(SCRUM-375-followup): guest/local form. Shares Vietnam address logic
+// (useVietnamAddresses) with `features/customer/address/components/address-form.tsx` but
+// does not call customer address API. Keep `phone` regex and ward/province
+// validation in sync with `features/customer/address/schemas.ts` (VietnamPhoneValidator).
+// Follow-up: unify or make checkout pick from saved addresses when logged in.
+
 import { useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "cn";

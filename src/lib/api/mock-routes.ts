@@ -8,6 +8,7 @@
  */
 
 import { MOCK_DATA, registerMockRoute, paginate } from "./mock-adapter";
+import { registerCustomerAddressMockRoutes } from "./mock-customer-addresses";
 
 export function mockPasswordResponse(body: unknown) {
   const request = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
@@ -106,13 +107,13 @@ export function registerAllMockRoutes(): void {
     createdAt: "2026-01-10T02:00:00Z",
   };
 
-  registerMockRoute("GET", "/v1/customers/me", async () => ({
+  registerMockRoute("GET", "/customers/me", async () => ({
     status: 200,
     data: mockCustomerProfile,
     headers: {},
   }));
 
-  registerMockRoute("PUT", "/v1/customers/me", async (config) => {
+  registerMockRoute("PUT", "/customers/me", async (config) => {
     const body = typeof config.data === "string" ? JSON.parse(config.data) : config.data;
     if (body?.version !== mockCustomerProfile.version) {
       return {
@@ -135,10 +136,13 @@ export function registerAllMockRoutes(): void {
     return { status: 200, data: mockCustomerProfile, headers: {} };
   });
 
-  registerMockRoute("PUT", "/v1/identity/auth/password", async (config) => {
+  registerMockRoute("PUT", "/identity/auth/password", async (config) => {
     const body = typeof config.data === "string" ? JSON.parse(config.data) : config.data;
     return mockPasswordResponse(body);
   });
+
+  // Module 18 — address book (BE-shaped fixture, see mock-customer-addresses.ts)
+  registerCustomerAddressMockRoutes();
 
   /* ====================================================================
    * Module 01 — Products / SKUs / Categories / Suppliers
@@ -579,7 +583,7 @@ export function registerAllMockRoutes(): void {
    * Auth routes (handled by auth-api.ts, registered here for completeness)
    * ==================================================================*/
 
-  registerMockRoute("POST", "/v1/identity/auth/login", async (config) => {
+  registerMockRoute("POST", "/identity/auth/login", async (config) => {
     const { staffUsers } = MOCK_DATA;
     const body = typeof config.data === "string" ? JSON.parse(config.data) : config.data;
     const user = staffUsers.find((u) => u.email === body?.username);
@@ -599,7 +603,7 @@ export function registerAllMockRoutes(): void {
     };
   });
 
-  registerMockRoute("POST", "/v1/identity/auth/logout", async () => {
+  registerMockRoute("POST", "/identity/auth/logout", async () => {
     return { status: 200, data: { message: "Logged out" }, headers: {} };
   });
 }
