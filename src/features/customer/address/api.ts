@@ -6,9 +6,9 @@ import { customerAddressDtoSchema, saveAddressRequestSchema } from "./schemas";
 import type { CustomerAddressDto, SaveAddressRequest } from "./types";
 
 // BE CustomerAddressController: /api/v1/customers/{customerId}/addresses (customerId is a UUID;
-// there is no /me/addresses yet). customerId comes from the cached /v1/customers/me profile.
+// there is no /me/addresses yet). customerId comes from the cached /customers/me profile.
 const addressesPath = (customerId: string) =>
-  `/v1/customers/${encodeURIComponent(customerId)}/addresses`;
+  `/customers/${encodeURIComponent(customerId)}/addresses`;
 const addressPath = (customerId: string, addressId: string) =>
   `${addressesPath(customerId)}/${encodeURIComponent(addressId)}`;
 
@@ -18,9 +18,9 @@ const addressListSchema = z.array(customerAddressDtoSchema);
 // deliberately ignores them instead of depending on the profile feature's strict schema.
 const customerIdentitySchema = z.object({ customerId: z.string().min(1) });
 
-/** GET /v1/customers/me → customerId of the signed-in customer (UUID on the BE). */
+/** GET /customers/me → customerId of the signed-in customer (UUID on the BE). */
 export async function getMyCustomerId(signal?: AbortSignal): Promise<string> {
-  const { data } = await api.get<unknown>("/v1/customers/me", signal ? { signal } : {});
+  const { data } = await api.get<unknown>("/customers/me", signal ? { signal } : {});
   return customerIdentitySchema.parse(data).customerId;
 }
 

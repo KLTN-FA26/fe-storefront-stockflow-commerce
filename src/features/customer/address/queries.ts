@@ -12,7 +12,7 @@ export const customerAddressKeys = {
 
 /**
  * Address book of the signed-in customer. The BE route needs the customer UUID, so it is
- * resolved once from GET /v1/customers/me and cached (it never changes for a session).
+ * resolved once from GET /customers/me and cached (it never changes for a session).
  */
 export function useAddressBook() {
   const owner = useQuery({

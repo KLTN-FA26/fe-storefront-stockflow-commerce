@@ -64,7 +64,7 @@ describe("AddressEditor states", () => {
 
     await user.click(screen.getByRole("button", { name: "Thử lại" }));
     expect(await screen.findByText("Không tìm thấy địa chỉ")).toBeInTheDocument();
-    expect(get).toHaveBeenLastCalledWith("/v1/customers/CUS-0010/addresses", expect.anything());
+    expect(get).toHaveBeenLastCalledWith("/customers/CUS-0010/addresses", expect.anything());
   });
 
   it("treats a /me response without customerId as a contract error", async () => {

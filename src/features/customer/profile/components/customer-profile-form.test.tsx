@@ -63,7 +63,7 @@ describe("CustomerProfileForm", () => {
     await user.click(screen.getByRole("button", { name: "Lưu thay đổi" }));
 
     await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
-    expect(put).toHaveBeenCalledWith("/v1/customers/me", {
+    expect(put).toHaveBeenCalledWith("/customers/me", {
       fullName: "Tên mới",
       phone: "0912345678",
       version: 3,
@@ -153,7 +153,7 @@ describe("CustomerProfileForm", () => {
     expect(await screen.findByText(/thông tin đã thay đổi ở nơi khác/i)).toBeVisible();
     expect(fullName).toHaveValue("Bản nháp cục bộ");
     expect(screen.getByRole("button", { name: "Lưu thay đổi" })).toBeDisabled();
-    expect(put).toHaveBeenCalledExactlyOnceWith("/v1/customers/me", {
+    expect(put).toHaveBeenCalledExactlyOnceWith("/customers/me", {
       fullName: "Bản nháp cục bộ",
       phone: profile.phone,
       version: 3,
@@ -167,7 +167,7 @@ describe("CustomerProfileForm", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Đang tải lại...");
     await user.click(pendingReload);
     expect(get).toHaveBeenCalledTimes(2);
-    expect(get.mock.calls.map(([path]) => path)).toEqual(["/v1/customers/me", "/v1/customers/me"]);
+    expect(get.mock.calls.map(([path]) => path)).toEqual(["/customers/me", "/customers/me"]);
     await act(async () => {
       rejectReload(reloadError);
       // Flush Query notifications and reloadLatest's continuation before checking the UI.
@@ -248,7 +248,7 @@ describe("CustomerProfileForm", () => {
     await user.type(fullName, "Bản sửa sau tải lại");
     await user.click(screen.getByRole("button", { name: "Lưu thay đổi" }));
     await waitFor(() => expect(put).toHaveBeenCalledTimes(2));
-    expect(put).toHaveBeenLastCalledWith("/v1/customers/me", {
+    expect(put).toHaveBeenLastCalledWith("/customers/me", {
       fullName: "Bản sửa sau tải lại",
       phone: latestProfile.phone,
       version: 4,
@@ -293,7 +293,7 @@ describe("CustomerProfileForm", () => {
       });
     });
     expect(get).toHaveBeenCalledTimes(2);
-    expect(get.mock.calls.map(([path]) => path)).toEqual(["/v1/customers/me", "/v1/customers/me"]);
+    expect(get.mock.calls.map(([path]) => path)).toEqual(["/customers/me", "/customers/me"]);
     expect(queryClient.getQueryData(customerProfileKeys.profile())).toEqual(profile);
 
     expect.soft(form).toBeInTheDocument();
@@ -337,7 +337,7 @@ describe("CustomerProfileForm", () => {
 
     await user.click(screen.getByRole("button", { name: "Lưu thay đổi" }));
     await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
-    expect.soft(put).toHaveBeenCalledWith("/v1/customers/me", {
+    expect.soft(put).toHaveBeenCalledWith("/customers/me", {
       fullName: "Bản nháp cục bộ",
       phone: profile.phone,
       version: 3,
@@ -451,7 +451,7 @@ describe("CustomerProfileForm", () => {
     expect(screen.queryByText("Không thể tải dữ liệu mới nhất")).not.toBeInTheDocument();
     expect(fullName).toHaveValue("Bản nháp lần hai");
     expect(screen.getByRole("button", { name: "Lưu thay đổi" })).toBeDisabled();
-    expect(put).toHaveBeenLastCalledWith("/v1/customers/me", {
+    expect(put).toHaveBeenLastCalledWith("/customers/me", {
       fullName: "Bản nháp lần hai",
       phone: profile.phone,
       version: 4,

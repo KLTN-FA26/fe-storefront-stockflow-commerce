@@ -21,7 +21,7 @@ describe("mock adapter settles like a real HTTP adapter", () => {
   it("resolves 2xx handler responses", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0.5);
 
-    const response = await api.get("/v1/customers/me");
+    const response = await api.get("/customers/me");
 
     expect(response.status).toBe(200);
   });
@@ -30,7 +30,7 @@ describe("mock adapter settles like a real HTTP adapter", () => {
     vi.spyOn(Math, "random").mockReturnValue(0.5);
 
     const error = await api
-      .put("/v1/customers/me", { fullName: "Tên", phone: null, version: 999 })
+      .put("/customers/me", { fullName: "Tên", phone: null, version: 999 })
       .catch((err: unknown) => err);
 
     expect(error).toBeInstanceOf(ApiError);
@@ -44,7 +44,7 @@ describe("mock adapter settles like a real HTTP adapter", () => {
   it("rejects the simulated random server error", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0.01);
 
-    const error = await api.get("/v1/customers/me").catch((err: unknown) => err);
+    const error = await api.get("/customers/me").catch((err: unknown) => err);
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ status: 500, code: "MOCK_RANDOM_ERROR" });
@@ -53,7 +53,7 @@ describe("mock adapter settles like a real HTTP adapter", () => {
   it("rejects an unmatched route with 404", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const error = await api.get("/v1/does-not-exist").catch((err: unknown) => err);
+    const error = await api.get("/does-not-exist").catch((err: unknown) => err);
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ status: 404 });

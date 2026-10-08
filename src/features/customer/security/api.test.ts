@@ -46,7 +46,7 @@ describe("change password contract", () => {
       }),
     ).resolves.toEqual({ revokedSessions: 2 });
 
-    expect(put).toHaveBeenCalledWith("/v1/identity/auth/password", {
+    expect(put).toHaveBeenCalledWith("/identity/auth/password", {
       currentPassword: valid.currentPassword,
       newPassword: valid.newPassword,
       logoutOtherDevices: true,

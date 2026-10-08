@@ -46,7 +46,7 @@ const body: SaveAddressRequest = {
   defaultAddress: false,
   version: 0,
 };
-const base = `/v1/customers/${customerId}/addresses`;
+const base = `/customers/${customerId}/addresses`;
 
 describe("customer address API (BE CustomerAddressController)", () => {
   it("reads customerId from a BE NON_NULL /me response (null phone/segmentId omitted)", async () => {
@@ -55,7 +55,7 @@ describe("customer address API (BE CustomerAddressController)", () => {
     });
 
     await expect(getMyCustomerId()).resolves.toBe(customerId);
-    expect(get).toHaveBeenCalledWith("/v1/customers/me", {});
+    expect(get).toHaveBeenCalledWith("/customers/me", {});
   });
 
   it("lists with exactly one request to /{customerId}/addresses and parses DTOs", async () => {

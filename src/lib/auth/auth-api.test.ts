@@ -17,7 +17,7 @@ describe("auth API contract", () => {
       tokenType: "Bearer",
       expiresInSeconds: 28_800,
     });
-    expect(post).toHaveBeenCalledWith("/v1/identity/auth/login", {
+    expect(post).toHaveBeenCalledWith("/identity/auth/login", {
       username: "customer@example.com",
       password: "Password1234",
     });
@@ -28,7 +28,7 @@ describe("auth API contract", () => {
 
     await logoutApi();
 
-    expect(post).toHaveBeenCalledWith("/v1/identity/auth/logout");
+    expect(post).toHaveBeenCalledWith("/identity/auth/logout");
   });
 
   it.each([

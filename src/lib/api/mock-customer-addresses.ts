@@ -1,5 +1,5 @@
 /**
- * Mock routes for the BE address book: /v1/customers/{customerId}/addresses.
+ * Mock routes for the BE address book: /customers/{customerId}/addresses.
  * Responses use the real ApiResponse envelope; the mock adapter rejects error statuses so the
  * client interceptor turns them into ApiError (fieldErrors, errorCode, correlationId).
  */
@@ -14,7 +14,7 @@ import {
   type MockResult,
 } from "./mock-fixtures/customer-addresses";
 
-/** Same id as the mock profile returned by GET /v1/customers/me (see mock-routes.ts). */
+/** Same id as the mock profile returned by GET /customers/me (see mock-routes.ts). */
 export const MOCK_CUSTOMER_ID = "CUS-0010";
 
 const respond = (result: MockResult) => ({
@@ -40,7 +40,7 @@ export function registerCustomerAddressMockRoutes(
     seedMockAddresses(MOCK_CUSTOMER_ID),
   ),
 ): void {
-  const BASE = "/v1/customers/:customerId/addresses";
+  const BASE = "/customers/:customerId/addresses";
 
   // BE `authorise`: another customer's book answers NOT_FOUND, hiding that it exists.
   const withOwnBook = (

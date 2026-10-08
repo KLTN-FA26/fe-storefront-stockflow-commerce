@@ -47,7 +47,7 @@ describe("API authentication semantics", () => {
       config,
     });
 
-    await expect(api.get("/v1/identity/auth/login")).resolves.toMatchObject({
+    await expect(api.get("/identity/auth/login")).resolves.toMatchObject({
       data: { accessToken: "access", tokenType: "Bearer", expiresInSeconds: 28_800 },
     });
   });
@@ -70,7 +70,7 @@ describe("API authentication semantics", () => {
     );
     api.defaults.adapter = adapter;
 
-    await expect(api.get("/v1/customer/profile")).rejects.toMatchObject({
+    await expect(api.get("/customer/profile")).rejects.toMatchObject({
       status: 401,
       code: "UNAUTHORIZED",
     });
@@ -79,7 +79,7 @@ describe("API authentication semantics", () => {
     expect(useAuthStore.getState().tokens).toBeNull();
     expect(replace).toHaveBeenCalledWith("/login");
     expect(adapter).toHaveBeenCalledTimes(1);
-    expect(adapter.mock.calls[0]?.[0].url).toBe("/v1/customer/profile");
+    expect(adapter.mock.calls[0]?.[0].url).toBe("/customer/profile");
   });
 
   it("does not clear auth state or redirect for a 400 password validation error", async () => {
@@ -98,7 +98,7 @@ describe("API authentication semantics", () => {
     });
 
     await expect(
-      api.put("/v1/identity/auth/password", { currentPassword: "wrong" }),
+      api.put("/identity/auth/password", { currentPassword: "wrong" }),
     ).rejects.toBeInstanceOf(ApiError);
 
     expect(useAuthStore.getState().isAuthenticated).toBe(true);
