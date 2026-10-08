@@ -1,56 +1,56 @@
-import { describe, it, expect } from "vitest";
-import { isOrderCancellable } from "../lifecycle";
+import { describe, expect, it } from "vitest";
 
-/**
- * BR-031: Customer self-cancellation is allowed only before "Shipped".
- * From "Shipped" onward the order is in the carrier's hands.
- * Source: scrum-242/245 — "khách tự huỷ chỉ khi đơn chưa rời kho".
- */
-describe("isOrderCancellable", () => {
-  it("returns true for cancellable pre-fulfillment statuses", () => {
-    const cancellableStatuses = [
-      "Draft",
-      "Pending Payment",
-      "Payment Failed",
-      "Confirmed",
-      "In Production",
-      "On Hold",
-      "Ready to Fulfill",
-      "Picking",
-      "Partially Fulfilled",
-      "Packed",
-    ] as const;
+import {
+  isOrderCancellable,
+  isOrderTerminal,
+  ORDER_STATUS_META,
+  orderProgressOf,
+} from "../lifecycle";
+import { ORDER_STATUSES } from "../schemas";
 
-    for (const status of cancellableStatuses) {
-      expect(isOrderCancellable(status)).toBe(true);
+describe("order lifecycle mirrors BE OrderStatus", () => {
+  it("covers all 10 BE statuses, including ON_HOLD", () => {
+    expect(ORDER_STATUSES).toHaveLength(10);
+    expect(ORDER_STATUSES).toContain("ON_HOLD");
+    expect(Object.keys(ORDER_STATUS_META).sort()).toEqual([...ORDER_STATUSES].sort());
+  });
+
+  // BR-031 + OrderStatus#canTransitionTo(CANCELLED)
+  it("allows cancellation from exactly DRAFT, PENDING_PAYMENT, PAID, IN_FULFILMENT, ON_HOLD", () => {
+    expect(ORDER_STATUSES.filter(isOrderCancellable)).toEqual([
+      "DRAFT",
+      "PENDING_PAYMENT",
+      "PAID",
+      "IN_FULFILMENT",
+      "ON_HOLD",
+    ]);
+  });
+
+  it.each(["SHIPPED", "DELIVERED", "COMPLETED", "CANCELLED", "RETURNED"] as const)(
+    "refuses cancellation from %s (BR-031: raise a return instead)",
+    (status) => expect(isOrderCancellable(status)).toBe(false),
+  );
+
+  it("treats COMPLETED, CANCELLED, RETURNED as terminal", () => {
+    expect(ORDER_STATUSES.filter(isOrderTerminal)).toEqual(["COMPLETED", "CANCELLED", "RETURNED"]);
+  });
+
+  it("gives every status a Vietnamese label and a semantic tone", () => {
+    expect(ORDER_STATUS_META.CANCELLED).toMatchObject({ label: "Đã huỷ", tone: "danger" });
+    expect(ORDER_STATUS_META.RETURNED.tone).toBe("special");
+    expect(ORDER_STATUS_META.ON_HOLD.tone).toBe("warning");
+    for (const status of ORDER_STATUSES) {
+      expect(ORDER_STATUS_META[status].label).not.toBe(status);
+      expect(ORDER_STATUS_META[status].hint.length).toBeGreaterThan(0);
     }
   });
 
-  it("returns false for non-cancellable statuses (BR-031)", () => {
-    const nonCancellableStatuses = [
-      "Shipped",
-      "In Transit",
-      "Delivery Failed",
-      "Delivered",
-      "Return Requested",
-      "Returned",
-      "Refunded",
-      "Partially Refunded",
-      "Completed",
-      "Cancelled",
-      "Closed",
-    ] as const;
-
-    for (const status of nonCancellableStatuses) {
-      expect(isOrderCancellable(status)).toBe(false);
-    }
-  });
-
-  it("is false specifically for Shipped (BR-031 boundary)", () => {
-    expect(isOrderCancellable("Shipped")).toBe(false);
-  });
-
-  it("is true specifically for Ready to Fulfill (last cancellable status)", () => {
-    expect(isOrderCancellable("Ready to Fulfill")).toBe(true);
+  it("derives progress from the status alone and leaves the happy path when cancelled/returned", () => {
+    expect(orderProgressOf("PENDING_PAYMENT")).toBe(1);
+    expect(orderProgressOf("SHIPPED")).toBe(3);
+    expect(orderProgressOf("DELIVERED")).toBe(5);
+    expect(orderProgressOf("COMPLETED")).toBe(5);
+    expect(orderProgressOf("CANCELLED")).toBeNull();
+    expect(orderProgressOf("RETURNED")).toBeNull();
   });
 });

@@ -13,8 +13,6 @@ export {
 export {
   INVOICE_STATUS,
   INVOICE_STATUSES,
-  ORDER_STATUS,
-  ORDER_STATUSES,
   PO_STATUS,
   PO_STATUSES,
   PRODUCT_STATUS,
@@ -27,7 +25,6 @@ export {
 } from "./statuses";
 export type {
   InvoiceStatus,
-  OrderStatus,
   PoStatus,
   ProductStatus,
   ProposalStatus,

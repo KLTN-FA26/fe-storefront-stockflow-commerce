@@ -1,45 +1,40 @@
 import { api } from "@/lib/api/client";
-import type { PaginatedResponse, ListQueryParams } from "@/lib/api/query-factory";
-import type { Order } from "./types";
 
-export interface PaginatedOrderResponse {
-  items: Order[];
-  page: number;
-  size: number;
-  totalElements: number;
-  totalPages: number;
-  hasNext: boolean;
-  hasPrevious: boolean;
-}
+import { cancelOrderInputSchema, orderDtoSchema, orderPageDtoSchema } from "./schemas";
+import type { CancelOrderInput, MyOrdersParams, Order, OrderPage } from "./types";
 
-export type ListMyOrdersParams = ListQueryParams;
+// BE OrderController: /api/v1/orders — the /v1 prefix lives in API_URL.
 
-/** GET /orders/me — 1-indexed FE → 0-indexed BE bridge. */
+/** GET /orders/me — FE pages are 1-based, the BE PageResponse is 0-based. */
 export async function getMyOrders(
-  params: ListMyOrdersParams,
+  params: MyOrdersParams,
   signal?: AbortSignal,
-): Promise<PaginatedResponse<Order>> {
-  const config = signal ? { signal } : {};
-  const { data } = await api.get<PaginatedOrderResponse>("/orders/me", {
-    params: { page: (params.page ?? 1) - 1, size: params.pageSize },
-    ...config,
+): Promise<OrderPage> {
+  const { data } = await api.get<unknown>("/orders/me", {
+    params: { page: Math.max(params.page, 1) - 1, size: params.size },
+    ...(signal ? { signal } : {}),
   });
-  return {
-    items: data.items,
-    total: data.totalElements,
-    page: data.page + 1, // BE 0-indexed → FE 1-indexed
-    pageSize: data.size,
-  };
+  const page = orderPageDtoSchema.parse(data);
+  return { ...page, page: page.page + 1 };
 }
 
-export async function getOrder(id: string, signal?: AbortSignal): Promise<Order> {
-  const config = signal ? { signal } : {};
-  const { data } = await api.get<Order>(`/orders/${id}`, config);
-  return data;
+/** GET /orders/{orderId} — another customer's order answers 404 NOT_FOUND (BE hides it). */
+export async function getOrder(orderId: string, signal?: AbortSignal): Promise<Order> {
+  const { data } = await api.get<unknown>(
+    `/orders/${encodeURIComponent(orderId)}`,
+    signal ? { signal } : {},
+  );
+  return orderDtoSchema.parse(data);
 }
 
-export async function cancelMyOrder(input: { id: string; reason?: string }): Promise<void> {
-  await api.post(`/orders/${input.id}/cancellation`, undefined, {
-    params: input.reason ? { reason: input.reason } : {},
+/**
+ * POST /orders/{orderId}/cancellation?reason= — `reason` is a query param (BE default
+ * CUSTOMER_REQUEST). The input is validated first so a reason the BE would refuse never leaves
+ * the client. Success is ApiResponse<Void> with no `data` key, so nothing is parsed.
+ */
+export async function cancelMyOrder(input: CancelOrderInput): Promise<void> {
+  const { orderId, reason } = cancelOrderInputSchema.parse(input);
+  await api.post(`/orders/${encodeURIComponent(orderId)}/cancellation`, undefined, {
+    params: reason ? { reason } : {},
   });
 }
