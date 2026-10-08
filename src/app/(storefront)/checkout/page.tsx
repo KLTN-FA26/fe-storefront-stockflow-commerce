@@ -11,10 +11,10 @@ import { Alert } from "@/components/shared";
 import { AddressForm } from "@/components/storefront/address-form";
 // TODO(SCRUM-375-followup): checkout currently uses the local guest AddressForm
 // (value/onChange, no BE call). When user is authenticated, offer to pick from
-// saved addresses via `features/customer` (useAddresses / AddressBook) and persist
+// saved addresses via `features/customer` (useAddressBook / AddressBook) and persist
 // through `createAddress`. Guest flow keeps this local form. See also
 // `components/storefront/address-form.tsx` — keep phone/ward validation in sync
-// with `features/customer/schemas.ts` until the two forms are unified.
+// with `features/customer/address/schemas.ts` until the two forms are unified.
 import { CheckoutStepper } from "@/components/storefront/checkout-stepper";
 import { OrderTotals } from "@/components/storefront/order-totals";
 import { PaymentMethodSelector } from "@/components/storefront/payment-method-selector";
