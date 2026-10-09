@@ -55,7 +55,7 @@ describe("customer profile API boundary", () => {
 
     await updateCustomerProfile({ fullName: "Tên mới", phone: null, version: 3 });
 
-    expect(put).toHaveBeenCalledWith("/v1/customers/me", {
+    expect(put).toHaveBeenCalledWith("/customers/me", {
       fullName: "Tên mới",
       phone: null,
       version: 3,

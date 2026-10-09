@@ -26,19 +26,19 @@ export const loginResponseSchema = z.object({
 });
 
 export async function loginApi(credentials: LoginRequest): Promise<LoginResponse> {
-  const { data } = await api.post<LoginResponse>("/v1/identity/auth/login", credentials);
+  const { data } = await api.post<LoginResponse>("/identity/auth/login", credentials);
   return loginResponseSchema.parse(data);
 }
 
 export async function logoutApi(): Promise<void> {
   try {
-    await api.post("/v1/identity/auth/logout");
+    await api.post("/identity/auth/logout");
   } catch {
     // Local logout must still complete when the server is unavailable.
   }
 }
 
 export async function mockLoginApi(credentials: LoginRequest): Promise<LoginResponse> {
-  const { data } = await api.post<LoginResponse>("/v1/identity/auth/login", credentials);
+  const { data } = await api.post<LoginResponse>("/identity/auth/login", credentials);
   return loginResponseSchema.parse(data);
 }

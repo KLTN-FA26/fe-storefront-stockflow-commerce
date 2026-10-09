@@ -38,7 +38,7 @@ describe("ChangePasswordForm", () => {
     await user.click(screen.getByRole("button", { name: "Cập nhật mật khẩu" }));
 
     await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
-    expect(put).toHaveBeenCalledWith("/v1/identity/auth/password", {
+    expect(put).toHaveBeenCalledWith("/identity/auth/password", {
       currentPassword: "CurrentPass1",
       newPassword: "NewPassword1",
       logoutOtherDevices: false,
@@ -58,7 +58,7 @@ describe("ChangePasswordForm", () => {
 
     await waitFor(() =>
       expect(put).toHaveBeenCalledWith(
-        "/v1/identity/auth/password",
+        "/identity/auth/password",
         expect.objectContaining({ logoutOtherDevices: true }),
       ),
     );

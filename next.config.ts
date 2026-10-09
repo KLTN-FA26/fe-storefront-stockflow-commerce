@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-const API_URL = process.env.API_URL ?? "http://localhost:8080/api";
+const API_URL = process.env.API_URL ?? "http://localhost:8080/api/v1";
 
 const nextConfig: NextConfig = {
   devIndicators: false,
