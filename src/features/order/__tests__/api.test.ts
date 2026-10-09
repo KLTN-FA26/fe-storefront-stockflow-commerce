@@ -49,7 +49,7 @@ describe("order API (BE OrderController)", () => {
   });
 
   it("rejects with a ZodError when the BE breaks the contract", async () => {
-    vi.spyOn(api, "get").mockResolvedValueOnce({ data: { ...beOrder, status: "Paid" } });
+    vi.spyOn(api, "get").mockResolvedValueOnce({ data: { ...beOrder, totalAmount: "507000" } });
     await expect(getOrder(orderId)).rejects.toBeInstanceOf(z.ZodError);
   });
 

@@ -18,7 +18,24 @@ export const ORDER_STATUSES = [
   "CANCELLED",
   "RETURNED",
 ] as const;
-export const orderStatusSchema = z.enum(ORDER_STATUSES);
+export type KnownOrderStatus = (typeof ORDER_STATUSES)[number];
+
+/**
+ * A status the FE does not know yet. The BE will add more (Sprint 2 B2B plans CONFIRMED and
+ * IN_PRODUCTION, SCRUM-423/427); one such order must not fail the whole /orders/me page as a
+ * contract error, so it is shown as "Đang xử lý" and never offered for cancellation.
+ */
+export const ORDER_STATUS_UNKNOWN = "UNKNOWN";
+
+const isKnownOrderStatus = (status: string): status is KnownOrderStatus =>
+  (ORDER_STATUSES as readonly string[]).includes(status);
+
+// Still a contract error when `status` is missing or not a string.
+export const orderStatusSchema = z
+  .string()
+  .transform((status): KnownOrderStatus | typeof ORDER_STATUS_UNKNOWN =>
+    isKnownOrderStatus(status) ? status : ORDER_STATUS_UNKNOWN,
+  );
 
 // ── DTOs — mirror BE OrderResponse. Jackson runs with `default-property-inclusion: non_null`,
 // so every nullable field may be absent from the JSON, not just null. ──

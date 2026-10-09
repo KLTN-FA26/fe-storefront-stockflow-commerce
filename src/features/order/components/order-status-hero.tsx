@@ -6,6 +6,7 @@ import {
   Clock,
   CreditCard,
   FilePen,
+  Hourglass,
   Package,
   PauseCircle,
   Truck,
@@ -29,6 +30,7 @@ const STATUS_ICON: Record<OrderStatus, LucideIcon> = {
   COMPLETED: BadgeCheck,
   CANCELLED: CircleX,
   RETURNED: Undo2,
+  UNKNOWN: Hourglass,
 };
 
 /** One place that says where the order is and what happens next, replacing badge + progress bar. */

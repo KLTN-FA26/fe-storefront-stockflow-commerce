@@ -37,9 +37,17 @@ describe("order schemas follow the BE OrderResponse / PageResponse contract", ()
     );
   });
 
-  it("rejects a status outside the BE enum (e.g. legacy Title Case)", () => {
-    expect(orderDtoSchema.safeParse({ ...beOrder, status: "Shipped" }).success).toBe(false);
-    expect(orderDtoSchema.safeParse({ ...beOrder, status: "IN_TRANSIT" }).success).toBe(false);
+  it("parses a status the FE does not know yet as UNKNOWN instead of failing the order", () => {
+    // Sprint 2 B2B adds CONFIRMED / IN_PRODUCTION (SCRUM-423/427) to the BE OrderStatus.
+    expect(orderDtoSchema.parse({ ...beOrder, status: "CONFIRMED" }).status).toBe("UNKNOWN");
+    expect(orderDtoSchema.parse({ ...beOrder, status: "IN_PRODUCTION" }).status).toBe("UNKNOWN");
+    expect(orderDtoSchema.parse({ ...beOrder, status: "PAID" }).status).toBe("PAID");
+  });
+
+  it("still rejects a missing or non-string status", () => {
+    const { status: _status, ...withoutStatus } = beOrder;
+    expect(orderDtoSchema.safeParse(withoutStatus).success).toBe(false);
+    expect(orderDtoSchema.safeParse({ ...beOrder, status: 3 }).success).toBe(false);
   });
 
   it("rejects a totalAmount that is not a number", () => {
@@ -58,7 +66,7 @@ describe("order schemas follow the BE OrderResponse / PageResponse contract", ()
   });
 
   it("turns a contract failure into a customer message, not the raw zod issues", () => {
-    const result = orderDtoSchema.safeParse({ ...beOrder, status: "Shipped" });
+    const result = orderDtoSchema.safeParse({ ...beOrder, totalAmount: "507000" });
     expect(result.success).toBe(false);
     const message = describeError(result.error);
     expect(message).toContain("Dữ liệu trả về không đúng định dạng");

@@ -174,6 +174,17 @@ describe("OrdersScreen", () => {
     expect(await screen.findByText("Trang 1 / 3")).toBeInTheDocument();
   });
 
+  it("still lists the page when one order has a status newer than the FE", async () => {
+    const b2b = { ...seeded("PAID"), status: "CONFIRMED" } as unknown as MockOrder;
+    book = createMockOrderBook(CUSTOMER, [b2b, seeded("SHIPPED")]);
+    renderWithProviders(<OrdersScreen />);
+
+    const card = (await screen.findByText(b2b.orderNumber)).closest("article")!;
+    expect(within(card).getByText("Đang xử lý")).toBeInTheDocument();
+    expect(screen.getByText(seeded("SHIPPED").orderNumber)).toBeInTheDocument();
+    expect(screen.queryByText(/không đúng định dạng/)).not.toBeInTheDocument();
+  });
+
   it("shows the empty state when the customer has no orders", async () => {
     book = createMockOrderBook(CUSTOMER, []);
     renderWithProviders(<OrdersScreen />);
@@ -261,6 +272,17 @@ describe("OrderDetailScreen", () => {
       expect(screen.getByRole("link", { name: /Chat với CSKH/ })).toBeInTheDocument();
     },
   );
+
+  it("never offers cancelling an order whose status the FE does not know", async () => {
+    const b2b = { ...seeded("PAID"), status: "IN_PRODUCTION" } as unknown as MockOrder;
+    book = createMockOrderBook(CUSTOMER, [b2b]);
+    renderWithProviders(<OrderDetailScreen orderId={b2b.orderId} />);
+
+    expect(await screen.findByRole("heading", { name: "Đang xử lý" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Huỷ đơn hàng/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Tiến trình đơn hàng" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Nếu bạn cần huỷ hoặc thay đổi đơn này/)).toBeInTheDocument();
+  });
 
   it("explains why a shipped order cannot be cancelled", async () => {
     renderWithProviders(<OrderDetailScreen orderId={seeded("SHIPPED").orderId} />);

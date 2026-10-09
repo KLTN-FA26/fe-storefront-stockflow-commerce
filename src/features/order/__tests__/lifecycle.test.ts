@@ -12,7 +12,14 @@ describe("order lifecycle mirrors BE OrderStatus", () => {
   it("covers all 10 BE statuses, including ON_HOLD", () => {
     expect(ORDER_STATUSES).toHaveLength(10);
     expect(ORDER_STATUSES).toContain("ON_HOLD");
-    expect(Object.keys(ORDER_STATUS_META).sort()).toEqual([...ORDER_STATUSES].sort());
+    expect(Object.keys(ORDER_STATUS_META).sort()).toEqual([...ORDER_STATUSES, "UNKNOWN"].sort());
+  });
+
+  it("treats a status unknown to the FE as in progress: not cancellable, not terminal, no stepper", () => {
+    expect(ORDER_STATUS_META.UNKNOWN).toMatchObject({ label: "Đang xử lý", tone: "info" });
+    expect(isOrderCancellable("UNKNOWN")).toBe(false);
+    expect(isOrderTerminal("UNKNOWN")).toBe(false);
+    expect(orderProgressOf("UNKNOWN")).toBeNull();
   });
 
   // BR-031 + OrderStatus#canTransitionTo(CANCELLED)

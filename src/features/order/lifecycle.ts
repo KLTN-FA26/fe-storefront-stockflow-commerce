@@ -72,6 +72,12 @@ export const ORDER_STATUS_META: Record<
   COMPLETED: { label: "Hoàn tất", tone: "positive", hint: "Đơn hàng đã hoàn tất." },
   CANCELLED: { label: "Đã huỷ", tone: "danger", hint: "Đơn đã bị huỷ và sẽ không được giao." },
   RETURNED: { label: "Đã trả hàng", tone: "special", hint: "Đơn hàng đã được trả lại." },
+  // A status newer than this FE (see ORDER_STATUS_UNKNOWN): neutral wording, no cancellation.
+  UNKNOWN: {
+    label: "Đang xử lý",
+    tone: "info",
+    hint: "Đơn hàng đang được xử lý. Hãy chat với chúng tôi nếu bạn cần hỗ trợ.",
+  },
 };
 
 /**
@@ -97,6 +103,8 @@ const DONE_STEPS: Record<OrderStatus, number | null> = {
   COMPLETED: 5,
   CANCELLED: null,
   RETURNED: null,
+  // Unknown to this FE, so where it sits on the happy path is unknown too: no stepper.
+  UNKNOWN: null,
 };
 
 export const orderProgressOf = (status: OrderStatus) => DONE_STEPS[status];

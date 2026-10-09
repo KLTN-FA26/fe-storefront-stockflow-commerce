@@ -6,6 +6,7 @@ import { Alert } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 
 import { isOrderCancellable, isOrderTerminal } from "../lifecycle";
+import { ORDER_STATUS_UNKNOWN } from "../schemas";
 import type { Order } from "../types";
 
 interface OrderHelpCardProps {
@@ -46,7 +47,9 @@ export function OrderHelpCard({
             ? "Bạn có thể huỷ đơn khi đơn chưa rời kho, hoặc chat với chúng tôi nếu cần đổi thông tin."
             : statusAllows
               ? "Tài khoản của bạn hiện không thể tự huỷ đơn. Hãy chat với chúng tôi để được hỗ trợ."
-              : isOrderTerminal(order.status)
+              : order.status === ORDER_STATUS_UNKNOWN
+                ? "Nếu bạn cần huỷ hoặc thay đổi đơn này, hãy chat với chúng tôi."
+                : isOrderTerminal(order.status)
               ? "Có thắc mắc về đơn này? Đội chăm sóc khách hàng luôn sẵn sàng hỗ trợ."
               : "Đơn đã rời kho nên không thể huỷ. Nếu cần trả hàng, hãy chat với chúng tôi."}
         </p>
