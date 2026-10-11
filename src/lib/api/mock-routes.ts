@@ -9,6 +9,8 @@
 
 import { MOCK_DATA, registerMockRoute, paginate } from "./mock-adapter";
 import { registerCustomerAddressMockRoutes } from "./mock-customer-addresses";
+import { registerMyPermissionsMockRoute } from "./mock-my-permissions";
+import { registerOrderMockRoutes } from "./mock-orders";
 
 export function mockPasswordResponse(body: unknown) {
   const request = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
@@ -143,6 +145,11 @@ export function registerAllMockRoutes(): void {
 
   // Module 18 — address book (BE-shaped fixture, see mock-customer-addresses.ts)
   registerCustomerAddressMockRoutes();
+
+  // Module 17 — customer order history (BE-shaped fixture, see mock-orders.ts).
+  // The legacy GET /orders/:id (mock-data shapes) is gone: first match wins, and it swallowed /orders/me.
+  registerOrderMockRoutes();
+  registerMyPermissionsMockRoute();
 
   /* ====================================================================
    * Module 01 — Products / SKUs / Categories / Suppliers
@@ -560,14 +567,6 @@ export function registerAllMockRoutes(): void {
     if (status.length) filtered = filtered.filter((o) => status.includes(o.status));
 
     return { status: 200, data: paginate(filtered, page, pageSize), headers: {} };
-  });
-
-  registerMockRoute("GET", "/orders/:id", async (config) => {
-    const { orders } = MOCK_DATA;
-    const { id } = (config as Record<string, unknown>)._mockParams as Record<string, string>;
-    const order = orders.find((o) => o.orderId === id);
-    if (!order) return { status: 404, data: { message: "Order not found" }, headers: {} };
-    return { status: 200, data: order, headers: {} };
   });
 
   /* ====================================================================
