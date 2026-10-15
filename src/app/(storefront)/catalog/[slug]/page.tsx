@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { AvailabilityBadge } from "@/components/storefront/availability-badge";
 import { DeliveryPromise, ProductSpecs } from "@/components/storefront/catalog/product-info-panels";
 import { ImageGallery } from "@/components/storefront/image-gallery";
-import { PageShell, Section, TrustBar } from "@/components/storefront/layout";
+import { PageShell, Section } from "@/components/storefront/layout";
 import { PriceDisplay } from "@/components/storefront/price-display";
 import { ProductGrid } from "@/components/storefront/product-grid";
 import { QuantityStepper } from "@/components/storefront/quantity-stepper";
@@ -109,8 +109,6 @@ export default function ProductDetailPage() {
           <DeliveryPromise />
         </div>
       </section>
-
-      <TrustBar variant="card" />
 
       <ProductSpecs />
 
