@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { parseAsInteger, useQueryState } from "nuqs";
 
 import { STORE_ROUTES } from "@/constants";
-import { PageHeader } from "@/components/shared";
+import { PageHeader, ScrollAfterItems } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { OrderCard } from "@/components/storefront/order-card";
 import { formatDate } from "@/lib/format/date";
@@ -62,7 +62,7 @@ export function OrdersScreen() {
   return (
     <>
       <PageHeader title="Đơn hàng của tôi" subtitle="Theo dõi trạng thái và giao hàng." />
-      <div className="mt-8 space-y-6">
+      <div className="mt-6 space-y-4">
         {/* isPending, not isLoading: a paused fetch (offline, hidden tab) has no data and no error
             yet, and must not fall through to the "no orders" empty state. */}
         {isPending ? (
@@ -84,7 +84,7 @@ export function OrdersScreen() {
               <Button
                 type="button"
                 variant="ghost"
-                className="min-h-11 rounded-full px-4"
+                className="min-h-11 rounded-[var(--r-md)] px-4"
                 onClick={() => void setPage(1)}
               >
                 Về trang đầu
@@ -96,26 +96,32 @@ export function OrdersScreen() {
         ) : (
           <>
             {error && (
-              <OrderStaleNotice error={error} onRetry={() => void refetch()} retrying={isFetching} />
+              <OrderStaleNotice
+                error={error}
+                onRetry={() => void refetch()}
+                retrying={isFetching}
+              />
             )}
-            <ul className="space-y-4" aria-busy={isPlaceholderData}>
-              {data.items.map((order) => (
-                <li key={order.orderId}>
-                  <OrderCard
-                    href={STORE_ROUTES.account.orders.detail(order.orderId)}
-                    orderCode={order.orderNumber}
-                    status={order.status}
-                    statusBadge={<OrderStatusBadge status={order.status} />}
-                    itemCount={order.lines.length}
-                    total={order.totalAmount}
-                    currency={order.currency}
-                    createdAt={formatDate(order.placedAt)}
-                    preview={<OrderLinesPreview order={order} />}
-                    hint={ORDER_STATUS_META[order.status].hint}
-                  />
-                </li>
-              ))}
-            </ul>
+            <ScrollAfterItems visibleItems={4} label="Danh sách đơn hàng">
+              <ul className="space-y-3" aria-busy={isPlaceholderData}>
+                {data.items.map((order) => (
+                  <li key={order.orderId}>
+                    <OrderCard
+                      href={STORE_ROUTES.account.orders.detail(order.orderId)}
+                      orderCode={order.orderNumber}
+                      status={order.status}
+                      statusBadge={<OrderStatusBadge status={order.status} />}
+                      itemCount={order.lines.length}
+                      total={order.totalAmount}
+                      currency={order.currency}
+                      createdAt={formatDate(order.placedAt)}
+                      preview={<OrderLinesPreview order={order} />}
+                      hint={ORDER_STATUS_META[order.status].hint}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </ScrollAfterItems>
             <OrdersPagination
               page={data.page}
               totalPages={data.totalPages}

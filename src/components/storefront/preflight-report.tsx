@@ -18,14 +18,14 @@ const tone = {
 
 export function PreflightReport({ issues }: PreflightReportProps) {
   return (
-    <section className="space-y-3 rounded-xl bg-bg-surface p-[var(--card-pad)] shadow-md">
+    <section className="space-y-3 rounded-[var(--r-lg)] border border-border-default bg-bg-surface p-[var(--card-pad)] shadow-[var(--card-shadow)]">
       <h2 className="font-display text-lg font-semibold">Preflight report</h2>
       <div className="space-y-2">
         {issues.map((issue) => {
           const meta = tone[issue.level];
           const Icon = meta.icon;
           return (
-            <div key={issue.id} className="flex items-start gap-3 rounded-lg bg-bg-subtle p-3">
+            <div key={issue.id} className="flex items-start gap-3 rounded-[var(--r-md)] bg-bg-subtle p-3">
               <Icon className={`mt-0.5 h-4 w-4 ${meta.className}`} />
               <div>
                 <p className={`text-sm font-semibold ${meta.className}`}>{meta.label}</p>

@@ -85,7 +85,7 @@ export function AddressForm({
       <DefaultAddressField form={form} locked={defaultLocked} />
 
       <div className="flex justify-end">
-        <Button type="submit" disabled={isSubmitting} className="h-11 rounded-full px-8">
+        <Button type="submit" disabled={isSubmitting} className="h-11 rounded-[var(--r-md)] px-8">
           {isSubmitting ? "Đang lưu..." : "Lưu địa chỉ"}
         </Button>
       </div>

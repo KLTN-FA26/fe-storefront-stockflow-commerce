@@ -17,14 +17,32 @@ interface VariantSelectorProps {
   type?: "text" | "color";
 }
 
-export function VariantSelector({ label, options, value, onChange, type = "text" }: VariantSelectorProps) {
+export function VariantSelector({
+  label,
+  options,
+  value,
+  onChange,
+  type = "text",
+}: VariantSelectorProps) {
   return (
     <fieldset className="space-y-3">
-      <legend className="text-sm font-semibold text-ink-primary">{label}</legend>
+      <legend className="text-ink-primary text-sm font-semibold">{label}</legend>
       <div className="flex flex-wrap gap-2">
         {options.map((option) => (
-          <Button key={option.id} type="button" variant={value === option.id ? "default" : "secondary"} disabled={option.disabled} className="rounded-full" onClick={() => onChange(option.id)}>
-            {type === "color" && <span className="h-4 w-4 rounded-full border border-border-default" style={{ backgroundColor: option.value ?? option.label }} />}
+          <Button
+            key={option.id}
+            type="button"
+            variant={value === option.id ? "default" : "secondary"}
+            disabled={option.disabled}
+            className="min-h-11 rounded-full"
+            onClick={() => onChange(option.id)}
+          >
+            {type === "color" && (
+              <span
+                className="border-border-default h-4 w-4 rounded-full border"
+                style={{ backgroundColor: option.value ?? option.label }}
+              />
+            )}
             {option.label}
           </Button>
         ))}

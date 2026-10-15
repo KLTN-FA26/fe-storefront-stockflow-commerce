@@ -28,10 +28,23 @@ export function PaymentMethodSelector({ methods, value, onChange }: PaymentMetho
       {methods.map((method) => {
         const Icon = icons[method.type];
         return (
-          <Label key={method.id} htmlFor={`payment-${method.id}`} className={cn("flex cursor-pointer items-center gap-4 rounded-xl border bg-bg-surface p-4 text-left transition duration-200", value === method.id ? "border-accent shadow-md" : "border-border-default")}>
+          <Label
+            key={method.id}
+            htmlFor={`payment-${method.id}`}
+            className={cn(
+              "bg-bg-surface hover:border-border-strong focus-within:ring-accent flex min-h-11 cursor-pointer items-center gap-3 rounded-[var(--r-md)] border p-3 text-left transition-colors duration-200 focus-within:ring-2 sm:gap-4 sm:p-4",
+              value === method.id ? "border-accent bg-accent/5" : "border-border-default",
+            )}
+          >
             <RadioGroupItem id={`payment-${method.id}`} value={method.id} />
-            <Icon className="h-5 w-5 text-accent" />
-            <span className="flex-1"><span className="block font-semibold">{method.label}</span><span className="text-sm text-ink-secondary">{method.description}{method.last4 ? ` · **** ${method.last4}` : ""}</span></span>
+            <Icon className="text-accent h-5 w-5 shrink-0" />
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold">{method.label}</span>
+              <span className="text-ink-secondary text-sm">
+                {method.description}
+                {method.last4 ? ` · **** ${method.last4}` : ""}
+              </span>
+            </span>
           </Label>
         );
       })}

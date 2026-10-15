@@ -1,5 +1,5 @@
 ---
-description: Mode B storefront modules 12-18 — Ink + Blue, ecommerce, airy, mobile-first
+description: Mode B storefront modules 12-18 — Ink + Blue, ecommerce, compact retail, mobile-first
 globs:
   - "src/app/(storefront)/**"
   - "src/components/storefront/**"
@@ -34,10 +34,10 @@ Do not introduce back-office/admin styling, caramel legacy theme, or one-off hex
 ## Density and shape
 
 - Mobile-first from 320px upward.
-- Card/panel padding: usually `p-[var(--card-pad)]`.
-- Section gaps: roomy (`space-y-6`, `space-y-8`, `gap-6`, `gap-8`).
+- Card/panel padding: usually `p-[var(--card-pad)]` (compact retail: 16px mobile / 20px ≥ sm).
+- Section gaps: compact (`gap-8 lg:gap-10` between sections; `gap-3`/`gap-4` inside grids).
 - Card radius: `rounded-[var(--r-lg)]` or `rounded-[var(--r-xl)]`.
-- Product/checkout cards may use light `shadow-md`/`shadow-lg`.
+- Cards: border + `--sh-sm`; product card hover raises to `--sh-md` without translate.
 - Touch targets must be at least 44px.
 
 ## Style

@@ -1,3 +1,5 @@
+import { cn } from "@/lib/cn";
+
 import { ProductCard } from "./product-card";
 
 interface ProductGridItem {
@@ -15,12 +17,20 @@ interface ProductGridItem {
 
 interface ProductGridProps {
   products: ProductGridItem[];
+  columns?: 3 | 4 | undefined;
 }
 
-export function ProductGrid({ products }: ProductGridProps) {
+export function ProductGrid({ products, columns = 4 }: ProductGridProps) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
-      {products.map((product) => <ProductCard key={product.id} {...product} />)}
+    <div
+      className={cn(
+        "grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3",
+        columns === 4 && "xl:grid-cols-4",
+      )}
+    >
+      {products.map((product) => (
+        <ProductCard key={product.id} {...product} />
+      ))}
     </div>
   );
 }

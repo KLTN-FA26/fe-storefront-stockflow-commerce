@@ -31,7 +31,7 @@ export function AddressBook({
 
   return (
     <>
-      <p className="text-ink-tertiary mb-6 text-sm">
+      <p className="text-ink-tertiary mb-5 text-sm">
         Sửa hoặc xoá địa chỉ không ảnh hưởng đến các đơn hàng đã đặt.
       </p>
       <div className="space-y-8">
@@ -39,24 +39,26 @@ export function AddressBook({
           <section
             key={group.type}
             aria-labelledby={`address-group-${group.type}`}
-            className="space-y-4"
+            className="space-y-3"
           >
             <h2
               id={`address-group-${group.type}`}
-              className="font-display text-ink-primary text-lg font-semibold"
+              className="font-display text-ink-primary text-base font-semibold"
             >
               Địa chỉ {ADDRESS_TYPE_LABELS[group.type].toLowerCase()}
             </h2>
-            {group.items.map((address) => (
-              <AddressCard
-                key={address.addressId}
-                address={address}
-                busy={busy}
-                onEdit={() => onEdit(address.addressId)}
-                onDelete={() => setToDelete(address)}
-                onSetDefault={() => onSetDefault(address.addressId)}
-              />
-            ))}
+            <div className="grid gap-4 md:grid-cols-2">
+              {group.items.map((address) => (
+                <AddressCard
+                  key={address.addressId}
+                  address={address}
+                  busy={busy}
+                  onEdit={() => onEdit(address.addressId)}
+                  onDelete={() => setToDelete(address)}
+                  onSetDefault={() => onSetDefault(address.addressId)}
+                />
+              ))}
+            </div>
           </section>
         ))}
       </div>
@@ -92,31 +94,45 @@ interface AddressCardProps {
 
 function AddressCard({ address, busy, onEdit, onDelete, onSetDefault }: AddressCardProps) {
   return (
-    <article className="border-border-default bg-bg-surface rounded-[var(--r-xl)] border p-[var(--card-pad)] shadow-sm transition-shadow hover:shadow-md">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-ink-primary font-semibold">{address.recipientName}</h3>
-            <span className="text-ink-secondary text-sm tabular-nums">{address.phone}</span>
-            <Badge variant="secondary" className="rounded-full">
-              {ADDRESS_TYPE_LABELS[address.type]}
-            </Badge>
-            {address.defaultAddress && (
-              <Badge className="bg-accent text-ink-inverse rounded-full">Mặc định</Badge>
-            )}
-          </div>
-          <p className="text-ink-secondary flex gap-2 text-sm">
-            <MapPin aria-hidden className="mt-0.5 size-4 shrink-0" />
-            <span>{formatAddressLine(address)}</span>
-          </p>
-          {address.postalCode && (
-            <p className="text-ink-tertiary pl-6 text-sm tabular-nums">
-              Mã bưu chính: {address.postalCode}
-            </p>
+    <article
+      className={`bg-bg-surface flex h-full flex-col rounded-[var(--r-lg)] border p-[var(--card-pad)] shadow-[var(--card-shadow)] transition-shadow hover:shadow-md ${address.defaultAddress ? "border-accent" : "border-border-default"}`}
+    >
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-ink-primary font-semibold">{address.recipientName}</h3>
+          <span className="text-ink-secondary text-sm tabular-nums">{address.phone}</span>
+          <Badge variant="secondary" className="rounded-full">
+            {ADDRESS_TYPE_LABELS[address.type]}
+          </Badge>
+          {address.defaultAddress && (
+            <Badge className="bg-accent text-ink-inverse rounded-full">Mặc định</Badge>
           )}
         </div>
+        <p className="text-ink-secondary flex gap-2 text-sm">
+          <MapPin aria-hidden className="mt-0.5 size-4 shrink-0" />
+          <span>{formatAddressLine(address)}</span>
+        </p>
+        {address.postalCode && (
+          <p className="text-ink-tertiary pl-6 text-sm tabular-nums">
+            Mã bưu chính: {address.postalCode}
+          </p>
+        )}
+      </div>
 
-        <div className="flex items-center gap-1">
+      <div className="border-border-default mt-4 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+        {!address.defaultAddress && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            className="border-border-strong text-ink-primary hover:bg-bg-muted h-11 rounded-[var(--r-md)] px-4"
+            aria-label={`Đặt địa chỉ của ${address.recipientName} làm mặc định`}
+            onClick={onSetDefault}
+          >
+            Đặt làm mặc định
+          </Button>
+        )}
+        <div className="ml-auto flex items-center gap-1">
           <Button
             type="button"
             variant="ghost"
@@ -138,19 +154,6 @@ function AddressCard({ address, busy, onEdit, onDelete, onSetDefault }: AddressC
           </Button>
         </div>
       </div>
-
-      {!address.defaultAddress && (
-        <Button
-          type="button"
-          variant="outline"
-          disabled={busy}
-          className="border-border-strong text-ink-primary hover:bg-bg-muted mt-4 h-11 rounded-full"
-          aria-label={`Đặt địa chỉ của ${address.recipientName} làm mặc định`}
-          onClick={onSetDefault}
-        >
-          Đặt làm mặc định
-        </Button>
-      )}
     </article>
   );
 }

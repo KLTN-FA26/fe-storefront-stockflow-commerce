@@ -42,22 +42,22 @@ export function OrderStatusHero({ status }: { status: OrderStatus }) {
   return (
     <section
       aria-labelledby="order-status-heading"
-      className="bg-bg-surface space-y-6 rounded-[var(--r-lg)] p-[var(--card-pad)] shadow-md"
+      className="bg-bg-surface border-border-default space-y-5 rounded-[var(--r-lg)] border p-[var(--card-pad)] shadow-[var(--card-shadow)]"
     >
-      <div className="flex items-start gap-4">
+      <div className="flex items-start gap-3">
         <span
           className={cn(
-            "flex size-12 shrink-0 items-center justify-center rounded-full",
+            "flex size-11 shrink-0 items-center justify-center rounded-full",
             ORDER_TONE_CLASSES[tone],
           )}
         >
-          <Icon aria-hidden className="size-6" />
+          <Icon aria-hidden className="size-5" />
         </span>
         <div className="min-w-0">
-          <h2 id="order-status-heading" className="font-display text-ink-primary text-xl font-bold">
+          <h2 id="order-status-heading" className="font-display text-ink-primary text-lg font-bold">
             {label}
           </h2>
-          <p className="text-ink-secondary mt-1">{hint}</p>
+          <p className="text-ink-secondary mt-0.5 text-sm">{hint}</p>
         </div>
       </div>
       {done !== null && <OrderStepper done={done} />}

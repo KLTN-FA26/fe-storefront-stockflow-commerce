@@ -26,7 +26,13 @@ export function AddressRegionFields({ form }: { form: AddressForm }) {
     control,
     name: ["provinceCode", "provinceName", "wardCode", "wardName"],
   });
-  const { provinces, wards, loading, error: regionError, retry } = useVietnamAddresses(provinceCode);
+  const {
+    provinces,
+    wards,
+    loading,
+    error: regionError,
+    retry,
+  } = useVietnamAddresses(provinceCode);
 
   const provinceOptions = useMemo(
     () => withSavedOption(provinces, provinceCode, provinceName),
@@ -60,7 +66,12 @@ export function AddressRegionFields({ form }: { form: AddressForm }) {
           <Alert tone="warning" title="Chưa tải được danh sách tỉnh/thành, phường/xã">
             {regionError.message}
           </Alert>
-          <Button type="button" variant="outline" className="h-11 rounded-full" onClick={retry}>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 rounded-[var(--r-md)]"
+            onClick={retry}
+          >
             Thử lại
           </Button>
         </div>

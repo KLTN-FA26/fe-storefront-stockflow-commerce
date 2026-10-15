@@ -30,7 +30,7 @@ export function AddressBookScreen() {
         subtitle="Quản lý địa chỉ giao hàng và thanh toán của bạn."
         actions={
           hasAddresses ? (
-            <Button asChild className="h-11 rounded-full">
+            <Button asChild className="h-11 rounded-[var(--r-md)] px-4">
               <Link href={NEW_ADDRESS_HREF}>
                 <Plus aria-hidden className="mr-2 size-4" />
                 Thêm địa chỉ mới
@@ -40,7 +40,7 @@ export function AddressBookScreen() {
         }
       />
 
-      <div className="mt-8 space-y-6">
+      <div className="mt-6 space-y-5">
         {error && addresses && (
           <AddressStaleNotice error={error} onRetry={() => void refetch()} retrying={isFetching} />
         )}
@@ -53,7 +53,7 @@ export function AddressBookScreen() {
             title="Sổ địa chỉ của bạn đang trống"
             description="Thêm địa chỉ để thanh toán nhanh hơn trong những lần mua hàng tới."
             action={
-              <Button asChild className="h-11 rounded-full">
+              <Button asChild className="h-11 rounded-[var(--r-md)] px-4">
                 <Link href={NEW_ADDRESS_HREF}>Thêm địa chỉ đầu tiên</Link>
               </Button>
             }

@@ -36,10 +36,13 @@ export function OrderHelpCard({
   return (
     <section
       aria-labelledby="order-help-heading"
-      className="bg-bg-surface space-y-4 rounded-[var(--r-lg)] p-[var(--card-pad)] shadow-md"
+      className="bg-bg-surface border-border-default space-y-3 rounded-[var(--r-lg)] border p-[var(--card-pad)] shadow-[var(--card-shadow)]"
     >
       <div>
-        <h2 id="order-help-heading" className="font-display text-ink-primary text-lg font-semibold">
+        <h2
+          id="order-help-heading"
+          className="font-display text-ink-primary text-base font-semibold"
+        >
           Cần hỗ trợ?
         </h2>
         <p className="text-ink-secondary mt-1 text-sm">
@@ -50,8 +53,8 @@ export function OrderHelpCard({
               : order.status === ORDER_STATUS_UNKNOWN
                 ? "Nếu bạn cần huỷ hoặc thay đổi đơn này, hãy chat với chúng tôi."
                 : isOrderTerminal(order.status)
-              ? "Có thắc mắc về đơn này? Đội chăm sóc khách hàng luôn sẵn sàng hỗ trợ."
-              : "Đơn đã rời kho nên không thể huỷ. Nếu cần trả hàng, hãy chat với chúng tôi."}
+                  ? "Có thắc mắc về đơn này? Đội chăm sóc khách hàng luôn sẵn sàng hỗ trợ."
+                  : "Đơn đã rời kho nên không thể huỷ. Nếu cần trả hàng, hãy chat với chúng tôi."}
         </p>
       </div>
       {cancelError && (
@@ -61,8 +64,8 @@ export function OrderHelpCard({
           </Alert>
         </div>
       )}
-      <div className="flex flex-col gap-3">
-        <Button asChild className="min-h-11 rounded-full px-5">
+      <div className="flex flex-col gap-2">
+        <Button asChild className="min-h-11 rounded-[var(--r-md)] px-5">
           <Link href={STORE_ROUTES.chat.list}>
             <MessageCircle aria-hidden className="mr-2 size-4" />
             Chat với CSKH
@@ -72,7 +75,7 @@ export function OrderHelpCard({
           <Button
             type="button"
             variant="outline"
-            className="border-border-strong text-danger hover:bg-bg-muted min-h-11 rounded-full px-5"
+            className="border-border-strong text-danger hover:bg-bg-muted min-h-11 rounded-[var(--r-md)] px-5"
             onClick={onCancel}
             disabled={cancelling}
             aria-label={`Huỷ đơn hàng ${order.orderNumber}`}
