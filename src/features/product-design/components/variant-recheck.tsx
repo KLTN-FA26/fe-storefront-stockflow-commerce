@@ -9,7 +9,7 @@ export function VariantRecheck({ changed, variantName }: VariantRecheckProps) {
   if (!changed) return null;
 
   return (
-    <div className="flex gap-3 rounded-xl border border-warning/40 bg-warning/10 p-4 text-warning">
+    <div className="flex gap-3 rounded-[var(--r-lg)] border border-warning/40 bg-warning/10 p-[var(--card-pad)] text-warning">
       <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
       <div>
         <p className="font-semibold">Cần kiểm tra lại layout</p>

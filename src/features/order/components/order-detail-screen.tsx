@@ -15,7 +15,7 @@ import { useCancelMyOrder } from "../mutations";
 import { useOrder } from "../queries";
 import { isValidOrderId } from "../schemas";
 import { CopyOrderNumber } from "./copy-order-number";
-import { OrderDeliveryCard, OrderLinesCard } from "./order-detail-sections";
+import { OrderDeliveryCard, OrderLinesCard, OrderTotalCard } from "./order-detail-sections";
 import { OrderHelpCard } from "./order-help-card";
 import {
   OrderDetailSkeleton,
@@ -75,10 +75,10 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
   }
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="space-y-5">
+      <div className="border-border-default border-b pb-3.5">
         <BackToOrders />
-        <h1 className="font-display text-ink-primary mt-2 text-2xl font-bold sm:text-3xl">
+        <h1 className="font-display text-ink-primary mt-1 text-xl font-bold sm:text-2xl">
           Chi tiết đơn hàng
         </h1>
         <div className="text-ink-secondary mt-1 flex flex-wrap items-center gap-x-1 text-sm">
@@ -97,11 +97,13 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
         <OrderStaleNotice error={error} onRetry={() => void refetch()} retrying={isFetching} />
       ) : null}
 
-      <OrderStatusHero status={order.status} />
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:items-start">
-        <OrderLinesCard order={order} />
-        <div className="space-y-6">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
+        <div className="min-w-0 space-y-5">
+          <OrderStatusHero status={order.status} />
+          <OrderLinesCard order={order} />
+        </div>
+        <div className="space-y-5 lg:sticky lg:top-[var(--sticky-top)] lg:-mx-1 lg:max-h-[calc(100dvh-var(--sticky-top)-1rem)] lg:self-start lg:overflow-y-auto lg:px-1">
+          <OrderTotalCard order={order} />
           <OrderDeliveryCard order={order} />
           <OrderHelpCard
             order={order}

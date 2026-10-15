@@ -11,9 +11,9 @@ import { describeError, isApiError } from "../errors";
 
 export function OrderListSkeleton() {
   return (
-    <div role="status" aria-label="Đang tải danh sách đơn hàng" className="space-y-4">
+    <div role="status" aria-label="Đang tải danh sách đơn hàng" className="space-y-3">
       {[0, 1, 2].map((i) => (
-        <Skeleton key={i} className="h-48 w-full rounded-[var(--r-lg)]" />
+        <Skeleton key={i} className="h-40 w-full rounded-[var(--r-lg)]" />
       ))}
     </div>
   );
@@ -21,13 +21,21 @@ export function OrderListSkeleton() {
 
 export function OrderDetailSkeleton() {
   return (
-    <div role="status" aria-label="Đang tải đơn hàng" className="space-y-6">
-      <Skeleton className="h-6 w-40" />
-      <Skeleton className="h-9 w-72" />
-      <Skeleton className="h-40 w-full rounded-[var(--r-lg)]" />
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
-        <Skeleton className="h-64 w-full rounded-[var(--r-lg)]" />
-        <Skeleton className="h-64 w-full rounded-[var(--r-lg)]" />
+    <div role="status" aria-label="Đang tải đơn hàng" className="space-y-5">
+      <div className="space-y-2">
+        <Skeleton className="h-6 w-40" />
+        <Skeleton className="h-8 w-full max-w-72" />
+      </div>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
+        <div className="min-w-0 space-y-5">
+          <Skeleton className="h-40 w-full rounded-[var(--r-lg)]" />
+          <Skeleton className="h-64 w-full rounded-[var(--r-lg)]" />
+        </div>
+        <div className="space-y-5">
+          <Skeleton className="h-24 w-full rounded-[var(--r-lg)]" />
+          <Skeleton className="h-36 w-full rounded-[var(--r-lg)]" />
+          <Skeleton className="h-40 w-full rounded-[var(--r-lg)]" />
+        </div>
       </div>
     </div>
   );
@@ -50,7 +58,7 @@ function RetryButton({ onRetry, retrying }: { onRetry: () => void; retrying: boo
     <Button
       type="button"
       variant="outline"
-      className="min-h-11 rounded-full px-4"
+      className="min-h-11 rounded-[var(--r-md)] px-4"
       onClick={onRetry}
       disabled={retrying}
     >
@@ -116,7 +124,7 @@ export function NoOrdersYet() {
       title="Bạn chưa có đơn hàng nào"
       description="Khi bạn đặt hàng lần đầu, lịch sử đơn hàng sẽ xuất hiện tại đây."
       action={
-        <Button asChild className="min-h-11 rounded-full px-5">
+        <Button asChild className="min-h-11 rounded-[var(--r-md)] px-5">
           <Link href={STORE_ROUTES.catalog.list}>Tiếp tục mua sắm</Link>
         </Button>
       }

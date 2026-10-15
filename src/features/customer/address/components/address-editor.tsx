@@ -77,7 +77,7 @@ export function AddressEditor({ addressId }: { addressId?: string }) {
           title="Không tìm thấy địa chỉ"
           description="Địa chỉ này không còn trong sổ địa chỉ của bạn, có thể đã bị xoá."
           action={
-            <Button asChild className="h-11 rounded-full">
+            <Button asChild className="h-11 rounded-[var(--r-md)]">
               <Link href={STORE_ROUTES.account.addresses}>Về sổ địa chỉ</Link>
             </Button>
           }

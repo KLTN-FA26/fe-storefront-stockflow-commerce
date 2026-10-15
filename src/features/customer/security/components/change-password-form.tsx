@@ -100,15 +100,17 @@ export function ChangePasswordForm() {
   const errors = form.formState.errors;
 
   return (
-    <section className="border-border-default bg-bg-surface rounded-[var(--r-xl)] border p-[var(--card-pad)] shadow-[var(--sh-sm)]">
-      <div className="mb-6">
-        <ShieldCheck className="text-accent mb-3 size-6" aria-hidden="true" />
-        <h1 className="font-display text-ink-primary text-2xl font-bold sm:text-3xl">
-          Đổi mật khẩu
-        </h1>
-        <p className="text-ink-secondary mt-2 text-sm">
-          Dùng mật khẩu dài từ 10 đến 72 ký tự, gồm chữ hoa, chữ thường và chữ số.
-        </p>
+    <section className="bg-bg-surface border-border-default rounded-[var(--r-lg)] border p-[var(--card-pad)] shadow-[var(--card-shadow)]">
+      <div className="border-border-default mb-5 flex items-start gap-3 border-b pb-4">
+        <span className="bg-accent/10 text-accent flex size-9 shrink-0 items-center justify-center rounded-full">
+          <ShieldCheck className="size-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <h1 className="font-display text-ink-primary text-xl font-bold">Đổi mật khẩu</h1>
+          <p className="text-ink-secondary mt-1 text-sm">
+            Dùng mật khẩu dài từ 10 đến 72 ký tự, gồm chữ hoa, chữ thường và chữ số.
+          </p>
+        </div>
       </div>
 
       {serverError && (
@@ -128,6 +130,7 @@ export function ChangePasswordForm() {
           <Label htmlFor="current-password">Mật khẩu hiện tại</Label>
           <Input
             id="current-password"
+            className="h-11"
             type="password"
             autoComplete="current-password"
             aria-invalid={Boolean(errors.currentPassword)}
@@ -137,30 +140,36 @@ export function ChangePasswordForm() {
           {fieldError(errors.currentPassword, "current-password-error")}
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="new-password">Mật khẩu mới</Label>
-          <Input
-            id="new-password"
-            type="password"
-            autoComplete="new-password"
-            aria-invalid={Boolean(errors.newPassword)}
-            aria-describedby={errors.newPassword ? "new-password-error" : undefined}
-            {...form.register("newPassword")}
-          />
-          {fieldError(errors.newPassword, "new-password-error")}
-        </div>
+        <div className="grid gap-5 lg:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="new-password">Mật khẩu mới</Label>
+            <Input
+              id="new-password"
+              className="h-11"
+              type="password"
+              autoComplete="new-password"
+              aria-invalid={Boolean(errors.newPassword)}
+              aria-describedby={errors.newPassword ? "new-password-error" : undefined}
+              {...form.register("newPassword")}
+            />
+            {fieldError(errors.newPassword, "new-password-error")}
+          </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="confirm-new-password">Xác nhận mật khẩu mới</Label>
-          <Input
-            id="confirm-new-password"
-            type="password"
-            autoComplete="new-password"
-            aria-invalid={Boolean(errors.confirmNewPassword)}
-            aria-describedby={errors.confirmNewPassword ? "confirm-new-password-error" : undefined}
-            {...form.register("confirmNewPassword")}
-          />
-          {fieldError(errors.confirmNewPassword, "confirm-new-password-error")}
+          <div className="space-y-2">
+            <Label htmlFor="confirm-new-password">Xác nhận mật khẩu mới</Label>
+            <Input
+              id="confirm-new-password"
+              className="h-11"
+              type="password"
+              autoComplete="new-password"
+              aria-invalid={Boolean(errors.confirmNewPassword)}
+              aria-describedby={
+                errors.confirmNewPassword ? "confirm-new-password-error" : undefined
+              }
+              {...form.register("confirmNewPassword")}
+            />
+            {fieldError(errors.confirmNewPassword, "confirm-new-password-error")}
+          </div>
         </div>
 
         <label className="border-border-default bg-bg-muted/30 flex cursor-pointer items-start gap-3 rounded-[var(--r-md)] border p-3">
@@ -180,7 +189,11 @@ export function ChangePasswordForm() {
           </span>
         </label>
 
-        <Button type="submit" disabled={mutation.isPending}>
+        <Button
+          type="submit"
+          disabled={mutation.isPending}
+          className="h-11 rounded-[var(--r-md)] px-5"
+        >
           {mutation.isPending && (
             <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
           )}

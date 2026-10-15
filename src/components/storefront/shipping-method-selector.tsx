@@ -25,10 +25,20 @@ export function ShippingMethodSelector({ methods, value, onChange }: ShippingMet
   return (
     <RadioGroup {...(value ? { value } : {})} onValueChange={onChange} className="grid gap-3">
       {methods.map((method) => (
-        <Label key={method.id} htmlFor={`shipping-${method.id}`} className={cn("flex cursor-pointer items-center gap-4 rounded-xl border bg-bg-surface p-4 text-left transition duration-200", value === method.id ? "border-accent shadow-md" : "border-border-default")}>
+        <Label
+          key={method.id}
+          htmlFor={`shipping-${method.id}`}
+          className={cn(
+            "bg-bg-surface hover:border-border-strong focus-within:ring-accent flex min-h-11 cursor-pointer items-center gap-3 rounded-[var(--r-md)] border p-3 text-left transition-colors duration-200 focus-within:ring-2 sm:gap-4 sm:p-4",
+            value === method.id ? "border-accent bg-accent/5" : "border-border-default",
+          )}
+        >
           <RadioGroupItem id={`shipping-${method.id}`} value={method.id} />
-          <Truck className="h-5 w-5 text-accent" />
-          <span className="flex-1"><span className="block font-semibold">{method.name}</span><span className="text-sm text-ink-secondary">{method.eta}</span></span>
+          <Truck className="text-accent h-5 w-5 shrink-0" />
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold">{method.name}</span>
+            <span className="text-ink-secondary text-sm">{method.eta}</span>
+          </span>
           <span className="font-semibold tabular-nums">{formatter.format(method.price)}</span>
         </Label>
       ))}

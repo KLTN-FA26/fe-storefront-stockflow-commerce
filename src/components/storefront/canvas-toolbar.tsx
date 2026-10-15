@@ -25,13 +25,13 @@ export function CanvasToolbar({ zoom, onUndo, onRedo, onZoomIn, onZoomOut, onRes
   ] as const;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-full border border-border-default bg-bg-surface p-2 shadow-md">
+    <div className="flex max-w-full items-center gap-1 overflow-x-auto rounded-[var(--r-lg)] border border-border-default bg-bg-surface p-1 shadow-[var(--card-shadow)] [scrollbar-width:none]">
       {actions.map(([Icon, label, action]) => (
-        <Button key={label} type="button" size="icon" variant="ghost" className="h-9 w-9 rounded-full" disabled={!action} onClick={action} aria-label={label}>
+        <Button key={label} type="button" size="icon" variant="ghost" className="size-11 shrink-0 rounded-full" disabled={!action} onClick={action} aria-label={label}>
           <Icon className="h-4 w-4" />
         </Button>
       ))}
-      <span className="px-2 text-sm font-semibold tabular-nums text-ink-secondary">{zoom}%</span>
+      <span className="shrink-0 px-2 text-sm font-semibold tabular-nums text-ink-secondary">{zoom}%</span>
     </div>
   );
 }

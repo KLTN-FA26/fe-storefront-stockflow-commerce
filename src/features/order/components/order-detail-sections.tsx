@@ -4,7 +4,8 @@ import { formatMoney } from "@/lib/format/money";
 
 import type { Order, OrderAddress } from "../types";
 
-const CARD = "rounded-[var(--r-lg)] bg-bg-surface p-[var(--card-pad)] shadow-md";
+const CARD =
+  "rounded-[var(--r-lg)] border border-border-default bg-bg-surface p-[var(--card-pad)] shadow-[var(--card-shadow)]";
 
 /**
  * BE order lines carry SKU, quantity and prices only — no product name or image yet — so the SKU
@@ -15,15 +16,18 @@ export function OrderLinesCard({ order }: { order: Order }) {
   const units = order.lines.reduce((sum, line) => sum + line.quantity, 0);
   return (
     <section className={CARD} aria-labelledby="order-lines-heading">
-      <h2 id="order-lines-heading" className="font-display text-ink-primary text-lg font-semibold">
+      <h2
+        id="order-lines-heading"
+        className="font-display text-ink-primary text-base font-semibold"
+      >
         Sản phẩm{" "}
-        <span className="text-ink-secondary text-base font-normal tabular-nums">
+        <span className="text-ink-secondary text-sm font-normal tabular-nums">
           ({order.lines.length} mặt hàng · {units} sản phẩm)
         </span>
       </h2>
-      <ul className="divide-border-default mt-2 divide-y">
+      <ul className="divide-border-default mt-1 divide-y">
         {order.lines.map((line) => (
-          <li key={line.lineId} className="flex items-start justify-between gap-4 py-4">
+          <li key={line.lineId} className="flex items-start justify-between gap-4 py-3">
             <div className="min-w-0">
               <p className="text-ink-primary font-mono text-sm font-semibold break-all">
                 {line.sku}
@@ -41,13 +45,19 @@ export function OrderLinesCard({ order }: { order: Order }) {
           </li>
         ))}
       </ul>
-      <div className="border-border-default flex items-baseline justify-between border-t pt-4">
-        <span className="text-ink-secondary">Tổng cộng</span>
-        <span className="font-display text-ink-primary text-2xl font-bold tabular-nums">
-          {money(order.totalAmount)}
-        </span>
-      </div>
     </section>
+  );
+}
+
+/** The order total, shown as the payment summary at the top of the detail aside. */
+export function OrderTotalCard({ order }: { order: Order }) {
+  return (
+    <div className={`${CARD} flex items-baseline justify-between gap-3`}>
+      <span className="text-ink-secondary">Tổng cộng</span>
+      <span className="font-display text-ink-primary text-xl font-bold tabular-nums">
+        {formatMoney(order.totalAmount, order.currency)}
+      </span>
+    </div>
   );
 }
 
@@ -85,10 +95,10 @@ export function OrderDeliveryCard({ order }: { order: Order }) {
   const showContact = !!contact && (!ship || contactDiffersFromRecipient(order, ship));
 
   return (
-    <section className={`${CARD} space-y-4`} aria-labelledby="order-delivery-heading">
+    <section className={`${CARD} space-y-3`} aria-labelledby="order-delivery-heading">
       <h2
         id="order-delivery-heading"
-        className="font-display text-ink-primary text-lg font-semibold"
+        className="font-display text-ink-primary text-base font-semibold"
       >
         Giao đến
       </h2>

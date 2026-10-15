@@ -10,11 +10,13 @@ import { describeError } from "../errors";
 
 export function AddressListSkeleton() {
   return (
-    <div role="status" aria-label="Đang tải sổ địa chỉ" className="space-y-4">
-      <Skeleton className="h-6 w-40" />
-      {[0, 1].map((i) => (
-        <Skeleton key={i} className="h-36 w-full rounded-[var(--r-xl)]" />
-      ))}
+    <div role="status" aria-label="Đang tải sổ địa chỉ" className="space-y-3">
+      <Skeleton className="h-5 w-40" />
+      <div className="grid gap-4 md:grid-cols-2">
+        {[0, 1].map((i) => (
+          <Skeleton key={i} className="h-44 w-full rounded-[var(--r-lg)]" />
+        ))}
+      </div>
     </div>
   );
 }
@@ -22,8 +24,8 @@ export function AddressListSkeleton() {
 export function AddressFormSkeleton() {
   return (
     <div role="status" aria-label="Đang tải địa chỉ" className="space-y-4">
-      <Skeleton className="h-24 w-full rounded-[var(--r-xl)]" />
-      <Skeleton className="h-96 w-full rounded-[var(--r-xl)]" />
+      <Skeleton className="h-24 w-full rounded-[var(--r-lg)]" />
+      <Skeleton className="h-96 w-full rounded-[var(--r-lg)]" />
     </div>
   );
 }
@@ -33,7 +35,7 @@ function RetryButton({ onRetry, retrying }: { onRetry: () => void; retrying: boo
     <Button
       type="button"
       variant="outline"
-      className="h-11 rounded-full"
+      className="h-11 rounded-[var(--r-md)] px-4"
       onClick={onRetry}
       disabled={retrying}
     >

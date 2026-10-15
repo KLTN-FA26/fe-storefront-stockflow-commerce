@@ -2,8 +2,8 @@ import { ChangePasswordForm } from "@/features/customer/security/components/chan
 
 export default function SecurityPage() {
   return (
-    <section className="mx-auto w-full max-w-2xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+    <div className="max-w-5xl">
       <ChangePasswordForm />
-    </section>
+    </div>
   );
 }

@@ -148,6 +148,7 @@ export function CustomerProfileForm() {
             type="button"
             variant="outline"
             size="sm"
+            className="h-11 rounded-[var(--r-md)] px-4"
             onClick={() => void profileQuery.refetch()}
           >
             <RefreshCw className="size-4" /> Thử lại
@@ -160,13 +161,11 @@ export function CustomerProfileForm() {
   if (!profileQuery.data) return null;
 
   return (
-    <section className="border-border-default bg-bg-surface rounded-[var(--r-xl)] border p-[var(--card-pad)] shadow-[var(--sh-sm)]">
-      <div className="mb-6">
-        <p className="text-ink-secondary text-sm">Tài khoản</p>
-        <h1 className="font-display text-ink-primary text-2xl font-bold sm:text-3xl">
-          Thông tin cá nhân
-        </h1>
-        <p className="text-ink-secondary mt-2 text-sm">Cập nhật thông tin liên hệ của bạn.</p>
+    <section className="bg-bg-surface border-border-default rounded-[var(--r-lg)] border p-[var(--card-pad)] shadow-[var(--card-shadow)]">
+      <div className="border-border-default mb-5 border-b pb-4">
+        <p className="text-ink-tertiary text-xs font-medium">Tài khoản</p>
+        <h1 className="font-display text-ink-primary text-xl font-bold">Thông tin cá nhân</h1>
+        <p className="text-ink-secondary mt-1 text-sm">Cập nhật thông tin liên hệ của bạn.</p>
       </div>
 
       {conflict && (
@@ -177,6 +176,7 @@ export function CustomerProfileForm() {
               type="button"
               variant="outline"
               size="sm"
+              className="h-11 rounded-[var(--r-md)] px-4"
               disabled={isReloading || profileQuery.isFetching}
               aria-busy={isReloading}
               onClick={() => void reloadLatest()}
@@ -209,58 +209,67 @@ export function CustomerProfileForm() {
       )}
 
       <form onSubmit={onSubmit} noValidate className="space-y-5">
-        <div className="space-y-2">
-          <Label htmlFor="customer-profile-full-name">Họ và tên</Label>
-          <Input
-            id="customer-profile-full-name"
-            autoComplete="name"
-            aria-invalid={Boolean(form.formState.errors.fullName)}
-            aria-describedby={
-              form.formState.errors.fullName ? "customer-profile-full-name-error" : undefined
-            }
-            {...form.register("fullName")}
-          />
-          {form.formState.errors.fullName?.message && (
-            <p id="customer-profile-full-name-error" className="text-danger text-sm" role="alert">
-              {form.formState.errors.fullName.message}
+        <div className="grid gap-5 lg:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="customer-profile-full-name">Họ và tên</Label>
+            <Input
+              id="customer-profile-full-name"
+              className="h-11"
+              autoComplete="name"
+              aria-invalid={Boolean(form.formState.errors.fullName)}
+              aria-describedby={
+                form.formState.errors.fullName ? "customer-profile-full-name-error" : undefined
+              }
+              {...form.register("fullName")}
+            />
+            {form.formState.errors.fullName?.message && (
+              <p id="customer-profile-full-name-error" className="text-danger text-sm" role="alert">
+                {form.formState.errors.fullName.message}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="customer-profile-email">Email</Label>
+            <Input
+              id="customer-profile-email"
+              className="h-11"
+              value={profileQuery.data.email}
+              readOnly
+              aria-readonly="true"
+            />
+            <p className="text-ink-tertiary text-xs">
+              Email là định danh đăng nhập và chưa thể thay đổi.
             </p>
-          )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="customer-profile-phone">Số điện thoại</Label>
+            <Input
+              id="customer-profile-phone"
+              className="h-11"
+              type="tel"
+              autoComplete="tel"
+              aria-invalid={Boolean(form.formState.errors.phone)}
+              aria-describedby={
+                form.formState.errors.phone ? "customer-profile-phone-error" : undefined
+              }
+              {...form.register("phone")}
+            />
+            {form.formState.errors.phone?.message && (
+              <p id="customer-profile-phone-error" className="text-danger text-sm" role="alert">
+                {form.formState.errors.phone.message}
+              </p>
+            )}
+          </div>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="customer-profile-email">Email</Label>
-          <Input
-            id="customer-profile-email"
-            value={profileQuery.data.email}
-            readOnly
-            aria-readonly="true"
-          />
-          <p className="text-ink-tertiary text-xs">
-            Email là định danh đăng nhập và chưa thể thay đổi.
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="customer-profile-phone">Số điện thoại</Label>
-          <Input
-            id="customer-profile-phone"
-            type="tel"
-            autoComplete="tel"
-            aria-invalid={Boolean(form.formState.errors.phone)}
-            aria-describedby={
-              form.formState.errors.phone ? "customer-profile-phone-error" : undefined
-            }
-            {...form.register("phone")}
-          />
-          {form.formState.errors.phone?.message && (
-            <p id="customer-profile-phone-error" className="text-danger text-sm" role="alert">
-              {form.formState.errors.phone.message}
-            </p>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3 pt-2">
-          <Button type="submit" disabled={updateMutation.isPending || conflict}>
+        <div className="border-border-default flex flex-wrap items-center gap-3 border-t pt-4">
+          <Button
+            type="submit"
+            disabled={updateMutation.isPending || conflict}
+            className="h-11 rounded-[var(--r-md)] px-5"
+          >
             {updateMutation.isPending && <LoaderCircle className="size-4 animate-spin" />}
             {updateMutation.isPending ? "Đang lưu..." : "Lưu thay đổi"}
           </Button>

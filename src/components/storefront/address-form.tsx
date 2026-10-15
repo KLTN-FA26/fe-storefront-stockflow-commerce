@@ -16,6 +16,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
+import { SurfaceCard } from "@/components/storefront/layout";
+
 export interface AddressFormValue {
   name: string;
   phone: string;
@@ -42,13 +44,13 @@ export function AddressForm({ value, provinces, wards, loading = false, onChange
   const setProvince = (province: string) => onChange({ ...value, province, ward: "" });
 
   return (
-    <div className="grid gap-4 rounded-xl bg-bg-surface p-[var(--card-pad)] shadow-md sm:grid-cols-2">
-      <Field label="Người nhận"><Input value={value.name} onChange={(event) => setField("name", event.target.value)} /></Field>
-      <Field label="Số điện thoại"><Input value={value.phone} onChange={(event) => setField("phone", event.target.value)} /></Field>
+    <SurfaceCard className="grid gap-4 sm:grid-cols-2">
+      <Field label="Người nhận"><Input className="min-h-11" value={value.name} onChange={(event) => setField("name", event.target.value)} /></Field>
+      <Field label="Số điện thoại"><Input className="min-h-11" value={value.phone} onChange={(event) => setField("phone", event.target.value)} /></Field>
       <ComboboxField label="Tỉnh/Thành" value={value.province} options={provinces} loading={loading} onChange={setProvince} />
       <ComboboxField label="Phường/Xã" value={value.ward} options={wards} loading={loading} disabled={!value.province} onChange={(next) => setField("ward", next)} />
-      <Field label="Địa chỉ chi tiết"><Input value={value.line1} onChange={(event) => setField("line1", event.target.value)} /></Field>
-    </div>
+      <Field label="Địa chỉ chi tiết"><Input className="min-h-11" value={value.line1} onChange={(event) => setField("line1", event.target.value)} /></Field>
+    </SurfaceCard>
   );
 }
 
@@ -65,7 +67,7 @@ function ComboboxField({ label, value, options, loading, disabled, onChange }: {
     <Field label={label}>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button type="button" variant="outline" role="combobox" aria-expanded={open} disabled={isDisabled} className="h-10 w-full justify-between rounded-[var(--r-md)] border-border-default bg-bg-surface px-3 font-normal text-ink-primary shadow-sm hover:bg-bg-subtle">
+          <Button type="button" variant="outline" role="combobox" aria-expanded={open} disabled={isDisabled} className="min-h-11 w-full justify-between rounded-[var(--r-md)] border-border-default bg-bg-surface px-3 font-normal text-ink-primary shadow-sm hover:bg-bg-subtle">
             <span className={cn("truncate", !selected && "text-ink-tertiary")}>{selected?.label ?? (loading ? "Đang tải..." : `Chọn ${label.toLowerCase()}`)}</span>
             <ChevronsUpDown className="ml-2 size-4 shrink-0 text-ink-tertiary" />
           </Button>

@@ -24,11 +24,14 @@ export function OrdersPagination({
 }: OrdersPaginationProps) {
   if (totalPages <= 1) return null;
   return (
-    <nav aria-label="Phân trang đơn hàng" className="flex items-center justify-between gap-3">
+    <nav
+      aria-label="Phân trang đơn hàng"
+      className="border-border-default mt-5 flex items-center justify-between gap-3 border-t pt-4"
+    >
       <Button
         type="button"
         variant="outline"
-        className="min-h-11 rounded-full px-4"
+        className="min-h-11 rounded-[var(--r-md)] px-4"
         disabled={!hasPrevious || busy}
         onClick={() => onPageChange(page - 1)}
         aria-label="Trang trước"
@@ -42,7 +45,7 @@ export function OrdersPagination({
       <Button
         type="button"
         variant="outline"
-        className="min-h-11 rounded-full px-4"
+        className="min-h-11 rounded-[var(--r-md)] px-4"
         disabled={!hasNext || busy}
         onClick={() => onPageChange(page + 1)}
         aria-label="Trang sau"

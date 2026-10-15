@@ -23,7 +23,7 @@ Storefront UI should be:
 
 - mobile-first.
 - ecommerce-focused.
-- airy and scannable.
+- compact retail density and scannable.
 - product-image-led.
 - shadcn-first for interactive controls.
 - accessible with keyboard/focus states.
