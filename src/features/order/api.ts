@@ -18,10 +18,13 @@ export async function getMyOrders(
   return { ...page, page: page.page + 1 };
 }
 
-/** GET /orders/{orderId} — another customer's order answers 404 NOT_FOUND (BE hides it). */
+/**
+ * GET /orders/me/{orderId} — the customer's own view. `/orders/{orderId}` is the staff one (the
+ * whole order, internals included). Another customer's order answers 404 NOT_FOUND (BE hides it).
+ */
 export async function getOrder(orderId: string, signal?: AbortSignal): Promise<Order> {
   const { data } = await api.get<unknown>(
-    `/orders/${encodeURIComponent(orderId)}`,
+    `/orders/me/${encodeURIComponent(orderId)}`,
     signal ? { signal } : {},
   );
   return orderDtoSchema.parse(data);

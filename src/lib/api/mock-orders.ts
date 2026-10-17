@@ -1,10 +1,7 @@
 /**
- * Mock routes for the BE customer order history: /orders/me, /orders/{orderId},
+ * Mock routes for the BE customer order history: /orders/me, /orders/me/{orderId},
  * /orders/{orderId}/cancellation. Responses use the real ApiResponse envelope; the mock adapter
  * rejects error statuses so the client interceptor turns them into ApiError.
- *
- * The registry matches in insertion order, so `/orders/me` is registered before
- * `/orders/:orderId` below; the other way round, `:orderId` would swallow `me`.
  */
 
 import type { AxiosRequestConfig } from "axios";
@@ -35,13 +32,16 @@ export function registerOrderMockRoutes(
   book: MockOrderBook = createMockOrderBook(MOCK_CUSTOMER_ID, seedMockOrders(MOCK_CUSTOMER_ID)),
 ): void {
   registerMockRoute("GET", "/orders/me", (config) => respond(book.page(queryParams(config))));
-  registerMockRoute("GET", "/orders/:orderId", (config) =>
+  registerMockRoute("GET", "/orders/me/:orderId", (config) =>
     respond(book.get(pathParams(config).orderId ?? "")),
   );
   registerMockRoute("POST", "/orders/:orderId/cancellation", (config) => {
     const reason = queryParams(config).reason;
     return respond(
-      book.cancel(pathParams(config).orderId ?? "", typeof reason === "string" ? reason : undefined),
+      book.cancel(
+        pathParams(config).orderId ?? "",
+        typeof reason === "string" ? reason : undefined,
+      ),
     );
   });
 }

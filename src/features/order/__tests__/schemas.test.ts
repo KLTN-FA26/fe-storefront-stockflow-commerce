@@ -2,26 +2,86 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import { describeError } from "../errors";
-import { orderDtoSchema, orderPageDtoSchema } from "../schemas";
-import { beOrder, bePage } from "./fixtures";
+import { orderCardDtoSchema, orderDtoSchema, orderPageDtoSchema } from "../schemas";
+import { beCard, beOrder, bePage } from "./fixtures";
 
-describe("order schemas follow the BE OrderResponse / PageResponse contract", () => {
-  it("accepts a real NON_NULL response with contact, addresses and design fields absent", () => {
+describe("order list schema follows BE CustomerOrderCardResponse / PageResponse", () => {
+  it("parses a real card: no lines, a line count, one customer-facing status group", () => {
+    const parsed = orderCardDtoSchema.parse(beCard);
+    expect(parsed).toMatchObject({
+      orderNumber: "SO-20260907-000431",
+      status: "CONFIRMED",
+      statusGroup: "CONFIRMED",
+      total: 507000,
+      lineCount: 2,
+      deliveryState: "NOT_SHIPPED",
+    });
+    expect(parsed).not.toHaveProperty("lines");
+  });
+
+  it("parses a whole /orders/me page", () => {
+    const page = orderPageDtoSchema.parse(bePage());
+    expect(page.items).toHaveLength(1);
+    expect(page).toMatchObject({ page: 0, totalElements: 1, hasNext: false });
+  });
+
+  it("accepts a card whose deliveryState is absent (NON_NULL)", () => {
+    const { deliveryState: _omit, ...card } = beCard;
+    expect(orderCardDtoSchema.safeParse(card).success).toBe(true);
+  });
+
+  it("parses a status or group the FE does not know yet as UNKNOWN instead of failing the page", () => {
+    const parsed = orderCardDtoSchema.parse({
+      ...beCard,
+      status: "SOMETHING_NEW",
+      statusGroup: "SOMETHING_NEWER",
+      deliveryState: "LOST_IN_SPACE",
+    });
+    expect(parsed).toMatchObject({
+      status: "UNKNOWN",
+      statusGroup: "UNKNOWN",
+      deliveryState: "UNKNOWN",
+    });
+    expect(
+      orderPageDtoSchema.safeParse(bePage({ items: [beCard, { ...beCard, status: "X" }] })).success,
+    ).toBe(true);
+  });
+
+  it("still rejects a missing or non-string status", () => {
+    const { status: _status, ...withoutStatus } = beCard;
+    expect(orderCardDtoSchema.safeParse(withoutStatus).success).toBe(false);
+    expect(orderCardDtoSchema.safeParse({ ...beCard, status: 3 }).success).toBe(false);
+  });
+
+  it("rejects a total that is not a number and the legacy totalAmount/lines shape", () => {
+    expect(orderCardDtoSchema.safeParse({ ...beCard, total: "507000" }).success).toBe(false);
+    const { total: _total, lineCount: _count, ...rest } = beCard;
+    expect(orderCardDtoSchema.safeParse({ ...rest, totalAmount: 507000, lines: [] }).success).toBe(
+      false,
+    );
+  });
+
+  it("requires the PageResponse paging flags", () => {
+    expect(orderPageDtoSchema.safeParse(bePage()).success).toBe(true);
+    const { hasNext: _omit, ...withoutHasNext } = bePage();
+    expect(orderPageDtoSchema.safeParse(withoutHasNext).success).toBe(false);
+  });
+});
+
+describe("order detail schema follows BE CustomerOrderDetailResponse", () => {
+  it("parses a real response with address, hold reason and contact data absent", () => {
     const parsed = orderDtoSchema.parse(beOrder);
-    expect(parsed.contactName).toBeUndefined();
     expect(parsed.shippingAddress).toBeUndefined();
+    expect(parsed.holdReasonPublic).toBeUndefined();
     expect(parsed.lines[0]?.designSnapshotId).toBeUndefined();
+    expect(parsed.lines[1]?.production).toEqual({ state: "IN_PROGRESS", goodQuantity: 0 });
+    expect(parsed.timeline?.map((entry) => entry.statusGroup)).toEqual([
+      "AWAITING_PAYMENT",
+      "CONFIRMED",
+    ]);
   });
 
-  it("accepts an order never modified after insert and a guest order (nullable columns)", () => {
-    // ordering.customer_order.last_modified_at / customer_id are nullable; NON_NULL drops the keys.
-    const { lastModifiedAt: _modified, customerId: _customer, ...untouched } = beOrder;
-    const parsed = orderDtoSchema.parse(untouched);
-    expect(parsed.lastModifiedAt).toBeUndefined();
-    expect(parsed.customerId).toBeUndefined();
-  });
-
-  it("accepts addresses without line2/postalCode", () => {
+  it("accepts a shipping address without line2/postalCode", () => {
     const shippingAddress = {
       recipientName: "Nguyễn Hoài Nam",
       phone: "+84908111222",
@@ -37,36 +97,27 @@ describe("order schemas follow the BE OrderResponse / PageResponse contract", ()
     );
   });
 
-  it("parses a status the FE does not know yet as UNKNOWN instead of failing the order", () => {
-    // Sprint 2 B2B adds CONFIRMED / IN_PRODUCTION (SCRUM-423/427) to the BE OrderStatus.
-    expect(orderDtoSchema.parse({ ...beOrder, status: "CONFIRMED" }).status).toBe("UNKNOWN");
-    expect(orderDtoSchema.parse({ ...beOrder, status: "IN_PRODUCTION" }).status).toBe("UNKNOWN");
-    expect(orderDtoSchema.parse({ ...beOrder, status: "PAID" }).status).toBe("PAID");
+  it("parses statuses the FE does not know yet as UNKNOWN, in the order and in its timeline", () => {
+    const parsed = orderDtoSchema.parse({
+      ...beOrder,
+      status: "SOMETHING_NEW",
+      statusGroup: "SOMETHING_NEWER",
+      timeline: [
+        { status: "SOMETHING_NEW", statusGroup: "SOMETHING_NEWER", occurredAt: beOrder.placedAt },
+      ],
+    });
+    expect(parsed).toMatchObject({ status: "UNKNOWN", statusGroup: "UNKNOWN" });
+    expect(parsed.timeline?.[0]).toMatchObject({ status: "UNKNOWN", statusGroup: "UNKNOWN" });
   });
 
-  it("still rejects a missing or non-string status", () => {
-    const { status: _status, ...withoutStatus } = beOrder;
-    expect(orderDtoSchema.safeParse(withoutStatus).success).toBe(false);
-    expect(orderDtoSchema.safeParse({ ...beOrder, status: 3 }).success).toBe(false);
-  });
-
-  it("rejects a totalAmount that is not a number", () => {
-    expect(orderDtoSchema.safeParse({ ...beOrder, totalAmount: "507000" }).success).toBe(false);
-  });
-
-  it("rejects the legacy FE field grandTotal in place of totalAmount", () => {
-    const { totalAmount: _omit, ...legacy } = beOrder;
-    expect(orderDtoSchema.safeParse({ ...legacy, grandTotal: 507000 }).success).toBe(false);
-  });
-
-  it("requires the PageResponse paging flags", () => {
-    expect(orderPageDtoSchema.safeParse(bePage()).success).toBe(true);
-    const { hasNext: _omit, ...withoutHasNext } = bePage();
-    expect(orderPageDtoSchema.safeParse(withoutHasNext).success).toBe(false);
+  it("rejects a total that is not a number and the staff OrderResponse field totalAmount", () => {
+    expect(orderDtoSchema.safeParse({ ...beOrder, total: "507000" }).success).toBe(false);
+    const { total: _omit, ...legacy } = beOrder;
+    expect(orderDtoSchema.safeParse({ ...legacy, totalAmount: 507000 }).success).toBe(false);
   });
 
   it("turns a contract failure into a customer message, not the raw zod issues", () => {
-    const result = orderDtoSchema.safeParse({ ...beOrder, totalAmount: "507000" });
+    const result = orderDtoSchema.safeParse({ ...beOrder, total: "507000" });
     expect(result.success).toBe(false);
     const message = describeError(result.error);
     expect(message).toContain("Dữ liệu trả về không đúng định dạng");

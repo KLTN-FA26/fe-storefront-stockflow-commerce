@@ -9,7 +9,9 @@ export const isValidOrderId = (orderId: string) => orderIdSchema.safeParse(order
 export const ORDER_STATUSES = [
   "DRAFT",
   "PENDING_PAYMENT",
-  "PAID",
+  "CONFIRMED",
+  "IN_PRODUCTION",
+  "READY_TO_FULFILL",
   "IN_FULFILMENT",
   "ON_HOLD",
   "SHIPPED",
@@ -21,9 +23,10 @@ export const ORDER_STATUSES = [
 export type KnownOrderStatus = (typeof ORDER_STATUSES)[number];
 
 /**
- * A status the FE does not know yet. The BE will add more (Sprint 2 B2B plans CONFIRMED and
- * IN_PRODUCTION, SCRUM-423/427); one such order must not fail the whole /orders/me page as a
- * contract error, so it is shown as "Đang xử lý" and never offered for cancellation.
+ * A status the FE does not know yet. The BE keeps adding some (CONFIRMED, IN_PRODUCTION and
+ * READY_TO_FULFILL arrived after the first FE cut); one such order must not fail the whole
+ * /orders/me page as a contract error, so it is shown as "Đang xử lý" and never offered for
+ * cancellation.
  */
 export const ORDER_STATUS_UNKNOWN = "UNKNOWN";
 
@@ -37,9 +40,55 @@ export const orderStatusSchema = z
     isKnownOrderStatus(status) ? status : ORDER_STATUS_UNKNOWN,
   );
 
-// ── DTOs — mirror BE OrderResponse. Jackson runs with `default-property-inclusion: non_null`,
-// so every nullable field may be absent from the JSON, not just null. ──
+/**
+ * What the customer reads (BE CustomerOrders.StatusGroup): one wording per group, whatever the
+ * order's own status is. Tolerant like the status: a group newer than this FE becomes UNKNOWN.
+ */
+export const ORDER_STATUS_GROUPS = [
+  "AWAITING_PAYMENT",
+  "UNDER_REVIEW",
+  "CONFIRMED",
+  "IN_PRODUCTION",
+  "PREPARING",
+  "SHIPPING",
+  "DELIVERED",
+  "CANCELLED",
+  "RETURNED",
+] as const;
+export type KnownOrderStatusGroup = (typeof ORDER_STATUS_GROUPS)[number];
 
+export const ORDER_STATUS_GROUP_UNKNOWN = "UNKNOWN";
+
+export const orderStatusGroupSchema = z
+  .string()
+  .transform((group): KnownOrderStatusGroup | typeof ORDER_STATUS_GROUP_UNKNOWN =>
+    (ORDER_STATUS_GROUPS as readonly string[]).includes(group)
+      ? (group as KnownOrderStatusGroup)
+      : ORDER_STATUS_GROUP_UNKNOWN,
+  );
+
+/** BE CustomerOrders.DeliveryState; only what staff recorded. Free-form on purpose: display only. */
+export const DELIVERY_STATES = ["NOT_SHIPPED", "IN_TRANSIT", "DELIVERED", "RETURNED"] as const;
+export type KnownDeliveryState = (typeof DELIVERY_STATES)[number];
+export const DELIVERY_STATE_UNKNOWN = "UNKNOWN";
+
+export const deliveryStateSchema = z
+  .string()
+  .transform((state): KnownDeliveryState | typeof DELIVERY_STATE_UNKNOWN =>
+    (DELIVERY_STATES as readonly string[]).includes(state)
+      ? (state as KnownDeliveryState)
+      : DELIVERY_STATE_UNKNOWN,
+  );
+
+// ── DTOs — mirror BE CustomerOrderCardResponse / CustomerOrderDetailResponse. Jackson runs with
+// `default-property-inclusion: non_null`, so every nullable field may be absent from the JSON,
+// not just null. ──
+
+// ISO 4217 code; the storefront only sells in VND today.
+const currencySchema = z.enum(["VND", "USD", "CNY"]);
+const instantSchema = z.iso.datetime({ offset: true });
+
+/** BE OrderResponse.Address, as the customer detail returns it. */
 export const orderAddressDtoSchema = z.object({
   recipientName: z.string(),
   phone: z.string(),
@@ -53,39 +102,64 @@ export const orderAddressDtoSchema = z.object({
   postalCode: z.string().nullish(),
 });
 
+/** One row of GET /orders/me (CustomerOrderCardResponse): no lines, only their count. */
+export const orderCardDtoSchema = z.object({
+  orderId: z.uuid(),
+  orderNumber: z.string().min(1),
+  status: orderStatusSchema,
+  statusGroup: orderStatusGroupSchema,
+  total: z.number().nonnegative(),
+  currency: currencySchema,
+  placedAt: instantSchema,
+  lineCount: z.number().int().nonnegative(),
+  deliveryState: deliveryStateSchema.nullish(),
+});
+
 export const orderLineDtoSchema = z.object({
   lineId: z.uuid(),
   sku: z.string().min(1),
   quantity: z.number().int().positive(),
   unitPrice: z.number().nonnegative(),
   lineTotal: z.number().nonnegative(),
-  reservationIds: z.array(z.uuid()).nullish(),
   designSnapshotId: z.uuid().nullish(),
-  designChecksum: z.string().nullish(),
+  // Only a line printed to the customer's design carries production progress.
+  production: z
+    .object({ state: z.string(), goodQuantity: z.number().int().nonnegative() })
+    .nullish(),
 });
 
+export const orderPaymentDtoSchema = z.object({
+  status: z.string(),
+  paidAmount: z.number().nonnegative().nullish(),
+  depositRequired: z.number().nonnegative().nullish(),
+  creditTermDays: z.number().int().nonnegative().nullish(),
+});
+
+export const orderTimelineEntryDtoSchema = z.object({
+  status: orderStatusSchema,
+  statusGroup: orderStatusGroupSchema,
+  occurredAt: instantSchema,
+  reasonCode: z.string().nullish(),
+});
+
+/** GET /orders/me/{orderId} (CustomerOrderDetailResponse). */
 export const orderDtoSchema = z.object({
   orderId: z.uuid(),
   orderNumber: z.string().min(1),
-  // Kept as string like the customer features (dev mock uses non-UUID customer ids).
-  // ordering.customer_order.customer_id is nullable (guest checkout), so NON_NULL may drop it.
-  customerId: z.string().min(1).nullish(),
   status: orderStatusSchema,
-  totalAmount: z.number().nonnegative(),
-  // ISO 4217 code; the storefront only sells in VND today.
-  currency: z.enum(["VND", "USD", "CNY"]),
-  lines: z.array(orderLineDtoSchema),
-  placedAt: z.iso.datetime({ offset: true }),
-  createdBy: z.string().nullish(),
-  // last_modified_at is nullable: an order never touched after insert (e.g. seeded rows) has none,
-  // and NON_NULL then omits the key.
-  lastModifiedAt: z.iso.datetime({ offset: true }).nullish(),
-  lastModifiedBy: z.string().nullish(),
-  contactName: z.string().nullish(),
-  contactEmail: z.string().nullish(),
-  contactPhone: z.string().nullish(),
+  statusGroup: orderStatusGroupSchema,
+  // Set only while the order is ON_HOLD.
+  holdReasonPublic: z.string().nullish(),
+  paymentTerm: z.string().nullish(),
+  total: z.number().nonnegative(),
+  currency: currencySchema,
+  placedAt: instantSchema,
   shippingAddress: orderAddressDtoSchema.nullish(),
-  billingAddress: orderAddressDtoSchema.nullish(),
+  payment: orderPaymentDtoSchema.nullish(),
+  lines: z.array(orderLineDtoSchema),
+  // Oldest first.
+  timeline: z.array(orderTimelineEntryDtoSchema).nullish(),
+  deliveryState: deliveryStateSchema.nullish(),
 });
 
 /** BE common.api.PageResponse — `page` is zero-based; hasNext/hasPrevious come from the BE. */
@@ -101,7 +175,7 @@ export function pageResponseSchema<T extends z.ZodType>(item: T) {
   });
 }
 
-export const orderPageDtoSchema = pageResponseSchema(orderDtoSchema);
+export const orderPageDtoSchema = pageResponseSchema(orderCardDtoSchema);
 
 // ── Input — POST /orders/{orderId}/cancellation?reason= ──
 // Order.cancel rejects a blank reason (IllegalArgumentException → 400 VALIDATION_FAILED) and

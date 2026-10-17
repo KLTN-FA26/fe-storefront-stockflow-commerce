@@ -1,19 +1,17 @@
 import type { SemanticTone } from "@/lib/domain/types";
 
-import type { OrderStatus } from "./types";
+import type { OrderStatus, OrderStatusGroup } from "./types";
 
 /**
- * BR-031 — cancellation is refused from SHIPPED onwards; the goods are with the carrier and the
- * correct process is a return. Source: BE order.api.OrderStatus#canTransitionTo(CANCELLED)
- * (develop): true only for DRAFT, PENDING_PAYMENT, PAID, IN_FULFILMENT, ON_HOLD.
- * UI gating only — the BE re-checks and answers 409 CONFLICT.
+ * Source: BE order.api.OrderStatus#customerMayCancelDirectly (develop): a customer cancels on
+ * their own only before anything is released to production or the warehouse. Later the BE
+ * records a cancellation request (202) that Sales decides, which this FE does not offer yet, so
+ * those orders are pointed to support instead. UI gating only — the BE re-checks (409 CONFLICT).
  */
 const CANCELLABLE: ReadonlySet<OrderStatus> = new Set<OrderStatus>([
   "DRAFT",
   "PENDING_PAYMENT",
-  "PAID",
-  "IN_FULFILMENT",
-  "ON_HOLD",
+  "CONFIRMED",
 ]);
 
 /** BE OrderStatus#isTerminal. */
@@ -28,38 +26,39 @@ export const isOrderTerminal = (status: OrderStatus) => TERMINAL.has(status);
 
 /**
  * Customer-facing label, semantic tone (special > danger > positive > warning > info > muted >
- * neutral) and a one-line "what happens next" hint for each status.
+ * neutral) and a one-line "what happens next" hint for each status group — the wording the BE
+ * itself says the customer reads (CustomerOrderCardResponse#statusGroup).
  */
-export const ORDER_STATUS_META: Record<
-  OrderStatus,
+export const ORDER_STATUS_GROUP_META: Record<
+  OrderStatusGroup,
   { label: string; tone: SemanticTone; hint: string }
 > = {
-  DRAFT: {
-    label: "Nháp",
-    tone: "neutral",
-    hint: "Đơn chưa được gửi. Hoàn tất đặt hàng để chúng tôi giữ hàng cho bạn.",
-  },
-  PENDING_PAYMENT: {
+  AWAITING_PAYMENT: {
     label: "Chờ thanh toán",
     tone: "warning",
-    hint: "Đơn sẽ được chuẩn bị ngay khi bạn thanh toán.",
+    hint: "Đơn sẽ được xử lý ngay khi bạn thanh toán.",
   },
-  PAID: {
-    label: "Đã thanh toán",
+  UNDER_REVIEW: {
+    label: "Đang xem xét",
+    tone: "warning",
+    hint: "Đơn đang được kiểm tra. Chúng tôi sẽ liên hệ bạn nếu cần thêm thông tin.",
+  },
+  CONFIRMED: {
+    label: "Đã xác nhận",
     tone: "positive",
-    hint: "Chúng tôi đã nhận thanh toán và đang chuẩn bị hàng cho bạn.",
+    hint: "Chúng tôi đã xác nhận đơn và sắp bắt đầu chuẩn bị cho bạn.",
   },
-  IN_FULFILMENT: {
+  IN_PRODUCTION: {
+    label: "Đang sản xuất",
+    tone: "info",
+    hint: "Sản phẩm của bạn đang được sản xuất.",
+  },
+  PREPARING: {
     label: "Đang chuẩn bị hàng",
     tone: "info",
     hint: "Kho đang lấy và đóng gói đơn hàng của bạn.",
   },
-  ON_HOLD: {
-    label: "Tạm giữ",
-    tone: "warning",
-    hint: "Đơn đang tạm giữ để kiểm tra. Chúng tôi sẽ liên hệ bạn nếu cần thêm thông tin.",
-  },
-  SHIPPED: {
+  SHIPPING: {
     label: "Đang giao hàng",
     tone: "info",
     hint: "Đơn đã rời kho và đang trên đường giao đến bạn.",
@@ -69,10 +68,9 @@ export const ORDER_STATUS_META: Record<
     tone: "positive",
     hint: "Đơn đã được giao. Cảm ơn bạn đã mua sắm.",
   },
-  COMPLETED: { label: "Hoàn tất", tone: "positive", hint: "Đơn hàng đã hoàn tất." },
   CANCELLED: { label: "Đã huỷ", tone: "danger", hint: "Đơn đã bị huỷ và sẽ không được giao." },
   RETURNED: { label: "Đã trả hàng", tone: "special", hint: "Đơn hàng đã được trả lại." },
-  // A status newer than this FE (see ORDER_STATUS_UNKNOWN): neutral wording, no cancellation.
+  // A group newer than this FE (see ORDER_STATUS_GROUP_UNKNOWN): neutral wording.
   UNKNOWN: {
     label: "Đang xử lý",
     tone: "info",
@@ -81,7 +79,7 @@ export const ORDER_STATUS_META: Record<
 };
 
 /**
- * Fulfilment progress derived from the status alone — the BE order has no per-status timestamps.
+ * Fulfilment progress derived from the status group alone — the BE order has no per-status timestamps.
  * `done` is how many steps are complete; CANCELLED/RETURNED leave the happy path (null).
  */
 export const ORDER_PROGRESS_STEPS = [
@@ -92,19 +90,18 @@ export const ORDER_PROGRESS_STEPS = [
   { id: "received", label: "Đã nhận" },
 ] as const;
 
-const DONE_STEPS: Record<OrderStatus, number | null> = {
-  DRAFT: 0,
-  PENDING_PAYMENT: 1,
-  PAID: 2,
-  IN_FULFILMENT: 2,
-  ON_HOLD: 2,
-  SHIPPED: 3,
+const DONE_STEPS: Record<OrderStatusGroup, number | null> = {
+  AWAITING_PAYMENT: 1,
+  UNDER_REVIEW: 1,
+  CONFIRMED: 2,
+  IN_PRODUCTION: 2,
+  PREPARING: 2,
+  SHIPPING: 3,
   DELIVERED: 5,
-  COMPLETED: 5,
   CANCELLED: null,
   RETURNED: null,
   // Unknown to this FE, so where it sits on the happy path is unknown too: no stepper.
   UNKNOWN: null,
 };
 
-export const orderProgressOf = (status: OrderStatus) => DONE_STEPS[status];
+export const orderProgressOf = (group: OrderStatusGroup) => DONE_STEPS[group];

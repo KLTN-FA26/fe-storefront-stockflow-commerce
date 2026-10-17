@@ -16,6 +16,7 @@ describe("order API (BE OrderController)", () => {
 
     expect(get).toHaveBeenCalledWith("/orders/me", { params: { page: 0, size: 10 } });
     expect(result.page).toBe(1);
+    expect(result.items[0]).toMatchObject({ orderId, statusGroup: "CONFIRMED", lineCount: 2 });
   });
 
   it("maps FE page 3 → BE page 2 and keeps the BE paging flags", async () => {
@@ -44,12 +45,12 @@ describe("order API (BE OrderController)", () => {
   it("parses the order detail once at the boundary", async () => {
     const get = vi.spyOn(api, "get").mockResolvedValueOnce({ data: beOrder });
 
-    await expect(getOrder(orderId)).resolves.toMatchObject({ orderId, status: "PAID" });
-    expect(get).toHaveBeenCalledWith(`/orders/${orderId}`, {});
+    await expect(getOrder(orderId)).resolves.toMatchObject({ orderId, status: "CONFIRMED" });
+    expect(get).toHaveBeenCalledWith(`/orders/me/${orderId}`, {});
   });
 
   it("rejects with a ZodError when the BE breaks the contract", async () => {
-    vi.spyOn(api, "get").mockResolvedValueOnce({ data: { ...beOrder, totalAmount: "507000" } });
+    vi.spyOn(api, "get").mockResolvedValueOnce({ data: { ...beOrder, total: "507000" } });
     await expect(getOrder(orderId)).rejects.toBeInstanceOf(z.ZodError);
   });
 

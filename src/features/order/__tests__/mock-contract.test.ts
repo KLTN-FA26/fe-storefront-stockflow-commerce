@@ -10,16 +10,19 @@ const CUSTOMER = "CUS-TEST";
 const dataOf = (result: { data: unknown }) => (result.data as { data: unknown }).data;
 
 describe("mock order fixtures satisfy the FE order contract", () => {
-  it("seeds only orders the order schema accepts", () => {
-    for (const order of seedMockOrders(CUSTOMER)) {
-      expect(orderDtoSchema.safeParse(order).success).toBe(true);
+  it("answers GET /orders/me/{id} with a body the detail schema accepts, for every status", () => {
+    const book = createMockOrderBook(CUSTOMER, seedMockOrders(CUSTOMER));
+    for (const order of seedMockOrders(CUSTOMER).filter((o) => o.customerId === CUSTOMER)) {
+      expect(orderDtoSchema.safeParse(dataOf(book.get(order.orderId))).success).toBe(true);
     }
   });
 
   it("answers GET /orders/me with a body the page schema accepts", () => {
     const book = createMockOrderBook(CUSTOMER, seedMockOrders(CUSTOMER));
     for (const page of [0, 1, 2]) {
-      expect(orderPageDtoSchema.safeParse(dataOf(book.page({ page, size: 10 }))).success).toBe(true);
+      expect(orderPageDtoSchema.safeParse(dataOf(book.page({ page, size: 10 }))).success).toBe(
+        true,
+      );
     }
   });
 });
