@@ -3,9 +3,8 @@ import {
   BadgeCheck,
   CircleCheck,
   CircleX,
-  Clock,
   CreditCard,
-  FilePen,
+  Factory,
   Hourglass,
   Package,
   PauseCircle,
@@ -14,30 +13,29 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { ORDER_STATUS_META, orderProgressOf } from "../lifecycle";
-import type { OrderStatus } from "../types";
+import { ORDER_STATUS_GROUP_META, orderProgressOf } from "../lifecycle";
+import type { OrderStatusGroup } from "../types";
 import { ORDER_TONE_CLASSES } from "./order-status-badge";
 import { OrderStepper } from "./order-stepper";
 
-const STATUS_ICON: Record<OrderStatus, LucideIcon> = {
-  DRAFT: FilePen,
-  PENDING_PAYMENT: CreditCard,
-  PAID: Clock,
-  IN_FULFILMENT: Package,
-  ON_HOLD: PauseCircle,
-  SHIPPED: Truck,
+const GROUP_ICON: Record<OrderStatusGroup, LucideIcon> = {
+  AWAITING_PAYMENT: CreditCard,
+  UNDER_REVIEW: PauseCircle,
+  CONFIRMED: BadgeCheck,
+  IN_PRODUCTION: Factory,
+  PREPARING: Package,
+  SHIPPING: Truck,
   DELIVERED: CircleCheck,
-  COMPLETED: BadgeCheck,
   CANCELLED: CircleX,
   RETURNED: Undo2,
   UNKNOWN: Hourglass,
 };
 
 /** One place that says where the order is and what happens next, replacing badge + progress bar. */
-export function OrderStatusHero({ status }: { status: OrderStatus }) {
-  const { label, tone, hint } = ORDER_STATUS_META[status];
-  const Icon = STATUS_ICON[status];
-  const done = orderProgressOf(status);
+export function OrderStatusHero({ group }: { group: OrderStatusGroup }) {
+  const { label, tone, hint } = ORDER_STATUS_GROUP_META[group];
+  const Icon = GROUP_ICON[group];
+  const done = orderProgressOf(group);
 
   return (
     <section

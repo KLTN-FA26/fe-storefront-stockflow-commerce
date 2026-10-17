@@ -3,8 +3,8 @@ import { cn } from "cn";
 import { Badge } from "@/components/ui/badge";
 import type { SemanticTone } from "@/lib/domain/types";
 
-import { ORDER_STATUS_META } from "../lifecycle";
-import type { OrderStatus } from "../types";
+import { ORDER_STATUS_GROUP_META } from "../lifecycle";
+import type { OrderStatusGroup } from "../types";
 
 /** Tinted background + text per tone, shared by the badge and the status hero icon. */
 export const ORDER_TONE_CLASSES: Record<SemanticTone, string> = {
@@ -18,13 +18,13 @@ export const ORDER_TONE_CLASSES: Record<SemanticTone, string> = {
 };
 
 export function OrderStatusBadge({
-  status,
+  group,
   className,
 }: {
-  status: OrderStatus;
+  group: OrderStatusGroup;
   className?: string;
 }) {
-  const { label, tone } = ORDER_STATUS_META[status];
+  const { label, tone } = ORDER_STATUS_GROUP_META[group];
   return (
     <Badge
       data-tone={tone}

@@ -1,12 +1,13 @@
 /**
  * In-memory customer order history that mirrors the BE contract, for USE_MOCK=true and tests.
  *
- * Shapes follow `OrderResponse` / `PageResponse`; rules follow `order.internal.controller.OrderController`
- * and `order.api.OrderStatus` (develop):
+ * Shapes follow `CustomerOrderCardResponse` (list), `CustomerOrderDetailResponse` (detail) and
+ * `PageResponse`; rules follow `order.internal.controller.OrderController` and
+ * `order.api.OrderStatus` (develop):
  *  - GET /orders/me pages are zero-based, sorted by lastModifiedAt DESC; page < 0 or size < 1 → 400;
- *  - another customer's order answers 404 NOT_FOUND (the BE hides that it exists);
- *  - cancellation is allowed only from DRAFT, PENDING_PAYMENT, PAID, IN_FULFILMENT, ON_HOLD
- *    (BR-031), otherwise 409 CONFLICT.
+ *  - GET /orders/me/{orderId}: another customer's order answers 404 NOT_FOUND (the BE hides it);
+ *  - a customer cancels directly only from DRAFT, PENDING_PAYMENT, CONFIRMED, otherwise 409
+ *    CONFLICT (the BE's 202 cancellation request is not mocked).
  * NON_NULL serialisation: absent optional fields are omitted, never sent as null.
  * Intentionally independent from mock-data.ts (legacy, non-BE shapes).
  */
@@ -14,7 +15,9 @@
 export type MockOrderStatus =
   | "DRAFT"
   | "PENDING_PAYMENT"
-  | "PAID"
+  | "CONFIRMED"
+  | "IN_PRODUCTION"
+  | "READY_TO_FULFILL"
   | "IN_FULFILMENT"
   | "ON_HOLD"
   | "SHIPPED"
@@ -91,14 +94,72 @@ const fail = (status: number, errorCode: string, message: string): MockResult =>
   },
 });
 
-// BE OrderStatus#canTransitionTo(CANCELLED) — kept here because lib/ must not import features/.
-const CANCELLABLE = new Set<MockOrderStatus>([
-  "DRAFT",
-  "PENDING_PAYMENT",
-  "PAID",
-  "IN_FULFILMENT",
-  "ON_HOLD",
-]);
+// BE OrderStatus#customerMayCancelDirectly — kept here because lib/ must not import features/.
+const CANCELLABLE = new Set<MockOrderStatus>(["DRAFT", "PENDING_PAYMENT", "CONFIRMED"]);
+
+// BE CustomerOrdersService#statusGroup / #deliveryState.
+function statusGroup(status: MockOrderStatus): string {
+  switch (status) {
+    case "DRAFT":
+    case "PENDING_PAYMENT":
+      return "AWAITING_PAYMENT";
+    case "ON_HOLD":
+      return "UNDER_REVIEW";
+    case "READY_TO_FULFILL":
+    case "IN_FULFILMENT":
+      return "PREPARING";
+    case "SHIPPED":
+      return "SHIPPING";
+    case "DELIVERED":
+    case "COMPLETED":
+      return "DELIVERED";
+    default:
+      return status; // CONFIRMED, IN_PRODUCTION, CANCELLED, RETURNED share their name
+  }
+}
+
+function deliveryState(status: MockOrderStatus): string {
+  if (status === "SHIPPED") return "IN_TRANSIT";
+  if (status === "DELIVERED" || status === "COMPLETED") return "DELIVERED";
+  return status === "RETURNED" ? "RETURNED" : "NOT_SHIPPED";
+}
+
+/** CustomerOrderCardResponse. */
+const toCard = (order: MockOrder) => ({
+  orderId: order.orderId,
+  orderNumber: order.orderNumber,
+  status: order.status,
+  statusGroup: statusGroup(order.status),
+  total: order.totalAmount,
+  currency: order.currency,
+  placedAt: order.placedAt,
+  lineCount: order.lines.length,
+  deliveryState: deliveryState(order.status),
+});
+
+/** CustomerOrderDetailResponse: no reservations, checksums, actors or contact block. */
+const toDetail = (order: MockOrder) => {
+  const { lineCount: _lineCount, ...card } = toCard(order);
+  return {
+    ...card,
+    ...(order.shippingAddress ? { shippingAddress: order.shippingAddress } : {}),
+    lines: order.lines.map(({ lineId, sku, quantity, unitPrice, lineTotal, designSnapshotId }) => ({
+      lineId,
+      sku,
+      quantity,
+      unitPrice,
+      lineTotal,
+      ...(designSnapshotId ? { designSnapshotId } : {}),
+    })),
+    timeline: [
+      {
+        status: "PENDING_PAYMENT",
+        statusGroup: "AWAITING_PAYMENT",
+        occurredAt: order.placedAt,
+      },
+    ],
+  };
+};
 
 const MAX_PAGE_SIZE = 200;
 const DEFAULT_PAGE_SIZE = 20;
@@ -135,7 +196,7 @@ export function createMockOrderBook(customerId: string, seed: MockOrder[]) {
         .sort((a, b) => b.lastModifiedAt.localeCompare(a.lastModifiedAt));
       const totalPages = Math.ceil(mine.length / size);
       return ok({
-        items: mine.slice(page * size, (page + 1) * size),
+        items: mine.slice(page * size, (page + 1) * size).map(toCard),
         page,
         size,
         totalElements: mine.length,
@@ -145,10 +206,10 @@ export function createMockOrderBook(customerId: string, seed: MockOrder[]) {
       });
     },
 
-    /** GET /orders/{orderId} */
+    /** GET /orders/me/{orderId} */
     get(orderId: string): MockResult {
       const order = own(orderId);
-      return order ? ok(order) : notFound(orderId);
+      return order ? ok(toDetail(order)) : notFound(orderId);
     },
 
     /** POST /orders/{orderId}/cancellation — ApiResponse<Void>: no `data` key on success. */
@@ -198,7 +259,7 @@ const PRODUCTS = [
 // Newest first after sorting: the first page shows every status with a cancel/no-cancel mix.
 const STATUS_CYCLE: MockOrderStatus[] = [
   "PENDING_PAYMENT",
-  "PAID",
+  "CONFIRMED",
   "SHIPPED",
   "IN_FULFILMENT",
   "ON_HOLD",
@@ -206,6 +267,8 @@ const STATUS_CYCLE: MockOrderStatus[] = [
   "COMPLETED",
   "CANCELLED",
   "RETURNED",
+  "IN_PRODUCTION",
+  "READY_TO_FULFILL",
   "DRAFT",
 ];
 
@@ -262,7 +325,7 @@ export function seedMockOrders(customerId: string, count = 24): MockOrder[] {
   const mine = Array.from({ length: count }, (_, n) =>
     seedOrder(n, customerId, STATUS_CYCLE[n % STATUS_CYCLE.length]!),
   );
-  return [...mine, seedOrder(count, "CUS-OTHER", "PAID")];
+  return [...mine, seedOrder(count, "CUS-OTHER", "CONFIRMED")];
 }
 
 /** Id of the seeded order that belongs to another customer (404 demo). */

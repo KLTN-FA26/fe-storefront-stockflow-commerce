@@ -50,7 +50,7 @@ function fakeBackend() {
       return { data: { roles: ["CUSTOMER"], permissions: [...permissions], dataScope: "OWN" } };
     }
     if (url === "/orders/me") return settle(book.page(config?.params as Record<string, unknown>));
-    return settle(book.get(url.replace("/orders/", "")));
+    return settle(book.get(url.replace("/orders/me/", "")));
   });
   vi.spyOn(api, "post").mockImplementation(async (url) =>
     settle(book.cancel(url.split("/")[2] ?? "")),
@@ -102,23 +102,18 @@ describe("OrdersScreen", () => {
     expect(screen.getByRole("button", { name: "Trang trước" })).toBeDisabled();
   });
 
-  it("previews each order by its first SKU and says what happens next", async () => {
+  it("shows each card's line count and says what happens next", async () => {
     renderWithProviders(<OrdersScreen />);
     const pending = seeded("PENDING_PAYMENT");
     const card = (await screen.findByText(pending.orderNumber)).closest("article")!;
 
-    expect(within(card).getByText(pending.lines[0]!.sku)).toBeInTheDocument();
+    expect(within(card).getByText(`${pending.lines.length} mặt hàng`)).toBeInTheDocument();
     expect(
-      within(card).getByText("Đơn sẽ được chuẩn bị ngay khi bạn thanh toán."),
+      within(card).getByText("Đơn sẽ được xử lý ngay khi bạn thanh toán."),
     ).toBeInTheDocument();
     expect(
       within(card).getByRole("link", { name: `Xem đơn ${pending.orderNumber}` }),
     ).toHaveAttribute("href", `/account/orders/${pending.orderId}`);
-    const paid = seeded("PAID");
-    const multi = (await screen.findByText(paid.orderNumber)).closest("article")!;
-    expect(
-      within(multi).getByText(`và ${paid.lines.length - 1} mặt hàng khác`),
-    ).toBeInTheDocument();
   });
 
   it("moves to the next page through the URL and asks the BE for page 1 (0-based)", async () => {
@@ -175,7 +170,7 @@ describe("OrdersScreen", () => {
   });
 
   it("still lists the page when one order has a status newer than the FE", async () => {
-    const b2b = { ...seeded("PAID"), status: "CONFIRMED" } as unknown as MockOrder;
+    const b2b = { ...seeded("CONFIRMED"), status: "SOMETHING_NEW" } as unknown as MockOrder;
     book = createMockOrderBook(CUSTOMER, [b2b, seeded("SHIPPED")]);
     renderWithProviders(<OrdersScreen />);
 
@@ -201,25 +196,25 @@ describe("OrdersScreen", () => {
     expect(screen.queryByRole("button", { name: /Thử lại/ })).not.toBeInTheDocument();
   });
 
-  it(
-    "retries a server error twice, then shows the BE message, correlation id and a retry",
-    async () => {
-      const serverError = new ApiError(500, "INTERNAL", "Lỗi máy chủ", undefined, "corr-123");
-      vi.mocked(api.get)
-        .mockRejectedValueOnce(serverError)
-        .mockRejectedValueOnce(serverError)
-        .mockRejectedValueOnce(serverError);
-      renderWithProviders(<OrdersScreen />);
+  it("retries a server error twice, then shows the BE message, correlation id and a retry", async () => {
+    const serverError = new ApiError(500, "INTERNAL", "Lỗi máy chủ", undefined, "corr-123");
+    vi.mocked(api.get)
+      .mockRejectedValueOnce(serverError)
+      .mockRejectedValueOnce(serverError)
+      .mockRejectedValueOnce(serverError);
+    renderWithProviders(<OrdersScreen />);
 
-      expect(
-        await screen.findByText(/Hệ thống đang gặp sự cố.*\(Mã tra cứu: corr-123\)/, {}, { timeout: 6000 }),
-      ).toBeInTheDocument();
-      expect(api.get).toHaveBeenCalledTimes(3);
-      await userEvent.click(screen.getByRole("button", { name: /Thử lại/ }));
-      expect(await screen.findByText("Trang 1 / 3")).toBeInTheDocument();
-    },
-    15_000,
-  );
+    expect(
+      await screen.findByText(
+        /Hệ thống đang gặp sự cố.*\(Mã tra cứu: corr-123\)/,
+        {},
+        { timeout: 6000 },
+      ),
+    ).toBeInTheDocument();
+    expect(api.get).toHaveBeenCalledTimes(3);
+    await userEvent.click(screen.getByRole("button", { name: /Thử lại/ }));
+    expect(await screen.findByText("Trang 1 / 3")).toBeInTheDocument();
+  }, 15_000);
 
   it("reports a contract break once, without retrying or leaking zod issues", async () => {
     vi.mocked(api.get).mockResolvedValue({ data: { items: [{ status: "Shipped" }] } });
@@ -247,34 +242,41 @@ describe("OrdersScreen", () => {
 });
 
 describe("OrderDetailScreen", () => {
-  it("shows lines, total and a cancel button for a PAID order", async () => {
-    const paid = seeded("PAID");
-    renderWithProviders(<OrderDetailScreen orderId={paid.orderId} />);
+  it("shows lines, total and a cancel button for a CONFIRMED order", async () => {
+    const confirmed = seeded("CONFIRMED");
+    renderWithProviders(<OrderDetailScreen orderId={confirmed.orderId} />);
 
     expect(await screen.findByRole("heading", { name: "Chi tiết đơn hàng" })).toBeInTheDocument();
-    expect(screen.getByText(paid.orderNumber)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Đã thanh toán" })).toBeInTheDocument();
+    expect(screen.getByText(confirmed.orderNumber)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Đã xác nhận" })).toBeInTheDocument();
     expect(screen.getByRole("listitem", { current: "step" })).toHaveTextContent("Chuẩn bị");
     const lines = screen.getByRole("region", { name: /Sản phẩm/ });
-    expect(within(lines).getByText(paid.lines[0]!.sku)).toBeInTheDocument();
+    expect(within(lines).getByText(confirmed.lines[0]!.sku)).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: `Huỷ đơn hàng ${paid.orderNumber}` }),
+      screen.getByRole("button", { name: `Huỷ đơn hàng ${confirmed.orderNumber}` }),
     ).toBeInTheDocument();
   });
 
-  it.each(["SHIPPED", "DELIVERED", "COMPLETED", "CANCELLED", "RETURNED"] as const)(
-    "hides the cancel button for %s",
-    async (status) => {
-      const order = seeded(status);
-      renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
-      expect(await screen.findByText(order.orderNumber)).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /Huỷ đơn hàng/ })).not.toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /Chat với CSKH/ })).toBeInTheDocument();
-    },
-  );
+  it.each([
+    "IN_PRODUCTION",
+    "READY_TO_FULFILL",
+    "IN_FULFILMENT",
+    "ON_HOLD",
+    "SHIPPED",
+    "DELIVERED",
+    "COMPLETED",
+    "CANCELLED",
+    "RETURNED",
+  ] as const)("hides the cancel button for %s", async (status) => {
+    const order = seeded(status);
+    renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
+    expect(await screen.findByText(order.orderNumber)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Huỷ đơn hàng/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Chat với CSKH/ })).toBeInTheDocument();
+  });
 
   it("never offers cancelling an order whose status the FE does not know", async () => {
-    const b2b = { ...seeded("PAID"), status: "IN_PRODUCTION" } as unknown as MockOrder;
+    const b2b = { ...seeded("CONFIRMED"), status: "SOMETHING_NEW" } as unknown as MockOrder;
     book = createMockOrderBook(CUSTOMER, [b2b]);
     renderWithProviders(<OrderDetailScreen orderId={b2b.orderId} />);
 
@@ -284,9 +286,9 @@ describe("OrderDetailScreen", () => {
     expect(screen.getByText(/Nếu bạn cần huỷ hoặc thay đổi đơn này/)).toBeInTheDocument();
   });
 
-  it("explains why a shipped order cannot be cancelled", async () => {
+  it("explains why an order already with the warehouse or carrier cannot be cancelled", async () => {
     renderWithProviders(<OrderDetailScreen orderId={seeded("SHIPPED").orderId} />);
-    expect(await screen.findByText(/Đơn đã rời kho nên không thể huỷ/)).toBeInTheDocument();
+    expect(await screen.findByText(/nên không thể tự huỷ/)).toBeInTheDocument();
   });
 
   it("drops the stepper once an order leaves the happy path", async () => {
@@ -295,12 +297,12 @@ describe("OrderDetailScreen", () => {
     expect(screen.queryByRole("list", { name: "Tiến trình đơn hàng" })).not.toBeInTheDocument();
   });
 
-  it("cancels a PAID order after confirmation and shows it as cancelled", async () => {
-    const paid = seeded("PAID");
-    renderWithProviders(<OrderDetailScreen orderId={paid.orderId} />);
+  it("cancels a CONFIRMED order after confirmation and shows it as cancelled", async () => {
+    const confirmed = seeded("CONFIRMED");
+    renderWithProviders(<OrderDetailScreen orderId={confirmed.orderId} />);
 
     await userEvent.click(
-      await screen.findByRole("button", { name: `Huỷ đơn hàng ${paid.orderNumber}` }),
+      await screen.findByRole("button", { name: `Huỷ đơn hàng ${confirmed.orderNumber}` }),
     );
     expect(
       screen.getByText(/không thể khôi phục\. Nếu bạn đã thanh toán, vui lòng liên hệ CSKH/),
@@ -313,14 +315,14 @@ describe("OrderDetailScreen", () => {
   });
 
   it("shows the BE 409 message and refetches the order that moved on", async () => {
-    const paid = seeded("PAID");
-    renderWithProviders(<OrderDetailScreen orderId={paid.orderId} />);
+    const confirmed = seeded("CONFIRMED");
+    renderWithProviders(<OrderDetailScreen orderId={confirmed.orderId} />);
     await userEvent.click(
-      await screen.findByRole("button", { name: `Huỷ đơn hàng ${paid.orderNumber}` }),
+      await screen.findByRole("button", { name: `Huỷ đơn hàng ${confirmed.orderNumber}` }),
     );
 
     // Warehouse ships it between page load and the click.
-    const shipped = { ...paid, status: "SHIPPED" as const };
+    const shipped = { ...confirmed, status: "SHIPPED" as const };
     book = createMockOrderBook(CUSTOMER, [shipped]);
     await userEvent.click(screen.getByRole("button", { name: "Xác nhận huỷ" }));
 
@@ -338,7 +340,7 @@ describe("OrderDetailScreen", () => {
     vi.mocked(api.get).mockRejectedValueOnce(
       new ApiError(404, "CUSTOMER_NOT_FOUND", "Customer not found"),
     );
-    renderWithProviders(<OrderDetailScreen orderId={seeded("PAID").orderId} />);
+    renderWithProviders(<OrderDetailScreen orderId={seeded("CONFIRMED").orderId} />);
 
     expect(await screen.findByText("Chưa có hồ sơ khách hàng")).toBeInTheDocument();
     expect(notFound).not.toHaveBeenCalled();
@@ -346,51 +348,40 @@ describe("OrderDetailScreen", () => {
 
   it("keeps the detail skeleton while a paused fetch waits for the network", async () => {
     onlineManager.setOnline(false);
-    renderWithProviders(<OrderDetailScreen orderId={seeded("PAID").orderId} />);
+    renderWithProviders(<OrderDetailScreen orderId={seeded("CONFIRMED").orderId} />);
 
     expect(await screen.findByText("Đang chờ kết nối")).toBeInTheDocument();
     expect(screen.queryByText("Không tải được đơn hàng")).not.toBeInTheDocument();
   });
 
   it("counts order lines and units with distinct words", async () => {
-    const paid = seeded("PAID");
-    const units = paid.lines.reduce((sum, line) => sum + line.quantity, 0);
-    renderWithProviders(<OrderDetailScreen orderId={paid.orderId} />);
+    const confirmed = seeded("CONFIRMED");
+    const units = confirmed.lines.reduce((sum, line) => sum + line.quantity, 0);
+    renderWithProviders(<OrderDetailScreen orderId={confirmed.orderId} />);
     expect(
-      await screen.findByText(`(${paid.lines.length} mặt hàng · ${units} sản phẩm)`),
+      await screen.findByText(`(${confirmed.lines.length} mặt hàng · ${units} sản phẩm)`),
     ).toBeInTheDocument();
   });
 
-  it.each([
-    ["the same person", {}, false],
-    ["the same number written +84 vs 0", { contactPhone: "0908111222" }, false],
-    ["someone else", { contactName: "Nguyen Van Demo", contactPhone: "0901234567" }, true],
-  ] as const)(
-    "shows the ordering contact only when it differs from the recipient (%s)",
-    async (_case, contact, shown) => {
-      const paid = { ...seeded("PAID"), ...contact };
-      book = createMockOrderBook(CUSTOMER, [paid]);
-      renderWithProviders(<OrderDetailScreen orderId={paid.orderId} />);
+  it("shows where the order goes, from the shipping address only", async () => {
+    const order = seeded("CONFIRMED");
+    renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
 
-      const delivery = await screen.findByRole("region", { name: "Giao đến" });
-      expect(within(delivery).queryByText("Người đặt hàng") !== null).toBe(shown);
-      if (shown) {
-        expect(within(delivery).getByText("Nguyen Van Demo · 0901234567")).toBeInTheDocument();
-      }
-      expect(within(delivery).getByText(/Email nhận thông báo/)).toBeInTheDocument();
-    },
-  );
+    const delivery = await screen.findByRole("region", { name: "Giao đến" });
+    expect(within(delivery).getByText(order.shippingAddress!.recipientName)).toBeInTheDocument();
+    expect(within(delivery).queryByText(/Email nhận thông báo/)).not.toBeInTheDocument();
+  });
 
   it("copies the order number for support", async () => {
     const user = userEvent.setup();
     const writeText = vi.spyOn(navigator.clipboard, "writeText");
-    const paid = seeded("PAID");
-    renderWithProviders(<OrderDetailScreen orderId={paid.orderId} />);
+    const confirmed = seeded("CONFIRMED");
+    renderWithProviders(<OrderDetailScreen orderId={confirmed.orderId} />);
 
     await user.click(
-      await screen.findByRole("button", { name: `Sao chép mã đơn ${paid.orderNumber}` }),
+      await screen.findByRole("button", { name: `Sao chép mã đơn ${confirmed.orderNumber}` }),
     );
-    expect(writeText).toHaveBeenCalledWith(paid.orderNumber);
+    expect(writeText).toHaveBeenCalledWith(confirmed.orderNumber);
   });
 
   it("treats a malformed order id as not found without calling the BE", async () => {
@@ -401,11 +392,11 @@ describe("OrderDetailScreen", () => {
   });
 
   it("refreshes after cancelling when the URL carries an upper-case UUID", async () => {
-    const paid = seeded("PAID");
-    renderWithProviders(<OrderDetailScreen orderId={paid.orderId.toUpperCase()} />);
+    const confirmed = seeded("CONFIRMED");
+    renderWithProviders(<OrderDetailScreen orderId={confirmed.orderId.toUpperCase()} />);
 
     await userEvent.click(
-      await screen.findByRole("button", { name: `Huỷ đơn hàng ${paid.orderNumber}` }),
+      await screen.findByRole("button", { name: `Huỷ đơn hàng ${confirmed.orderNumber}` }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Xác nhận huỷ" }));
 
@@ -415,31 +406,31 @@ describe("OrderDetailScreen", () => {
 
   it("does not offer cancelling when the account lacks sales-orders:UPDATE", async () => {
     permissions = MOCK_CUSTOMER_PERMISSIONS.filter((code) => code !== "sales-orders:UPDATE");
-    renderWithProviders(<OrderDetailScreen orderId={seeded("PAID").orderId} />);
+    renderWithProviders(<OrderDetailScreen orderId={seeded("CONFIRMED").orderId} />);
 
     expect(await screen.findByText(/hiện không thể tự huỷ đơn/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Huỷ đơn hàng/ })).not.toBeInTheDocument();
   });
 
   it("keeps offering cancel when the permission list cannot be loaded", async () => {
-    const paid = seeded("PAID");
+    const confirmed = seeded("CONFIRMED");
     const real = vi.mocked(api.get).getMockImplementation()!;
     vi.mocked(api.get).mockImplementation(async (url, config) => {
       if (url === "/identity/me/permissions") throw new ApiError(500, "INTERNAL_ERROR", "boom");
       return real(url, config);
     });
-    renderWithProviders(<OrderDetailScreen orderId={paid.orderId} />);
+    renderWithProviders(<OrderDetailScreen orderId={confirmed.orderId} />);
 
     expect(
-      await screen.findByRole("button", { name: `Huỷ đơn hàng ${paid.orderNumber}` }),
+      await screen.findByRole("button", { name: `Huỷ đơn hàng ${confirmed.orderNumber}` }),
     ).toBeInTheDocument();
   });
 
   it("re-reads permissions after a 403 so the cancel button goes away", async () => {
-    const paid = seeded("PAID");
-    renderWithProviders(<OrderDetailScreen orderId={paid.orderId} />);
+    const confirmed = seeded("CONFIRMED");
+    renderWithProviders(<OrderDetailScreen orderId={confirmed.orderId} />);
     await userEvent.click(
-      await screen.findByRole("button", { name: `Huỷ đơn hàng ${paid.orderNumber}` }),
+      await screen.findByRole("button", { name: `Huỷ đơn hàng ${confirmed.orderNumber}` }),
     );
 
     // An admin took the permission away after the page loaded.
@@ -456,10 +447,10 @@ describe("OrderDetailScreen", () => {
   });
 
   it("shows a failed cancellation inside the help card, next to the cancel button", async () => {
-    const paid = seeded("PAID");
-    renderWithProviders(<OrderDetailScreen orderId={paid.orderId} />);
+    const confirmed = seeded("CONFIRMED");
+    renderWithProviders(<OrderDetailScreen orderId={confirmed.orderId} />);
     await userEvent.click(
-      await screen.findByRole("button", { name: `Huỷ đơn hàng ${paid.orderNumber}` }),
+      await screen.findByRole("button", { name: `Huỷ đơn hàng ${confirmed.orderNumber}` }),
     );
     vi.mocked(api.post).mockRejectedValueOnce(
       new ApiError(0, "NETWORK_ERROR", "Không kết nối được máy chủ. Vui lòng kiểm tra mạng."),
@@ -471,7 +462,7 @@ describe("OrderDetailScreen", () => {
       "Không kết nối được máy chủ. Vui lòng kiểm tra mạng.",
     );
     expect(
-      within(help).getByRole("button", { name: `Huỷ đơn hàng ${paid.orderNumber}` }),
+      within(help).getByRole("button", { name: `Huỷ đơn hàng ${confirmed.orderNumber}` }),
     ).toBeInTheDocument();
   });
 

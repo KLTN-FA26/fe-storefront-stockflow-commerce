@@ -9,9 +9,8 @@ import { Button } from "@/components/ui/button";
 import { OrderCard } from "@/components/storefront/order-card";
 import { formatDate } from "@/lib/format/date";
 
-import { ORDER_STATUS_META } from "../lifecycle";
+import { ORDER_STATUS_GROUP_META } from "../lifecycle";
 import { ORDER_PAGE_SIZE, useMyOrders } from "../queries";
-import type { Order } from "../types";
 import { OrderStatusBadge } from "./order-status-badge";
 import {
   NoOrdersYet,
@@ -21,24 +20,6 @@ import {
   OrderWaitingNotice,
 } from "./order-states";
 import { OrdersPagination } from "./orders-pagination";
-
-/**
- * First line by SKU (the BE has no product name yet) plus how many more lines the order has.
- * Wording: a "mặt hàng" is an order line (one SKU), a "sản phẩm" is one unit — same as the detail.
- */
-function OrderLinesPreview({ order }: { order: Order }) {
-  const [first, ...rest] = order.lines;
-  if (!first) return null;
-  return (
-    <p className="min-w-0">
-      <span className="font-mono text-sm font-semibold break-all">{first.sku}</span>
-      <span className="text-ink-secondary text-sm tabular-nums"> × {first.quantity}</span>
-      {rest.length > 0 && (
-        <span className="text-ink-secondary block text-sm">và {rest.length} mặt hàng khác</span>
-      )}
-    </p>
-  );
-}
 
 const pageParser = parseAsInteger.withDefault(1).withOptions({ history: "push", scroll: true });
 
@@ -109,14 +90,17 @@ export function OrdersScreen() {
                     <OrderCard
                       href={STORE_ROUTES.account.orders.detail(order.orderId)}
                       orderCode={order.orderNumber}
-                      status={order.status}
-                      statusBadge={<OrderStatusBadge status={order.status} />}
-                      itemCount={order.lines.length}
-                      total={order.totalAmount}
+                      status={ORDER_STATUS_GROUP_META[order.statusGroup].label}
+                      statusBadge={<OrderStatusBadge group={order.statusGroup} />}
+                      itemCount={order.lineCount}
+                      total={order.total}
                       currency={order.currency}
                       createdAt={formatDate(order.placedAt)}
-                      preview={<OrderLinesPreview order={order} />}
-                      hint={ORDER_STATUS_META[order.status].hint}
+                      preview={
+                        // A "mặt hàng" is an order line (one SKU), same wording as the detail.
+                        <p className="tabular-nums">{order.lineCount} mặt hàng</p>
+                      }
+                      hint={ORDER_STATUS_GROUP_META[order.statusGroup].hint}
                     />
                   </li>
                 ))}

@@ -21,7 +21,7 @@ interface OrderHelpCardProps {
 
 /**
  * Support first, cancellation second: cancelling is a quiet secondary action, and when the BE
- * would refuse it (BR-031, from SHIPPED on) the card explains why and points to support instead.
+ * would not let the customer do it alone (released to production or the warehouse, BR-031) the card explains why and points to support instead.
  */
 export function OrderHelpCard({
   order,
@@ -47,14 +47,14 @@ export function OrderHelpCard({
         </h2>
         <p className="text-ink-secondary mt-1 text-sm">
           {cancellable
-            ? "Bạn có thể huỷ đơn khi đơn chưa rời kho, hoặc chat với chúng tôi nếu cần đổi thông tin."
+            ? "Bạn có thể huỷ đơn khi đơn chưa chuyển cho kho, hoặc chat với chúng tôi nếu cần đổi thông tin."
             : statusAllows
               ? "Tài khoản của bạn hiện không thể tự huỷ đơn. Hãy chat với chúng tôi để được hỗ trợ."
               : order.status === ORDER_STATUS_UNKNOWN
                 ? "Nếu bạn cần huỷ hoặc thay đổi đơn này, hãy chat với chúng tôi."
                 : isOrderTerminal(order.status)
                   ? "Có thắc mắc về đơn này? Đội chăm sóc khách hàng luôn sẵn sàng hỗ trợ."
-                  : "Đơn đã rời kho nên không thể huỷ. Nếu cần trả hàng, hãy chat với chúng tôi."}
+                  : "Đơn đã chuyển cho kho hoặc đơn vị vận chuyển nên không thể tự huỷ. Nếu cần huỷ hoặc trả hàng, hãy chat với chúng tôi."}
         </p>
       </div>
       {cancelError && (

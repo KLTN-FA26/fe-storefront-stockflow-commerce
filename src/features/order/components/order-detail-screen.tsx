@@ -99,7 +99,7 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
         <div className="min-w-0 space-y-5">
-          <OrderStatusHero status={order.status} />
+          <OrderStatusHero group={order.statusGroup} />
           <OrderLinesCard order={order} />
         </div>
         <div className="space-y-5 lg:sticky lg:top-[var(--sticky-top)] lg:-mx-1 lg:max-h-[calc(100dvh-var(--sticky-top)-1rem)] lg:self-start lg:overflow-y-auto lg:px-1">
