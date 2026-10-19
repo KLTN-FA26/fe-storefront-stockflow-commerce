@@ -8,7 +8,16 @@
  */
 
 import { MOCK_DATA, registerMockRoute, paginate } from "./mock-adapter";
-import { registerCustomerAddressMockRoutes } from "./mock-customer-addresses";
+import { registerAuthMockRoutes } from "./mock-auth";
+import { registerCatalogMockRoutes } from "./mock-catalog";
+import { MOCK_CUSTOMER_ID, registerCustomerAddressMockRoutes } from "./mock-customer-addresses";
+import { createMockCatalog, seedMockCatalog } from "./mock-fixtures/catalog";
+import {
+  createMockAddressBook,
+  seedMockAddresses,
+  type MockAddress,
+} from "./mock-fixtures/customer-addresses";
+import { createMockOrderBook, seedMockOrders, type MockOrderDeps } from "./mock-fixtures/orders";
 import { registerMyPermissionsMockRoute } from "./mock-my-permissions";
 import { registerOrderMockRoutes } from "./mock-orders";
 
@@ -98,7 +107,7 @@ export function registerAllMockRoutes(): void {
    * ==================================================================*/
 
   let mockCustomerProfile = {
-    customerId: "CUS-0010",
+    customerId: MOCK_CUSTOMER_ID,
     userId: "USER-CUS-0010",
     fullName: "Nguyễn Hoài Nam",
     email: "nam.nguyen@example.vn",
@@ -143,12 +152,49 @@ export function registerAllMockRoutes(): void {
     return mockPasswordResponse(body);
   });
 
-  // Module 18 — address book (BE-shaped fixture, see mock-customer-addresses.ts)
-  registerCustomerAddressMockRoutes();
+  // Module 18 — address book (BE-shaped fixture, see mock-customer-addresses.ts). Checkout reads
+  // the same book, so an order is delivered to an address that really is in it.
+  const addressBook = createMockAddressBook(MOCK_CUSTOMER_ID, seedMockAddresses(MOCK_CUSTOMER_ID));
+  registerCustomerAddressMockRoutes(addressBook);
 
-  // Module 17 — customer order history (BE-shaped fixture, see mock-orders.ts).
+  // Module 13 — B2B catalogue (BE-shaped fixture, see mock-catalog.ts). Checkout prices and
+  // reserves from the same stock, so an order moves what the catalogue shows.
+  const catalog = createMockCatalog(seedMockCatalog());
+  registerCatalogMockRoutes(catalog);
+
+  // Modules 14/17 — checkout and customer order history (BE-shaped fixture, see mock-orders.ts).
   // The legacy GET /orders/:id (mock-data shapes) is gone: first match wins, and it swallowed /orders/me.
-  registerOrderMockRoutes();
+  const shippingAddresses = () =>
+    (addressBook.list().data as { data: MockAddress[] }).data.filter(
+      (address) => address.type === "SHIPPING",
+    );
+  const deps: MockOrderDeps = {
+    catalog,
+    shippingAddress: (addressId) => {
+      const found = shippingAddresses().find((address) => address.addressId === addressId);
+      // OrderResponse.Address: the order keeps the address text, not the book's ids.
+      return found
+        ? {
+            recipientName: found.recipientName,
+            phone: found.phone,
+            line1: found.line1,
+            ...(found.line2 ? { line2: found.line2 } : {}),
+            wardCode: found.wardCode,
+            wardName: found.wardName,
+            provinceCode: found.provinceCode,
+            provinceName: found.provinceName,
+            countryCode: found.countryCode,
+            ...(found.postalCode ? { postalCode: found.postalCode } : {}),
+          }
+        : undefined;
+    },
+    defaultShippingAddressId: () =>
+      shippingAddresses().find((address) => address.defaultAddress)?.addressId,
+  };
+  registerOrderMockRoutes(
+    deps,
+    createMockOrderBook(MOCK_CUSTOMER_ID, seedMockOrders(MOCK_CUSTOMER_ID), deps),
+  );
   registerMyPermissionsMockRoute();
 
   /* ====================================================================
@@ -582,25 +628,9 @@ export function registerAllMockRoutes(): void {
    * Auth routes (handled by auth-api.ts, registered here for completeness)
    * ==================================================================*/
 
-  registerMockRoute("POST", "/identity/auth/login", async (config) => {
-    const { staffUsers } = MOCK_DATA;
-    const body = typeof config.data === "string" ? JSON.parse(config.data) : config.data;
-    const user = staffUsers.find((u) => u.email === body?.username);
-
-    if (!user) {
-      return { status: 401, data: { message: "Email hoặc mật khẩu không đúng" }, headers: {} };
-    }
-
-    return {
-      status: 200,
-      data: {
-        accessToken: `mock-access-${user.userId}-${Date.now()}`,
-        tokenType: "Bearer",
-        expiresInSeconds: 8 * 60 * 60,
-      },
-      headers: {},
-    };
-  });
+  // Sign-in and /identity/me (BE-shaped, see mock-auth.ts); the legacy staff mock users may sign in
+  // too, which the storefront must refuse.
+  registerAuthMockRoutes(MOCK_DATA.staffUsers);
 
   registerMockRoute("POST", "/identity/auth/logout", async () => {
     return { status: 200, data: { message: "Logged out" }, headers: {} };
