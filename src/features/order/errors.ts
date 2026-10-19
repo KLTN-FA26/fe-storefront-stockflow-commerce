@@ -16,6 +16,13 @@ const MESSAGE_BY_CODE: Record<string, string> = {
   NOT_FOUND: "Không tìm thấy đơn hàng.",
   CUSTOMER_NOT_FOUND: "Tài khoản chưa được liên kết với hồ sơ khách hàng.",
   CONFLICT: "Thao tác không phù hợp với trạng thái hiện tại của đơn hàng.",
+  ORDER_NOT_CANCELLABLE:
+    "Đơn hàng đã sang bước không thể huỷ. Nếu cần trả hàng, hãy chat với chúng tôi.",
+  CANCELLATION_NEEDS_STAFF:
+    "Đơn đang được sản xuất nên chỉ nhân viên mới quyết định được việc huỷ. Hãy chat với Sales.",
+  ORDER_CANCELLED: "Đơn hàng này đã được huỷ.",
+  ORDER_CANCELLATION_REQUEST_PENDING:
+    "Bạn đã gửi yêu cầu huỷ cho đơn này và đang chờ Sales xem xét.",
   UNSUPPORTED_PARAMETER: "Yêu cầu không hợp lệ. Vui lòng tải lại trang và thử lại.",
   VALIDATION_FAILED: "Yêu cầu không hợp lệ. Vui lòng tải lại trang và thử lại.",
 };

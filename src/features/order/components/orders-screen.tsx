@@ -6,6 +6,7 @@ import { parseAsInteger, useQueryState } from "nuqs";
 import { STORE_ROUTES } from "@/constants";
 import { PageHeader, ScrollAfterItems } from "@/components/shared";
 import { Button } from "@/components/ui/button";
+import { ListPagination } from "@/components/storefront/list-pagination";
 import { OrderCard } from "@/components/storefront/order-card";
 import { formatDate } from "@/lib/format/date";
 
@@ -19,7 +20,6 @@ import {
   OrderStaleNotice,
   OrderWaitingNotice,
 } from "./order-states";
-import { OrdersPagination } from "./orders-pagination";
 
 const pageParser = parseAsInteger.withDefault(1).withOptions({ history: "push", scroll: true });
 
@@ -106,7 +106,8 @@ export function OrdersScreen() {
                 ))}
               </ul>
             </ScrollAfterItems>
-            <OrdersPagination
+            <ListPagination
+              label="Phân trang đơn hàng"
               page={data.page}
               totalPages={data.totalPages}
               hasPrevious={data.hasPrevious}

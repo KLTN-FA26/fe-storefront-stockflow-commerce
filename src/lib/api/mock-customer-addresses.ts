@@ -15,7 +15,8 @@ import {
 } from "./mock-fixtures/customer-addresses";
 
 /** Same id as the mock profile returned by GET /customers/me (see mock-routes.ts). */
-export const MOCK_CUSTOMER_ID = "CUS-0010";
+// A UUID, like the BE's: checkout sends it as `customerId` and the BE refuses anything else.
+export const MOCK_CUSTOMER_ID = "c0ffee00-0000-4000-8000-000000000010";
 
 const respond = (result: MockResult) => ({
   status: result.status,

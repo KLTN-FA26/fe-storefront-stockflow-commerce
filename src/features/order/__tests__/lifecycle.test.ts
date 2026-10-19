@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  isCancellationRequestable,
   isOrderCancellable,
   isOrderTerminal,
   ORDER_STATUS_GROUP_META,
@@ -50,6 +51,29 @@ describe("order lifecycle mirrors BE OrderStatus / CustomerOrders.StatusGroup", 
     "does not offer cancellation from %s (released, shipped or closed: ask support)",
     (status) => expect(isOrderCancellable(status)).toBe(false),
   );
+
+  // BE OrderStatus#canTransitionTo(CANCELLED) minus customerMayCancelDirectly: the customer asks (202).
+  it("offers a cancellation request from exactly IN_PRODUCTION, READY_TO_FULFILL, IN_FULFILMENT, ON_HOLD", () => {
+    expect(ORDER_STATUSES.filter(isCancellationRequestable)).toEqual([
+      "IN_PRODUCTION",
+      "READY_TO_FULFILL",
+      "IN_FULFILMENT",
+      "ON_HOLD",
+    ]);
+  });
+
+  it("never offers both: direct cancel and request are different answers of the BE", () => {
+    for (const status of ORDER_STATUSES) {
+      expect(isOrderCancellable(status) && isCancellationRequestable(status)).toBe(false);
+    }
+    expect(isCancellationRequestable("UNKNOWN")).toBe(false);
+  });
+
+  it("offers neither from SHIPPED on: that is a return, not a cancellation (BR-031)", () => {
+    for (const status of ["SHIPPED", "DELIVERED", "COMPLETED", "CANCELLED", "RETURNED"] as const) {
+      expect(isOrderCancellable(status) || isCancellationRequestable(status)).toBe(false);
+    }
+  });
 
   it("treats COMPLETED, CANCELLED, RETURNED as terminal", () => {
     expect(ORDER_STATUSES.filter(isOrderTerminal)).toEqual(["COMPLETED", "CANCELLED", "RETURNED"]);

@@ -2,7 +2,9 @@ import { MapPin } from "lucide-react";
 
 import { formatMoney } from "@/lib/format/money";
 
+import { DELIVERY_STATE_LABEL } from "../labels";
 import type { Order, OrderAddress } from "../types";
+import { LineProduction } from "./line-production";
 
 const CARD =
   "rounded-[var(--r-lg)] border border-border-default bg-bg-surface p-[var(--card-pad)] shadow-[var(--card-shadow)]";
@@ -38,6 +40,7 @@ export function OrderLinesCard({ order }: { order: Order }) {
               {line.designSnapshotId && (
                 <p className="text-accent mt-1 text-xs font-medium">Có thiết kế riêng</p>
               )}
+              <LineProduction line={line} />
             </div>
             <p className="text-ink-primary shrink-0 font-semibold tabular-nums">
               {money(line.lineTotal)}
@@ -65,12 +68,13 @@ const addressLine = (address: OrderAddress) =>
   [address.line1, address.line2, address.wardName, address.provinceName].filter(Boolean).join(", ");
 
 /**
- * Where the order goes. The customer view carries the shipping address only (no contact or
- * billing block), and NON_NULL omits it when the BE has none.
+ * Where the order goes and where delivery stands. The customer view carries the shipping address
+ * only (no contact or billing block), and NON_NULL omits it when the BE has none. The delivery
+ * state is only what staff recorded: nothing is tracked after handover to the carrier.
  */
 export function OrderDeliveryCard({ order }: { order: Order }) {
   const ship = order.shippingAddress;
-  if (!ship) return null;
+  if (!ship && !order.deliveryState) return null;
 
   return (
     <section className={`${CARD} space-y-3`} aria-labelledby="order-delivery-heading">
@@ -78,16 +82,23 @@ export function OrderDeliveryCard({ order }: { order: Order }) {
         id="order-delivery-heading"
         className="font-display text-ink-primary text-base font-semibold"
       >
-        Giao đến
+        Giao hàng
       </h2>
-      <div className="flex gap-3">
-        <MapPin aria-hidden className="text-ink-tertiary mt-0.5 size-5 shrink-0" />
-        <address className="text-sm not-italic">
-          <span className="text-ink-primary font-semibold">{ship.recipientName}</span>
-          <span className="text-ink-secondary tabular-nums"> · {ship.phone}</span>
-          <span className="text-ink-secondary block">{addressLine(ship)}</span>
-        </address>
-      </div>
+      {order.deliveryState ? (
+        <p className="text-ink-primary text-sm font-medium">
+          {DELIVERY_STATE_LABEL[order.deliveryState]}
+        </p>
+      ) : null}
+      {ship ? (
+        <div className="flex gap-3">
+          <MapPin aria-hidden className="text-ink-tertiary mt-0.5 size-5 shrink-0" />
+          <address className="text-sm not-italic">
+            <span className="text-ink-primary font-semibold">{ship.recipientName}</span>
+            <span className="text-ink-secondary tabular-nums"> · {ship.phone}</span>
+            <span className="text-ink-secondary block">{addressLine(ship)}</span>
+          </address>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { api } from "@/lib/api/client";
 
 import { cancelMyOrder, getMyOrders, getOrder } from "../api";
+import type { CancelOrderInput } from "../types";
 import { beOrder, bePage, orderId } from "./fixtures";
 
 afterEach(() => vi.restoreAllMocks());
@@ -54,37 +55,56 @@ describe("order API (BE OrderController)", () => {
     await expect(getOrder(orderId)).rejects.toBeInstanceOf(z.ZodError);
   });
 
-  it("sends the cancellation reason as a query param and ignores the Void body", async () => {
+  it("sends the cancellation as a JSON body and reads what it did (cancelled at once)", async () => {
     const post = vi
       .spyOn(api, "post")
-      .mockResolvedValueOnce({ data: { success: true, timestamp: "2026-10-08T00:00:00Z" } });
+      .mockResolvedValueOnce({ data: { result: "CANCELLED", order: { orderId } } });
 
-    await expect(cancelMyOrder({ orderId, reason: "CHANGED_MIND" })).resolves.toBeUndefined();
-    expect(post).toHaveBeenCalledWith(`/orders/${orderId}/cancellation`, undefined, {
-      params: { reason: "CHANGED_MIND" },
+    await expect(
+      cancelMyOrder({ orderId, reasonCode: "DUPLICATE_ORDER", note: "Đặt trùng" }),
+    ).resolves.toEqual({ result: "CANCELLED" });
+    expect(post).toHaveBeenCalledWith(`/orders/${orderId}/cancellation`, {
+      reasonCode: "DUPLICATE_ORDER",
+      note: "Đặt trùng",
     });
   });
 
-  it("omits reason so the BE defaults to CUSTOMER_REQUEST", async () => {
-    const post = vi.spyOn(api, "post").mockResolvedValueOnce({ data: {} });
+  it("reads the 202 answer as a request for Sales, with its id", async () => {
+    const requestId = "c4a1ce11-0000-4000-8000-000000000001";
+    vi.spyOn(api, "post").mockResolvedValueOnce({ data: { result: "REQUESTED", requestId } });
+    await expect(cancelMyOrder({ orderId })).resolves.toEqual({ result: "REQUESTED", requestId });
+  });
+
+  it("sends no body when there is neither a reason nor a note, so the BE defaults to CUSTOMER_REQUEST", async () => {
+    const post = vi.spyOn(api, "post").mockResolvedValueOnce({ data: { result: "CANCELLED" } });
     await cancelMyOrder({ orderId });
-    expect(post).toHaveBeenCalledWith(`/orders/${orderId}/cancellation`, undefined, { params: {} });
+    expect(post).toHaveBeenCalledWith(`/orders/${orderId}/cancellation`, undefined);
   });
 
-  it("drops a blank reason so the BE records CUSTOMER_REQUEST instead of answering 400", async () => {
-    const post = vi.spyOn(api, "post").mockResolvedValueOnce({ data: {} });
-    await cancelMyOrder({ orderId, reason: "   " });
-    expect(post).toHaveBeenCalledWith(`/orders/${orderId}/cancellation`, undefined, { params: {} });
+  it("drops a blank note and trims the rest", async () => {
+    const post = vi.spyOn(api, "post").mockResolvedValue({ data: { result: "CANCELLED" } });
+    await cancelMyOrder({ orderId, reasonCode: "CUSTOMER_REQUEST", note: "   " });
+    expect(post.mock.calls[0]?.[1]).toEqual({ reasonCode: "CUSTOMER_REQUEST", note: undefined });
+    await cancelMyOrder({ orderId, reasonCode: "OTHER", note: "  Đặt nhầm size  " });
+    expect(post.mock.calls[1]?.[1]).toEqual({ reasonCode: "OTHER", note: "Đặt nhầm size" });
   });
 
-  it("trims the reason before sending it", async () => {
-    const post = vi.spyOn(api, "post").mockResolvedValueOnce({ data: {} });
-    await cancelMyOrder({ orderId, reason: "  Đặt nhầm size  " });
-    expect(post.mock.calls[0]?.[2]).toEqual({ params: { reason: "Đặt nhầm size" } });
+  it("parses a result newer than the FE as UNKNOWN instead of failing", async () => {
+    vi.spyOn(api, "post").mockResolvedValueOnce({ data: { result: "SCHEDULED" } });
+    await expect(cancelMyOrder({ orderId })).resolves.toEqual({ result: "UNKNOWN" });
   });
 
-  it.each([
-    ["a reason longer than the 500-char column", { orderId, reason: "x".repeat(501) }],
+  it.each<[string, CancelOrderInput]>([
+    ["a note longer than the BE's 1000 characters", { orderId, note: "x".repeat(1001) }],
+    [
+      "OTHER without a note (BE: other with no explanation is not a reason)",
+      { orderId, reasonCode: "OTHER" },
+    ],
+    ["OTHER with a blank note", { orderId, reasonCode: "OTHER", note: "  " }],
+    [
+      "a reason code the BE does not have",
+      { orderId, reasonCode: "CHANGED_MIND" } as unknown as CancelOrderInput,
+    ],
     ["an order id that is not a UUID", { orderId: "SO-20260907-000431" }],
   ])("rejects %s without calling the BE", async (_case, input) => {
     const post = vi.spyOn(api, "post");

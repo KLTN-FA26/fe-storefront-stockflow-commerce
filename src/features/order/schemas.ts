@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+import { pageResponseSchema } from "@/lib/api/page-response";
+import { tolerantEnum } from "@/lib/validation/tolerant-enum";
+
 // BE OrderController takes `@PathVariable UUID orderId`; anything else answers
 // 400 UNSUPPORTED_PARAMETER, so an id from the URL is checked before it is sent.
 export const orderIdSchema = z.uuid();
@@ -80,6 +83,43 @@ export const deliveryStateSchema = z
       : DELIVERY_STATE_UNKNOWN,
   );
 
+/** BE CustomerOrders.ProductionState; NOT_REQUIRED is a line of stock goods. */
+export const PRODUCTION_STATES = [
+  "NOT_REQUIRED",
+  "NOT_STARTED",
+  "IN_PROGRESS",
+  "DONE",
+  "CANCELLED",
+] as const;
+export const productionStateSchema = tolerantEnum(PRODUCTION_STATES);
+
+/** BE payment status (kltn-docs 15 §5.2). */
+export const PAYMENT_STATUSES = ["UNPAID", "PARTIALLY_PAID", "ON_CREDIT", "PAID"] as const;
+export const paymentStatusSchema = tolerantEnum(PAYMENT_STATUSES);
+
+/** BE order.api.PaymentTerm. */
+export const PAYMENT_TERMS = ["PREPAID", "DEPOSIT", "CREDIT"] as const;
+export const paymentTermSchema = tolerantEnum(PAYMENT_TERMS);
+
+/** What an ON_HOLD order is waiting for, as the customer may be told (never the internal reason). */
+export const HOLD_REASONS = ["AWAITING_CREDIT_APPROVAL", "UNDER_REVIEW"] as const;
+export const holdReasonSchema = tolerantEnum(HOLD_REASONS);
+
+/** BE order.api.CancellationReasonCode (SCRUM-460). */
+export const CANCELLATION_REASON_CODES = [
+  "CUSTOMER_REQUEST",
+  "PAYMENT_NOT_RECEIVED",
+  "PAYMENT_FAILED",
+  "OUT_OF_STOCK",
+  "SUSPECTED_FRAUD",
+  "CREDIT_REJECTED",
+  "DUPLICATE_ORDER",
+  "PRODUCTION_ISSUE",
+  "OTHER",
+] as const;
+export type KnownCancellationReasonCode = (typeof CANCELLATION_REASON_CODES)[number];
+export const cancellationReasonCodeSchema = tolerantEnum(CANCELLATION_REASON_CODES);
+
 // ── DTOs — mirror BE CustomerOrderCardResponse / CustomerOrderDetailResponse. Jackson runs with
 // `default-property-inclusion: non_null`, so every nullable field may be absent from the JSON,
 // not just null. ──
@@ -124,12 +164,12 @@ export const orderLineDtoSchema = z.object({
   designSnapshotId: z.uuid().nullish(),
   // Only a line printed to the customer's design carries production progress.
   production: z
-    .object({ state: z.string(), goodQuantity: z.number().int().nonnegative() })
+    .object({ state: productionStateSchema, goodQuantity: z.number().int().nonnegative() })
     .nullish(),
 });
 
 export const orderPaymentDtoSchema = z.object({
-  status: z.string(),
+  status: paymentStatusSchema,
   paidAmount: z.number().nonnegative().nullish(),
   depositRequired: z.number().nonnegative().nullish(),
   creditTermDays: z.number().int().nonnegative().nullish(),
@@ -139,7 +179,8 @@ export const orderTimelineEntryDtoSchema = z.object({
   status: orderStatusSchema,
   statusGroup: orderStatusGroupSchema,
   occurredAt: instantSchema,
-  reasonCode: z.string().nullish(),
+  // Set only on the cancellation step.
+  reasonCode: cancellationReasonCodeSchema.nullish(),
 });
 
 /** GET /orders/me/{orderId} (CustomerOrderDetailResponse). */
@@ -149,8 +190,8 @@ export const orderDtoSchema = z.object({
   status: orderStatusSchema,
   statusGroup: orderStatusGroupSchema,
   // Set only while the order is ON_HOLD.
-  holdReasonPublic: z.string().nullish(),
-  paymentTerm: z.string().nullish(),
+  holdReasonPublic: holdReasonSchema.nullish(),
+  paymentTerm: paymentTermSchema.nullish(),
   total: z.number().nonnegative(),
   currency: currencySchema,
   placedAt: instantSchema,
@@ -162,32 +203,59 @@ export const orderDtoSchema = z.object({
   deliveryState: deliveryStateSchema.nullish(),
 });
 
-/** BE common.api.PageResponse — `page` is zero-based; hasNext/hasPrevious come from the BE. */
-export function pageResponseSchema<T extends z.ZodType>(item: T) {
-  return z.object({
-    items: z.array(item),
-    page: z.number().int().nonnegative(),
-    size: z.number().int().positive(),
-    totalElements: z.number().int().nonnegative(),
-    totalPages: z.number().int().nonnegative(),
-    hasNext: z.boolean(),
-    hasPrevious: z.boolean(),
-  });
-}
-
 export const orderPageDtoSchema = pageResponseSchema(orderCardDtoSchema);
 
-// ── Input — POST /orders/{orderId}/cancellation?reason= ──
-// Order.cancel rejects a blank reason (IllegalArgumentException → 400 VALIDATION_FAILED) and
-// ordering.customer_order.cancellation_reason is VARCHAR(500). Omitting it lets the BE record
-// CUSTOMER_REQUEST, so a blank reason is dropped rather than sent.
-export const CANCELLATION_REASON_MAX = 500;
-export const cancelOrderInputSchema = z.object({
-  orderId: orderIdSchema,
-  reason: z
-    .string()
-    .trim()
-    .max(CANCELLATION_REASON_MAX)
-    .optional()
-    .transform((reason) => (reason ? reason : undefined)),
+// ── Input — POST /orders/{orderId}/cancellation (BE CancelOrderRequest, SCRUM-460) ──
+// Body `{ reasonCode?, note? }`, both optional (defaults to CUSTOMER_REQUEST); `note` is at most
+// 1000 characters and required for OTHER ("other with no explanation is not a reason"). The
+// legacy `?reason=` free text is not used.
+export const CANCELLATION_NOTE_MAX = 1000;
+
+/**
+ * Reasons a customer can honestly give. The rest of CancellationReasonCode (payment failed, out
+ * of stock, suspected fraud, credit rejected, production issue) are decided by the system or by
+ * staff, so they are not offered.
+ */
+export const CUSTOMER_CANCELLATION_REASONS = [
+  "CUSTOMER_REQUEST",
+  "DUPLICATE_ORDER",
+  "OTHER",
+] as const;
+
+export const cancelOrderInputSchema = z
+  .object({
+    orderId: orderIdSchema,
+    reasonCode: z.enum(CANCELLATION_REASON_CODES).optional(),
+    note: z
+      .string()
+      .trim()
+      .max(CANCELLATION_NOTE_MAX)
+      .optional()
+      .transform((note) => (note ? note : undefined)),
+  })
+  .refine((input) => input.reasonCode !== "OTHER" || input.note !== undefined, {
+    path: ["note"],
+    message: "Vui lòng nhập lý do khi chọn “Lý do khác”.",
+  });
+
+/** The dialog's form: the reasons a customer can give, and a note that OTHER cannot do without. */
+export const cancellationFormSchema = z
+  .object({
+    reasonCode: z.enum(CUSTOMER_CANCELLATION_REASONS),
+    note: z.string().trim().max(CANCELLATION_NOTE_MAX, "Tối đa 1000 ký tự"),
+  })
+  .refine((form) => form.reasonCode !== "OTHER" || form.note.length > 0, {
+    path: ["note"],
+    message: "Vui lòng nhập lý do khi chọn “Lý do khác”.",
+  });
+
+/**
+ * What a customer's cancellation did (BE CancellationResultResponse): CANCELLED at once (200), or
+ * REQUESTED (202) for Sales to decide, with the request's id. A result newer than this FE is
+ * UNKNOWN, and the screen simply re-reads the order. The `order` echo is not read.
+ */
+export const CANCELLATION_RESULTS = ["CANCELLED", "REQUESTED"] as const;
+export const cancellationResultDtoSchema = z.object({
+  result: tolerantEnum(CANCELLATION_RESULTS),
+  requestId: z.uuid().nullish(),
 });

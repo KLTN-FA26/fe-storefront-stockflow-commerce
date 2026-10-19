@@ -1,4 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render as rtlRender, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { defaultTrustItems } from "@/components/storefront/layout";
@@ -13,7 +15,12 @@ const navigation = vi.hoisted(() => ({ pathname: "/" }));
 
 vi.mock("next/navigation", () => ({
   usePathname: () => navigation.pathname,
+  useRouter: () => ({ push: vi.fn() }),
 }));
+
+// The header search and the cart badge read the session and the cart; the app provides the cache.
+const render = (ui: ReactElement) =>
+  rtlRender(<QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>);
 
 vi.mock("@/components/storefront/theme-toggle", () => ({
   ThemeToggle: () => <button type="button">Chuyển giao diện</button>,
@@ -25,7 +32,7 @@ describe("HeaderSearch", () => {
     const form = screen.getByRole("search");
     expect(form.getAttribute("action")).toMatch(/\/catalog$/);
     expect(form).toHaveAttribute("method", "get");
-    expect(screen.getByRole("searchbox", { name: "Tìm sản phẩm" })).toHaveAttribute("name", "q");
+    expect(screen.getByRole("combobox", { name: "Tìm sản phẩm" })).toHaveAttribute("name", "q");
     expect(screen.getByRole("button", { name: "Tìm kiếm" })).toHaveAttribute("type", "submit");
   });
 });

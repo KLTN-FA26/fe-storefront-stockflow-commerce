@@ -13,8 +13,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { HOLD_REASON_LABEL } from "../labels";
 import { ORDER_STATUS_GROUP_META, orderProgressOf } from "../lifecycle";
-import type { OrderStatusGroup } from "../types";
+import type { HoldReason, OrderStatusGroup } from "../types";
 import { ORDER_TONE_CLASSES } from "./order-status-badge";
 import { OrderStepper } from "./order-stepper";
 
@@ -32,7 +33,14 @@ const GROUP_ICON: Record<OrderStatusGroup, LucideIcon> = {
 };
 
 /** One place that says where the order is and what happens next, replacing badge + progress bar. */
-export function OrderStatusHero({ group }: { group: OrderStatusGroup }) {
+export function OrderStatusHero({
+  group,
+  holdReason,
+}: {
+  group: OrderStatusGroup;
+  /** Why an ON_HOLD order waits (BE holdReasonPublic); replaces the generic hint. */
+  holdReason?: HoldReason | null | undefined;
+}) {
   const { label, tone, hint } = ORDER_STATUS_GROUP_META[group];
   const Icon = GROUP_ICON[group];
   const done = orderProgressOf(group);
@@ -55,7 +63,9 @@ export function OrderStatusHero({ group }: { group: OrderStatusGroup }) {
           <h2 id="order-status-heading" className="font-display text-ink-primary text-lg font-bold">
             {label}
           </h2>
-          <p className="text-ink-secondary mt-0.5 text-sm">{hint}</p>
+          <p className="text-ink-secondary mt-0.5 text-sm">
+            {holdReason ? HOLD_REASON_LABEL[holdReason] : hint}
+          </p>
         </div>
       </div>
       {done !== null && <OrderStepper done={done} />}

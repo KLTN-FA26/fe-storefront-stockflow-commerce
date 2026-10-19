@@ -28,7 +28,7 @@ const expectListAndDetailInvalidated = (invalidate: ReturnType<typeof setup>["in
 
 describe("useCancelMyOrder keeps the list and the order in sync", () => {
   it("re-reads list and detail after a successful cancellation", async () => {
-    vi.spyOn(api, "post").mockResolvedValueOnce({ data: {} });
+    vi.spyOn(api, "post").mockResolvedValueOnce({ data: { result: "CANCELLED" } });
     const { invalidate, wrapper } = setup();
     const { result } = renderHook(() => useCancelMyOrder(), { wrapper });
 

@@ -30,9 +30,16 @@ export async function loginApi(credentials: LoginRequest): Promise<LoginResponse
   return loginResponseSchema.parse(data);
 }
 
-export async function logoutApi(): Promise<void> {
+/** `accessToken`: end a session whose token is not stored (yet, or any more), e.g. a refused sign-in. */
+export async function logoutApi(accessToken?: string): Promise<void> {
   try {
-    await api.post("/identity/auth/logout");
+    if (accessToken) {
+      await api.post("/identity/auth/logout", undefined, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+    } else {
+      await api.post("/identity/auth/logout");
+    }
   } catch {
     // Local logout must still complete when the server is unavailable.
   }

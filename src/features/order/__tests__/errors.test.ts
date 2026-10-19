@@ -33,15 +33,39 @@ describe("order error helpers", () => {
   it.each([
     [new ApiError(403, "FORBIDDEN", "Missing permission: sales-orders:READ"), "không có quyền"],
     [new ApiError(404, "NOT_FOUND", "No order with id 1"), "Không tìm thấy đơn hàng."],
-    [new ApiError(400, "UNSUPPORTED_PARAMETER", "Page number must not be negative"), "Yêu cầu không hợp lệ"],
-    [new ApiError(500, "INTERNAL_ERROR", "Something went wrong on our side"), "Hệ thống đang gặp sự cố"],
-    [new ApiError(502, "HTTP_502", "Request failed with status code 502"), "Hệ thống đang gặp sự cố"],
+    [
+      new ApiError(400, "UNSUPPORTED_PARAMETER", "Page number must not be negative"),
+      "Yêu cầu không hợp lệ",
+    ],
+    [
+      new ApiError(500, "INTERNAL_ERROR", "Something went wrong on our side"),
+      "Hệ thống đang gặp sự cố",
+    ],
+    [
+      new ApiError(502, "HTTP_502", "Request failed with status code 502"),
+      "Hệ thống đang gặp sự cố",
+    ],
     [new ApiError(418, "TEAPOT", "I'm a teapot"), "Không thực hiện được yêu cầu"],
   ])("never shows the raw BE message (%#)", (error, expected) => {
     const message = describeError(error);
     expect(message).toContain(expected);
     expect(message).not.toContain(error.message);
   });
+
+  it.each([
+    ["ORDER_NOT_CANCELLABLE", "Nếu cần trả hàng"],
+    ["CANCELLATION_NEEDS_STAFF", "chỉ nhân viên mới quyết định"],
+    ["ORDER_CANCELLED", "đã được huỷ"],
+    ["ORDER_CANCELLATION_REQUEST_PENDING", "đang chờ Sales xem xét"],
+  ])(
+    "explains the BE cancellation code %s in Vietnamese, never its English message",
+    (code, text) => {
+      const error = new ApiError(409, code, "Order SO-1 is SHIPPED and can no longer be cancelled");
+      const message = describeCancelError(error);
+      expect(message).toContain(text);
+      expect(message).not.toContain("SHIPPED");
+    },
+  );
 
   it("falls back to the general message for other failures", () => {
     expect(

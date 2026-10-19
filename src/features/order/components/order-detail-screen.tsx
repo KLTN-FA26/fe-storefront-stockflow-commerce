@@ -6,17 +6,19 @@ import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
-import { ConfirmDialog } from "@/components/shared";
 import { useHasPermission } from "@/lib/auth/my-permissions";
 import { formatDateTime } from "@/lib/format/date";
 
 import { describeCancelError, isNotFound } from "../errors";
 import { useCancelMyOrder } from "../mutations";
-import { useOrder } from "../queries";
+import { useKnownCancellationRequest, useOrder } from "../queries";
 import { isValidOrderId } from "../schemas";
+import { CancellationDialog } from "./cancellation-dialog";
 import { CopyOrderNumber } from "./copy-order-number";
 import { OrderDeliveryCard, OrderLinesCard, OrderTotalCard } from "./order-detail-sections";
 import { OrderHelpCard } from "./order-help-card";
+import { OrderPaymentCard } from "./order-payment-card";
+import { OrderTimelineCard } from "./order-timeline-card";
 import {
   OrderDetailSkeleton,
   OrderLoadError,
@@ -24,9 +26,6 @@ import {
   OrderWaitingNotice,
 } from "./order-states";
 import { OrderStatusHero } from "./order-status-hero";
-
-const CANCEL_COPY =
-  "Đơn hàng sẽ bị huỷ và không thể khôi phục. Nếu bạn đã thanh toán, vui lòng liên hệ CSKH để được hỗ trợ.";
 
 function BackToOrders() {
   return (
@@ -44,9 +43,10 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
   // The BE serialises UUIDs lower-case; keying the query on the same spelling keeps the
   // post-cancel invalidation (keyed by order.orderId) hitting this query for a pasted upper-case URL.
   const orderId = rawOrderId.toLowerCase();
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [dialog, setDialog] = useState<"cancel" | "request" | null>(null);
   const { data: order, isPending, isPaused, isFetching, error, refetch } = useOrder(orderId);
   const cancel = useCancelMyOrder();
+  const known = useKnownCancellationRequest(orderId);
   const mayCancel = useHasPermission("sales-orders:UPDATE");
 
   // Not a UUID: the BE would answer 400 UNSUPPORTED_PARAMETER, and to the customer it is simply an
@@ -99,30 +99,45 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
         <div className="min-w-0 space-y-5">
-          <OrderStatusHero group={order.statusGroup} />
+          <OrderStatusHero group={order.statusGroup} holdReason={order.holdReasonPublic} />
           <OrderLinesCard order={order} />
+          <OrderTimelineCard order={order} />
         </div>
         <div className="space-y-5 lg:sticky lg:top-[var(--sticky-top)] lg:-mx-1 lg:max-h-[calc(100dvh-var(--sticky-top)-1rem)] lg:self-start lg:overflow-y-auto lg:px-1">
           <OrderTotalCard order={order} />
+          <OrderPaymentCard order={order} />
           <OrderDeliveryCard order={order} />
           <OrderHelpCard
             order={order}
-            cancelling={cancel.isPending}
-            onCancel={() => setConfirmOpen(true)}
+            onCancel={(mode) => {
+              cancel.reset();
+              setDialog(mode);
+            }}
             mayCancel={mayCancel}
-            cancelError={cancel.error ? describeCancelError(cancel.error) : undefined}
+            requestPending={known.data !== undefined}
           />
         </div>
       </div>
 
-      <ConfirmDialog
-        open={confirmOpen}
-        onOpenChange={setConfirmOpen}
-        title="Huỷ đơn hàng?"
-        description={CANCEL_COPY}
-        confirmLabel="Xác nhận huỷ"
-        cancelLabel="Giữ đơn hàng"
-        onConfirm={() => cancel.mutate({ orderId: order.orderId })}
+      <CancellationDialog
+        mode={dialog}
+        orderStatus={order.status}
+        holdReason={order.holdReasonPublic}
+        onOpenChange={(open) => !open && setDialog(null)}
+        pending={cancel.isPending}
+        error={cancel.error ? describeCancelError(cancel.error) : undefined}
+        onSubmit={(values) =>
+          cancel.mutate(
+            { orderId: order.orderId, reasonCode: values.reasonCode, note: values.note },
+            {
+              onSuccess: () => setDialog(null),
+              // Already asked: the page now shows the request as waiting, so the dialog is done.
+              onError: (error) => {
+                if (error.code === "ORDER_CANCELLATION_REQUEST_PENDING") setDialog(null);
+              },
+            },
+          )
+        }
       />
     </div>
   );

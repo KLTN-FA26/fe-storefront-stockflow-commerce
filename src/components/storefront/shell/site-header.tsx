@@ -1,9 +1,11 @@
 import Link from "next/link";
-import { MessageCircle, ShoppingBag, UserRound } from "lucide-react";
+import { MessageCircle, ShoppingBag } from "lucide-react";
 
 import { BRAND, STORE_ROUTES } from "@/constants";
 import { cn } from "@/lib/cn";
 
+import { HeaderAccountLink } from "@/features/auth/components/header-account-link";
+import { CartBadge } from "@/features/cart/components/cart-badge";
 import { ThemeToggle } from "@/components/storefront/theme-toggle";
 
 import { HeaderSearch } from "./header-search";
@@ -45,20 +47,12 @@ export function SiteHeader() {
               <MessageCircle className="size-5" aria-hidden="true" />
               <span className="sr-only lg:not-sr-only">Tư vấn</span>
             </Link>
-            <Link
-              href={STORE_ROUTES.account.home}
-              className={cn(actionLink, "hidden sm:inline-flex")}
-            >
-              <UserRound className="size-5" aria-hidden="true" />
-              <span className="sr-only lg:not-sr-only">Tài khoản</span>
-            </Link>
+            <HeaderAccountLink className={cn(actionLink, "hidden sm:inline-flex")} />
             <ThemeToggle />
             <Link href={STORE_ROUTES.cart} className={cn(actionLink, "text-ink-primary")}>
               <span className="relative">
                 <ShoppingBag className="size-5" aria-hidden="true" />
-                <span className="bg-accent text-ink-inverse absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-xs leading-none font-bold tabular-nums">
-                  2
-                </span>
+                <CartBadge />
               </span>
               <span className="sr-only sm:not-sr-only">Giỏ hàng</span>
             </Link>
