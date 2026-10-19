@@ -52,8 +52,8 @@ function fakeBackend() {
     if (url === "/orders/me") return settle(book.page(config?.params as Record<string, unknown>));
     return settle(book.get(url.replace("/orders/me/", "")));
   });
-  vi.spyOn(api, "post").mockImplementation(async (url) =>
-    settle(book.cancel(url.split("/")[2] ?? "")),
+  vi.spyOn(api, "post").mockImplementation(async (url, body) =>
+    settle(book.cancel(url.split("/")[2] ?? "", body as Record<string, unknown> | undefined)),
   );
 }
 
@@ -257,23 +257,16 @@ describe("OrderDetailScreen", () => {
     ).toBeInTheDocument();
   });
 
-  it.each([
-    "IN_PRODUCTION",
-    "READY_TO_FULFILL",
-    "IN_FULFILMENT",
-    "ON_HOLD",
-    "SHIPPED",
-    "DELIVERED",
-    "COMPLETED",
-    "CANCELLED",
-    "RETURNED",
-  ] as const)("hides the cancel button for %s", async (status) => {
-    const order = seeded(status);
-    renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
-    expect(await screen.findByText(order.orderNumber)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Huỷ đơn hàng/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Chat với CSKH/ })).toBeInTheDocument();
-  });
+  it.each(["SHIPPED", "DELIVERED", "COMPLETED", "CANCELLED", "RETURNED"] as const)(
+    "hides the cancel button for %s",
+    async (status) => {
+      const order = seeded(status);
+      renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
+      expect(await screen.findByText(order.orderNumber)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Huỷ đơn hàng/ })).not.toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /Chat với CSKH/ })).toBeInTheDocument();
+    },
+  );
 
   it("never offers cancelling an order whose status the FE does not know", async () => {
     const b2b = { ...seeded("CONFIRMED"), status: "SOMETHING_NEW" } as unknown as MockOrder;
@@ -288,7 +281,7 @@ describe("OrderDetailScreen", () => {
 
   it("explains why an order already with the warehouse or carrier cannot be cancelled", async () => {
     renderWithProviders(<OrderDetailScreen orderId={seeded("SHIPPED").orderId} />);
-    expect(await screen.findByText(/nên không thể tự huỷ/)).toBeInTheDocument();
+    expect(await screen.findByText(/nên không thể huỷ/)).toBeInTheDocument();
   });
 
   it("drops the stepper once an order leaves the happy path", async () => {
@@ -326,10 +319,12 @@ describe("OrderDetailScreen", () => {
     book = createMockOrderBook(CUSTOMER, [shipped]);
     await userEvent.click(screen.getByRole("button", { name: "Xác nhận huỷ" }));
 
+    const dialog = screen.getByRole("dialog");
     expect(
-      await screen.findByText(/Đơn hàng vừa chuyển sang trạng thái khác nên không thể huỷ nữa/),
+      await within(dialog).findByText(/Đơn hàng đã sang bước không thể huỷ/),
     ).toBeInTheDocument();
     expect(screen.queryByText(/cannot be cancelled|SHIPPED/)).not.toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Quay lại" }));
     expect(await screen.findAllByText("Đang giao hàng")).not.toHaveLength(0);
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: /Huỷ đơn hàng/ })).not.toBeInTheDocument(),
@@ -367,7 +362,7 @@ describe("OrderDetailScreen", () => {
     const order = seeded("CONFIRMED");
     renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
 
-    const delivery = await screen.findByRole("region", { name: "Giao đến" });
+    const delivery = await screen.findByRole("region", { name: "Giao hàng" });
     expect(within(delivery).getByText(order.shippingAddress!.recipientName)).toBeInTheDocument();
     expect(within(delivery).queryByText(/Email nhận thông báo/)).not.toBeInTheDocument();
   });
@@ -440,13 +435,16 @@ describe("OrderDetailScreen", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "Xác nhận huỷ" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("không có quyền");
+    expect(await within(screen.getByRole("dialog")).findByRole("alert")).toHaveTextContent(
+      "không có quyền",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Quay lại" }));
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: /Huỷ đơn hàng/ })).not.toBeInTheDocument(),
     );
   });
 
-  it("shows a failed cancellation inside the help card, next to the cancel button", async () => {
+  it("keeps a failed cancellation inside the dialog, so the customer can retry", async () => {
     const confirmed = seeded("CONFIRMED");
     renderWithProviders(<OrderDetailScreen orderId={confirmed.orderId} />);
     await userEvent.click(
@@ -457,17 +455,223 @@ describe("OrderDetailScreen", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "Xác nhận huỷ" }));
 
-    const help = screen.getByRole("region", { name: "Cần hỗ trợ?" });
-    expect(await within(help).findByRole("alert")).toHaveTextContent(
+    const dialog = screen.getByRole("dialog");
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
       "Không kết nối được máy chủ. Vui lòng kiểm tra mạng.",
     );
-    expect(
-      within(help).getByRole("button", { name: `Huỷ đơn hàng ${confirmed.orderNumber}` }),
-    ).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Xác nhận huỷ" }));
+    expect(await screen.findByRole("heading", { name: "Đã huỷ" })).toBeInTheDocument();
   });
 
   it("treats another customer's order as not found", async () => {
     renderWithProviders(<OrderDetailScreen orderId={foreignMockOrderId()} />);
     await waitFor(() => expect(notFound).toHaveBeenCalled());
+  });
+});
+
+describe("OrderDetailScreen: asking Sales to cancel (202)", () => {
+  const request = () => screen.findByRole("button", { name: /Gửi yêu cầu huỷ đơn hàng/ });
+
+  it.each(["IN_PRODUCTION", "READY_TO_FULFILL", "IN_FULFILMENT", "ON_HOLD"] as const)(
+    "offers a request, not a cancellation, for %s",
+    async (status) => {
+      renderWithProviders(<OrderDetailScreen orderId={seeded(status).orderId} />);
+      expect(await request()).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^Huỷ đơn hàng/ })).not.toBeInTheDocument();
+    },
+  );
+
+  it("sends the reason and note, then shows the request as waiting for Sales", async () => {
+    const order = seeded("IN_PRODUCTION");
+    renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
+    await userEvent.click(await request());
+
+    const dialog = screen.getByRole("dialog", { name: "Gửi yêu cầu huỷ đơn" });
+    expect(within(dialog).getByText(/Sales xem xét/)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole("radio", { name: "Tôi đặt trùng đơn" }));
+    await userEvent.type(within(dialog).getByLabelText(/Ghi chú/), "Đã đặt lại ở đơn khác");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Gửi yêu cầu huỷ" }));
+
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent("Đã gửi yêu cầu huỷ.");
+    expect(status).toHaveTextContent("Đơn giữ nguyên trạng thái");
+    expect(api.post).toHaveBeenCalledWith(`/orders/${order.orderId}/cancellation`, {
+      reasonCode: "DUPLICATE_ORDER",
+      note: "Đã đặt lại ở đơn khác",
+    });
+    expect(book.pendingCancellationOf(order.orderId)).toMatchObject({
+      reasonCode: "DUPLICATE_ORDER",
+      note: "Đã đặt lại ở đơn khác",
+    });
+    // The order itself did not change, and a second request is not offered.
+    expect(screen.getByRole("heading", { name: "Đang sản xuất" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Gửi yêu cầu huỷ đơn hàng/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("asks for a note when the reason is 'other', before anything is sent", async () => {
+    renderWithProviders(<OrderDetailScreen orderId={seeded("IN_FULFILMENT").orderId} />);
+    await userEvent.click(await request());
+    const dialog = screen.getByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("radio", { name: "Lý do khác" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Gửi yêu cầu huỷ" }));
+
+    expect(await within(dialog).findByText(/Vui lòng nhập lý do khi chọn/)).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("learns a request is already waiting from the BE's 409, and shows that state", async () => {
+    const order = seeded("ON_HOLD");
+    // Asked earlier (another tab, an earlier visit): the BE knows, this page does not.
+    book.cancel(order.orderId, { reasonCode: "CUSTOMER_REQUEST" });
+    renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
+    await userEvent.click(await request());
+    await userEvent.click(screen.getByRole("button", { name: "Gửi yêu cầu huỷ" }));
+
+    expect(await screen.findByText("Đã gửi yêu cầu huỷ.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("says the BE refused when the order was packed meanwhile (409 ORDER_NOT_CANCELLABLE)", async () => {
+    const order = seeded("IN_FULFILMENT");
+    renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
+    await userEvent.click(await request());
+    book = createMockOrderBook(CUSTOMER, [{ ...order, status: "SHIPPED" }]);
+    await userEvent.click(screen.getByRole("button", { name: "Gửi yêu cầu huỷ" }));
+
+    expect(
+      await within(screen.getByRole("dialog")).findByText(/không thể huỷ\. Nếu cần trả hàng/),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("OrderDetailScreen: what the BE reports about the order", () => {
+  it("shows the timeline oldest first, one step per customer-facing status", async () => {
+    const order = seeded("IN_FULFILMENT"); // READY_TO_FULFILL + IN_FULFILMENT are one step: Đang chuẩn bị hàng
+    renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
+
+    const timeline = await screen.findByRole("region", { name: "Lịch sử đơn hàng" });
+    const steps = within(timeline).getAllByRole("listitem");
+    expect(steps.map((step) => step.querySelector("p")?.textContent)).toEqual([
+      "Chờ thanh toán",
+      "Đã xác nhận",
+      "Đang chuẩn bị hàng",
+    ]);
+    expect(within(steps[0]!).getByText(/\d{4}/)).toBeInTheDocument();
+  });
+
+  it("gives the reason on the cancellation step, in words", async () => {
+    const order = seedMockOrders(CUSTOMER).find(
+      (o) =>
+        o.customerId === CUSTOMER &&
+        o.status === "CANCELLED" &&
+        o.history.at(-1)?.reasonCode === "PAYMENT_NOT_RECEIVED",
+    )!;
+    renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
+    expect(
+      await screen.findByText("Lý do: Chưa nhận được thanh toán đúng hạn"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a deposit order's payment: term, deposit, what arrived and what is still due", async () => {
+    const order = seedMockOrders(CUSTOMER).find(
+      (o) => o.customerId === CUSTOMER && o.paymentTerm === "DEPOSIT" && o.status === "CONFIRMED",
+    )!;
+    renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
+
+    const payment = await screen.findByRole("region", { name: "Thanh toán" });
+    expect(within(payment).getByText("Đặt cọc")).toBeInTheDocument();
+    expect(within(payment).getByText("Đã thanh toán một phần")).toBeInTheDocument();
+    expect(within(payment).getByText("Tiền cọc cần thanh toán")).toBeInTheDocument();
+    expect(within(payment).getByText("Còn phải thanh toán")).toBeInTheDocument();
+    expect(within(payment).queryByText("Hạn thanh toán")).not.toBeInTheDocument();
+  });
+
+  it("shows a credit order's days to pay instead of an amount due", async () => {
+    const order = seedMockOrders(CUSTOMER).find(
+      (o) => o.customerId === CUSTOMER && o.paymentTerm === "CREDIT",
+    )!;
+    renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
+
+    const payment = await screen.findByRole("region", { name: "Thanh toán" });
+    expect(within(payment).getByText("Công nợ", { selector: "dd" })).toBeInTheDocument();
+    expect(within(payment).getByText("30 ngày sau khi giao")).toBeInTheDocument();
+    expect(within(payment).queryByText("Còn phải thanh toán")).not.toBeInTheDocument();
+  });
+
+  it("shows print progress for a printed line and nothing for stock goods", async () => {
+    const order = seeded("IN_PRODUCTION");
+    renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
+
+    const lines = await screen.findByRole("region", { name: /Sản phẩm/ });
+    const printed = order.lines.find((line) => line.designSnapshotId)!;
+    expect(within(lines).getByText("Đang sản xuất")).toBeInTheDocument();
+    const bar = within(lines).getByRole("progressbar", { name: `Tiến độ sản xuất ${printed.sku}` });
+    expect(bar).toHaveAttribute("aria-valuenow", String(Math.floor(printed.quantity / 2)));
+    expect(bar).toHaveAttribute("aria-valuemax", String(printed.quantity));
+    expect(within(lines).queryByText(/không cần sản xuất/)).not.toBeInTheDocument();
+  });
+
+  it("tells a customer why an ON_HOLD order waits, without the internal reason", async () => {
+    const order = seeded("ON_HOLD");
+    renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
+    expect(await screen.findByText("Đơn đang được chúng tôi xem xét.")).toBeInTheDocument();
+  });
+
+  it("shows where delivery stands, as recorded by staff", async () => {
+    renderWithProviders(<OrderDetailScreen orderId={seeded("SHIPPED").orderId} />);
+    const delivery = await screen.findByRole("region", { name: "Giao hàng" });
+    expect(within(delivery).getByText("Đang trên đường giao")).toBeInTheDocument();
+  });
+
+  it("does not claim a cancelled order still has money to pay", async () => {
+    const cancelled = seedMockOrders(CUSTOMER).find(
+      (o) => o.customerId === CUSTOMER && o.status === "CANCELLED",
+    )!;
+    renderWithProviders(<OrderDetailScreen orderId={cancelled.orderId} />);
+    const payment = await screen.findByRole("region", { name: "Thanh toán" });
+    expect(within(payment).getByText("Chưa thanh toán")).toBeInTheDocument();
+    expect(within(payment).queryByText("Còn phải thanh toán")).not.toBeInTheDocument();
+  });
+});
+
+describe("OrderDetailScreen: asking Sales about an order on hold", () => {
+  const held = (term: "PREPAID" | "CREDIT") =>
+    seedMockOrders(CUSTOMER).find(
+      (o) => o.customerId === CUSTOMER && o.status === "ON_HOLD" && o.paymentTerm === term,
+    ) ?? { ...seeded("ON_HOLD"), paymentTerm: term };
+
+  it("does not say an ON_HOLD order went to production or the warehouse: it never did", async () => {
+    const order = held("PREPAID");
+    renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
+    await userEvent.click(await screen.findByRole("button", { name: /Gửi yêu cầu huỷ đơn hàng/ }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/chưa được chuyển cho sản xuất hoặc kho/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Đơn đang được chúng tôi xem xét/)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/phát sinh chi phí/)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/Đơn đã được chuyển cho sản xuất/)).not.toBeInTheDocument();
+  });
+
+  it("names the credit approval when that is what the order waits for", async () => {
+    const order = held("CREDIT");
+    book = createMockOrderBook(CUSTOMER, [order]);
+    renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
+    await screen.findByRole("button", { name: /Gửi yêu cầu huỷ đơn hàng/ });
+    const help = screen.getByRole("region", { name: "Cần hỗ trợ?" });
+    expect(
+      within(help).getByText(
+        /Đơn đang chờ duyệt hạn mức công nợ, chưa chuyển cho sản xuất hoặc kho/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the production wording for an order that really is released", async () => {
+    renderWithProviders(<OrderDetailScreen orderId={seeded("IN_PRODUCTION").orderId} />);
+    await userEvent.click(await screen.findByRole("button", { name: /Gửi yêu cầu huỷ đơn hàng/ }));
+    expect(
+      within(screen.getByRole("dialog")).getByText(/Đơn đã được chuyển cho sản xuất hoặc kho/),
+    ).toBeInTheDocument();
   });
 });

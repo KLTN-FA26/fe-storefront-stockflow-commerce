@@ -4,14 +4,26 @@ import type { OrderStatus, OrderStatusGroup } from "./types";
 
 /**
  * Source: BE order.api.OrderStatus#customerMayCancelDirectly (develop): a customer cancels on
- * their own only before anything is released to production or the warehouse. Later the BE
- * records a cancellation request (202) that Sales decides, which this FE does not offer yet, so
- * those orders are pointed to support instead. UI gating only — the BE re-checks (409 CONFLICT).
+ * their own only before anything is released to production or the warehouse. UI gating only —
+ * the BE decides (the answer says CANCELLED or REQUESTED) and re-checks (409).
  */
 const CANCELLABLE: ReadonlySet<OrderStatus> = new Set<OrderStatus>([
   "DRAFT",
   "PENDING_PAYMENT",
   "CONFIRMED",
+]);
+
+/**
+ * Past that point the customer may still ask (BE OrderServiceImpl.cancelOwn → 202): every status
+ * OrderStatus#canTransitionTo(CANCELLED) allows that is not directly cancellable. From SHIPPED on
+ * it is a return, not a cancellation (kltn-docs 17 §4.5, BR-031). The BE also refuses once the
+ * order is packed (ORDER_NOT_CANCELLABLE) and while a request is already waiting.
+ */
+const CANCELLATION_REQUESTABLE: ReadonlySet<OrderStatus> = new Set<OrderStatus>([
+  "IN_PRODUCTION",
+  "READY_TO_FULFILL",
+  "IN_FULFILMENT",
+  "ON_HOLD",
 ]);
 
 /** BE OrderStatus#isTerminal. */
@@ -22,6 +34,8 @@ const TERMINAL: ReadonlySet<OrderStatus> = new Set<OrderStatus>([
 ]);
 
 export const isOrderCancellable = (status: OrderStatus) => CANCELLABLE.has(status);
+export const isCancellationRequestable = (status: OrderStatus) =>
+  CANCELLATION_REQUESTABLE.has(status);
 export const isOrderTerminal = (status: OrderStatus) => TERMINAL.has(status);
 
 /**

@@ -1,36 +1,32 @@
 import Image from "next/image";
 import Link from "next/link";
+import { ImageOff } from "lucide-react";
 
 import { cn } from "@/lib/cn";
-
-import { Badge } from "@/components/ui/badge";
+import { isRemoteImage } from "@/lib/remote-image";
 
 import { AvailabilityBadge } from "./availability-badge";
 import { PriceDisplay } from "./price-display";
-import { RatingStars } from "./rating-stars";
 
-interface ProductCardProps {
+export interface ProductCardProps {
   href: string;
   name: string;
-  imageSrc: string;
-  price: number;
-  compareAtPrice?: number;
-  badge?: string;
-  rating?: number;
-  reviewCount?: number;
-  availability?: "in-stock" | "low-stock" | "out-of-stock";
+  imageSrc?: string | undefined;
+  imageAlt?: string | undefined;
+  /** The customer's unit price; absent while loading or when the product has no price for them. */
+  price?: number | undefined;
+  priceLabel?: string | undefined;
+  availability?: "in-stock" | "low-stock" | "out-of-stock" | undefined;
 }
 
 export function ProductCard({
   href,
   name,
   imageSrc,
+  imageAlt,
   price,
-  compareAtPrice,
-  badge,
-  rating,
-  reviewCount,
-  availability = "in-stock",
+  priceLabel,
+  availability,
 }: ProductCardProps) {
   return (
     <Link
@@ -38,26 +34,37 @@ export function ProductCard({
       className="group bg-bg-surface border-border-default hover:border-border-strong focus-visible:ring-accent flex h-full flex-col overflow-hidden rounded-[var(--r-lg)] border shadow-[var(--sh-sm)] transition-[border-color,box-shadow] duration-200 hover:shadow-[var(--sh-md)] focus-visible:ring-2 focus-visible:outline-none"
     >
       <div className="bg-bg-subtle relative aspect-square overflow-hidden">
-        <Image
-          src={imageSrc}
-          alt={name}
-          fill
-          sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, 50vw"
-          className={cn(
-            "object-contain p-6 transition-transform duration-300 group-hover:scale-105 sm:p-8",
-            availability === "out-of-stock" && "opacity-60",
-          )}
-        />
-        {badge ? <Badge className="absolute top-2 left-2 rounded-full">{badge}</Badge> : null}
+        {imageSrc ? (
+          <Image
+            src={imageSrc}
+            alt={imageAlt ?? name}
+            fill
+            unoptimized={isRemoteImage(imageSrc)}
+            sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, 50vw"
+            className={cn(
+              "object-contain p-6 transition-transform duration-300 group-hover:scale-105 sm:p-8",
+              availability === "out-of-stock" && "opacity-60",
+            )}
+          />
+        ) : (
+          <span className="text-ink-tertiary absolute inset-0 flex items-center justify-center">
+            <ImageOff className="size-8" aria-hidden="true" />
+            <span className="sr-only">Chưa có hình ảnh</span>
+          </span>
+        )}
       </div>
       <div className="flex flex-1 flex-col gap-1.5 p-3">
         <h3 className="text-ink-primary group-hover:text-accent line-clamp-2 text-sm font-medium transition-colors">
           {name}
         </h3>
-        <AvailabilityBadge status={availability} />
-        {typeof rating === "number" ? <RatingStars rating={rating} count={reviewCount} /> : null}
+        {availability ? <AvailabilityBadge status={availability} /> : null}
         <div className="mt-auto pt-1">
-          <PriceDisplay price={price} compareAtPrice={compareAtPrice} size="sm" />
+          {typeof price === "number" ? (
+            <>
+              {priceLabel ? <span className="text-ink-tertiary text-xs">{priceLabel} </span> : null}
+              <PriceDisplay price={price} size="sm" />
+            </>
+          ) : null}
         </div>
       </div>
     </Link>

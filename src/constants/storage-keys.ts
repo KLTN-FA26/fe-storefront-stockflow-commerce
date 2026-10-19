@@ -6,4 +6,5 @@ export const STORAGE_KEYS = {
   adminReceiptsConfig: "stockflow:admin:receipts:config",
   adminInvoicesConfig: "stockflow:admin:invoices:config",
   adminVariantsConfig: "stockflow:admin:variants:config",
+  storefrontCart: "stockflow:storefront:cart",
 } as const;

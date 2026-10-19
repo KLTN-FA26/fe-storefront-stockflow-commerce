@@ -1,18 +1,9 @@
 import { cn } from "@/lib/cn";
 
-import { ProductCard } from "./product-card";
+import { ProductCard, type ProductCardProps } from "./product-card";
 
-interface ProductGridItem {
+export interface ProductGridItem extends ProductCardProps {
   id: string;
-  href: string;
-  name: string;
-  imageSrc: string;
-  price: number;
-  compareAtPrice?: number;
-  badge?: string;
-  rating?: number;
-  reviewCount?: number;
-  availability?: "in-stock" | "low-stock" | "out-of-stock";
 }
 
 interface ProductGridProps {
@@ -22,15 +13,17 @@ interface ProductGridProps {
 
 export function ProductGrid({ products, columns = 4 }: ProductGridProps) {
   return (
-    <div
+    <ul
       className={cn(
         "grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3",
         columns === 4 && "xl:grid-cols-4",
       )}
     >
-      {products.map((product) => (
-        <ProductCard key={product.id} {...product} />
+      {products.map(({ id, ...card }) => (
+        <li key={id}>
+          <ProductCard {...card} />
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }

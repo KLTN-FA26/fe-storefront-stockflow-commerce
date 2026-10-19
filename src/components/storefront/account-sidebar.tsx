@@ -8,6 +8,8 @@ import { ChevronRight, MessageCircle, UserRound } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { STORE_ROUTES } from "@/constants";
 
+import { LogoutButton } from "@/features/auth/components/logout-button";
+
 import { accountNavItems, type AccountNavItem } from "./account-nav-items";
 
 function isActive(pathname: string, item: AccountNavItem) {
@@ -61,6 +63,9 @@ export function AccountSidebar() {
               </li>
             );
           })}
+          <li>
+            <LogoutButton className="border-border-default bg-bg-surface text-ink-secondary rounded-full border px-4 text-sm whitespace-nowrap" />
+          </li>
         </ul>
       </nav>
 
@@ -118,6 +123,9 @@ export function AccountSidebar() {
                 })}
               </ul>
             </nav>
+            <div className="border-border-default mt-1 border-t pt-1">
+              <LogoutButton className="text-ink-secondary hover:text-ink-primary w-full font-medium" />
+            </div>
           </div>
 
           <div className="bg-bg-surface border-border-default rounded-[var(--r-lg)] border px-4 pt-3 pb-1">

@@ -21,6 +21,8 @@ import { setAuthCookie, removeAuthCookie } from "./auth-cookie";
 
 export interface AuthUser {
   userId: string;
+  /** The customer profile (GET /customers/me) behind a storefront sign-in; owns the cart and orders. */
+  customerId?: string | undefined;
   fullName: string;
   email: string;
   roles: RoleName[];

@@ -16,9 +16,11 @@
  */
 
 import axios, { type AxiosError, type AxiosResponse } from "axios";
-import { APP_ROUTES } from "@/constants";
 import { ApiError, type ApiErrorBody } from "./error";
 import { useAuthStore } from "@/lib/auth/auth-store";
+import { isTokenExpired } from "@/lib/auth/jwt";
+import { endSession, redirectToLogin } from "@/lib/auth/session";
+import { useAppStore } from "@/lib/store/use-app-store";
 
 export const api = axios.create({
   baseURL: "/api",
@@ -28,24 +30,30 @@ export const api = axios.create({
 
 /* ── Request interceptor ─────────────────────────────────────────────── */
 
-api.interceptors.request.use((cfg) => {
-  try {
-    // Auth token — require() to avoid circular dependency at module init
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { useAuthStore } = require("@/lib/auth/auth-store");
-    const tokens = useAuthStore.getState().tokens;
-    if (tokens?.accessToken) {
-      cfg.headers.set("Authorization", `Bearer ${tokens.accessToken}`);
-    }
+/**
+ * Anonymous BE endpoints. They get no bearer: a stale token on a permitAll route is still run
+ * through the resource-server filter, which answers 401 for it before the endpoint is reached.
+ */
+const ANONYMOUS_PATHS = ["/identity/auth/login", "/customers/portal-activation"];
+const isAnonymous = (url: string | undefined) =>
+  ANONYMOUS_PATHS.some((path) => (url ?? "").split("?")[0] === path);
 
-    // Warehouse header
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { useAppStore } = require("@/lib/store/use-app-store");
-    const wh = useAppStore.getState().warehouseId;
-    if (wh) cfg.headers.set("X-Warehouse-Id", wh);
-  } catch {
-    // Store not initialised yet (SSR / test) — skip.
+api.interceptors.request.use((cfg) => {
+  if (isAnonymous(cfg.url)) return cfg;
+  const token = useAuthStore.getState().tokens?.accessToken;
+  if (token && isTokenExpired(token)) {
+    // Do not send a token the BE would refuse: sign out and come back here after signing in.
+    endSession();
+    redirectToLogin();
+    return Promise.reject(
+      new ApiError(401, "TOKEN_EXPIRED", "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."),
+    );
   }
+  // The stores are plain imports: client.ts is only reached from the browser at request time, and
+  // the auth store no longer imports anything that imports this file.
+  if (token) cfg.headers.set("Authorization", `Bearer ${token}`);
+  const warehouse = useAppStore.getState().warehouseId;
+  if (warehouse) cfg.headers.set("X-Warehouse-Id", warehouse);
   return cfg;
 });
 
@@ -72,12 +80,14 @@ function unwrapSuccess(response: AxiosResponse<unknown>): AxiosResponse<unknown>
 }
 
 function logoutAfterUnauthorized(): void {
-  useAuthStore.getState().logout();
-
-  if (typeof window !== "undefined") window.location.replace(APP_ROUTES.login);
+  endSession();
+  redirectToLogin();
 }
 
-api.interceptors.response.use(unwrapSuccess, (err: AxiosError<ApiErrorBody>) => {
-  if (err.response?.status === 401) logoutAfterUnauthorized();
+api.interceptors.response.use(unwrapSuccess, (err: AxiosError<ApiErrorBody> | ApiError) => {
+  // Already ours (the request interceptor refused an expired token): not an HTTP failure to translate.
+  if (err instanceof ApiError) return Promise.reject(err);
+  // A wrong password is also 401, but it is the login form's to show: not a lost session.
+  if (err.response?.status === 401 && !isAnonymous(err.config?.url)) logoutAfterUnauthorized();
   return Promise.reject(ApiError.from(err));
 });

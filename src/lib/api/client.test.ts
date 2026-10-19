@@ -59,7 +59,11 @@ describe("API authentication semantics", () => {
       expiresInSeconds: 28_800,
     });
     const replace = vi.fn();
-    vi.spyOn(window, "location", "get").mockReturnValue({ replace } as unknown as Location);
+    vi.spyOn(window, "location", "get").mockReturnValue({
+      replace,
+      pathname: "/cart",
+      search: "?a=1",
+    } as unknown as Location);
     const adapter = vi.fn(
       rejectedAdapter(401, {
         success: false,
@@ -77,7 +81,8 @@ describe("API authentication semantics", () => {
 
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
     expect(useAuthStore.getState().tokens).toBeNull();
-    expect(replace).toHaveBeenCalledWith("/login");
+    // Back to where the customer was after signing in again.
+    expect(replace).toHaveBeenCalledWith("/login?next=%2Fcart%3Fa%3D1");
     expect(adapter).toHaveBeenCalledTimes(1);
     expect(adapter.mock.calls[0]?.[0].url).toBe("/customer/profile");
   });
@@ -103,5 +108,79 @@ describe("API authentication semantics", () => {
 
     expect(useAuthStore.getState().isAuthenticated).toBe(true);
     expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("does not bounce a wrong password: a 401 from the login endpoint is the form's to show", async () => {
+    const replace = vi.fn();
+    vi.spyOn(window, "location", "get").mockReturnValue({
+      replace,
+      pathname: "/login",
+      search: "",
+    } as unknown as Location);
+    api.defaults.adapter = rejectedAdapter(401, {
+      success: false,
+      errorCode: "UNAUTHORIZED",
+      message: "Invalid username or password",
+    });
+
+    await expect(
+      api.post("/identity/auth/login", { username: "a", password: "b" }),
+    ).rejects.toMatchObject({
+      status: 401,
+      code: "UNAUTHORIZED",
+    });
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("sends no bearer to the anonymous endpoints: a stale token would be refused before they run", async () => {
+    useAuthStore
+      .getState()
+      .login(null, { accessToken: "stale", tokenType: "Bearer", expiresInSeconds: 1 });
+    const seen: Array<string | undefined> = [];
+    api.defaults.adapter = async (config) => {
+      seen.push(config.headers.get("Authorization") as string | undefined);
+      return {
+        data: { success: true, data: {} },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config,
+      };
+    };
+    await api.post("/identity/auth/login", { username: "a", password: "b" });
+    await api.get("/customers/me");
+    expect(seen).toEqual([undefined, "Bearer stale"]);
+  });
+
+  it("does not send a token whose own exp has passed: signs out and goes to the login page", async () => {
+    const payload = btoa(JSON.stringify({ exp: Math.floor(Date.now() / 1000) - 60 }));
+    useAuthStore.getState().login(null, {
+      accessToken: `h.${payload}.s`,
+      tokenType: "Bearer",
+      expiresInSeconds: 1,
+    });
+    const replace = vi.fn();
+    vi.spyOn(window, "location", "get").mockReturnValue({
+      replace,
+      pathname: "/account/orders",
+      search: "?page=2",
+    } as unknown as Location);
+    const adapter = vi.fn(async (config) => ({
+      data: {},
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config,
+    })) as unknown as AxiosAdapter;
+    api.defaults.adapter = adapter;
+
+    await expect(api.get("/orders/me")).rejects.toMatchObject({
+      status: 401,
+      code: "TOKEN_EXPIRED",
+    });
+
+    expect(adapter).not.toHaveBeenCalled();
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    expect(replace).toHaveBeenCalledWith("/login?next=%2Faccount%2Forders%3Fpage%3D2");
   });
 });

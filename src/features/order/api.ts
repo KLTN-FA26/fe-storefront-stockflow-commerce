@@ -1,7 +1,18 @@
 import { api } from "@/lib/api/client";
 
-import { cancelOrderInputSchema, orderDtoSchema, orderPageDtoSchema } from "./schemas";
-import type { CancelOrderInput, MyOrdersParams, Order, OrderPage } from "./types";
+import {
+  cancelOrderInputSchema,
+  cancellationResultDtoSchema,
+  orderDtoSchema,
+  orderPageDtoSchema,
+} from "./schemas";
+import type {
+  CancelOrderInput,
+  CancellationResult,
+  MyOrdersParams,
+  Order,
+  OrderPage,
+} from "./types";
 
 // BE OrderController: /api/v1/orders — the /v1 prefix lives in API_URL.
 
@@ -31,13 +42,17 @@ export async function getOrder(orderId: string, signal?: AbortSignal): Promise<O
 }
 
 /**
- * POST /orders/{orderId}/cancellation?reason= — `reason` is a query param (BE default
- * CUSTOMER_REQUEST). The input is validated first so a reason the BE would refuse never leaves
- * the client. Success is ApiResponse<Void> with no `data` key, so nothing is parsed.
+ * POST /orders/{orderId}/cancellation with `{ reasonCode?, note? }` (BE CancelOrderRequest). Before
+ * anything is released to production or the warehouse the order is cancelled at once (200,
+ * CANCELLED); after that the BE records a request Sales decides (202, REQUESTED, with its id).
+ * The input is validated first so a body the BE would refuse never leaves the client.
  */
-export async function cancelMyOrder(input: CancelOrderInput): Promise<void> {
-  const { orderId, reason } = cancelOrderInputSchema.parse(input);
-  await api.post(`/orders/${encodeURIComponent(orderId)}/cancellation`, undefined, {
-    params: reason ? { reason } : {},
-  });
+export async function cancelMyOrder(input: CancelOrderInput): Promise<CancellationResult> {
+  const { orderId, reasonCode, note } = cancelOrderInputSchema.parse(input);
+  const body = reasonCode || note ? { reasonCode, note } : undefined;
+  const { data } = await api.post<unknown>(
+    `/orders/${encodeURIComponent(orderId)}/cancellation`,
+    body,
+  );
+  return cancellationResultDtoSchema.parse(data);
 }
