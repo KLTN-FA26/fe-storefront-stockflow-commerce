@@ -44,7 +44,7 @@ describe("CatalogSearchBox", () => {
     // Typing is debounced: one call for the text typed, not one per key.
     expect(suggestionCalls().length).toBeLessThanOrEqual(2);
     await userEvent.click(option);
-    expect(push).toHaveBeenCalledWith("/catalog/ly-giay-2-lop-8oz");
+    expect(push).toHaveBeenCalledWith("/catalog/products/ly-giay-2-lop-8oz");
   });
 
   it("asks nothing for a single character", async () => {
@@ -72,7 +72,7 @@ describe("CatalogSearchBox", () => {
     await userEvent.keyboard("{ArrowDown}");
     expect(screen.getAllByRole("option")[0]).toHaveAttribute("aria-selected", "true");
     await userEvent.keyboard("{Enter}");
-    expect(push).toHaveBeenCalledWith(expect.stringMatching(/^\/catalog\/ly-giay/));
+    expect(push).toHaveBeenCalledWith(expect.stringMatching(/^\/catalog\/products\/ly-giay/));
   });
 
   it("searches the catalogue for the typed text on submit, URL-encoded", async () => {

@@ -32,7 +32,7 @@ describe("CatalogScreen", () => {
     renderWithProviders(<CatalogScreen />);
 
     const cup = await card("Ly giấy 2 lớp 8oz");
-    expect(cup).toHaveAttribute("href", "/catalog/ly-giay-2-lop-8oz");
+    expect(cup).toHaveAttribute("href", "/catalog/products/ly-giay-2-lop-8oz");
     // The lowest unit price over the SKUs' tiers: 720 (the 5.000+ tier of the white cup).
     await waitFor(() => expect(within(cup).getByText(/720/)).toBeInTheDocument());
     expect(within(cup).getByText("Từ")).toBeInTheDocument();
