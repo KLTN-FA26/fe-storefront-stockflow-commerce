@@ -31,13 +31,11 @@ describe("storefront redirects (next.config.ts)", () => {
     expect(redirectOf("/catalog?page=2")).toBeUndefined();
   });
 
-  it("moves the old product URL /catalog/{slug} to /catalog/products/{slug}", () => {
-    expect(redirectOf("/catalog/ly-giay-2-lop-8oz")).toBe("/catalog/products/ly-giay-2-lop-8oz");
-  });
-
-  it("sends the bare /catalog/products to the catalogue, and never loops", () => {
-    expect(redirectOf("/catalog/products")).toBe("/catalog");
-    expect(redirectOf("/catalog/products/ly-giay-2-lop-8oz")).toBeUndefined();
+  it("leaves every /catalog/<segment> to the routes, so a new /catalog page is never hijacked", () => {
+    // Old product links are redirected by catalog/[slug]/page.tsx: a static route wins over it.
+    expect(redirectOf("/catalog/ly-giay-2-lop-8oz")).toBeUndefined();
+    expect(redirectOf("/catalog/categories")).toBeUndefined();
+    expect(redirectOf("/catalog/products")).toBeUndefined();
     expect(redirectOf("/search?q=hoodie")).toBeUndefined();
   });
 });
