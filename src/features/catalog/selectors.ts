@@ -1,5 +1,7 @@
 import { normalizeSku } from "@/lib/catalog/schemas";
 
+import { CATALOG_QUERY_MAX } from "./schemas";
+
 import type { CatalogGallery, GalleryImage } from "./types";
 
 /** Gallery order is the BE's `sortOrder`; the primary image leads when none is chosen. */
@@ -19,4 +21,10 @@ export function imageFor(
   return (
     (wanted && images.find((image) => image.sku && normalizeSku(image.sku) === wanted)) || images[0]
   );
+}
+
+/** The browser title of /search: the text searched, so tabs and history tell searches apart. */
+export function searchPageTitle(q: string | undefined): string {
+  const text = [...(q?.trim() ?? "")].slice(0, CATALOG_QUERY_MAX).join("");
+  return text ? `Tìm “${text}”` : "Tìm kiếm";
 }

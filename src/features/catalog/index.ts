@@ -8,6 +8,7 @@ export {
 } from "./queries";
 export { useCatalogListing, type CatalogListingItem } from "./use-catalog-listing";
 export { describeCatalogError } from "./errors";
+export { searchPageTitle } from "./selectors";
 export { CatalogScreen, toGridItem } from "./components/catalog-screen";
 export { FeaturedProducts } from "./components/featured-products";
 export { CatalogSearchBox } from "./components/catalog-search-box";
