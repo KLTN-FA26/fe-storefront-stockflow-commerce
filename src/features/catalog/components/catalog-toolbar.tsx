@@ -21,15 +21,17 @@ interface CatalogToolbarProps {
   onClearQuery: () => void;
 }
 
-/** The BE stops counting at its window: say "500+" and how to see the rest, not an exact 500. */
-function WindowNote({ query }: { query: string | undefined }) {
-  return (
-    <p className="text-ink-tertiary text-xs">
-      {query
-        ? `Chỉ hiện ${CATALOG_RESULT_WINDOW} kết quả khớp nhất — thêm từ khoá để thu hẹp.`
-        : `Chỉ hiện ${CATALOG_RESULT_WINDOW} sản phẩm mới nhất — tìm theo tên hoặc SKU để xem thêm.`}
-    </p>
-  );
+/**
+ * The BE stops counting at its window: say "500+" and which 500 are shown. With a text they are
+ * the best matches; without one, the first by the chosen order (listAll: title or newest).
+ */
+function WindowNote({ query, sort }: { query: string | undefined; sort: CatalogSort }) {
+  const shown = query
+    ? `${CATALOG_RESULT_WINDOW} kết quả khớp nhất — thêm từ khoá để thu hẹp.`
+    : sort === "title"
+      ? `${CATALOG_RESULT_WINDOW} sản phẩm đầu tiên theo tên — tìm theo tên hoặc SKU để xem thêm.`
+      : `${CATALOG_RESULT_WINDOW} sản phẩm mới nhất — tìm theo tên hoặc SKU để xem thêm.`;
+  return <p className="text-ink-tertiary text-xs">Chỉ hiện {shown}</p>;
 }
 
 export function CatalogToolbar({
@@ -43,7 +45,8 @@ export function CatalogToolbar({
   return (
     <div className="bg-bg-base border-border-default sticky top-[var(--header-h)] z-30 -mx-4 flex flex-col gap-2 border-b px-4 py-3 sm:-mx-6 sm:px-6 lg:static lg:z-auto lg:mx-0 lg:flex-row lg:items-center lg:justify-between lg:gap-4 lg:px-0 lg:pt-0">
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-        <p className="text-ink-secondary text-sm" role="status" aria-live="polite">
+        {/* The count is announced when it changes; loading is announced by the grid skeleton. */}
+        <p className="text-ink-secondary text-sm" aria-live="polite">
           {typeof total === "number" ? (
             <>
               <span className="text-ink-primary font-semibold tabular-nums">
@@ -52,7 +55,7 @@ export function CatalogToolbar({
               sản phẩm{query ? " phù hợp" : ""}
             </>
           ) : (
-            "Đang tải…"
+            <span aria-hidden="true">Đang tải…</span>
           )}
         </p>
         {query ? (
@@ -70,7 +73,7 @@ export function CatalogToolbar({
             </Button>
           </p>
         ) : null}
-        {capped ? <WindowNote query={query} /> : null}
+        {capped ? <WindowNote query={query} sort={sort} /> : null}
       </div>
       <Select value={sort} onValueChange={(value) => onSortChange(value as CatalogSort)}>
         <SelectTrigger
