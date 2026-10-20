@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, createEvent, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -100,6 +100,21 @@ describe("CatalogSearchBox", () => {
     await screen.findAllByRole("option");
     await userEvent.keyboard("{Escape}{ArrowUp}{Enter}");
     expect(push).toHaveBeenCalledWith("/search?q=ly%20giay");
+  });
+
+  it("keeps the text when Escape closes the list (a search field clears itself on Escape)", async () => {
+    renderWithProviders(<CatalogSearchBox />);
+    await userEvent.type(box(), "ly giay");
+    await screen.findAllByRole("option");
+    // jsdom does not clear a search field; the browser default is what must be prevented.
+    const closeList = createEvent.keyDown(box(), { key: "Escape" });
+    fireEvent(box(), closeList);
+    expect(closeList.defaultPrevented).toBe(true);
+    await waitFor(() => expect(box()).toHaveAttribute("aria-expanded", "false"));
+
+    const clearText = createEvent.keyDown(box(), { key: "Escape" });
+    fireEvent(box(), clearText);
+    expect(clearText.defaultPrevented).toBe(false); // a second Escape may clear, as usual
   });
 
   it("closes the completions with Escape", async () => {

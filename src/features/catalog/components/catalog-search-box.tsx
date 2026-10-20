@@ -93,6 +93,8 @@ export function CatalogSearchBox({ className }: { className?: string | undefined
         onFocus={() => setOpen(value.trim() !== seed.trim())}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
+            // A search field clears itself on Escape: the first Escape only closes the list.
+            if (expanded) event.preventDefault();
             setOpen(false);
             setActive(-1);
           } else if (event.key === "ArrowDown" && (!open || suggestions.length > 0)) {
