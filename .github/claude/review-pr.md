@@ -170,8 +170,7 @@ Những thứ sau là **false positive — không báo**:
 - Lỗi có sẵn trước PR (không nằm trong dòng được thêm/sửa).
 - Thứ trông như bug nhưng đúng.
 - Bắt bẻ vụn mà senior engineer không nêu.
-- Lỗi lint/format thuần mà `pnpm run lint` sẽ bắt (đừng tự chạy để kiểm). Lỗi type/compile thì vẫn báo
-  theo tiêu chí ở bước 4 — repo này chưa có workflow CI chạy typecheck.
+- Lỗi mà typecheck/lint/test sẽ bắt — workflow `ci` đã chạy chúng (đừng tự chạy để kiểm).
 - Code quality chung (thiếu test, bảo mật chung chung) trừ khi CLAUDE.md/rules bắt buộc rõ.
 - Vi phạm đã được tắt có chủ đích trong code (comment ignore có lý do).
 - Status/transition khớp BE nhưng lệch docs (xem agent 5).
