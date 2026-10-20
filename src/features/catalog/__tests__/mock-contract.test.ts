@@ -1,4 +1,7 @@
+import { AxiosError, type AxiosResponse } from "axios";
 import { describe, expect, it } from "vitest";
+
+import { ApiError } from "@/lib/api/error";
 
 import { createMockCatalog, seedMockCatalog } from "@/lib/api/mock-fixtures/catalog";
 import { priceSchedulesDtoSchema, skuAvailabilitiesDtoSchema } from "@/lib/catalog/schemas";
@@ -46,6 +49,36 @@ describe("mock catalogue satisfies the FE catalogue contract", () => {
     expect(catalogGalleryDtoSchema.safeParse(dataOf(catalog.gallery(NO_PRICE_SLUG))).success).toBe(
       true,
     );
+  });
+
+  it("refuses search like the BE, with the ApiResponse error envelope the client reads", () => {
+    // What client.ts does with a non-2xx answer: ApiError.from(the AxiosError).
+    const asApiError = (result: { status: number; data: unknown }) =>
+      ApiError.from(
+        new AxiosError("refused", "ERR_BAD_REQUEST", undefined, undefined, {
+          status: result.status,
+          data: result.data,
+        } as AxiosResponse),
+      );
+
+    const tooLong = catalog.suggestions({ q: "a".repeat(101) });
+    expect(tooLong.data).toMatchObject({
+      success: false,
+      errorCode: "VALIDATION_FAILED",
+      fieldErrors: [{ field: "q", message: expect.any(String) }],
+      correlationId: expect.any(String),
+    });
+    expect(asApiError(tooLong)).toMatchObject({ status: 400, code: "VALIDATION_FAILED" });
+    expect(asApiError(tooLong).fieldErrors).toHaveProperty("q");
+
+    const listTooLong = catalog.list({ q: "a".repeat(101) });
+    expect(asApiError(listTooLong)).toMatchObject({ status: 400, code: "VALIDATION_FAILED" });
+
+    let limited = catalog.suggestions({ q: "ly" });
+    const burst = createMockCatalog(seedMockCatalog(), { now: () => 0 });
+    for (let i = 0; i <= 30; i++) limited = burst.suggestions({ q: "ly" });
+    expect(limited.data).toMatchObject({ success: false, errorCode: "RATE_LIMITED" });
+    expect(asApiError(limited)).toMatchObject({ status: 429, code: "RATE_LIMITED" });
   });
 
   it("answers suggestions, availability and prices with bodies the schemas accept", () => {

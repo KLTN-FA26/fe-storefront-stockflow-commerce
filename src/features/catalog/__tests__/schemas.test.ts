@@ -80,6 +80,25 @@ describe("catalogue schemas follow the BE DTOs", () => {
     ).toBe(false);
   });
 
+  it("parses the search samples of the BE contract (CatalogSearchIntegrationTest, SCRUM-170)", () => {
+    // seoTitle null is left out of the JSON (non_null); totalElements stops at the 500 window.
+    const page = catalogPageDtoSchema.parse({
+      items: [{ productId: beCard.productId, slug: "ban-an-go-soi", title: "Bàn ăn gỗ sồi" }],
+      page: 0,
+      size: 20,
+      totalElements: 500,
+      totalPages: 25,
+      hasNext: true,
+      hasPrevious: false,
+    });
+    expect(page.items[0]?.seoTitle).toBeUndefined();
+    expect(
+      searchSuggestionsDtoSchema.parse([
+        { title: "Bàn ăn gỗ sồi", slug: "ban-an-go-soi", sku: "TABLE-OAK-160" },
+      ])[0],
+    ).toEqual({ title: "Bàn ăn gỗ sồi", slug: "ban-an-go-soi", sku: "TABLE-OAK-160" });
+  });
+
   it("parses suggestions: title, slug and the SKU the text matched", () => {
     expect(
       searchSuggestionsDtoSchema.parse([{ title: "Ly giấy", slug: "ly-giay", sku: "CUP-1" }]),
