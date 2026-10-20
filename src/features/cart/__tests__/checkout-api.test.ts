@@ -159,3 +159,13 @@ describe("checkout errors by BE errorCode", () => {
     expect(describePlacedStatus("CONFIRMED").title).toBe("Đã đặt hàng");
   });
 });
+
+describe("ids the dev BE really sends (no RFC version/variant bits)", () => {
+  it("places an order for such a customer and address, and reads such an order id", async () => {
+    const odd = "e5c50b95-014a-18a3-7a2b-5fd7a1dcb8ed";
+    const post = vi.spyOn(api, "post").mockResolvedValueOnce({ data: { ...placed, orderId: odd } });
+    const order = await placeOrder({ ...input, customerId: odd, shippingAddressId: odd });
+    expect(post).toHaveBeenCalledOnce();
+    expect(order.orderId).toBe(odd);
+  });
+});

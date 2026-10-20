@@ -8,6 +8,7 @@ import {
   cancellationResultDtoSchema,
   orderCardDtoSchema,
   orderDtoSchema,
+  isValidOrderId,
   orderPageDtoSchema,
 } from "../schemas";
 import { beCard, beOrder, bePage } from "./fixtures";
@@ -247,5 +248,22 @@ describe("cancellation schemas follow BE CancelOrderRequest / CancellationResult
     });
     expect(cancellationResultDtoSchema.parse({ result: "QUEUED" }).result).toBe("UNKNOWN");
     expect(cancellationResultDtoSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe("order ids the dev BE really sends (no RFC version/variant bits)", () => {
+  const id = "e5c50b95-014a-18a3-7a2b-5fd7a1dcb8ed";
+  it("parses cards and the detail with such ids, and opens the order page for them", async () => {
+    const { beCard, beOrder } = await import("./fixtures");
+    expect(orderCardDtoSchema.safeParse({ ...beCard, orderId: id }).success).toBe(true);
+    const lines = beOrder.lines.map((line) => ({
+      ...line,
+      lineId: id,
+      designSnapshotId: "d2738a4c-38f0-d893-b2d5-349038e4bb20",
+    }));
+    expect(orderDtoSchema.safeParse({ ...beOrder, orderId: id, lines }).success).toBe(true);
+    expect(cancellationResultDtoSchema.shape.requestId.safeParse(id).success).toBe(true);
+    expect(isValidOrderId(id)).toBe(true);
+    expect(isValidOrderId("not-an-order")).toBe(false);
   });
 });

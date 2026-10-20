@@ -1,11 +1,12 @@
 import { z } from "zod";
 
 import { pageResponseSchema } from "@/lib/api/page-response";
+import { beId } from "@/lib/validation/primitives";
 import { tolerantEnum } from "@/lib/validation/tolerant-enum";
 
 // BE OrderController takes `@PathVariable UUID orderId`; anything else answers
 // 400 UNSUPPORTED_PARAMETER, so an id from the URL is checked before it is sent.
-export const orderIdSchema = z.uuid();
+export const orderIdSchema = beId();
 export const isValidOrderId = (orderId: string) => orderIdSchema.safeParse(orderId).success;
 
 // Mirrors BE order.api.OrderStatus (develop). Lifecycle rules for these live in lifecycle.ts.
@@ -144,7 +145,7 @@ export const orderAddressDtoSchema = z.object({
 
 /** One row of GET /orders/me (CustomerOrderCardResponse): no lines, only their count. */
 export const orderCardDtoSchema = z.object({
-  orderId: z.uuid(),
+  orderId: beId(),
   orderNumber: z.string().min(1),
   status: orderStatusSchema,
   statusGroup: orderStatusGroupSchema,
@@ -156,12 +157,12 @@ export const orderCardDtoSchema = z.object({
 });
 
 export const orderLineDtoSchema = z.object({
-  lineId: z.uuid(),
+  lineId: beId(),
   sku: z.string().min(1),
   quantity: z.number().int().positive(),
   unitPrice: z.number().nonnegative(),
   lineTotal: z.number().nonnegative(),
-  designSnapshotId: z.uuid().nullish(),
+  designSnapshotId: beId().nullish(),
   // Only a line printed to the customer's design carries production progress.
   production: z
     .object({ state: productionStateSchema, goodQuantity: z.number().int().nonnegative() })
@@ -185,7 +186,7 @@ export const orderTimelineEntryDtoSchema = z.object({
 
 /** GET /orders/me/{orderId} (CustomerOrderDetailResponse). */
 export const orderDtoSchema = z.object({
-  orderId: z.uuid(),
+  orderId: beId(),
   orderNumber: z.string().min(1),
   status: orderStatusSchema,
   statusGroup: orderStatusGroupSchema,
@@ -257,5 +258,5 @@ export const cancellationFormSchema = z
 export const CANCELLATION_RESULTS = ["CANCELLED", "REQUESTED"] as const;
 export const cancellationResultDtoSchema = z.object({
   result: tolerantEnum(CANCELLATION_RESULTS),
-  requestId: z.uuid().nullish(),
+  requestId: beId().nullish(),
 });

@@ -108,3 +108,14 @@ describe("address selectors", () => {
     ]);
   });
 });
+
+describe("address ids the dev BE really sends", () => {
+  it("parses an address whose id has no RFC version/variant bits", () => {
+    expect(
+      customerAddressDtoSchema.safeParse({
+        ...dto,
+        addressId: "e5c50b95-014a-18a3-7a2b-5fd7a1dcb8ed",
+      }).success,
+    ).toBe(true);
+  });
+});
