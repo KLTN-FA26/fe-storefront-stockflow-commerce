@@ -217,6 +217,40 @@ describe("CatalogScreen", () => {
   });
 });
 
+describe("CatalogScreen on /search (SCRUM-469)", () => {
+  const listCalls = () =>
+    vi.mocked(api.get).mock.calls.filter(([url]) => url === "/catalog/products");
+
+  it("asks for a search text instead of listing the whole catalogue", async () => {
+    renderWithProviders(<CatalogScreen scope="search" />);
+    expect(await screen.findByText("Nhập từ khoá để tìm sản phẩm")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Xem tất cả sản phẩm" })).toHaveAttribute(
+      "href",
+      "/catalog",
+    );
+    expect(listCalls()).toHaveLength(0);
+  });
+
+  it("treats a blank q as no search text", async () => {
+    renderWithProviders(<CatalogScreen scope="search" />, { searchParams: "?q=%20%20" });
+    expect(await screen.findByText("Nhập từ khoá để tìm sản phẩm")).toBeInTheDocument();
+    expect(listCalls()).toHaveLength(0);
+  });
+
+  it("lists the products matching q", async () => {
+    renderWithProviders(<CatalogScreen scope="search" />, { searchParams: "?q=hoodie" });
+    expect(await card("Áo hoodie Essential")).toBeInTheDocument();
+    expect(listCalls()[0]?.[1]).toMatchObject({ params: { q: "hoodie" } });
+  });
+
+  it("explains an empty result, and clearing it goes back to the prompt", async () => {
+    renderWithProviders(<CatalogScreen scope="search" />, { searchParams: "?q=zzzz" });
+    expect(await screen.findByText("Không tìm thấy sản phẩm phù hợp")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Xoá tìm kiếm" }));
+    expect(await screen.findByText("Nhập từ khoá để tìm sản phẩm")).toBeInTheDocument();
+  });
+});
+
 describe("sort", () => {
   it("sends nothing for the default, so the BE picks relevance or newest itself", () => {
     expect(toApiSort("default")).toBeUndefined();

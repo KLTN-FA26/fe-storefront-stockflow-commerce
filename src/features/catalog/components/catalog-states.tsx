@@ -79,6 +79,21 @@ export function FiguresNotice({ error }: { error: unknown }) {
   );
 }
 
+/** /search without a text: nothing is asked, the visitor is told what the box accepts. */
+export function SearchPrompt() {
+  return (
+    <EmptyState
+      title="Nhập từ khoá để tìm sản phẩm"
+      description="Tìm theo tên hoặc mã SKU, gõ có dấu hay không dấu đều được."
+      action={
+        <Button asChild variant="outline" className="min-h-11 rounded-[var(--r-md)] px-5">
+          <Link href={STORE_ROUTES.catalog.list}>Xem tất cả sản phẩm</Link>
+        </Button>
+      }
+    />
+  );
+}
+
 export function NoProducts({ query, onClear }: { query: string | undefined; onClear: () => void }) {
   if (query) {
     return (

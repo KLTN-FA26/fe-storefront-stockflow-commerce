@@ -19,6 +19,7 @@ import {
   CatalogLoadError,
   FiguresNotice,
   NoProducts,
+  SearchPrompt,
   SignInRequired,
 } from "./catalog-states";
 import { CatalogToolbar } from "./catalog-toolbar";
@@ -38,7 +39,11 @@ export function toGridItem(item: CatalogListingItem): ProductGridItem {
   };
 }
 
-export function CatalogScreen() {
+/**
+ * The product list. `scope="search"` is /search?q= (SCRUM-469): without a text it asks for one
+ * and calls nothing; `/catalog?q=` redirects there (next.config.ts).
+ */
+export function CatalogScreen({ scope = "catalog" }: { scope?: "catalog" | "search" }) {
   const signedIn = useSignedIn();
   const [urlPage, setPage] = useQueryState("page", pageParser);
   const [rawQuery, setQuery] = useQueryState("q", parseAsString);
@@ -47,6 +52,7 @@ export function CatalogScreen() {
   const query = [...(rawQuery?.trim() ?? "")].slice(0, CATALOG_QUERY_MAX).join("") || undefined;
   const sort: CatalogSort = rawSort && isCatalogSort(rawSort) ? rawSort : "default";
   const page = Number.isInteger(urlPage) && urlPage >= 1 ? urlPage : 1;
+  const awaitingText = scope === "search" && !query;
 
   const {
     page: result,
@@ -54,7 +60,7 @@ export function CatalogScreen() {
     figuresError,
   } = useCatalogListing(
     { q: query, sort: toApiSort(sort), page, size: CATALOG_PAGE_SIZE },
-    signedIn === true,
+    signedIn === true && !awaitingText,
   );
   const { data, isPending, isFetching, isPlaceholderData, error, refetch } = result;
 
@@ -72,6 +78,7 @@ export function CatalogScreen() {
 
   if (signedIn === undefined) return <CatalogGridSkeleton />;
   if (!signedIn) return <SignInRequired />;
+  if (awaitingText) return <SearchPrompt />;
 
   return (
     <div className="min-w-0 space-y-4">
