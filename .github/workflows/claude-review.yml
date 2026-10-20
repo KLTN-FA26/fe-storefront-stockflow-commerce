@@ -78,10 +78,20 @@ jobs:
 
       # Quy trình review luôn lấy từ nhánh mặc định, không lấy từ PR: PR tách ra trước khi có lệnh này
       # (hoặc stacked trên nhánh feature) vẫn review được, và một PR không tự sửa được luật chấm chính nó.
+      # Ngoại lệ: nhánh mặc định chưa có lệnh (PR đầu tiên thêm workflow này) thì dùng bản trong PR.
       - name: Use review command from default branch
+        env:
+          DEFAULT_REF: origin/${{ github.event.repository.default_branch }}
         run: |
           mkdir -p .claude/commands
-          git show "origin/${{ github.event.repository.default_branch }}:.claude/commands/review-pr.md"             > .claude/commands/review-pr.md
+          if git cat-file -e "$DEFAULT_REF:.claude/commands/review-pr.md" 2>/dev/null; then
+            git show "$DEFAULT_REF:.claude/commands/review-pr.md" > .claude/commands/review-pr.md
+          elif [ -f .claude/commands/review-pr.md ]; then
+            echo "::notice::$DEFAULT_REF chưa có review-pr.md - dùng bản trong PR."
+          else
+            echo "::error::Không tìm thấy .claude/commands/review-pr.md ở $DEFAULT_REF lẫn trong PR."
+            exit 1
+          fi
 
       # ---------------------------------------------------------------------
       # Ngữ cảnh cho review, đặt trong .review-context/ (đã gitignore). /review-pr tìm ở đây trước.
