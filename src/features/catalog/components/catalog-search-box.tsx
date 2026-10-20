@@ -7,12 +7,16 @@ import { Search } from "lucide-react";
 import { STORE_ROUTES } from "@/constants";
 import { cn } from "@/lib/cn";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { hasErrorCode } from "@/lib/api/describe-error";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 import { CATALOG_QUERY_MAX, suggestionQueryOf } from "../schemas";
 import { useSearchSuggestions } from "../queries";
+import type { SearchSuggestion } from "../types";
+
+const NO_SUGGESTIONS: SearchSuggestion[] = [];
 
 /**
  * The header search box with title completions (GET /catalog/search/suggestions). Without a
@@ -28,7 +32,12 @@ export function CatalogSearchBox({ className }: { className?: string | undefined
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const text = useDebouncedValue(value, 250).trim();
-  const { suggestions: found } = useSearchSuggestions(text, signedIn === true && open);
+  const { data, error, isPlaceholderData } = useSearchSuggestions(text, signedIn === true && open);
+  // Past 30 calls per 10 s the BE answers 429 RATE_LIMITED: keep the last list it answered
+  // (SCRUM-469; contract in the SCRUM-170 comment). Any other failure shows none.
+  const [held, setHeld] = useState<SearchSuggestion[]>(NO_SUGGESTIONS);
+  if (data && !isPlaceholderData && data !== held) setHeld(data);
+  const found = data ?? (hasErrorCode(error, "RATE_LIMITED") ? held : NO_SUGGESTIONS);
   const suggestions = suggestionQueryOf(text) && value.trim() === text ? found : [];
   const expanded = open && suggestions.length > 0;
 
