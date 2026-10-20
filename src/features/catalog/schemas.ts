@@ -65,6 +65,7 @@ export const CATALOG_QUERY_MAX = 100; // BE: longer text is 400 VALIDATION_FAILE
 export const CATALOG_PAGE_SIZE_MAX = 200; // BE Pages.MAX_PAGE_SIZE
 export const SUGGESTION_MIN_LENGTH = 2; // BE CatalogSearchService.MIN_SUGGEST_LENGTH
 export const SUGGESTION_LIMIT_MAX = 10;
+export const SUGGESTION_LIMIT = 5; // SCRUM-469: the header box shows 5 completions
 
 /** The BE counts code points (`codePointCount`), not UTF-16 units: an emoji or a decomposed accent is not two. */
 export const codePointLength = (text: string) => [...text].length;

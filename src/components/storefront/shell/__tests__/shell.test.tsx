@@ -27,10 +27,10 @@ vi.mock("@/components/storefront/theme-toggle", () => ({
 }));
 
 describe("HeaderSearch", () => {
-  it("submits a GET to /catalog with the q field", () => {
+  it("submits a GET to /search with the q field", () => {
     render(<HeaderSearch />);
     const form = screen.getByRole("search");
-    expect(form.getAttribute("action")).toMatch(/\/catalog$/);
+    expect(form.getAttribute("action")).toMatch(/\/search$/);
     expect(form).toHaveAttribute("method", "get");
     expect(screen.getByRole("combobox", { name: "Tìm sản phẩm" })).toHaveAttribute("name", "q");
     expect(screen.getByRole("button", { name: "Tìm kiếm" })).toHaveAttribute("type", "submit");

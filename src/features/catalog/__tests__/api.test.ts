@@ -60,12 +60,14 @@ describe("catalogue API (BE StorefrontCatalogController / CatalogSearchControlle
     await expect(getCatalogProduct("ly-giay")).rejects.toBeInstanceOf(z.ZodError);
   });
 
-  it("asks suggestions only for 2 characters or more", async () => {
+  it("asks 5 suggestions, and only for 2 characters or more", async () => {
     const get = vi.spyOn(api, "get").mockResolvedValueOnce({ data: [] });
     await expect(getSearchSuggestions("l")).rejects.toBeInstanceOf(z.ZodError);
     expect(get).not.toHaveBeenCalled();
     await getSearchSuggestions(" ly ");
-    expect(get).toHaveBeenCalledWith("/catalog/search/suggestions", { params: { q: "ly" } });
+    expect(get).toHaveBeenCalledWith("/catalog/search/suggestions", {
+      params: { q: "ly", limit: 5 },
+    });
   });
 });
 

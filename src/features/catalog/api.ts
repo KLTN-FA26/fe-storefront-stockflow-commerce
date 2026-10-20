@@ -1,6 +1,7 @@
 import { api } from "@/lib/api/client";
 
 import {
+  SUGGESTION_LIMIT,
   catalogGalleryDtoSchema,
   catalogListInputSchema,
   catalogPageDtoSchema,
@@ -69,7 +70,7 @@ export async function getSearchSuggestions(
   q: string,
   signal?: AbortSignal,
 ): Promise<SearchSuggestion[]> {
-  const params = suggestionInputSchema.parse({ q });
+  const params = suggestionInputSchema.parse({ q, limit: SUGGESTION_LIMIT });
   const { data } = await api.get<unknown>("/catalog/search/suggestions", {
     params,
     ...withSignal(signal),

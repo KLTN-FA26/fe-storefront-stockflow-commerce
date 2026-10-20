@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/error";
 import { createMockCatalog, seedMockCatalog } from "@/lib/api/mock-fixtures/catalog";
 import { fakeBackend } from "@/test/fake-backend";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
@@ -27,11 +28,11 @@ const suggestionCalls = () =>
   vi.mocked(api.get).mock.calls.filter(([url]) => url === "/catalog/search/suggestions");
 
 describe("CatalogSearchBox", () => {
-  it("stays a plain GET form to /catalog with a q field (works without JS)", () => {
+  it("stays a plain GET form to /search with a q field (works without JS)", () => {
     renderWithProviders(<CatalogSearchBox />);
     const form = screen.getByRole("search");
     expect(form).toHaveAttribute("method", "get");
-    expect(form.getAttribute("action")).toMatch(/\/catalog$/);
+    expect(form.getAttribute("action")).toMatch(/\/search$/);
     expect(box()).toHaveAttribute("name", "q");
   });
 
@@ -75,10 +76,10 @@ describe("CatalogSearchBox", () => {
     expect(push).toHaveBeenCalledWith(expect.stringMatching(/^\/catalog\/products\/ly-giay/));
   });
 
-  it("searches the catalogue for the typed text on submit, URL-encoded", async () => {
+  it("opens the search page for the typed text on submit, URL-encoded", async () => {
     renderWithProviders(<CatalogSearchBox />);
     await userEvent.type(box(), "áo thun{Enter}");
-    expect(push).toHaveBeenCalledWith("/catalog?q=%C3%A1o%20thun");
+    expect(push).toHaveBeenCalledWith("/search?q=%C3%A1o%20thun");
   });
 
   it("closes the completions with Escape", async () => {
@@ -96,6 +97,39 @@ describe("CatalogSearchBox", () => {
     await new Promise((resolve) => setTimeout(resolve, 400));
     expect(suggestionCalls()).toHaveLength(0);
     await userEvent.keyboard("{Enter}");
-    expect(push).toHaveBeenCalledWith("/catalog?q=ly%20giay");
+    expect(push).toHaveBeenCalledWith("/search?q=ly%20giay");
+  });
+
+  it("browses the whole catalogue when submitted empty", async () => {
+    renderWithProviders(<CatalogSearchBox />);
+    await userEvent.type(box(), "{Enter}");
+    expect(push).toHaveBeenCalledWith("/catalog");
+  });
+
+  it("keeps the previous completions when the BE answers 429 RATE_LIMITED (SCRUM-469)", async () => {
+    renderWithProviders(<CatalogSearchBox />);
+    await userEvent.type(box(), "ly giay");
+    await screen.findByRole("option", { name: /Ly giấy 2 lớp 8oz/ });
+
+    vi.mocked(api.get).mockRejectedValueOnce(
+      new ApiError(429, "RATE_LIMITED", "Too many requests", undefined, "corr-1"),
+    );
+    await userEvent.type(box(), " 2");
+    await waitFor(() => expect(suggestionCalls()).toHaveLength(2));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(screen.getByRole("option", { name: /Ly giấy 2 lớp 8oz/ })).toBeInTheDocument();
+    expect(box()).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("drops the completions on any other failure", async () => {
+    renderWithProviders(<CatalogSearchBox />);
+    await userEvent.type(box(), "ly giay");
+    await screen.findByRole("option", { name: /Ly giấy 2 lớp 8oz/ });
+
+    vi.mocked(api.get).mockRejectedValueOnce(new ApiError(500, "INTERNAL_ERROR", "Boom"));
+    await userEvent.type(box(), " 2");
+    await waitFor(() => expect(suggestionCalls()).toHaveLength(2));
+    await waitFor(() => expect(screen.queryByRole("option")).not.toBeInTheDocument());
   });
 });

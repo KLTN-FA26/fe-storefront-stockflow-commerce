@@ -16,8 +16,9 @@ import { useSearchSuggestions } from "../queries";
 
 /**
  * The header search box with title completions (GET /catalog/search/suggestions). Without a
- * session the box still searches (the catalogue page asks to sign in), it just has no
- * completions: the BE answers them to signed-in callers only. Without JS it is a plain GET form.
+ * session the box still searches (the search page asks to sign in), it just has no
+ * completions: the BE answers them to signed-in callers only. Results open on /search?q=; without
+ * JS it is a plain GET form to the same page.
  */
 export function CatalogSearchBox({ className }: { className?: string | undefined }) {
   const router = useRouter();
@@ -27,8 +28,8 @@ export function CatalogSearchBox({ className }: { className?: string | undefined
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const text = useDebouncedValue(value, 250).trim();
-  const { data } = useSearchSuggestions(text, signedIn === true && open);
-  const suggestions = suggestionQueryOf(text) && value.trim() === text ? (data ?? []) : [];
+  const { suggestions: found } = useSearchSuggestions(text, signedIn === true && open);
+  const suggestions = suggestionQueryOf(text) && value.trim() === text ? found : [];
   const expanded = open && suggestions.length > 0;
 
   const go = (href: string) => {
@@ -38,14 +39,14 @@ export function CatalogSearchBox({ className }: { className?: string | undefined
   };
   const search = () => {
     const q = [...value.trim()].slice(0, CATALOG_QUERY_MAX).join("");
-    go(q ? `${STORE_ROUTES.catalog.list}?q=${encodeURIComponent(q)}` : STORE_ROUTES.catalog.list);
+    go(q ? `${STORE_ROUTES.catalog.search}?q=${encodeURIComponent(q)}` : STORE_ROUTES.catalog.list);
   };
 
   return (
     <form
       role="search"
       method="get"
-      action={STORE_ROUTES.catalog.list}
+      action={STORE_ROUTES.catalog.search}
       onSubmit={(event) => {
         event.preventDefault();
         const chosen = suggestions[active];
