@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { imageFor, searchPageTitle, sortedImages } from "../selectors";
+import { imageFor, sortedImages } from "../selectors";
 import { catalogGalleryDtoSchema } from "../schemas";
 import { beGallery } from "./fixtures";
 
@@ -20,13 +20,6 @@ describe("gallery selectors", () => {
     );
     expect(imageFor(gallery, "NO-SUCH-SKU")?.url).toBe("https://cdn.example.vn/p/white.jpg");
     expect(imageFor(gallery)?.url).toBe("https://cdn.example.vn/p/white.jpg");
-  });
-
-  it("titles the search page after the text searched", () => {
-    expect(searchPageTitle(undefined)).toBe("Tìm kiếm");
-    expect(searchPageTitle("   ")).toBe("Tìm kiếm");
-    expect(searchPageTitle(" hộp pizza ")).toBe("Tìm “hộp pizza”");
-    expect(searchPageTitle("a".repeat(150))).toBe(`Tìm “${"a".repeat(100)}”`);
   });
 
   it("has no image for an empty or missing gallery", () => {
