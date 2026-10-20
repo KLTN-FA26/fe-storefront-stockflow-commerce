@@ -10,7 +10,7 @@ import { fakeBackend } from "@/test/fake-backend";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { CatalogScreen } from "../components/catalog-screen";
-import { useCurrentSearch } from "../current-search-store";
+import { readCurrentSearch } from "../current-search-store";
 import { FeaturedProducts } from "../components/featured-products";
 import { toApiSort } from "../sorts";
 
@@ -253,17 +253,29 @@ describe("CatalogScreen on /search (SCRUM-469)", () => {
     const { unmount } = renderWithProviders(<CatalogScreen scope="search" />, {
       searchParams: "?q=hoodie&sort=title",
     });
-    await waitFor(() =>
-      expect(useCurrentSearch.getState().current).toEqual({ q: "hoodie", sort: "title" }),
-    );
+    await waitFor(() => expect(readCurrentSearch()).toEqual({ q: "hoodie", sort: "title" }));
     unmount();
-    expect(useCurrentSearch.getState().current).toBeUndefined();
+    expect(readCurrentSearch()).toBeUndefined();
+  });
+
+  it("tells the header only a sort it accepts, never one the BE would refuse", async () => {
+    renderWithProviders(<CatalogScreen scope="search" />, { searchParams: "?q=ly&sort=price" });
+    await waitFor(() => expect(readCurrentSearch()).toEqual({ q: "ly", sort: undefined }));
+  });
+
+  it("brings a visitor back to the same catalogue page after signing in", () => {
+    signOut();
+    renderWithProviders(<CatalogScreen />, { searchParams: "?page=3&sort=title" });
+    expect(screen.getByRole("link", { name: "Đăng nhập" })).toHaveAttribute(
+      "href",
+      "/login?next=%2Fcatalog%3Fsort%3Dtitle%26page%3D3",
+    );
   });
 
   it("tells the header nothing from the plain catalogue", async () => {
     renderWithProviders(<CatalogScreen />);
     expect(await card("Ly giấy 2 lớp 8oz")).toBeInTheDocument();
-    expect(useCurrentSearch.getState().current).toBeUndefined();
+    expect(readCurrentSearch()).toBeUndefined();
   });
 
   it("treats a blank q as no search text", async () => {

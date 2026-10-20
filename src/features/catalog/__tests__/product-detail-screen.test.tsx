@@ -145,6 +145,10 @@ describe("ProductDetailScreen", () => {
     signOut();
     renderWithProviders(<ProductDetailScreen slug="ly-giay-2-lop-8oz" />);
     expect(await screen.findByText("Đăng nhập để xem sản phẩm")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Đăng nhập" })).toHaveAttribute(
+      "href",
+      "/login?next=%2Fcatalog%2Fproducts%2Fly-giay-2-lop-8oz",
+    );
     expect(api.get).not.toHaveBeenCalled();
   });
 

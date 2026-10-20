@@ -25,14 +25,15 @@ export function CatalogSearchBox({ className }: { className?: string | undefined
   const router = useRouter();
   const listId = useId();
   const signedIn = useSignedIn();
-  const current = useCurrentSearch((state) => state.current);
+  const current = useCurrentSearch();
   const seed = current?.q ?? "";
   const [value, setValue] = useState(seed);
   const [seededWith, setSeededWith] = useState(seed);
   if (seed !== seededWith) {
-    // The URL's text changed (a new search, Back): show it.
+    // The searched text changed (a new search, Back, leaving /search): follow it, unless the
+    // customer is typing something else, which is kept.
     setSeededWith(seed);
-    setValue(seed);
+    if (value === seededWith) setValue(seed);
   }
   const [open, setOpen] = useState(false);
   const { suggestions, active, setActive } = useCompletions(value, signedIn === true && open);
@@ -87,7 +88,8 @@ export function CatalogSearchBox({ className }: { className?: string | undefined
           setOpen(true);
           setActive(-1);
         }}
-        onFocus={() => setOpen(true)}
+        // The text already searched needs no completions: they open once it is edited.
+        onFocus={() => setOpen(value.trim() !== seed.trim())}
         onKeyDown={(event) => {
           if (event.key === "Escape") setOpen(false);
           else if (event.key === "ArrowDown" && suggestions.length > 0) {

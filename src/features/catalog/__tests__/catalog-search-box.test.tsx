@@ -9,7 +9,7 @@ import { fakeBackend } from "@/test/fake-backend";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { CatalogSearchBox } from "../components/catalog-search-box";
-import { useCurrentSearch } from "../current-search-store";
+import { publishCurrentSearch } from "../current-search-store";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
@@ -22,7 +22,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   signOut();
-  useCurrentSearch.setState({ current: undefined });
+  publishCurrentSearch(undefined);
 });
 
 const box = () => screen.getByRole("combobox", { name: "Tìm sản phẩm" });
@@ -169,18 +169,40 @@ describe("CatalogSearchBox", () => {
   });
 
   it("shows the current search on /search and keeps its sort when the text changes", async () => {
-    useCurrentSearch.setState({ current: { q: "hoodie", sort: "title" } });
+    publishCurrentSearch({ q: "hoodie", sort: "title" });
     renderWithProviders(<CatalogSearchBox />);
     expect(box()).toHaveValue("hoodie");
     await userEvent.type(box(), " den{Enter}");
     expect(push).toHaveBeenCalledWith("/search?q=hoodie%20den&sort=title");
 
-    act(() => useCurrentSearch.setState({ current: { q: "ao thun" } }));
+    // /search now shows the text sent; Back to another search is followed too.
+    act(() => publishCurrentSearch({ q: "hoodie den", sort: "title" }));
+    act(() => publishCurrentSearch({ q: "ao thun" }));
     expect(box()).toHaveValue("ao thun");
   });
 
+  it("keeps what the customer is typing when the search page changes or is left", async () => {
+    publishCurrentSearch({ q: "hoodie" });
+    renderWithProviders(<CatalogSearchBox />);
+    await userEvent.type(box(), " den");
+    act(() => publishCurrentSearch(undefined));
+    expect(box()).toHaveValue("hoodie den");
+  });
+
+  it("does not pop completions for the text already searched just because the box is focused", async () => {
+    publishCurrentSearch({ q: "ly giay" });
+    renderWithProviders(<CatalogSearchBox />);
+    await userEvent.click(box());
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(suggestionCalls()).toHaveLength(0);
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
+
+    await userEvent.type(box(), " 2");
+    expect(await screen.findAllByRole("option")).not.toHaveLength(0);
+  });
+
   it("stays on /search when submitted empty there", async () => {
-    useCurrentSearch.setState({ current: { q: "hoodie" } });
+    publishCurrentSearch({ q: "hoodie" });
     renderWithProviders(<CatalogSearchBox />);
     await userEvent.clear(box());
     await userEvent.keyboard("{Enter}");

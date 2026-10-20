@@ -8,7 +8,7 @@ import { ListPagination } from "@/components/storefront/list-pagination";
 import { ProductGrid, type ProductGridItem } from "@/components/storefront/product-grid";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 
-import { useCurrentSearch } from "../current-search-store";
+import { publishCurrentSearch } from "../current-search-store";
 import { CATALOG_QUERY_MAX } from "../schemas";
 import { badgeStatus } from "@/lib/catalog/selectors";
 
@@ -75,12 +75,15 @@ export function CatalogScreen({ scope = "catalog" }: { scope?: "catalog" | "sear
   );
   const { data, isPending, isFetching, isPlaceholderData, error, refetch } = result;
 
-  // Tell the header box what /search shows (text and sort), and nothing once the page is left.
+  // Tell the header box what /search shows (the text, a sort the BE accepts), and nothing once
+  // the page is left.
+  const shownSort = sort === "default" ? undefined : sort;
   useEffect(() => {
     if (scope !== "search") return;
-    useCurrentSearch.setState({ current: { q: query, sort: rawSort ?? undefined } });
-    return () => useCurrentSearch.setState({ current: undefined });
-  }, [scope, query, rawSort]);
+    publishCurrentSearch({ q: query, sort: shownSort });
+    return () => publishCurrentSearch(undefined);
+  }, [scope, query, shownSort]);
+
   // `relevance` means newest without a search text; drop it when the text goes away.
   useEffect(() => {
     if (!query && sort === "relevance") void setSort(null, { history: "replace" });

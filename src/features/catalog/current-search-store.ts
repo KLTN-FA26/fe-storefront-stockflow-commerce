@@ -1,16 +1,28 @@
-import { create } from "zustand";
+import { useStore } from "zustand";
+import { createStore } from "zustand/vanilla";
 
-/** What /search is showing (its q and sort); undefined on every other page. */
+/** What /search is showing: its text and a sort the BE accepts. */
 export interface CurrentSearch {
   q?: string | undefined;
   sort?: string | undefined;
 }
 
 /**
- * The search page tells the header search box what it shows, so the box can show the text and
- * keep the sort. The header lives in the layout: reading the URL there would need
- * useSearchParams under Suspense, which kept the desktop box on its empty fallback on /search.
+ * The URL stays the only source of the search state (nuqs on /search). This is a read-only
+ * projection of it for the header search box: the header lives in the layout, and reading the
+ * URL there needs useSearchParams under Suspense, which kept the desktop box on its empty
+ * fallback on /search. The search page is the only writer (publishCurrentSearch).
  */
-export const useCurrentSearch = create<{ current: CurrentSearch | undefined }>(() => ({
-  current: undefined,
-}));
+const store = createStore<{ current: CurrentSearch | undefined }>(() => ({ current: undefined }));
+
+/** Called by CatalogScreen on /search with what it shows, and with undefined when it is left. */
+export function publishCurrentSearch(current: CurrentSearch | undefined) {
+  store.setState({ current });
+}
+
+/** What /search shows, or undefined on every other page. */
+export function useCurrentSearch(): CurrentSearch | undefined {
+  return useStore(store, (state) => state.current);
+}
+
+export const readCurrentSearch = () => store.getState().current;

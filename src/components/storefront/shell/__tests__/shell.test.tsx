@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { defaultTrustItems } from "@/components/storefront/layout";
 import { StorefrontShell } from "@/components/storefront/storefront-shell";
-import { useCurrentSearch } from "@/features/catalog/current-search-store";
+import { publishCurrentSearch } from "@/features/catalog/current-search-store";
 
 import { HeaderSearch } from "../header-search";
 import { categoryLinks, paymentMethods } from "../nav-config";
@@ -39,10 +39,10 @@ describe("HeaderSearch", () => {
 });
 
 describe("HeaderSearch on /search", () => {
-  afterEach(() => useCurrentSearch.setState({ current: undefined }));
+  afterEach(() => publishCurrentSearch(undefined));
 
   it("shows the text the search page is showing", () => {
-    useCurrentSearch.setState({ current: { q: "hoodie", sort: "title" } });
+    publishCurrentSearch({ q: "hoodie", sort: "title" });
     render(<HeaderSearch />);
     expect(screen.getByRole("combobox", { name: "Tìm sản phẩm" })).toHaveValue("hoodie");
   });
