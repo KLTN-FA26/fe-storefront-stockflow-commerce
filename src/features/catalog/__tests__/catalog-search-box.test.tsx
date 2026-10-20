@@ -86,6 +86,22 @@ describe("CatalogSearchBox", () => {
     expect(push).toHaveBeenCalledWith("/search?q=%C3%A1o%20thun");
   });
 
+  it("searches the typed text on Enter after Escape, not the option highlighted before", async () => {
+    renderWithProviders(<CatalogSearchBox />);
+    await userEvent.type(box(), "ly giay");
+    await screen.findAllByRole("option");
+    await userEvent.keyboard("{ArrowDown}{Escape}{Enter}");
+    expect(push).toHaveBeenCalledWith("/search?q=ly%20giay");
+  });
+
+  it("does not move a highlight in a closed list with ArrowUp", async () => {
+    renderWithProviders(<CatalogSearchBox />);
+    await userEvent.type(box(), "ly giay");
+    await screen.findAllByRole("option");
+    await userEvent.keyboard("{Escape}{ArrowUp}{Enter}");
+    expect(push).toHaveBeenCalledWith("/search?q=ly%20giay");
+  });
+
   it("closes the completions with Escape", async () => {
     renderWithProviders(<CatalogSearchBox />);
     await userEvent.type(box(), "ly giay");
@@ -247,6 +263,23 @@ describe("CatalogSearchBox", () => {
     await userEvent.clear(box());
     await userEvent.keyboard("{Enter}");
     expect(push).toHaveBeenCalledWith("/search");
+  });
+
+  it("keeps no completions of an unrelated earlier text on a 429", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderWithProviders(<CatalogSearchBox />);
+    await userEvent.type(box(), "ly giay");
+    await screen.findByRole("option", { name: /Ly giấy 2 lớp 8oz/ });
+    const limited = new ApiError(429, "RATE_LIMITED", "Too many requests", undefined, "corr-1");
+    vi.mocked(api.get).mockRejectedValueOnce(limited).mockRejectedValueOnce(limited);
+
+    await userEvent.clear(box());
+    await userEvent.type(box(), "hop");
+    await waitFor(() => expect(suggestionCalls()).toHaveLength(2));
+    expect(screen.queryAllByRole("option")).toHaveLength(0); // not while the retry waits
+    await act(() => vi.advanceTimersByTimeAsync(SUGGESTION_RETRY_AFTER_MS));
+    await waitFor(() => expect(suggestionCalls()).toHaveLength(3));
+    expect(screen.queryAllByRole("option")).toHaveLength(0); // nor once it is refused too
   });
 
   it("drops the completions on any other failure", async () => {

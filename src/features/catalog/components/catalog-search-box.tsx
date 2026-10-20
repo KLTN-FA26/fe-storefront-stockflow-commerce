@@ -58,7 +58,8 @@ export function CatalogSearchBox({ className }: { className?: string | undefined
       action={STORE_ROUTES.catalog.search}
       onSubmit={(event) => {
         event.preventDefault();
-        const chosen = suggestions[active];
+        // Only an option the customer can see: after Escape or a blur, Enter searches the text.
+        const chosen = expanded ? suggestions[active] : undefined;
         if (chosen) go(STORE_ROUTES.catalog.detail(chosen.slug));
         else search();
       }}
@@ -91,13 +92,15 @@ export function CatalogSearchBox({ className }: { className?: string | undefined
         // The text already searched needs no completions: they open once it is edited.
         onFocus={() => setOpen(value.trim() !== seed.trim())}
         onKeyDown={(event) => {
-          if (event.key === "Escape") setOpen(false);
-          else if (event.key === "ArrowDown" && (!open || suggestions.length > 0)) {
+          if (event.key === "Escape") {
+            setOpen(false);
+            setActive(-1);
+          } else if (event.key === "ArrowDown" && (!open || suggestions.length > 0)) {
             // A closed box opens first (e.g. the text shown on /search), then moves down the list.
             event.preventDefault();
             if (!open) setOpen(true);
             else setActive((i) => (i + 1) % suggestions.length);
-          } else if (event.key === "ArrowUp" && suggestions.length > 0) {
+          } else if (event.key === "ArrowUp" && expanded) {
             event.preventDefault();
             setActive((i) => (i <= 0 ? suggestions.length - 1 : i - 1));
           }
