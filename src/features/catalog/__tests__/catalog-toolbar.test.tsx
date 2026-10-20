@@ -44,6 +44,13 @@ describe("CatalogToolbar count", () => {
     expect(screen.queryByText(/mới nhất/)).not.toBeInTheDocument();
   });
 
+  it("keeps the note out of the sticky bar, so the bar stays one block tall on phones", () => {
+    toolbar(500, "hộp");
+    const note = screen.getByText(/500 kết quả khớp nhất/);
+    expect(note.closest(".sticky")).toBeNull();
+    expect(screen.getByText(/sản phẩm phù hợp/).closest(".sticky")).not.toBeNull();
+  });
+
   it("is not a second status region: the grid skeleton already announces loading", () => {
     toolbar(undefined);
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
