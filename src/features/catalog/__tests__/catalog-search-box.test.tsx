@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -9,6 +9,7 @@ import { fakeBackend } from "@/test/fake-backend";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { CatalogSearchBox } from "../components/catalog-search-box";
+import { useCurrentSearch } from "../current-search-store";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
@@ -21,6 +22,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   signOut();
+  useCurrentSearch.setState({ current: undefined });
 });
 
 const box = () => screen.getByRole("combobox", { name: "Tìm sản phẩm" });
@@ -120,6 +122,69 @@ describe("CatalogSearchBox", () => {
 
     expect(screen.getByRole("option", { name: /Ly giấy 2 lớp 8oz/ })).toBeInTheDocument();
     expect(box()).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("asks once more after Retry-After (≈1 s) when the BE answers 429, and shows the new answer", async () => {
+    renderWithProviders(<CatalogSearchBox />);
+    vi.mocked(api.get).mockRejectedValueOnce(
+      new ApiError(429, "RATE_LIMITED", "Too many requests", undefined, "corr-1"),
+    );
+    await userEvent.type(box(), "ly giay 2 lop 8");
+    await waitFor(() => expect(suggestionCalls()).toHaveLength(2), { timeout: 3000 });
+    expect(await screen.findByRole("option", { name: /Ly giấy 2 lớp 8oz/ })).toBeInTheDocument();
+  });
+
+  it("keeps the last completions when the retry is refused too", async () => {
+    renderWithProviders(<CatalogSearchBox />);
+    await userEvent.type(box(), "ly giay");
+    await screen.findByRole("option", { name: /Ly giấy 2 lớp 12oz/ });
+    const limited = new ApiError(429, "RATE_LIMITED", "Too many requests", undefined, "corr-1");
+    vi.mocked(api.get).mockRejectedValueOnce(limited).mockRejectedValueOnce(limited);
+    await userEvent.type(box(), " 2 lop 8");
+    await waitFor(() => expect(suggestionCalls()).toHaveLength(3), { timeout: 3000 });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.getByRole("option", { name: /Ly giấy 2 lớp 12oz/ })).toBeInTheDocument();
+  });
+
+  it("forgets the highlighted completion when a new list arrives", async () => {
+    renderWithProviders(<CatalogSearchBox />);
+    await userEvent.type(box(), "ly giay");
+    expect(await screen.findAllByRole("option")).toHaveLength(4);
+
+    // The next answer is held back: the previous 4 stay on screen meanwhile and get highlighted.
+    let answer: (value: unknown) => void = () => {};
+    vi.mocked(api.get).mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+    await userEvent.type(box(), " 2 lop 8");
+    await waitFor(() => expect(suggestionCalls()).toHaveLength(2));
+    await userEvent.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}");
+    expect(screen.getAllByRole("option")[3]).toHaveAttribute("aria-selected", "true");
+
+    answer({ data: [{ title: "Ly giấy 2 lớp 8oz", slug: "ly-giay-2-lop-8oz", sku: "CUP-1" }] });
+    await waitFor(() => expect(screen.getAllByRole("option")).toHaveLength(1));
+
+    expect(screen.getByRole("option")).toHaveAttribute("aria-selected", "false");
+    expect(box()).not.toHaveAttribute("aria-activedescendant");
+    await userEvent.keyboard("{Enter}");
+    expect(push).toHaveBeenCalledWith("/search?q=ly%20giay%202%20lop%208");
+  });
+
+  it("shows the current search on /search and keeps its sort when the text changes", async () => {
+    useCurrentSearch.setState({ current: { q: "hoodie", sort: "title" } });
+    renderWithProviders(<CatalogSearchBox />);
+    expect(box()).toHaveValue("hoodie");
+    await userEvent.type(box(), " den{Enter}");
+    expect(push).toHaveBeenCalledWith("/search?q=hoodie%20den&sort=title");
+
+    act(() => useCurrentSearch.setState({ current: { q: "ao thun" } }));
+    expect(box()).toHaveValue("ao thun");
+  });
+
+  it("stays on /search when submitted empty there", async () => {
+    useCurrentSearch.setState({ current: { q: "hoodie" } });
+    renderWithProviders(<CatalogSearchBox />);
+    await userEvent.clear(box());
+    await userEvent.keyboard("{Enter}");
+    expect(push).toHaveBeenCalledWith("/search");
   });
 
   it("drops the completions on any other failure", async () => {

@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render as rtlRender, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { defaultTrustItems } from "@/components/storefront/layout";
 import { StorefrontShell } from "@/components/storefront/storefront-shell";
+import { useCurrentSearch } from "@/features/catalog/current-search-store";
 
 import { HeaderSearch } from "../header-search";
 import { categoryLinks, paymentMethods } from "../nav-config";
@@ -34,6 +35,21 @@ describe("HeaderSearch", () => {
     expect(form).toHaveAttribute("method", "get");
     expect(screen.getByRole("combobox", { name: "Tìm sản phẩm" })).toHaveAttribute("name", "q");
     expect(screen.getByRole("button", { name: "Tìm kiếm" })).toHaveAttribute("type", "submit");
+  });
+});
+
+describe("HeaderSearch on /search", () => {
+  afterEach(() => useCurrentSearch.setState({ current: undefined }));
+
+  it("shows the text the search page is showing", () => {
+    useCurrentSearch.setState({ current: { q: "hoodie", sort: "title" } });
+    render(<HeaderSearch />);
+    expect(screen.getByRole("combobox", { name: "Tìm sản phẩm" })).toHaveValue("hoodie");
+  });
+
+  it("starts empty anywhere else", () => {
+    render(<HeaderSearch />);
+    expect(screen.getByRole("combobox", { name: "Tìm sản phẩm" })).toHaveValue("");
   });
 });
 

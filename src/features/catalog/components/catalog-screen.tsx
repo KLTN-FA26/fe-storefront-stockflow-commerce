@@ -8,6 +8,7 @@ import { ListPagination } from "@/components/storefront/list-pagination";
 import { ProductGrid, type ProductGridItem } from "@/components/storefront/product-grid";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 
+import { useCurrentSearch } from "../current-search-store";
 import { CATALOG_QUERY_MAX } from "../schemas";
 import { badgeStatus } from "@/lib/catalog/selectors";
 
@@ -39,6 +40,16 @@ export function toGridItem(item: CatalogListingItem): ProductGridItem {
   };
 }
 
+/** This list's own URL, to come back to after signing in. */
+function here(scope: "catalog" | "search", q: string | undefined, sort: CatalogSort, page: number) {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (sort !== "default") params.set("sort", sort);
+  if (page > 1) params.set("page", String(page));
+  const path = scope === "search" ? STORE_ROUTES.catalog.search : STORE_ROUTES.catalog.list;
+  return params.size ? `${path}?${params}` : path;
+}
+
 /**
  * The product list. `scope="search"` is /search?q= (SCRUM-469): without a text it asks for one
  * and calls nothing; `/catalog?q=` redirects there (next.config.ts).
@@ -64,6 +75,12 @@ export function CatalogScreen({ scope = "catalog" }: { scope?: "catalog" | "sear
   );
   const { data, isPending, isFetching, isPlaceholderData, error, refetch } = result;
 
+  // Tell the header box what /search shows (text and sort), and nothing once the page is left.
+  useEffect(() => {
+    if (scope !== "search") return;
+    useCurrentSearch.setState({ current: { q: query, sort: rawSort ?? undefined } });
+    return () => useCurrentSearch.setState({ current: undefined });
+  }, [scope, query, rawSort]);
   // `relevance` means newest without a search text; drop it when the text goes away.
   useEffect(() => {
     if (!query && sort === "relevance") void setSort(null, { history: "replace" });
@@ -77,7 +94,7 @@ export function CatalogScreen({ scope = "catalog" }: { scope?: "catalog" | "sear
   }, [urlPage, page, data, isPlaceholderData, setPage]);
 
   if (signedIn === undefined) return <CatalogGridSkeleton />;
-  if (!signedIn) return <SignInRequired />;
+  if (!signedIn) return <SignInRequired from={here(scope, query, sort, page)} />;
   if (awaitingText) return <SearchPrompt />;
 
   return (

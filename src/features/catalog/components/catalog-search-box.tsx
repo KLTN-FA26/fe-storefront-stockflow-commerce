@@ -6,39 +6,36 @@ import { Search } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
 import { cn } from "@/lib/cn";
-import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { hasErrorCode } from "@/lib/api/describe-error";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-import { CATALOG_QUERY_MAX, suggestionQueryOf } from "../schemas";
-import { useSearchSuggestions } from "../queries";
-import type { SearchSuggestion } from "../types";
-
-const NO_SUGGESTIONS: SearchSuggestion[] = [];
+import { useCurrentSearch } from "../current-search-store";
+import { CATALOG_QUERY_MAX } from "../schemas";
+import { useCompletions } from "../use-completions";
 
 /**
  * The header search box with title completions (GET /catalog/search/suggestions). Without a
  * session the box still searches (the search page asks to sign in), it just has no
  * completions: the BE answers them to signed-in callers only. Results open on /search?q=; without
- * JS it is a plain GET form to the same page.
+ * JS it is a plain GET form to the same page. On /search it shows the text searched (the page
+ * tells it, see current-search-store), and a new text keeps the chosen sort.
  */
 export function CatalogSearchBox({ className }: { className?: string | undefined }) {
   const router = useRouter();
   const listId = useId();
   const signedIn = useSignedIn();
-  const [value, setValue] = useState("");
+  const current = useCurrentSearch((state) => state.current);
+  const seed = current?.q ?? "";
+  const [value, setValue] = useState(seed);
+  const [seededWith, setSeededWith] = useState(seed);
+  if (seed !== seededWith) {
+    // The URL's text changed (a new search, Back): show it.
+    setSeededWith(seed);
+    setValue(seed);
+  }
   const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(-1);
-  const text = useDebouncedValue(value, 250).trim();
-  const { data, error, isPlaceholderData } = useSearchSuggestions(text, signedIn === true && open);
-  // Past 30 calls per 10 s the BE answers 429 RATE_LIMITED: keep the last list it answered
-  // (SCRUM-469; contract in the SCRUM-170 comment). Any other failure shows none.
-  const [held, setHeld] = useState<SearchSuggestion[]>(NO_SUGGESTIONS);
-  if (data && !isPlaceholderData && data !== held) setHeld(data);
-  const found = data ?? (hasErrorCode(error, "RATE_LIMITED") ? held : NO_SUGGESTIONS);
-  const suggestions = suggestionQueryOf(text) && value.trim() === text ? found : [];
+  const { suggestions, active, setActive } = useCompletions(value, signedIn === true && open);
   const expanded = open && suggestions.length > 0;
 
   const go = (href: string) => {
@@ -48,7 +45,9 @@ export function CatalogSearchBox({ className }: { className?: string | undefined
   };
   const search = () => {
     const q = [...value.trim()].slice(0, CATALOG_QUERY_MAX).join("");
-    go(q ? `${STORE_ROUTES.catalog.search}?q=${encodeURIComponent(q)}` : STORE_ROUTES.catalog.list);
+    if (!q) return go(current ? STORE_ROUTES.catalog.search : STORE_ROUTES.catalog.list);
+    const sort = current?.sort ? `&sort=${encodeURIComponent(current.sort)}` : "";
+    go(`${STORE_ROUTES.catalog.search}?q=${encodeURIComponent(q)}${sort}`);
   };
 
   return (

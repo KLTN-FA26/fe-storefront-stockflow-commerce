@@ -62,7 +62,7 @@ export function ProductDetailScreen({ slug }: { slug: string }) {
   if (!signedIn) {
     return (
       <PageShell breadcrumbs={crumbs()}>
-        <SignInRequired />
+        <SignInRequired from={STORE_ROUTES.catalog.detail(slug)} />
       </PageShell>
     );
   }

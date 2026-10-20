@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 
-import { APP_ROUTES, STORE_ROUTES } from "@/constants";
+import { STORE_ROUTES } from "@/constants";
+import { loginUrl } from "@/lib/auth/safe-next";
 import { Alert, EmptyState, Skeleton } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 
@@ -23,15 +24,18 @@ export function CatalogGridSkeleton({ count = 8 }: { count?: number }) {
   );
 }
 
-/** The catalogue is behind a login: no price or stock for a visitor (kltn-docs 13 BR-02). */
-export function SignInRequired() {
+/**
+ * The catalogue is behind a login: no price or stock for a visitor (kltn-docs 13 BR-02).
+ * `from` is where to come back after signing in (the search, the product), as `/login?next=`.
+ */
+export function SignInRequired({ from }: { from?: string | undefined }) {
   return (
     <EmptyState
       title="Đăng nhập để xem sản phẩm"
       description="Cổng khách hàng chỉ dành cho khách sỉ đã được cấp tài khoản. Đăng nhập để xem sản phẩm, giá riêng và tình trạng còn hàng."
       action={
         <Button asChild className="min-h-11 rounded-[var(--r-md)] px-5">
-          <Link href={APP_ROUTES.login}>Đăng nhập</Link>
+          <Link href={loginUrl(from)}>Đăng nhập</Link>
         </Button>
       }
     />

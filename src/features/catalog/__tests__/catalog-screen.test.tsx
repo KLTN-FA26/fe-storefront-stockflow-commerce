@@ -10,6 +10,7 @@ import { fakeBackend } from "@/test/fake-backend";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { CatalogScreen } from "../components/catalog-screen";
+import { useCurrentSearch } from "../current-search-store";
 import { FeaturedProducts } from "../components/featured-products";
 import { toApiSort } from "../sorts";
 
@@ -93,7 +94,10 @@ describe("CatalogScreen", () => {
     signOut();
     renderWithProviders(<CatalogScreen />);
     expect(await screen.findByText("Đăng nhập để xem sản phẩm")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Đăng nhập" })).toHaveAttribute("href", "/login");
+    expect(screen.getByRole("link", { name: "Đăng nhập" })).toHaveAttribute(
+      "href",
+      "/login?next=%2Fcatalog",
+    );
     expect(api.get).not.toHaveBeenCalled();
   });
 
@@ -229,6 +233,37 @@ describe("CatalogScreen on /search (SCRUM-469)", () => {
       "/catalog",
     );
     expect(listCalls()).toHaveLength(0);
+  });
+
+  it("signs a visitor in and brings them back to the same search", async () => {
+    signOut();
+    renderWithProviders(<CatalogScreen scope="search" />, {
+      searchParams: "?q=h%E1%BB%99p%20pizza&sort=title",
+    });
+    const href = screen.getByRole("link", { name: "Đăng nhập" }).getAttribute("href") ?? "";
+    const next = new URL(href, "http://shop.test").searchParams.get("next");
+    expect(new URL(next ?? "", "http://shop.test")).toMatchObject({
+      pathname: "/search",
+      search: "?q=h%E1%BB%99p+pizza&sort=title",
+    });
+    expect(listCalls()).toHaveLength(0);
+  });
+
+  it("tells the header box what it shows, and forgets it when left", async () => {
+    const { unmount } = renderWithProviders(<CatalogScreen scope="search" />, {
+      searchParams: "?q=hoodie&sort=title",
+    });
+    await waitFor(() =>
+      expect(useCurrentSearch.getState().current).toEqual({ q: "hoodie", sort: "title" }),
+    );
+    unmount();
+    expect(useCurrentSearch.getState().current).toBeUndefined();
+  });
+
+  it("tells the header nothing from the plain catalogue", async () => {
+    renderWithProviders(<CatalogScreen />);
+    expect(await card("Ly giấy 2 lớp 8oz")).toBeInTheDocument();
+    expect(useCurrentSearch.getState().current).toBeUndefined();
   });
 
   it("treats a blank q as no search text", async () => {
