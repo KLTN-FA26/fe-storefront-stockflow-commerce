@@ -6,29 +6,37 @@ import { Search } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
 import { cn } from "@/lib/cn";
-import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-import { CATALOG_QUERY_MAX, suggestionQueryOf } from "../schemas";
-import { useSearchSuggestions } from "../queries";
+import { useCurrentSearch } from "../current-search-store";
+import { CATALOG_QUERY_MAX } from "../schemas";
+import { useCompletions } from "../use-completions";
 
 /**
  * The header search box with title completions (GET /catalog/search/suggestions). Without a
- * session the box still searches (the catalogue page asks to sign in), it just has no
- * completions: the BE answers them to signed-in callers only. Without JS it is a plain GET form.
+ * session the box still searches (the search page asks to sign in), it just has no
+ * completions: the BE answers them to signed-in callers only. Results open on /search?q=; without
+ * JS it is a plain GET form to the same page. On /search it shows the text searched (the page
+ * tells it, see current-search-store), and a new text keeps the chosen sort.
  */
 export function CatalogSearchBox({ className }: { className?: string | undefined }) {
   const router = useRouter();
   const listId = useId();
   const signedIn = useSignedIn();
-  const [value, setValue] = useState("");
+  const current = useCurrentSearch();
+  const seed = current?.q ?? "";
+  const [value, setValue] = useState(seed);
+  const [seededWith, setSeededWith] = useState(seed);
+  if (seed !== seededWith) {
+    // The page shows another search (a submit, a link, Back): show its text. Leaving /search or
+    // clearing the text only empties the box if the customer had not typed something else.
+    setSeededWith(seed);
+    if (seed || value === seededWith) setValue(seed);
+  }
   const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(-1);
-  const text = useDebouncedValue(value, 250).trim();
-  const { data } = useSearchSuggestions(text, signedIn === true && open);
-  const suggestions = suggestionQueryOf(text) && value.trim() === text ? (data ?? []) : [];
+  const { suggestions, active, setActive } = useCompletions(value, signedIn === true && open);
   const expanded = open && suggestions.length > 0;
 
   const go = (href: string) => {
@@ -38,17 +46,20 @@ export function CatalogSearchBox({ className }: { className?: string | undefined
   };
   const search = () => {
     const q = [...value.trim()].slice(0, CATALOG_QUERY_MAX).join("");
-    go(q ? `${STORE_ROUTES.catalog.list}?q=${encodeURIComponent(q)}` : STORE_ROUTES.catalog.list);
+    if (!q) return go(current ? STORE_ROUTES.catalog.search : STORE_ROUTES.catalog.list);
+    const sort = current?.sort ? `&sort=${encodeURIComponent(current.sort)}` : "";
+    go(`${STORE_ROUTES.catalog.search}?q=${encodeURIComponent(q)}${sort}`);
   };
 
   return (
     <form
       role="search"
       method="get"
-      action={STORE_ROUTES.catalog.list}
+      action={STORE_ROUTES.catalog.search}
       onSubmit={(event) => {
         event.preventDefault();
-        const chosen = suggestions[active];
+        // Only an option the customer can see: after Escape or a blur, Enter searches the text.
+        const chosen = expanded ? suggestions[active] : undefined;
         if (chosen) go(STORE_ROUTES.catalog.detail(chosen.slug));
         else search();
       }}
@@ -78,14 +89,20 @@ export function CatalogSearchBox({ className }: { className?: string | undefined
           setOpen(true);
           setActive(-1);
         }}
-        onFocus={() => setOpen(true)}
+        // The text already searched needs no completions: they open once it is edited.
+        onFocus={() => setOpen(value.trim() !== seed.trim())}
         onKeyDown={(event) => {
-          if (event.key === "Escape") setOpen(false);
-          else if (event.key === "ArrowDown" && suggestions.length > 0) {
+          if (event.key === "Escape") {
+            // A search field clears itself on Escape: the first Escape only closes the list.
+            if (expanded) event.preventDefault();
+            setOpen(false);
+            setActive(-1);
+          } else if (event.key === "ArrowDown" && (!open || suggestions.length > 0)) {
+            // A closed box opens first (e.g. the text shown on /search), then moves down the list.
             event.preventDefault();
-            setOpen(true);
-            setActive((i) => (i + 1) % suggestions.length);
-          } else if (event.key === "ArrowUp" && suggestions.length > 0) {
+            if (!open) setOpen(true);
+            else setActive((i) => (i + 1) % suggestions.length);
+          } else if (event.key === "ArrowUp" && expanded) {
             event.preventDefault();
             setActive((i) => (i <= 0 ? suggestions.length - 1 : i - 1));
           }
@@ -109,7 +126,7 @@ export function CatalogSearchBox({ className }: { className?: string | undefined
       >
         {suggestions.map((suggestion, index) => (
           <li
-            key={`${suggestion.slug}-${suggestion.sku}`}
+            key={`${suggestion.slug}-${suggestion.sku ?? ""}`}
             id={`${listId}-${index}`}
             role="option"
             aria-selected={index === active}
@@ -121,7 +138,9 @@ export function CatalogSearchBox({ className }: { className?: string | undefined
             onClick={() => go(STORE_ROUTES.catalog.detail(suggestion.slug))}
           >
             <span className="text-ink-primary truncate">{suggestion.title}</span>
-            <span className="text-ink-tertiary shrink-0 font-mono text-xs">{suggestion.sku}</span>
+            {suggestion.sku ? (
+              <span className="text-ink-tertiary shrink-0 font-mono text-xs">{suggestion.sku}</span>
+            ) : null}
           </li>
         ))}
       </ul>

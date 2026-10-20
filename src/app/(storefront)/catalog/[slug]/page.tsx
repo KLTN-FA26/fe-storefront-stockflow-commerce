@@ -1,15 +1,12 @@
-import { ProductDetailScreen } from "@/features/catalog";
+import { redirect } from "next/navigation";
 
-/** Route params arrive percent-encoded for non-ASCII slugs; a stray `%` must not crash the page. */
-function readSlug(raw: string) {
-  try {
-    return decodeURIComponent(raw);
-  } catch {
-    return raw;
-  }
-}
+import { STORE_ROUTES } from "@/constants";
 
-export default async function ProductDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+/**
+ * Old product URL: the page moved to /catalog/products/{slug}, the BE path (SCRUM-469). Any
+ * static /catalog/<page> takes precedence over this dynamic segment.
+ */
+export default async function LegacyProductPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  return <ProductDetailScreen slug={readSlug(slug)} />;
+  redirect(STORE_ROUTES.catalog.detail(slug));
 }

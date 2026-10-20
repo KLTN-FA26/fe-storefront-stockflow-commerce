@@ -2,13 +2,15 @@ import { z } from "zod";
 
 import { pageResponseSchema } from "@/lib/api/page-response";
 import { availabilitySchema, currencySchema } from "@/lib/catalog/schemas";
+import { beId } from "@/lib/validation/primitives";
 
 // Jackson runs with `default-property-inclusion: non_null`: a nullable field is absent from the
 // JSON, not null, so every optional field is `.nullish()`.
+// Ids are beId() (any 8-4-4-4-12 hex): the dev catalogue has ids without RFC version/variant bits.
 
 /** One row of GET /catalog/products (CatalogCardResponse): no image, SKU, price or stock. */
 export const catalogCardDtoSchema = z.object({
-  productId: z.uuid(),
+  productId: beId(),
   slug: z.string().min(1),
   title: z.string().min(1),
   seoTitle: z.string().nullish(),
@@ -26,7 +28,7 @@ export const catalogVariantDtoSchema = z.object({
 
 /** GET /catalog/products/{slug} (CatalogProductResponse). */
 export const catalogProductDtoSchema = z.object({
-  productId: z.uuid(),
+  productId: beId(),
   slug: z.string().min(1),
   title: z.string().min(1),
   description: z.string().nullish(),
@@ -37,8 +39,8 @@ export const catalogProductDtoSchema = z.object({
 });
 
 export const galleryImageDtoSchema = z.object({
-  id: z.uuid(),
-  variantId: z.uuid().nullish(),
+  id: beId(),
+  variantId: beId().nullish(),
   sku: z.string().nullish(),
   // Public canonical media URL (absolute), not a private storage key.
   url: z.string().min(1),
@@ -50,11 +52,14 @@ export const galleryImageDtoSchema = z.object({
 /** GET /catalog/products/{slug}/gallery (CatalogGalleryResponse). */
 export const catalogGalleryDtoSchema = z.object({ images: z.array(galleryImageDtoSchema) });
 
-/** GET /catalog/search/suggestions (SearchSuggestionResponse). */
+/**
+ * GET /catalog/search/suggestions (SearchSuggestionResponse). `sku` is the SKU the text matched,
+ * else the listing's first published one; with none published it is null, so absent (non_null).
+ */
 export const searchSuggestionDtoSchema = z.object({
   title: z.string().min(1),
   slug: z.string().min(1),
-  sku: z.string().min(1),
+  sku: z.string().min(1).nullish(),
 });
 export const searchSuggestionsDtoSchema = z.array(searchSuggestionDtoSchema);
 
@@ -65,6 +70,10 @@ export const CATALOG_QUERY_MAX = 100; // BE: longer text is 400 VALIDATION_FAILE
 export const CATALOG_PAGE_SIZE_MAX = 200; // BE Pages.MAX_PAGE_SIZE
 export const SUGGESTION_MIN_LENGTH = 2; // BE CatalogSearchService.MIN_SUGGEST_LENGTH
 export const SUGGESTION_LIMIT_MAX = 10;
+export const SUGGESTION_LIMIT = 5; // SCRUM-469: the header box shows 5 completions
+// BE stockflow.catalog.search.ranking-window: list and search rank and page only this many, so a
+// total equal to it means "at least". ASSUMPTION: the BE keeps its default (500, SCRUM-170).
+export const CATALOG_RESULT_WINDOW = 500;
 
 /** The BE counts code points (`codePointCount`), not UTF-16 units: an emoji or a decomposed accent is not two. */
 export const codePointLength = (text: string) => [...text].length;

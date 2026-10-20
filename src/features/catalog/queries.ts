@@ -1,5 +1,6 @@
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 
+import { hasErrorCode } from "@/lib/api/describe-error";
 import { QUERY_TIMES } from "@/lib/api/query-client";
 import { retryTransient } from "@/lib/api/retry";
 
@@ -73,14 +74,26 @@ export function useCardDetails(cards: readonly CatalogCard[], enabled = true) {
   return { products, galleries };
 }
 
-/** Search-box completions; nothing is asked that the BE would answer with 400 (see suggestionQueryOf). */
+/**
+ * The BE's suggestion budget is 30 calls per 10 s, refilled 3 per second; its 429 says
+ * `Retry-After: 1`. One retry after that second catches up with the last text typed.
+ */
+export const SUGGESTION_RETRY_AFTER_MS = 1_000;
+
+/**
+ * Search-box completions; nothing is asked that the BE would answer with 400 (see suggestionQueryOf).
+ * Only a 429 RATE_LIMITED is asked again, once; the box keeps the last completions meanwhile and
+ * if that fails too (SCRUM-469).
+ */
 export function useSearchSuggestions(q: string, enabled = true) {
   const text = suggestionQueryOf(q);
   return useQuery({
     queryKey: catalogKeys.suggestions(text ?? ""),
     queryFn: ({ signal }) => getSearchSuggestions(text ?? "", signal),
     enabled: enabled && text !== undefined,
-    retry: false,
+    placeholderData: keepPreviousData, // no flicker while the next text is asked
+    retry: (failures, error) => failures < 1 && hasErrorCode(error, "RATE_LIMITED"),
+    retryDelay: SUGGESTION_RETRY_AFTER_MS,
     staleTime: 60_000,
   });
 }

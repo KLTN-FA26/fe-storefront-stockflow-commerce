@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { SKU_PATTERN, currencySchema } from "@/lib/catalog/schemas";
+import { beId } from "@/lib/validation/primitives";
 
 // ── Request — mirrors BE PlaceOrderRequest (POST /orders) ──
 
@@ -22,8 +23,8 @@ export const checkoutLineInputSchema = z.object({
 export const placeOrderInputSchema = z.object({
   // Idempotency key: resending it returns the original order (BE OrderServiceImpl.place).
   requestId: z.uuid(),
-  customerId: z.uuid(),
-  shippingAddressId: z.uuid(),
+  customerId: beId(),
+  shippingAddressId: beId(),
   lines: z.array(checkoutLineInputSchema).min(1),
 });
 
@@ -31,7 +32,7 @@ export const placeOrderInputSchema = z.object({
 // actors, contact block) are not read. ──
 
 export const placedOrderDtoSchema = z.object({
-  orderId: z.uuid(),
+  orderId: beId(),
   orderNumber: z.string().min(1),
   // A string, not an enum: only ON_HOLD (credit order over its limit) changes what is said.
   status: z.string().min(1),

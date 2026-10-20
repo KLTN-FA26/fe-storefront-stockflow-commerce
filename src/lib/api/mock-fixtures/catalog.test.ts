@@ -125,6 +125,32 @@ describe("mock catalogue mirrors the BE catalogue rules", () => {
     expect(found[0]).toMatchObject({ slug: "ly-giay-2-lop-12oz", sku: "CUP-PAPER-12OZ-WHT" });
   });
 
+  it("refuses a completion text over 100 characters like the BE: 400 VALIDATION_FAILED on q", () => {
+    expect(catalog().suggestions({ q: "a".repeat(100) }).status).toBe(200);
+    expect(catalog().suggestions({ q: "a".repeat(101) })).toMatchObject({
+      status: 400,
+      data: { errorCode: "VALIDATION_FAILED", fieldErrors: [{ field: "q" }] },
+    });
+  });
+
+  it("allows 30 completions per 10 s, then answers 429 RATE_LIMITED with Retry-After", () => {
+    let now = 0;
+    const c = createMockCatalog(seedMockCatalog(), { now: () => now });
+    for (let i = 0; i < 30; i++) expect(c.suggestions({ q: "ly" }).status).toBe(200);
+
+    const limited = c.suggestions({ q: "ly" });
+    expect(limited).toMatchObject({
+      status: 429,
+      data: { success: false, errorCode: "RATE_LIMITED" },
+      headers: { "Retry-After": "1" },
+    });
+    // A refused call is counted too, as on the BE (the limiter runs before validation).
+    expect(c.suggestions({ q: "l" }).status).toBe(429);
+
+    now += 1000; // the bucket refills 3 calls per second
+    expect(c.suggestions({ q: "ly" }).status).toBe(200);
+  });
+
   it("prices checkout on the SKU's total quantity and holds stock all or nothing", () => {
     const c = catalog();
     expect(c.checkoutPrice("CUP-PAPER-8OZ-WHT", 999)).toEqual({ error: "BELOW_MOQ" });

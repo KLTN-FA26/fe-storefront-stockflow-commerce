@@ -15,7 +15,11 @@ import {
   type MockResult,
 } from "./mock-fixtures/catalog";
 
-const respond = (result: MockResult) => ({ status: result.status, data: result.data, headers: {} });
+const respond = (result: MockResult) => ({
+  status: result.status,
+  data: result.data,
+  headers: result.headers ?? {},
+});
 
 function pathParams(config: AxiosRequestConfig): Record<string, string> {
   return (

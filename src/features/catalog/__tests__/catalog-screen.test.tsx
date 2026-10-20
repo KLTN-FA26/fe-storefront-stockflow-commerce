@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { renderHook, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { OnUrlUpdateFunction } from "nuqs/adapters/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +10,7 @@ import { fakeBackend } from "@/test/fake-backend";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { CatalogScreen } from "../components/catalog-screen";
+import { useCurrentSearch } from "../current-search-store";
 import { FeaturedProducts } from "../components/featured-products";
 import { toApiSort } from "../sorts";
 
@@ -32,7 +33,7 @@ describe("CatalogScreen", () => {
     renderWithProviders(<CatalogScreen />);
 
     const cup = await card("Ly giấy 2 lớp 8oz");
-    expect(cup).toHaveAttribute("href", "/catalog/ly-giay-2-lop-8oz");
+    expect(cup).toHaveAttribute("href", "/catalog/products/ly-giay-2-lop-8oz");
     // The lowest unit price over the SKUs' tiers: 720 (the 5.000+ tier of the white cup).
     await waitFor(() => expect(within(cup).getByText(/720/)).toBeInTheDocument());
     expect(within(cup).getByText("Từ")).toBeInTheDocument();
@@ -93,7 +94,10 @@ describe("CatalogScreen", () => {
     signOut();
     renderWithProviders(<CatalogScreen />);
     expect(await screen.findByText("Đăng nhập để xem sản phẩm")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Đăng nhập" })).toHaveAttribute("href", "/login");
+    expect(screen.getByRole("link", { name: "Đăng nhập" })).toHaveAttribute(
+      "href",
+      "/login?next=%2Fcatalog",
+    );
     expect(api.get).not.toHaveBeenCalled();
   });
 
@@ -214,6 +218,86 @@ describe("CatalogScreen", () => {
     await waitFor(() =>
       expect(screen.queryByRole("link", { name: /Túi canvas/ })).not.toBeInTheDocument(),
     );
+  });
+});
+
+describe("CatalogScreen on /search (SCRUM-469)", () => {
+  const listCalls = () =>
+    vi.mocked(api.get).mock.calls.filter(([url]) => url === "/catalog/products");
+
+  it("asks for a search text instead of listing the whole catalogue", async () => {
+    renderWithProviders(<CatalogScreen scope="search" />);
+    expect(await screen.findByText("Nhập từ khoá để tìm sản phẩm")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Xem tất cả sản phẩm" })).toHaveAttribute(
+      "href",
+      "/catalog",
+    );
+    expect(listCalls()).toHaveLength(0);
+  });
+
+  it("signs a visitor in and brings them back to the same search", async () => {
+    signOut();
+    renderWithProviders(<CatalogScreen scope="search" />, {
+      searchParams: "?q=h%E1%BB%99p%20pizza&sort=title",
+    });
+    const href = screen.getByRole("link", { name: "Đăng nhập" }).getAttribute("href") ?? "";
+    const next = new URL(href, "http://shop.test").searchParams.get("next");
+    expect(new URL(next ?? "", "http://shop.test")).toMatchObject({
+      pathname: "/search",
+      search: "?q=h%E1%BB%99p+pizza&sort=title",
+    });
+    expect(listCalls()).toHaveLength(0);
+  });
+
+  it("tells the header box what it shows, and forgets it when left", async () => {
+    const header = renderHook(() => useCurrentSearch());
+    const { unmount } = renderWithProviders(<CatalogScreen scope="search" />, {
+      searchParams: "?q=hoodie&sort=title",
+    });
+    await waitFor(() => expect(header.result.current).toEqual({ q: "hoodie", sort: "title" }));
+    unmount();
+    await waitFor(() => expect(header.result.current).toBeUndefined());
+  });
+
+  it("tells the header only a sort it accepts, never one the BE would refuse", async () => {
+    const header = renderHook(() => useCurrentSearch());
+    renderWithProviders(<CatalogScreen scope="search" />, { searchParams: "?q=ly&sort=price" });
+    await waitFor(() => expect(header.result.current).toEqual({ q: "ly", sort: undefined }));
+  });
+
+  it("brings a visitor back to the same catalogue page after signing in", () => {
+    signOut();
+    renderWithProviders(<CatalogScreen />, { searchParams: "?page=3&sort=title" });
+    expect(screen.getByRole("link", { name: "Đăng nhập" })).toHaveAttribute(
+      "href",
+      "/login?next=%2Fcatalog%3Fsort%3Dtitle%26page%3D3",
+    );
+  });
+
+  it("tells the header nothing from the plain catalogue", async () => {
+    const header = renderHook(() => useCurrentSearch());
+    renderWithProviders(<CatalogScreen />);
+    expect(await card("Ly giấy 2 lớp 8oz")).toBeInTheDocument();
+    expect(header.result.current).toBeUndefined();
+  });
+
+  it("treats a blank q as no search text", async () => {
+    renderWithProviders(<CatalogScreen scope="search" />, { searchParams: "?q=%20%20" });
+    expect(await screen.findByText("Nhập từ khoá để tìm sản phẩm")).toBeInTheDocument();
+    expect(listCalls()).toHaveLength(0);
+  });
+
+  it("lists the products matching q", async () => {
+    renderWithProviders(<CatalogScreen scope="search" />, { searchParams: "?q=hoodie" });
+    expect(await card("Áo hoodie Essential")).toBeInTheDocument();
+    expect(listCalls()[0]?.[1]).toMatchObject({ params: { q: "hoodie" } });
+  });
+
+  it("explains an empty result, and clearing it goes back to the prompt", async () => {
+    renderWithProviders(<CatalogScreen scope="search" />, { searchParams: "?q=zzzz" });
+    expect(await screen.findByText("Không tìm thấy sản phẩm phù hợp")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Xoá tìm kiếm" }));
+    expect(await screen.findByText("Nhập từ khoá để tìm sản phẩm")).toBeInTheDocument();
   });
 });
 

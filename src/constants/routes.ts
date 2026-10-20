@@ -11,7 +11,7 @@ export const APP_ROUTES = {
 export const STORE_ROUTES = {
   catalog: {
     list: "/catalog",
-    detail: (slug: string) => `/catalog/${slug}`,
+    detail: (slug: string) => `/catalog/products/${slug}`,
     search: "/search",
   },
   design: {

@@ -6,7 +6,10 @@
  * `StorefrontCatalogController`, `CatalogController`, `CatalogSearchController` and
  * `CatalogSearchService` (develop):
  *  - list/search: zero-based pages, sort relevance|newest|title (price is UNSUPPORTED_PARAMETER),
- *    q over 100 characters is VALIDATION_FAILED;
+ *    q over 100 characters (code points, after trim) is VALIDATION_FAILED;
+ *  - suggestions: limit 1..10, the same q bound, then 2 letters or digits; 30 calls per 10 s per
+ *    caller (token bucket, 3 back per second), past that 429 RATE_LIMITED with Retry-After, a
+ *    refused call counting too (the BE limiter runs before validation);
  *  - the detail knows only IN_STOCK / OUT_OF_STOCK; /availability adds LOW_STOCK (≤ 5 units);
  *  - /prices leaves out a SKU with no price (it cannot be ordered either);
  *  - a product with a variant that has no base price has no readable detail: 409 PRICE_NOT_AVAILABLE;
@@ -50,12 +53,23 @@ export interface MockProduct {
 export interface MockResult {
   status: number;
   data: unknown;
+  headers?: Record<string, string>;
 }
 
 export const LOW_STOCK_THRESHOLD = 5; // BE stockflow.catalog.availability.low-stock-threshold
 export const MAX_SKUS_PER_REQUEST = 50;
 const MAX_PAGE_SIZE = 200;
 const MAX_QUERY = 100;
+// BE @RateLimit(limit = 30, perSeconds = 10, key = USER) on CatalogSearchController.suggestions
+const SUGGESTION_BUDGET = 30;
+const SUGGESTION_REFILL_MS = 10_000 / SUGGESTION_BUDGET;
+
+/** BE SearchQueryNormalizer bound: trimmed text, counted in code points. */
+const tooLong = (q: string) => [...q.trim()].length > MAX_QUERY;
+const queryTooLong = () =>
+  fail(400, "VALIDATION_FAILED", "Search text must be at most 100 characters", [
+    { field: "q", message: "must be at most 100 characters" },
+  ]);
 
 const ok = (data: unknown): MockResult => ({
   status: 200,
@@ -97,8 +111,22 @@ export function availabilityOf(stock: number): "IN_STOCK" | "LOW_STOCK" | "OUT_O
   return stock <= LOW_STOCK_THRESHOLD ? "LOW_STOCK" : "IN_STOCK";
 }
 
-export function createMockCatalog(seed: readonly MockProduct[]) {
+export function createMockCatalog(
+  seed: readonly MockProduct[],
+  { now = Date.now }: { now?: () => number } = {},
+) {
   const products: MockProduct[] = seed.map((p) => structuredClone(p));
+  let tokens = SUGGESTION_BUDGET;
+  let refilledAt = now();
+  /** One call out of the suggestion budget; false when it is spent. */
+  const takeSuggestionToken = () => {
+    const at = now();
+    tokens = Math.min(SUGGESTION_BUDGET, tokens + (at - refilledAt) / SUGGESTION_REFILL_MS);
+    refilledAt = at;
+    if (tokens < 1) return false;
+    tokens -= 1;
+    return true;
+  };
   const visible = () => products.filter((p) => p.published !== false);
   const bySlug = (slug: string) => visible().find((p) => p.slug === slug);
   const variantOf = (sku: string) =>
@@ -128,11 +156,7 @@ export function createMockCatalog(seed: readonly MockProduct[]) {
         ]);
       }
       const q = typeof query.q === "string" ? query.q : "";
-      if (q.length > MAX_QUERY) {
-        return fail(400, "VALIDATION_FAILED", "q must be at most 100 characters", [
-          { field: "q", message: "must be at most 100 characters" },
-        ]);
-      }
+      if (tooLong(q)) return queryTooLong();
       const terms = fold(q)
         .split(/[^a-z0-9]+/)
         .filter(Boolean);
@@ -204,6 +228,12 @@ export function createMockCatalog(seed: readonly MockProduct[]) {
 
     /** GET /catalog/search/suggestions?q=&limit= */
     suggestions(query: { q?: unknown; limit?: unknown } = {}): MockResult {
+      if (!takeSuggestionToken()) {
+        return {
+          ...fail(429, "RATE_LIMITED", "Too many requests. Try again in 1 second(s)."),
+          headers: { "Retry-After": "1" },
+        };
+      }
       const limit = toInt(query.limit, 5);
       if (!(limit >= 1) || limit > 10) {
         return fail(400, "UNSUPPORTED_PARAMETER", "Limit must be between 1 and 10", [
@@ -211,6 +241,7 @@ export function createMockCatalog(seed: readonly MockProduct[]) {
         ]);
       }
       const q = typeof query.q === "string" ? query.q : "";
+      if (tooLong(q)) return queryTooLong();
       const squash = (text: string) =>
         fold(text)
           .replace(/[^a-z0-9]+/g, " ")

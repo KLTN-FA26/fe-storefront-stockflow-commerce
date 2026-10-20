@@ -80,13 +80,53 @@ describe("catalogue schemas follow the BE DTOs", () => {
     ).toBe(false);
   });
 
+  it("accepts the ids the BE really sends, RFC version/variant bits or not (dev data, 2026-10-20)", () => {
+    // Java UUID takes any 8-4-4-4-12 hex; these two came back from GET /catalog/products on dev.
+    const ids = ["e5c50b95-014a-18a3-7a2b-5fd7a1dcb8ed", "d2738a4c-38f0-d893-b2d5-349038e4bb20"];
+    const page = catalogPageDtoSchema.safeParse({
+      ...bePage(),
+      items: ids.map((productId) => ({ ...beCard, productId })),
+    });
+    expect(page.success).toBe(true);
+    expect(catalogProductDtoSchema.safeParse({ ...beProduct, productId: ids[0] }).success).toBe(
+      true,
+    );
+    const image = { ...beGallery.images[0], id: ids[0], variantId: ids[1] };
+    expect(catalogGalleryDtoSchema.safeParse({ images: [image] }).success).toBe(true);
+    expect(
+      catalogPageDtoSchema.safeParse({ ...bePage(), items: [{ ...beCard, productId: "nope" }] })
+        .success,
+    ).toBe(false);
+  });
+
+  it("parses the search samples of the BE contract (CatalogSearchIntegrationTest, SCRUM-170)", () => {
+    // seoTitle null is left out of the JSON (non_null); totalElements stops at the 500 window.
+    const page = catalogPageDtoSchema.parse({
+      items: [{ productId: beCard.productId, slug: "ban-an-go-soi", title: "Bàn ăn gỗ sồi" }],
+      page: 0,
+      size: 20,
+      totalElements: 500,
+      totalPages: 25,
+      hasNext: true,
+      hasPrevious: false,
+    });
+    expect(page.items[0]?.seoTitle).toBeUndefined();
+    expect(
+      searchSuggestionsDtoSchema.parse([
+        { title: "Bàn ăn gỗ sồi", slug: "ban-an-go-soi", sku: "TABLE-OAK-160" },
+      ])[0],
+    ).toEqual({ title: "Bàn ăn gỗ sồi", slug: "ban-an-go-soi", sku: "TABLE-OAK-160" });
+  });
+
   it("parses suggestions: title, slug and the SKU the text matched", () => {
     expect(
       searchSuggestionsDtoSchema.parse([{ title: "Ly giấy", slug: "ly-giay", sku: "CUP-1" }]),
     ).toHaveLength(1);
+    // The BE sends the matched or first published SKU; with none it leaves `sku` out (non_null).
     expect(
       searchSuggestionsDtoSchema.safeParse([{ title: "Ly giấy", slug: "ly-giay" }]).success,
-    ).toBe(false);
+    ).toBe(true);
+    expect(searchSuggestionsDtoSchema.safeParse([{ title: "Ly giấy" }]).success).toBe(false);
   });
 });
 

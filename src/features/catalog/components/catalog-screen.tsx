@@ -8,6 +8,7 @@ import { ListPagination } from "@/components/storefront/list-pagination";
 import { ProductGrid, type ProductGridItem } from "@/components/storefront/product-grid";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 
+import { publishCurrentSearch } from "../current-search-store";
 import { CATALOG_QUERY_MAX } from "../schemas";
 import { badgeStatus } from "@/lib/catalog/selectors";
 
@@ -19,6 +20,7 @@ import {
   CatalogLoadError,
   FiguresNotice,
   NoProducts,
+  SearchPrompt,
   SignInRequired,
 } from "./catalog-states";
 import { CatalogToolbar } from "./catalog-toolbar";
@@ -38,7 +40,21 @@ export function toGridItem(item: CatalogListingItem): ProductGridItem {
   };
 }
 
-export function CatalogScreen() {
+/** This list's own URL, to come back to after signing in. */
+function here(scope: "catalog" | "search", q: string | undefined, sort: CatalogSort, page: number) {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (sort !== "default") params.set("sort", sort);
+  if (page > 1) params.set("page", String(page));
+  const path = scope === "search" ? STORE_ROUTES.catalog.search : STORE_ROUTES.catalog.list;
+  return params.size ? `${path}?${params}` : path;
+}
+
+/**
+ * The product list. `scope="search"` is /search?q= (SCRUM-469): without a text it asks for one
+ * and calls nothing; `/catalog?q=` redirects there (next.config.ts).
+ */
+export function CatalogScreen({ scope = "catalog" }: { scope?: "catalog" | "search" }) {
   const signedIn = useSignedIn();
   const [urlPage, setPage] = useQueryState("page", pageParser);
   const [rawQuery, setQuery] = useQueryState("q", parseAsString);
@@ -47,6 +63,7 @@ export function CatalogScreen() {
   const query = [...(rawQuery?.trim() ?? "")].slice(0, CATALOG_QUERY_MAX).join("") || undefined;
   const sort: CatalogSort = rawSort && isCatalogSort(rawSort) ? rawSort : "default";
   const page = Number.isInteger(urlPage) && urlPage >= 1 ? urlPage : 1;
+  const awaitingText = scope === "search" && !query;
 
   const {
     page: result,
@@ -54,9 +71,18 @@ export function CatalogScreen() {
     figuresError,
   } = useCatalogListing(
     { q: query, sort: toApiSort(sort), page, size: CATALOG_PAGE_SIZE },
-    signedIn === true,
+    signedIn === true && !awaitingText,
   );
   const { data, isPending, isFetching, isPlaceholderData, error, refetch } = result;
+
+  // Tell the header box what /search shows (the text, a sort the BE accepts), and nothing once
+  // the page is left.
+  const shownSort = sort === "default" ? undefined : sort;
+  useEffect(() => {
+    if (scope !== "search") return;
+    publishCurrentSearch({ q: query, sort: shownSort });
+    return () => publishCurrentSearch(undefined);
+  }, [scope, query, shownSort]);
 
   // `relevance` means newest without a search text; drop it when the text goes away.
   useEffect(() => {
@@ -71,7 +97,8 @@ export function CatalogScreen() {
   }, [urlPage, page, data, isPlaceholderData, setPage]);
 
   if (signedIn === undefined) return <CatalogGridSkeleton />;
-  if (!signedIn) return <SignInRequired />;
+  if (!signedIn) return <SignInRequired from={here(scope, query, sort, page)} />;
+  if (awaitingText) return <SearchPrompt />;
 
   return (
     <div className="min-w-0 space-y-4">

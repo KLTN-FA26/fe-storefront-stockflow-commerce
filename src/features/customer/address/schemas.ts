@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { requiredString, vietnamPhone } from "@/lib/validation/primitives";
+import { beId, requiredString, vietnamPhone } from "@/lib/validation/primitives";
 
 // Mirrors BE customer.internal.domain.AddressType. Default address is tracked per type.
 export const ADDRESS_TYPES = ["SHIPPING", "BILLING"] as const;
@@ -8,7 +8,7 @@ export const addressTypeSchema = z.enum(ADDRESS_TYPES);
 
 // ── DTO — mirrors BE CustomerAddressResponse (NON_NULL: optional fields may be absent) ──
 export const customerAddressDtoSchema = z.object({
-  addressId: z.uuid(),
+  addressId: beId(),
   // Kept as string like customerProfileSchema.customerId (dev mock uses non-UUID ids).
   customerId: z.string().min(1),
   type: addressTypeSchema,
