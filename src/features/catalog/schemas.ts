@@ -5,10 +5,12 @@ import { availabilitySchema, currencySchema } from "@/lib/catalog/schemas";
 
 // Jackson runs with `default-property-inclusion: non_null`: a nullable field is absent from the
 // JSON, not null, so every optional field is `.nullish()`.
+// Ids are `z.guid()` (any 8-4-4-4-12 hex), not `z.uuid()`: Java's UUID accepts ids without RFC
+// version/variant bits and the dev catalogue has such product ids (e5c50b95-014a-18a3-7a2b-…).
 
 /** One row of GET /catalog/products (CatalogCardResponse): no image, SKU, price or stock. */
 export const catalogCardDtoSchema = z.object({
-  productId: z.uuid(),
+  productId: z.guid(),
   slug: z.string().min(1),
   title: z.string().min(1),
   seoTitle: z.string().nullish(),
@@ -26,7 +28,7 @@ export const catalogVariantDtoSchema = z.object({
 
 /** GET /catalog/products/{slug} (CatalogProductResponse). */
 export const catalogProductDtoSchema = z.object({
-  productId: z.uuid(),
+  productId: z.guid(),
   slug: z.string().min(1),
   title: z.string().min(1),
   description: z.string().nullish(),
@@ -37,8 +39,8 @@ export const catalogProductDtoSchema = z.object({
 });
 
 export const galleryImageDtoSchema = z.object({
-  id: z.uuid(),
-  variantId: z.uuid().nullish(),
+  id: z.guid(),
+  variantId: z.guid().nullish(),
   sku: z.string().nullish(),
   // Public canonical media URL (absolute), not a private storage key.
   url: z.string().min(1),
