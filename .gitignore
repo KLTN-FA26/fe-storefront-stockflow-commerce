@@ -44,3 +44,6 @@ Thumbs.db
 npm-shrinkwrap.json
 yarn.lock
 bun.lockb
+
+# Claude review context (CI checkout docs/BE)
+.review-context/
