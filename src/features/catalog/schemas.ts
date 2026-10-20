@@ -71,6 +71,9 @@ export const CATALOG_PAGE_SIZE_MAX = 200; // BE Pages.MAX_PAGE_SIZE
 export const SUGGESTION_MIN_LENGTH = 2; // BE CatalogSearchService.MIN_SUGGEST_LENGTH
 export const SUGGESTION_LIMIT_MAX = 10;
 export const SUGGESTION_LIMIT = 5; // SCRUM-469: the header box shows 5 completions
+// BE stockflow.catalog.search.ranking-window: list and search rank and page only this many, so a
+// total equal to it means "at least". ASSUMPTION: the BE keeps its default (500, SCRUM-170).
+export const CATALOG_RESULT_WINDOW = 500;
 
 /** The BE counts code points (`codePointCount`), not UTF-16 units: an emoji or a decomposed accent is not two. */
 export const codePointLength = (text: string) => [...text].length;
