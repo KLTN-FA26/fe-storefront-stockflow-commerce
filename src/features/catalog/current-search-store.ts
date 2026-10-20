@@ -24,5 +24,3 @@ export function publishCurrentSearch(current: CurrentSearch | undefined) {
 export function useCurrentSearch(): CurrentSearch | undefined {
   return useStore(store, (state) => state.current);
 }
-
-export const readCurrentSearch = () => store.getState().current;

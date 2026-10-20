@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { renderHook, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { OnUrlUpdateFunction } from "nuqs/adapters/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,7 +10,7 @@ import { fakeBackend } from "@/test/fake-backend";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { CatalogScreen } from "../components/catalog-screen";
-import { readCurrentSearch } from "../current-search-store";
+import { useCurrentSearch } from "../current-search-store";
 import { FeaturedProducts } from "../components/featured-products";
 import { toApiSort } from "../sorts";
 
@@ -250,17 +250,19 @@ describe("CatalogScreen on /search (SCRUM-469)", () => {
   });
 
   it("tells the header box what it shows, and forgets it when left", async () => {
+    const header = renderHook(() => useCurrentSearch());
     const { unmount } = renderWithProviders(<CatalogScreen scope="search" />, {
       searchParams: "?q=hoodie&sort=title",
     });
-    await waitFor(() => expect(readCurrentSearch()).toEqual({ q: "hoodie", sort: "title" }));
+    await waitFor(() => expect(header.result.current).toEqual({ q: "hoodie", sort: "title" }));
     unmount();
-    expect(readCurrentSearch()).toBeUndefined();
+    await waitFor(() => expect(header.result.current).toBeUndefined());
   });
 
   it("tells the header only a sort it accepts, never one the BE would refuse", async () => {
+    const header = renderHook(() => useCurrentSearch());
     renderWithProviders(<CatalogScreen scope="search" />, { searchParams: "?q=ly&sort=price" });
-    await waitFor(() => expect(readCurrentSearch()).toEqual({ q: "ly", sort: undefined }));
+    await waitFor(() => expect(header.result.current).toEqual({ q: "ly", sort: undefined }));
   });
 
   it("brings a visitor back to the same catalogue page after signing in", () => {
@@ -273,9 +275,10 @@ describe("CatalogScreen on /search (SCRUM-469)", () => {
   });
 
   it("tells the header nothing from the plain catalogue", async () => {
+    const header = renderHook(() => useCurrentSearch());
     renderWithProviders(<CatalogScreen />);
     expect(await card("Ly giấy 2 lớp 8oz")).toBeInTheDocument();
-    expect(readCurrentSearch()).toBeUndefined();
+    expect(header.result.current).toBeUndefined();
   });
 
   it("treats a blank q as no search text", async () => {
