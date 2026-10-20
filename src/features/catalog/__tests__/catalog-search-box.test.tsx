@@ -9,6 +9,7 @@ import { fakeBackend } from "@/test/fake-backend";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { CatalogSearchBox } from "../components/catalog-search-box";
+import { SUGGESTION_RETRY_AFTER_MS } from "../queries";
 import { publishCurrentSearch } from "../current-search-store";
 
 const push = vi.fn();
@@ -20,6 +21,7 @@ beforeEach(() => {
   fakeBackend({ catalog: createMockCatalog(seedMockCatalog()) });
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   signOut();
   publishCurrentSearch(undefined);
@@ -125,13 +127,18 @@ describe("CatalogSearchBox", () => {
   });
 
   it("asks once more after Retry-After (≈1 s) when the BE answers 429, and shows the new answer", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     renderWithProviders(<CatalogSearchBox />);
     vi.mocked(api.get).mockRejectedValueOnce(
       new ApiError(429, "RATE_LIMITED", "Too many requests", undefined, "corr-1"),
     );
     await userEvent.type(box(), "ly giay 2 lop 8");
-    await waitFor(() => expect(suggestionCalls()).toHaveLength(2), { timeout: 3000 });
+    await waitFor(() => expect(suggestionCalls()).toHaveLength(1));
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
+
+    await act(() => vi.advanceTimersByTimeAsync(SUGGESTION_RETRY_AFTER_MS));
     expect(await screen.findByRole("option", { name: /Ly giấy 2 lớp 8oz/ })).toBeInTheDocument();
+    expect(suggestionCalls()).toHaveLength(2);
   });
 
   it("keeps the last completions when the retry is refused too", async () => {
@@ -139,10 +146,12 @@ describe("CatalogSearchBox", () => {
     await userEvent.type(box(), "ly giay");
     await screen.findByRole("option", { name: /Ly giấy 2 lớp 12oz/ });
     const limited = new ApiError(429, "RATE_LIMITED", "Too many requests", undefined, "corr-1");
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.mocked(api.get).mockRejectedValueOnce(limited).mockRejectedValueOnce(limited);
     await userEvent.type(box(), " 2 lop 8");
-    await waitFor(() => expect(suggestionCalls()).toHaveLength(3), { timeout: 3000 });
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await waitFor(() => expect(suggestionCalls()).toHaveLength(2));
+    await act(() => vi.advanceTimersByTimeAsync(SUGGESTION_RETRY_AFTER_MS));
+    await waitFor(() => expect(suggestionCalls()).toHaveLength(3));
     expect(screen.getByRole("option", { name: /Ly giấy 2 lớp 12oz/ })).toBeInTheDocument();
   });
 
@@ -199,6 +208,37 @@ describe("CatalogSearchBox", () => {
 
     await userEvent.type(box(), " 2");
     expect(await screen.findAllByRole("option")).not.toHaveLength(0);
+  });
+
+  it("shows the new search when the page moves to another text, even over unsent typing", async () => {
+    renderWithProviders(<CatalogSearchBox />);
+    await userEvent.type(box(), "ly");
+    act(() => publishCurrentSearch({ q: "hộp pizza" }));
+    expect(box()).toHaveValue("hộp pizza");
+  });
+
+  it("opens the completions of the shown text with ArrowDown", async () => {
+    publishCurrentSearch({ q: "ly giay" });
+    renderWithProviders(<CatalogSearchBox />);
+    await userEvent.click(box());
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
+    await userEvent.keyboard("{ArrowDown}");
+    expect(await screen.findAllByRole("option")).toHaveLength(4);
+    await userEvent.keyboard("{ArrowDown}");
+    expect(screen.getAllByRole("option")[0]).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("lists a completion the BE sends without a SKU instead of dropping them all", async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({
+      data: [
+        { title: "Hộp bánh pizza", slug: "hop-pizza" },
+        { title: "Hộp quà", slug: "hop-qua", sku: "BOX-GIFT" },
+      ],
+    });
+    renderWithProviders(<CatalogSearchBox />);
+    await userEvent.type(box(), "hop");
+    expect(await screen.findByRole("option", { name: "Hộp bánh pizza" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Hộp quà/ })).toHaveTextContent("BOX-GIFT");
   });
 
   it("stays on /search when submitted empty there", async () => {

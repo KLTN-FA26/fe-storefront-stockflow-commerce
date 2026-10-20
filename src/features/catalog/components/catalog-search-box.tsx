@@ -30,10 +30,10 @@ export function CatalogSearchBox({ className }: { className?: string | undefined
   const [value, setValue] = useState(seed);
   const [seededWith, setSeededWith] = useState(seed);
   if (seed !== seededWith) {
-    // The searched text changed (a new search, Back, leaving /search): follow it, unless the
-    // customer is typing something else, which is kept.
+    // The page shows another search (a submit, a link, Back): show its text. Leaving /search or
+    // clearing the text only empties the box if the customer had not typed something else.
     setSeededWith(seed);
-    if (value === seededWith) setValue(seed);
+    if (seed || value === seededWith) setValue(seed);
   }
   const [open, setOpen] = useState(false);
   const { suggestions, active, setActive } = useCompletions(value, signedIn === true && open);
@@ -92,10 +92,11 @@ export function CatalogSearchBox({ className }: { className?: string | undefined
         onFocus={() => setOpen(value.trim() !== seed.trim())}
         onKeyDown={(event) => {
           if (event.key === "Escape") setOpen(false);
-          else if (event.key === "ArrowDown" && suggestions.length > 0) {
+          else if (event.key === "ArrowDown" && (!open || suggestions.length > 0)) {
+            // A closed box opens first (e.g. the text shown on /search), then moves down the list.
             event.preventDefault();
-            setOpen(true);
-            setActive((i) => (i + 1) % suggestions.length);
+            if (!open) setOpen(true);
+            else setActive((i) => (i + 1) % suggestions.length);
           } else if (event.key === "ArrowUp" && suggestions.length > 0) {
             event.preventDefault();
             setActive((i) => (i <= 0 ? suggestions.length - 1 : i - 1));
@@ -120,7 +121,7 @@ export function CatalogSearchBox({ className }: { className?: string | undefined
       >
         {suggestions.map((suggestion, index) => (
           <li
-            key={`${suggestion.slug}-${suggestion.sku}`}
+            key={`${suggestion.slug}-${suggestion.sku ?? ""}`}
             id={`${listId}-${index}`}
             role="option"
             aria-selected={index === active}
@@ -132,7 +133,9 @@ export function CatalogSearchBox({ className }: { className?: string | undefined
             onClick={() => go(STORE_ROUTES.catalog.detail(suggestion.slug))}
           >
             <span className="text-ink-primary truncate">{suggestion.title}</span>
-            <span className="text-ink-tertiary shrink-0 font-mono text-xs">{suggestion.sku}</span>
+            {suggestion.sku ? (
+              <span className="text-ink-tertiary shrink-0 font-mono text-xs">{suggestion.sku}</span>
+            ) : null}
           </li>
         ))}
       </ul>

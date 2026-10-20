@@ -122,9 +122,11 @@ describe("catalogue schemas follow the BE DTOs", () => {
     expect(
       searchSuggestionsDtoSchema.parse([{ title: "Ly giấy", slug: "ly-giay", sku: "CUP-1" }]),
     ).toHaveLength(1);
+    // The BE sends the matched or first published SKU; with none it leaves `sku` out (non_null).
     expect(
       searchSuggestionsDtoSchema.safeParse([{ title: "Ly giấy", slug: "ly-giay" }]).success,
-    ).toBe(false);
+    ).toBe(true);
+    expect(searchSuggestionsDtoSchema.safeParse([{ title: "Ly giấy" }]).success).toBe(false);
   });
 });
 

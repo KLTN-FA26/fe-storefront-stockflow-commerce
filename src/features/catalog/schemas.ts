@@ -52,11 +52,14 @@ export const galleryImageDtoSchema = z.object({
 /** GET /catalog/products/{slug}/gallery (CatalogGalleryResponse). */
 export const catalogGalleryDtoSchema = z.object({ images: z.array(galleryImageDtoSchema) });
 
-/** GET /catalog/search/suggestions (SearchSuggestionResponse). */
+/**
+ * GET /catalog/search/suggestions (SearchSuggestionResponse). `sku` is the SKU the text matched,
+ * else the listing's first published one; with none published it is null, so absent (non_null).
+ */
 export const searchSuggestionDtoSchema = z.object({
   title: z.string().min(1),
   slug: z.string().min(1),
-  sku: z.string().min(1),
+  sku: z.string().min(1).nullish(),
 });
 export const searchSuggestionsDtoSchema = z.array(searchSuggestionDtoSchema);
 
