@@ -54,7 +54,7 @@ function bodyOf(config: AxiosRequestConfig): Record<string, unknown> {
   return raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
 }
 
-function claimsOf(config: AxiosRequestConfig) {
+export function claimsOf(config: AxiosRequestConfig) {
   const headers = config.headers as unknown as
     { get?: (name: string) => unknown; Authorization?: unknown } | undefined;
   const header = String(headers?.get?.("Authorization") ?? headers?.Authorization ?? "");

@@ -19,7 +19,7 @@ const MESSAGE_BY_CODE: Record<string, string> = {
 
 export function describeLoginError(error: unknown): string {
   if (error instanceof NotCustomerError) {
-    return "Đây là tài khoản nhân viên nên không dùng được cổng khách hàng. Vui lòng đăng nhập bằng tài khoản khách hàng của bạn.";
+    return "Tài khoản này không có quyền dùng cổng khách hàng (ví dụ tài khoản nhân viên). Vui lòng đăng nhập bằng tài khoản khách hàng của bạn.";
   }
   return describeApiError(error, MESSAGE_BY_CODE);
 }

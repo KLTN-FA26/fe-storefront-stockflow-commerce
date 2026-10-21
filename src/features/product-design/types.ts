@@ -4,7 +4,6 @@ import type {
   confirmDesignInputSchema,
   designDtoSchema,
   designElementSchema,
-  designRoleSchema,
   designStatusSchema,
   designUpdateInputSchema,
   preflightIssueSchema,
@@ -13,7 +12,6 @@ import type {
 
 export type DesignStatus = z.infer<typeof designStatusSchema>;
 export type PreflightResult = z.infer<typeof preflightResultSchema>;
-export type DesignRole = z.infer<typeof designRoleSchema>;
 export type DesignElement = z.infer<typeof designElementSchema>;
 export type PreflightIssue = z.infer<typeof preflightIssueSchema>;
 export type DesignDto = z.infer<typeof designDtoSchema>;

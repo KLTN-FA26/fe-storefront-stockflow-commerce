@@ -13,7 +13,6 @@ export type {
   ConfirmDesignInput,
   DesignDto,
   DesignElement,
-  DesignRole,
   DesignStatus,
   DesignUpdateInput,
   PreflightIssue,

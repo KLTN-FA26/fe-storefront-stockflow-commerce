@@ -14,7 +14,6 @@
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import type { RoleName } from "./roles";
 import { setAuthCookie, removeAuthCookie } from "./auth-cookie";
 
 /* ── Types ───────────────────────────────────────────────────────────── */
@@ -25,7 +24,8 @@ export interface AuthUser {
   customerId?: string | undefined;
   fullName: string;
   email: string;
-  roles: RoleName[];
+  /** Role names as the BE reports them: display only, never a basis for access (see permission-codes.ts). */
+  roles: string[];
   warehouseIds: string[];
 }
 
@@ -41,13 +41,6 @@ interface AuthState {
   tokens: AuthTokens | null;
   isAuthenticated: boolean;
 
-  /* ── Role impersonation (dev/demo only) ─────────────────────────── */
-  impersonatedRole: RoleName | null;
-  setImpersonatedRole: (r: RoleName | null) => void;
-
-  /* ── Effective roles (respects impersonation) ───────────────────── */
-  effectiveRoles: () => RoleName[];
-
   /* ── Actions ────────────────────────────────────────────────────── */
   login: (user: AuthUser | null, tokens: AuthTokens) => void;
   logout: () => void;
@@ -57,24 +50,14 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       user: null,
       tokens: null,
       isAuthenticated: false,
 
-      impersonatedRole: null,
-      setImpersonatedRole: (r) => set({ impersonatedRole: r }),
-
-      effectiveRoles: () => {
-        const { user, impersonatedRole } = get();
-        if (!user) return [];
-        if (impersonatedRole) return [impersonatedRole];
-        return user.roles;
-      },
-
       login: (user, tokens) => {
         setAuthCookie(tokens.accessToken);
-        set({ user, tokens, isAuthenticated: true, impersonatedRole: null });
+        set({ user, tokens, isAuthenticated: true });
       },
 
       logout: () => {
@@ -83,7 +66,6 @@ export const useAuthStore = create<AuthState>()(
           user: null,
           tokens: null,
           isAuthenticated: false,
-          impersonatedRole: null,
         });
       },
     }),
@@ -117,7 +99,6 @@ export const useAuthStore = create<AuthState>()(
         user: state.user,
         tokens: state.tokens,
         isAuthenticated: state.isAuthenticated,
-        // Don't persist impersonatedRole — reset on page refresh
       }),
     },
   ),

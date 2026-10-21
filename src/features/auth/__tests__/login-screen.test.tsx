@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error";
 import { useAuthStore } from "@/lib/auth/auth-store";
+import { STOREFRONT_PERMISSIONS } from "@/lib/auth/permission-codes";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { LoginScreen } from "../components/login-screen";
@@ -15,7 +16,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ replace, push: vi.fn() }
 const CUSTOMER_ID = "c0ffee00-0000-4000-8000-000000000010";
 
 function backend(
-  opts: { roles?: string[]; loginError?: ApiError; mustChangePassword?: boolean } = {},
+  opts: { staff?: boolean; loginError?: ApiError; mustChangePassword?: boolean } = {},
 ) {
   vi.spyOn(api, "post").mockImplementation(async (url) => {
     if (url === "/identity/auth/login") {
@@ -31,8 +32,16 @@ function backend(
           userId: "u-1",
           email: "nam@example.vn",
           fullName: "Nam",
-          roles: opts.roles ?? ["CUSTOMER"],
           mustChangePassword: opts.mustChangePassword ?? false,
+        },
+      };
+    }
+    if (url === "/identity/me/permissions") {
+      return {
+        data: {
+          roles: [],
+          permissions: opts.staff ? ["sales-orders:READ"] : STOREFRONT_PERMISSIONS,
+          dataScope: opts.staff ? "ALL" : "OWN",
         },
       };
     }
@@ -117,7 +126,7 @@ describe("LoginScreen", () => {
   });
 
   it("tells a staff account the storefront is not for it, and leaves it signed out", async () => {
-    backend({ roles: ["SALES_STAFF"] });
+    backend({ staff: true });
     renderWithProviders(<LoginScreen />);
     await fill("staff@example.vn", "pw");
 

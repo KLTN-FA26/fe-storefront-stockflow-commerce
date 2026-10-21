@@ -21,6 +21,16 @@ describe("GET /identity/me/permissions (BE MeController)", () => {
     expect(get).toHaveBeenCalledWith("/identity/me/permissions", {});
   });
 
+  it("can carry a token that is not stored yet (sign-in checks the account before storing it)", async () => {
+    const get = vi.spyOn(api, "get").mockResolvedValueOnce({
+      data: { roles: [], permissions: [], dataScope: "OWN" },
+    });
+    await getMyPermissions({ headers: { Authorization: "Bearer new" } });
+    expect(get).toHaveBeenCalledWith("/identity/me/permissions", {
+      headers: { Authorization: "Bearer new" },
+    });
+  });
+
   it("rejects an unknown data scope as a contract break", async () => {
     vi.spyOn(api, "get").mockResolvedValueOnce({
       data: { roles: [], permissions: [], dataScope: "EVERYTHING" },

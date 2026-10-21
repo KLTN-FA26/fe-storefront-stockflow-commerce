@@ -6,14 +6,15 @@ import { useCartStore } from "@/lib/store/use-cart-store";
 
 import { loginApi, logoutApi, type LoginRequest } from "./auth-api";
 import { useAuthStore } from "./auth-store";
+import { getMyPermissions } from "./my-permissions";
+import { holdsAll, STOREFRONT_PERMISSIONS } from "./permission-codes";
 import { endSession } from "./session";
 
-/** BE MeResponse (GET /identity/me): the login response carries only a token. */
+/** BE MeResponse (GET /identity/me): the login response carries only a token. Role names are not read. */
 const meSchema = z.object({
   userId: z.string().min(1),
   fullName: z.string().nullish(),
   email: z.string().nullish(),
-  roles: z.array(z.string()),
   // The password was set by an administrator: ask for a new one first.
   mustChangePassword: z.boolean().nullish(),
 });
@@ -21,7 +22,7 @@ const meSchema = z.object({
 // Only the id: other /customers/me fields may be omitted by the BE (NON_NULL).
 const customerIdentitySchema = z.object({ customerId: z.string().min(1) });
 
-/** A staff (or any non-CUSTOMER) account: the storefront is the customers' portal, not theirs. */
+/** An account that does not hold the storefront's permissions: the portal is not for it (a staff account). */
 export class NotCustomerError extends Error {
   constructor() {
     super("NOT_CUSTOMER");
@@ -37,7 +38,8 @@ export interface SignInResult {
 /**
  * Sign a customer in, in the order the BE needs:
  *  1. POST /identity/auth/login (5 per minute per IP) → a bearer token and nothing else;
- *  2. GET /identity/me → who it is and the roles; only CUSTOMER may use the storefront;
+ *  2. GET /identity/me → who it is; GET /identity/me/permissions → what it may do: only an account
+ *     holding the storefront's permissions (permission-codes.ts) may use it, whatever its roles are called;
  *  3. GET /customers/me → the customer profile id, which owns the cart and the orders.
  * Steps 2 and 3 carry the new token explicitly and it is stored only once both have passed:
  * storing it first would make the login page (and every screen) see a signed-in customer while a
@@ -48,7 +50,8 @@ export async function signInCustomer(credentials: LoginRequest): Promise<SignInR
   const headers = { Authorization: `Bearer ${tokens.accessToken}` };
   try {
     const me = meSchema.parse((await api.get<unknown>("/identity/me", { headers })).data);
-    if (!me.roles.includes("CUSTOMER")) throw new NotCustomerError();
+    const { permissions } = await getMyPermissions({ headers });
+    if (!holdsAll(permissions, STOREFRONT_PERMISSIONS)) throw new NotCustomerError();
     const { customerId } = customerIdentitySchema.parse(
       (await api.get<unknown>("/customers/me", { headers })).data,
     );
