@@ -53,7 +53,16 @@ export async function signInCustomer(credentials: LoginRequest): Promise<SignInR
     const { permissions } = await getMyPermissions({ headers });
     if (!holdsAll(permissions, STOREFRONT_PERMISSIONS)) throw new NotCustomerError();
     const { customerId } = customerIdentitySchema.parse(
-      (await api.get<unknown>("/customers/me", { headers })).data,
+      (
+        await api.get<unknown>("/customers/me", { headers }).catch((error: unknown) => {
+          // Holding every permission (a system administrator) is not being a customer: no profile
+          // right after sign-in means this is not a customer account, whatever the permissions say.
+          if (error instanceof ApiError && error.code === "CUSTOMER_NOT_FOUND") {
+            throw new NotCustomerError();
+          }
+          throw error;
+        })
+      ).data,
     );
     // Before the user is set: nothing may render a cart that is not this customer's.
     useCartStore.getState().bindOwner(customerId);

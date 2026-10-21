@@ -1,6 +1,6 @@
 import { api } from "@/lib/api/client";
 
-import { paymentTermsDtoSchema, type PaymentTermsDto } from "./schemas";
+import { parsePaymentTerms, type PaymentTermsDto } from "./schemas";
 
 /**
  * GET /orders/payment-terms (BE CreditHoldController.myTerms, sales-orders:CREATE scope OWN): the
@@ -10,5 +10,5 @@ import { paymentTermsDtoSchema, type PaymentTermsDto } from "./schemas";
  */
 export async function getPaymentTerms(signal?: AbortSignal): Promise<PaymentTermsDto> {
   const { data } = await api.get<unknown>("/orders/payment-terms", signal ? { signal } : {});
-  return paymentTermsDtoSchema.parse(data);
+  return parsePaymentTerms(data);
 }

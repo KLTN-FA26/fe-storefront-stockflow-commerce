@@ -11,7 +11,7 @@ import {
   type MockCreditTerms,
   type MockOrderBook,
 } from "@/lib/api/mock-fixtures/orders";
-import { getPaymentTerms, paymentTermsDtoSchema } from "@/lib/payment-terms";
+import { getPaymentTerms, parsePaymentTerms, paymentTermsDtoSchema } from "@/lib/payment-terms";
 import { useCartStore } from "@/lib/store/use-cart-store";
 import { fakeBackend } from "@/test/fake-backend";
 import { renderWithProviders, resetCart, signIn, signOut } from "@/test/render";
@@ -204,6 +204,16 @@ describe("checkout payment terms (kltn-docs 15 BR-01)", () => {
       expect(await placeButton()).toBeEnabled();
     });
 
+    it("tells a customer allowed credit without a limit that the order will be held", async () => {
+      // The BE omits a null limit: only the allowed term says credit is on.
+      setup(terms({ allowed: ["PREPAID", "CREDIT"], creditLimit: 0 }));
+      renderWithProviders(<CheckoutScreen customer={customer} />);
+      await pickCredit();
+
+      expect(await screen.findByText("Hạn mức công nợ của bạn là 0 ₫.")).toBeInTheDocument();
+      expect(await placeButton()).toBeEnabled();
+    });
+
     it("says nothing about credit for another term", async () => {
       setup(credit({ defaultTerm: "PREPAID" }));
       renderWithProviders(<CheckoutScreen customer={customer} />);
@@ -370,7 +380,7 @@ describe("payment term and the idempotency key", () => {
 
 describe("payment terms boundary", () => {
   it("keeps the customer's own credit position and drops what it does not read", () => {
-    const dto = paymentTermsDtoSchema.parse({
+    const dto = parsePaymentTerms({
       customerId: CUSTOMER_ID,
       allowedTerms: ["PREPAID", "CREDIT"],
       defaultTerm: "CREDIT",
@@ -392,9 +402,28 @@ describe("payment terms boundary", () => {
       hasOverdue: true,
     });
     // A customer without credit: the BE omits the credit fields (NON_NULL).
-    expect(paymentTermsDtoSchema.parse({ allowedTerms: ["PREPAID"] })).toEqual({
+    expect(parsePaymentTerms({ allowedTerms: ["PREPAID"] })).toEqual({
       allowedTerms: ["PREPAID"],
     });
+  });
+
+  it("keeps the payment-term selection when a credit field is malformed: no credit figures, the terms stay", async () => {
+    const dto = parsePaymentTerms({
+      allowedTerms: ["PREPAID", "CREDIT"],
+      defaultTerm: "PREPAID",
+      creditLimit: "a lot",
+      exposure: 3,
+    });
+    expect(dto).toEqual({
+      allowedTerms: ["PREPAID", "CREDIT"],
+      defaultTerm: "PREPAID",
+      creditUnreadable: true,
+    });
+    const choice = resolvePaymentTerms(dto);
+    expect(choice?.options.map((o) => o.term)).toEqual(["PREPAID", "CREDIT"]);
+    expect(choice?.credit).toBeUndefined();
+    // A broken term list is still a contract error.
+    expect(() => parsePaymentTerms({ allowedTerms: "PREPAID" })).toThrow();
   });
 
   it("drops a term newer than the FE, falls back to the first allowed one, and keeps the BE order", () => {
