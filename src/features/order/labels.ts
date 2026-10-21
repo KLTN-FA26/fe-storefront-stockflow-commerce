@@ -125,7 +125,7 @@ export const CANCELLATION_REQUEST_META: Record<
   EXPIRED: {
     label: "Đã đóng",
     tone: "muted",
-    note: "Đơn đã được đóng gói, giao đi hoặc kết thúc trước khi Sales kịp quyết định, vì vậy yêu cầu huỷ này đã được đóng và đơn giữ nguyên. Nếu cần trả hàng, hãy chat với chúng tôi.",
+    note: "Đơn đã được đóng gói, giao đi, kết thúc hoặc huỷ theo cách khác trước khi Sales kịp quyết định, vì vậy yêu cầu huỷ này đã được đóng. Hãy xem trạng thái hiện tại của đơn; nếu cần hỗ trợ hoặc muốn trả hàng, hãy chat với chúng tôi.",
   },
   UNKNOWN: {
     label: "Đang cập nhật",
