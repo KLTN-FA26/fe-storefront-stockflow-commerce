@@ -51,7 +51,15 @@ const base = `/customers/${customerId}/addresses`;
 describe("customer address API (BE CustomerAddressController)", () => {
   it("reads customerId from a BE NON_NULL /me response (null phone/segmentId omitted)", async () => {
     const get = vi.spyOn(api, "get").mockResolvedValueOnce({
-      data: { customerId, userId: "u-1", fullName: "Nguyễn Hoài Nam", email: "a@b.vn", status: "ACTIVE", version: 0, createdAt: "2026-10-01T00:00:00Z" },
+      data: {
+        customerId,
+        userId: "u-1",
+        fullName: "Nguyễn Hoài Nam",
+        email: "a@b.vn",
+        status: "ACTIVE",
+        version: 0,
+        createdAt: "2026-10-01T00:00:00Z",
+      },
     });
 
     await expect(getMyCustomerId()).resolves.toBe(customerId);

@@ -105,7 +105,7 @@ export interface MockOrder {
   stockHeld?: boolean;
 }
 
-/** The customer's commercial terms, as the BE's CreditTerms (the customer cannot read them). */
+/** The customer's commercial terms, as the BE's CreditTerms (the customer reads them at GET /orders/payment-terms). */
 export interface MockCreditTerms {
   defaultTerm: MockPaymentTerm;
   allowed: readonly MockPaymentTerm[];
@@ -113,6 +113,8 @@ export interface MockCreditTerms {
   creditLimit: number;
   creditTermDays: number;
 }
+
+const PAYMENT_TERM_VALUES = ["PREPAID", "DEPOSIT", "CREDIT"];
 
 export const DEFAULT_MOCK_TERMS: MockCreditTerms = {
   defaultTerm: "PREPAID",
@@ -344,6 +346,13 @@ export function createMockOrderBook(
     orders.find((o) => o.orderId === orderId && o.customerId === customerId);
   const notFound = (orderId: string) => fail(404, "NOT_FOUND", `No order with id ${orderId}`);
 
+  const allowedTerms = (): MockPaymentTerm[] => [
+    ...PAYMENT_TERM_VALUES.filter(
+      (t): t is MockPaymentTerm =>
+        terms.allowed.includes(t as MockPaymentTerm) || (t === "CREDIT" && terms.creditLimit > 0),
+    ),
+  ];
+
   /** BE PlaceOrderRequest bean validation, plus OrderWebMapper.wholeVnd. */
   function validatePlace(body: Record<string, unknown>) {
     const errors: Array<{ field: string; message: string; code: string }> = [];
@@ -429,6 +438,31 @@ export function createMockOrderBook(
       return order ? ok(toDetail(order)) : notFound(orderId);
     },
 
+    /**
+     * GET /orders/payment-terms (BE CreditPosition): the terms the caller may use, the default and
+     * the deposit share. Like the BE it also carries back-office money (limit, exposure, what is
+     * left) that the storefront must not read: the checkout schema drops it.
+     */
+    paymentTerms(): MockResult {
+      const allowed = allowedTerms();
+      return ok({
+        customerId,
+        allowedTerms: allowed,
+        defaultTerm: terms.defaultTerm,
+        ...(allowed.includes("DEPOSIT") ? { depositPercent: terms.depositPercent } : {}),
+        ...(terms.creditLimit > 0
+          ? {
+              creditLimit: terms.creditLimit,
+              creditTermDays: terms.creditTermDays,
+              exposure: 0,
+              availableCredit: terms.creditLimit,
+            }
+          : {}),
+        currency: "VND",
+        hasOverdue: false,
+      });
+    },
+
     /** POST /orders — the checkout: one transaction, nothing is left behind on a refusal. */
     place(body: Record<string, unknown>): MockResult {
       const catalog = deps.catalog;
@@ -504,8 +538,13 @@ export function createMockOrderBook(
       const shipping = deps.shippingAddress?.(addressId);
       if (!shipping) return fail(404, "ADDRESS_NOT_FOUND", "Address not found");
 
-      const term = terms.defaultTerm; // the request carries no term: the customer's default applies
-      if (!terms.allowed.includes(term) && !(term === "CREDIT" && terms.creditLimit > 0)) {
+      // BE: a paymentTerm that is not PREPAID/DEPOSIT/CREDIT cannot be read (400); none means the
+      // customer's default. A term the customer may not use is 409 PAYMENT_TERM_NOT_ALLOWED (BR-01).
+      if (body.paymentTerm != null && !PAYMENT_TERM_VALUES.includes(String(body.paymentTerm))) {
+        return fail(400, "MALFORMED_REQUEST", "The request body could not be read");
+      }
+      const term = (body.paymentTerm ?? terms.defaultTerm) as MockPaymentTerm;
+      if (!allowedTerms().includes(term)) {
         return fail(409, "PAYMENT_TERM_NOT_ALLOWED", `Customer may not be sold on ${term} terms`);
       }
 

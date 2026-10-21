@@ -5,6 +5,7 @@ import type { ApiError } from "@/lib/api/error";
 import { catalogReadKeys } from "@/lib/catalog/queries";
 
 import { placeOrder } from "./checkout-api";
+import { checkoutKeys } from "./checkout-queries";
 import { isStaleCartError } from "./checkout-errors";
 import type { PlaceOrderInput, PlacedOrder } from "./checkout-schemas";
 
@@ -24,6 +25,10 @@ export function usePlaceOrder() {
         queryClient.invalidateQueries({ queryKey: catalogReadKeys.availabilities() }),
       ]),
     onError: (error) => {
+      // Sales changed the customer's terms since the checkout read them: read them again.
+      if (error.code === "PAYMENT_TERM_NOT_ALLOWED") {
+        return queryClient.invalidateQueries({ queryKey: checkoutKeys.paymentTerms() });
+      }
       if (!isStaleCartError(error)) return;
       return Promise.all([
         queryClient.invalidateQueries({ queryKey: catalogReadKeys.availabilities() }),

@@ -49,6 +49,7 @@ export function fakeBackend(deps: {
       if (detail) return settle(catalog.detail(decodeURIComponent(detail[1]!)));
     }
     if (orders) {
+      if (url === "/orders/payment-terms") return settle(orders().paymentTerms());
       if (url === "/orders/me") return settle(orders().page(params));
       if (url.startsWith("/orders/me/"))
         return settle(orders().get(url.replace("/orders/me/", "")));

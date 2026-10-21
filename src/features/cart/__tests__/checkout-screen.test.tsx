@@ -92,7 +92,9 @@ describe("CheckoutScreen", () => {
     expect(within(group).getByRole("radio", { name: /Trần Thu Hà/ })).not.toBeChecked();
     expect(screen.getByText("Hàng đặt")).toBeInTheDocument();
     expect(await screen.findAllByText(/3\.600\.000/)).not.toHaveLength(0);
-    expect(screen.getByText(/điều khoản đã thoả thuận với Sales/)).toBeInTheDocument();
+    // The payment term is chosen among those the customer may use, the default preselected.
+    const terms = await screen.findByRole("radiogroup", { name: "Hình thức thanh toán" });
+    expect(within(terms).getByRole("radio", { name: /Trả trước 100%/ })).toBeChecked();
   });
 
   it("places the order with the chosen address, the SKU's tier price and a request id, then shows the order", async () => {
@@ -109,6 +111,7 @@ describe("CheckoutScreen", () => {
       customerId: CUSTOMER_ID,
       shippingAddressId: OFFICE,
       lines: [{ sku: "CUP-PAPER-8OZ-WHT", quantity: 5000, unitPrice: 720 }],
+      // no paymentTerm: it is the customer's default, which the BE applies itself
     });
     expect(screen.getByText(/SO-\d{8}-\d{6}/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Xem đơn hàng" })).toHaveAttribute(

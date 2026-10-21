@@ -336,6 +336,42 @@ describe("mock checkout (POST /orders) mirrors BE OrderServiceImpl.place", () =>
     expect(errorOf(book.place(request()))).toBe("PAYMENT_TERM_NOT_ALLOWED");
   });
 
+  it("places on the term asked for when the customer may use it, else 409 PAYMENT_TERM_NOT_ALLOWED (BR-01)", () => {
+    const book = checkoutBook(); // allowed PREPAID + DEPOSIT, default PREPAID
+    expect(errorOf(book.place(request({ paymentTerm: "CREDIT" })))).toBe(
+      "PAYMENT_TERM_NOT_ALLOWED",
+    );
+    expect(errorOf(book.place(request({ paymentTerm: "BARTER" })))).toBe("MALFORMED_REQUEST");
+    const placed = dataOf(book.place(request({ paymentTerm: "DEPOSIT" }))) as { orderId: string };
+    expect(dataOf(book.get(placed.orderId))).toMatchObject({
+      paymentTerm: "DEPOSIT",
+      payment: { depositRequired: 234000 },
+    });
+    // a refused order holds no stock
+    expect(catalog.stockOf("CUP-PAPER-8OZ-WHT")).toBe(119000);
+  });
+
+  it("answers GET /orders/payment-terms like the BE: the allowed terms, the default, the deposit share", () => {
+    const body = dataOf(checkoutBook().paymentTerms()) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      customerId: ME,
+      allowedTerms: ["PREPAID", "DEPOSIT"],
+      defaultTerm: "PREPAID",
+      depositPercent: 30,
+    });
+    const credit = dataOf(
+      checkoutBook({
+        defaultTerm: "CREDIT",
+        allowed: ["PREPAID", "CREDIT"],
+        depositPercent: 30,
+        creditLimit: 5_000_000,
+        creditTermDays: 30,
+      }).paymentTerms(),
+    ) as Record<string, unknown>;
+    expect(credit.allowedTerms).toEqual(["PREPAID", "CREDIT"]);
+    expect(credit).not.toHaveProperty("depositPercent"); // only with DEPOSIT allowed
+  });
+
   it("gives the stock back when the customer cancels an order placed here", () => {
     const book = checkoutBook();
     const { orderId } = dataOf(book.place(request())) as { orderId: string };
