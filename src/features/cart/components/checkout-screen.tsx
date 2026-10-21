@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { CreditCard, RefreshCw, ShieldCheck } from "lucide-react";
 
@@ -15,13 +15,16 @@ import { useCartStore } from "@/lib/store/use-cart-store";
 
 import { describeCheckoutError } from "../checkout-errors";
 import { usePlaceOrder } from "../checkout-mutations";
-import type { PlacedOrder } from "../checkout-schemas";
+import { resolvePaymentTerms } from "../checkout-payment-terms";
+import { useCheckoutPaymentTerms } from "../checkout-queries";
+import { PAYMENT_TERMS, type CheckoutPaymentTerm, type PlacedOrder } from "../checkout-schemas";
 import type { CheckoutCustomer } from "../checkout-types";
 import { ISSUE_MESSAGE } from "../selectors";
 import { useCartView } from "../use-cart-view";
-import { forgetRequestId, requestIdFor } from "../request-id";
+import { forgetRequestId, readPickedTerm, rememberPickedTerm, requestIdFor } from "../request-id";
 import { CheckoutAddressPicker } from "./checkout-address-picker";
 import { CheckoutLines } from "./checkout-lines";
+import { CheckoutPaymentTerms } from "./checkout-payment-terms";
 import { OrderPlacedPanel } from "./order-placed-panel";
 
 const Heading = ({ children }: { children: string }) => (
@@ -58,6 +61,32 @@ export function CheckoutScreen({ customer }: { customer: CheckoutCustomer }) {
   const place = usePlaceOrder();
   const [placed, setPlaced] = useState<PlacedOrder>();
   const [pickedAddress, setPickedAddress] = useState<string>();
+  // Kept in sessionStorage with the request id: a reload must not change what the order is.
+  const [pickedTerm, setPickedTerm] = useState<CheckoutPaymentTerm | undefined>(() => {
+    const stored = readPickedTerm();
+    return PAYMENT_TERMS.find((term) => term === stored);
+  });
+  // What the customer may be sold on (kltn-docs 15 BR-01). Asked once the cart is worth ordering.
+  const termsQuery = useCheckoutPaymentTerms(signedIn === true && view.lines.length > 0);
+  const terms = useMemo(
+    () => (termsQuery.data ? resolvePaymentTerms(termsQuery.data) : undefined),
+    [termsQuery.data],
+  );
+  // The pick if it is still allowed, else the customer's default. Terms read earlier still count
+  // when a refetch fails (stale data is kept), so what is shown and what is sent stay the same.
+  const paymentTerm =
+    (pickedTerm && terms?.options.some((o) => o.term === pickedTerm) ? pickedTerm : undefined) ??
+    terms?.defaultTerm;
+  // Only a term that differs from the customer's default is sent, and keyed: the BE applies the
+  // default itself, so the same order is the same request whether or not the terms were readable.
+  const sentTerm = paymentTerm && paymentTerm !== terms?.defaultTerm ? paymentTerm : undefined;
+  // No terms to check an earlier pick against: ordering waits for them, rather than placing an
+  // order that may differ from the one the earlier pick sent.
+  const awaitingTerms = !terms && !termsQuery.isPending && pickedTerm !== undefined;
+  const pickTerm = (term: CheckoutPaymentTerm) => {
+    setPickedTerm(term);
+    rememberPickedTerm(term);
+  };
 
   const addresses = customer.addresses ?? [];
   const addressId =
@@ -72,7 +101,8 @@ export function CheckoutScreen({ customer }: { customer: CheckoutCustomer }) {
     quantity: row.line.quantity,
     unitPrice: row.unitPrice ?? 0,
   }));
-  const contentKey = JSON.stringify([customer.customerId, addressId, lines]);
+  // The term is part of the content: the same key with another term would be IDEMPOTENCY_KEY_REUSED.
+  const contentKey = JSON.stringify([customer.customerId, addressId, lines, sentTerm ?? null]);
 
   if (placed) return <OrderPlacedPanel order={placed} />;
   if (signedIn === undefined || !hydrated || customer.isLoading) {
@@ -103,7 +133,12 @@ export function CheckoutScreen({ customer }: { customer: CheckoutCustomer }) {
 
   const blockedLine = view.lines.find((row) => row.issue);
   const ready =
-    status === "ready" && !view.blocked && Boolean(customer.customerId) && Boolean(addressId);
+    status === "ready" &&
+    !view.blocked &&
+    Boolean(customer.customerId) &&
+    Boolean(addressId) &&
+    !termsQuery.isPending &&
+    !awaitingTerms;
 
   const submit = () => {
     if (!ready || !customer.customerId || !addressId) return;
@@ -113,6 +148,7 @@ export function CheckoutScreen({ customer }: { customer: CheckoutCustomer }) {
         customerId: customer.customerId,
         shippingAddressId: addressId,
         lines,
+        ...(sentTerm ? { paymentTerm: sentTerm } : {}),
       },
       {
         // Show the order and empty the cart in one step: emptied first, the screen would flash
@@ -158,15 +194,21 @@ export function CheckoutScreen({ customer }: { customer: CheckoutCustomer }) {
 
         <CheckoutLines lines={view.lines} />
 
-        <SurfaceCard className="space-y-2">
+        <SurfaceCard className="space-y-3">
           <div className="flex items-center gap-2">
             <CreditCard aria-hidden className="text-accent size-5" />
             <Heading>Thanh toán</Heading>
           </div>
-          <p className="text-ink-secondary text-sm">
-            Đơn được thanh toán theo điều khoản đã thoả thuận với Sales cho tài khoản của bạn (trả
-            trước, đặt cọc hoặc công nợ). Sau khi đặt, đơn hàng cho biết số tiền cần thanh toán.
-          </p>
+          <CheckoutPaymentTerms
+            terms={terms}
+            isLoading={termsQuery.isPending}
+            error={termsQuery.error}
+            onRetry={() => void termsQuery.refetch()}
+            value={paymentTerm}
+            onChange={pickTerm}
+            awaitingChoice={awaitingTerms}
+            subtotal={view.subtotal}
+          />
         </SurfaceCard>
       </div>
 

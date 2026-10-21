@@ -13,5 +13,9 @@ export function useDesigns() {
 }
 
 export function useDesign(id: string) {
-  return useQuery({ queryKey: designKeys.detail(id), queryFn: () => getDesign(id), enabled: Boolean(id) });
+  return useQuery({
+    queryKey: designKeys.detail(id),
+    queryFn: () => getDesign(id),
+    enabled: Boolean(id),
+  });
 }

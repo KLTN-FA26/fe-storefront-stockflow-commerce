@@ -8,12 +8,26 @@ import { beId } from "@/lib/validation/primitives";
 // JSON, not null, so every optional field is `.nullish()`.
 // Ids are beId() (any 8-4-4-4-12 hex): the dev catalogue has ids without RFC version/variant bits.
 
-/** One row of GET /catalog/products (CatalogCardResponse): no image, SKU, price or stock. */
+/** A variant on a list row: its SKU and name (never a price or stock; those are /prices and /availability). */
+export const catalogCardSkuDtoSchema = z.object({
+  sku: z.string().min(1),
+  name: z.string().nullish(),
+});
+
+/**
+ * One row of GET /catalog/products (CatalogCardResponse): never a price or stock. `primaryImageUrl`
+ * and `skus` were added to the row so a card needs no detail and gallery call of its own; a BE
+ * without them sends neither, so both stay optional and the list falls back to those calls.
+ * `skus` present (even empty) means the BE answered the new row; `primaryImageUrl` is then absent
+ * only for a product with no approved image.
+ */
 export const catalogCardDtoSchema = z.object({
   productId: beId(),
   slug: z.string().min(1),
   title: z.string().min(1),
   seoTitle: z.string().nullish(),
+  primaryImageUrl: z.string().min(1).nullish(),
+  skus: z.array(catalogCardSkuDtoSchema).nullish(),
 });
 export const catalogPageDtoSchema = pageResponseSchema(catalogCardDtoSchema);
 

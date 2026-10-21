@@ -15,5 +15,8 @@ export function computeDesignStats(design: DesignDto) {
 }
 
 export function hasPreflightFail(design: DesignDto): boolean {
-  return design.preflightResult === "Fail" || design.preflightIssues.some((issue) => issue.level === "fail");
+  return (
+    design.preflightResult === "Fail" ||
+    design.preflightIssues.some((issue) => issue.level === "fail")
+  );
 }

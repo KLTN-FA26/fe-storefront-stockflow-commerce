@@ -1,6 +1,13 @@
 import { z } from "zod";
 
-export const designStatusSchema = z.enum(["Draft", "Ready", "Confirmed", "Locked", "Superseded", "Cancelled"]);
+export const designStatusSchema = z.enum([
+  "Draft",
+  "Ready",
+  "Confirmed",
+  "Locked",
+  "Superseded",
+  "Cancelled",
+]);
 export const preflightResultSchema = z.enum(["Pass", "Warning", "Fail"]);
 export const designRoleSchema = z.enum(["Customer", "Sales Staff", "E-commerce Admin", "System"]);
 
@@ -34,14 +41,16 @@ export const designDtoSchema = z.object({
   preflightIssues: z.array(preflightIssueSchema),
 });
 
-export const designUpdateInputSchema = designDtoSchema.pick({
-  id: true,
-  variantName: true,
-  elements: true,
-}).extend({
-  preflightResult: preflightResultSchema,
-  preflightIssues: z.array(preflightIssueSchema),
-})
+export const designUpdateInputSchema = designDtoSchema
+  .pick({
+    id: true,
+    variantName: true,
+    elements: true,
+  })
+  .extend({
+    preflightResult: preflightResultSchema,
+    preflightIssues: z.array(preflightIssueSchema),
+  })
   // BR-01 docs 12 §6: Không cho Confirmed khi preflight còn lỗi Fail.
   .refine((design) => design.preflightResult !== "Fail", {
     message: "Không thể xác nhận khi preflight không đạt",
@@ -53,11 +62,12 @@ export const designUpdateInputSchema = designDtoSchema.pick({
     path: ["elements"],
   });
 
-export const confirmDesignInputSchema = z.object({
-  id: z.string().min(1),
-  acceptedWarnings: z.boolean().default(false),
-  preflightResult: preflightResultSchema,
-})
+export const confirmDesignInputSchema = z
+  .object({
+    id: z.string().min(1),
+    acceptedWarnings: z.boolean().default(false),
+    preflightResult: preflightResultSchema,
+  })
   // BR-01 docs 12 §6: Không confirm khi preflight còn lỗi Fail.
   .refine((input) => input.preflightResult !== "Fail", {
     message: "Không thể xác nhận khi preflight không đạt",

@@ -2,6 +2,7 @@ import type { z } from "zod";
 
 import type {
   catalogCardDtoSchema,
+  catalogCardSkuDtoSchema,
   catalogGalleryDtoSchema,
   catalogListInputSchema,
   catalogProductDtoSchema,
@@ -11,6 +12,7 @@ import type {
 } from "./schemas";
 
 export type CatalogCard = z.infer<typeof catalogCardDtoSchema>;
+export type CatalogCardSku = z.infer<typeof catalogCardSkuDtoSchema>;
 export type CatalogVariant = z.infer<typeof catalogVariantDtoSchema>;
 export type CatalogProduct = z.infer<typeof catalogProductDtoSchema>;
 export type GalleryImage = z.infer<typeof galleryImageDtoSchema>;

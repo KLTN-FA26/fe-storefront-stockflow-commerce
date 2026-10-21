@@ -14,10 +14,16 @@ export const checkoutLineInputSchema = z.object({
   unitPrice: z.number().int().nonnegative(),
 });
 
+// kltn-docs 15-payment §1, BR-01: PREPAID (100% up front), DEPOSIT, CREDIT; the order may use only
+// a term the customer is allowed. Same names as BE `PaymentTerm` / `CommercialTerm`.
+export const PAYMENT_TERMS = ["PREPAID", "DEPOSIT", "CREDIT"] as const;
+export type CheckoutPaymentTerm = (typeof PAYMENT_TERMS)[number];
+
 /**
- * `paymentTerm` and `depositPercent` are deliberately not part of the request. The BE then uses the
- * customer's default term, and the customer cannot read which terms Sales allowed them
- * (/customers/{id}/credit-profile is back-office only), so offering a choice would be a guess.
+ * `paymentTerm` is the term the customer picked among those GET /orders/payment-terms allows them;
+ * omitted, the BE uses the customer's default. A term they may not use is 409
+ * PAYMENT_TERM_NOT_ALLOWED. `depositPercent` is deliberately not part of the request: the BE
+ * ignores a customer's own share and applies the one in their terms (OrderController.place).
  * `billingAddressId` is omitted too: the BE falls back to the default billing, then shipping.
  */
 export const placeOrderInputSchema = z.object({
@@ -26,6 +32,7 @@ export const placeOrderInputSchema = z.object({
   customerId: beId(),
   shippingAddressId: beId(),
   lines: z.array(checkoutLineInputSchema).min(1),
+  paymentTerm: z.enum(PAYMENT_TERMS).optional(),
 });
 
 // ── Response — the part of BE OrderResponse the storefront uses. Extra fields (stock holds,
@@ -43,3 +50,18 @@ export const placedOrderDtoSchema = z.object({
 
 export type PlaceOrderInput = z.input<typeof placeOrderInputSchema>;
 export type PlacedOrder = z.infer<typeof placedOrderDtoSchema>;
+
+// ── GET /orders/payment-terms — what the signed-in customer may be sold on (BE CreditPosition) ──
+// The BE sends more than the checkout needs (the credit limit, what is owed, what is left). That
+// is back-office money: it is neither parsed nor kept here, so no screen can show it. Jackson
+// drops null fields (NON_NULL), so every optional field is nullish.
+
+export const paymentTermsDtoSchema = z.object({
+  // Strings, not an enum: a term newer than this FE is dropped by resolvePaymentTerms, not a parse failure.
+  allowedTerms: z.array(z.string()),
+  defaultTerm: z.string().nullish(),
+  // DEPOSIT only: the share of the total the customer's terms ask up front.
+  depositPercent: z.number().gt(0).lt(100).nullish(),
+});
+
+export type PaymentTermsDto = z.infer<typeof paymentTermsDtoSchema>;

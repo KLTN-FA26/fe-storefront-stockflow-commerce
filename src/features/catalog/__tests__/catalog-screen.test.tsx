@@ -28,6 +28,29 @@ afterEach(() => {
 
 const card = async (title: string) => await screen.findByRole("link", { name: new RegExp(title) });
 
+/** A BE that predates the card fields: list rows carry the title and slug only. */
+function stripCardFields() {
+  const real = vi.mocked(api.get).getMockImplementation()!;
+  vi.mocked(api.get).mockImplementation(async (url, config) => {
+    const answer = (await real(url, config)) as { data: unknown };
+    if (url !== "/catalog/products") return answer as never;
+    const page = answer.data as { items: Array<Record<string, unknown>> };
+    return {
+      data: {
+        ...page,
+        items: page.items.map(({ primaryImageUrl: _i, skus: _s, ...row }) => row),
+      },
+    } as never;
+  });
+}
+
+const callsTo = (url: string) => vi.mocked(api.get).mock.calls.filter(([u]) => u === url);
+const detailAndGalleryCalls = () =>
+  vi
+    .mocked(api.get)
+    .mock.calls.filter(([url]) => /^\/catalog\/products\/[^/]+(\/gallery)?$/.test(String(url)))
+    .filter(([url]) => !/\/(availability|prices)$/.test(String(url)));
+
 describe("CatalogScreen", () => {
   it("lists a page of products with the customer's price and the stock indicator", async () => {
     renderWithProviders(<CatalogScreen />);
@@ -69,6 +92,52 @@ describe("CatalogScreen", () => {
     });
   });
 
+  it("makes one list call, one stock call and one price call for a whole page: no detail, no gallery", async () => {
+    renderWithProviders(<CatalogScreen />);
+    const cup = await card("Ly giấy 2 lớp 8oz");
+    await waitFor(() => expect(within(cup).getByText(/720/)).toBeInTheDocument());
+
+    expect(callsTo("/catalog/products")).toHaveLength(1);
+    expect(callsTo("/catalog/products/availability")).toHaveLength(1);
+    expect(callsTo("/catalog/products/prices")).toHaveLength(1);
+    expect(detailAndGalleryCalls()).toHaveLength(0);
+    // The picture comes from the row's primaryImageUrl.
+    expect(within(cup).getByRole("img")).toHaveAttribute("src", expect.stringContaining("logo"));
+  });
+
+  it("falls back to one detail and one gallery per card when the rows carry no card fields", async () => {
+    stripCardFields();
+    renderWithProviders(<CatalogScreen />);
+    const cup = await card("Ly giấy 2 lớp 8oz");
+    await waitFor(() => expect(within(cup).getByText(/720/)).toBeInTheDocument());
+
+    expect(callsTo("/catalog/products")).toHaveLength(1);
+    expect(detailAndGalleryCalls().length).toBeGreaterThanOrEqual(24); // 12 details + 12 galleries
+    expect(callsTo("/catalog/products/availability")).toHaveLength(1);
+    expect(callsTo("/catalog/products/prices")).toHaveLength(1);
+    expect(within(cup).getByRole("img")).toBeInTheDocument();
+  });
+
+  it("shows a card for a product with no image without asking for a gallery", async () => {
+    const real = vi.mocked(api.get).getMockImplementation()!;
+    vi.mocked(api.get).mockImplementation(async (url, config) => {
+      const answer = (await real(url, config)) as { data: unknown };
+      if (url !== "/catalog/products") return answer as never;
+      const page = answer.data as { items: Array<Record<string, unknown>> };
+      return {
+        data: {
+          ...page,
+          items: page.items.map(({ primaryImageUrl: _i, ...row }) => row),
+        },
+      } as never;
+    });
+    renderWithProviders(<CatalogScreen />);
+    const cup = await card("Ly giấy 2 lớp 8oz");
+    await waitFor(() => expect(within(cup).getByText(/720/)).toBeInTheDocument());
+    expect(detailAndGalleryCalls()).toHaveLength(0);
+    expect(within(cup).queryByRole("img")).not.toBeInTheDocument();
+  });
+
   it("shows no price for a product the customer has no price for, but still lists it", async () => {
     renderWithProviders(<CatalogScreen />);
     const custom = await card("Ly giấy in logo");
@@ -76,14 +145,14 @@ describe("CatalogScreen", () => {
     expect(within(custom).queryByText("Từ")).not.toBeInTheDocument();
   });
 
-  it("lists a product whose detail the BE refuses for want of a price, with no price and no error", async () => {
+  it("lists a product whose detail the BE would refuse for want of a price, with no price and no error", async () => {
     renderWithProviders(<CatalogScreen />, { searchParams: "?q=kraft" });
     const cup = await card("Ly giấy kraft 16oz");
-    await waitFor(() =>
-      expect(api.get).toHaveBeenCalledWith(
-        "/catalog/products/ly-giay-kraft-16oz",
-        expect.anything(),
-      ),
+    // The row carries its SKUs, so the stock is asked for without ever opening the (refused) detail.
+    await waitFor(() => expect(within(cup).getByText("Còn hàng")).toBeInTheDocument());
+    expect(api.get).not.toHaveBeenCalledWith(
+      "/catalog/products/ly-giay-kraft-16oz",
+      expect.anything(),
     );
     expect(within(cup).queryByText("Từ")).not.toBeInTheDocument();
     expect(within(cup).queryByText(/₫/)).not.toBeInTheDocument();
@@ -203,7 +272,8 @@ describe("CatalogScreen", () => {
     expect(await card("Ly giấy 2 lớp 8oz")).toBeInTheDocument();
   });
 
-  it("hides a product that was unpublished after the list was built (detail answers 404)", async () => {
+  it("hides a product that was unpublished after the list was built (fallback: detail answers 404)", async () => {
+    stripCardFields();
     const real = vi.mocked(api.get).getMockImplementation()!;
     vi.mocked(api.get).mockImplementation(async (url, config) => {
       if (url === "/catalog/products/tui-canvas") throw new ApiError(404, "NOT_FOUND", "gone");

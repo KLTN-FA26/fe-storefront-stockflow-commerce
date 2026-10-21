@@ -98,7 +98,9 @@ describe("AddressForm", () => {
 
   it("reports a broken response contract without leaking zod issues", () => {
     const contractError = z.object({ addressId: z.uuid() }).safeParse({}).error;
-    renderWithQuery(<AddressForm snapshot={snapshot} onSubmit={vi.fn()} serverError={contractError} />);
+    renderWithQuery(
+      <AddressForm snapshot={snapshot} onSubmit={vi.fn()} serverError={contractError} />,
+    );
 
     expect(screen.getByText(/Dữ liệu trả về không đúng định dạng/)).toBeInTheDocument();
     expect(screen.queryByText(/invalid_type/)).not.toBeInTheDocument();
