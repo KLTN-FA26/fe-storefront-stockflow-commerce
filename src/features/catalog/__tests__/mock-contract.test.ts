@@ -33,6 +33,45 @@ describe("mock catalogue satisfies the FE catalogue contract", () => {
     }
   });
 
+  it("gives every list row the card fields the BE sends: the SKUs, and the image the gallery leads with", () => {
+    const rows = (
+      dataOf(catalog.list({ size: 200 })) as {
+        items: Array<{ slug: string; primaryImageUrl?: string; skus: Array<{ sku: string }> }>;
+      }
+    ).items;
+    for (const row of rows) {
+      const gallery = dataOf(catalog.gallery(row.slug)) as {
+        images: Array<{ url: string; primary: boolean }>;
+      };
+      expect(row.primaryImageUrl).toBe(gallery.images.find((i) => i.primary)?.url);
+      // The SKUs the row lists are the ones the stock and price calls will be asked for.
+      expect(row.skus.length).toBeGreaterThan(0);
+      expect(Object.keys(row)).not.toEqual(expect.arrayContaining(["price", "availability"]));
+    }
+  });
+
+  it("leads a list row's image with the primary one even when it is not the first (several variants may each have a primary)", () => {
+    const base = seedMockCatalog()[0]!;
+    const custom = createMockCatalog([
+      {
+        ...base,
+        images: [
+          { sku: "A", url: "https://img.test/a.jpg", primary: false },
+          { sku: "B", url: "https://img.test/b.jpg", primary: true },
+        ],
+      },
+    ]);
+    const row = (dataOf(custom.list({ size: 5 })) as { items: Array<{ primaryImageUrl?: string }> })
+      .items[0];
+    expect(row?.primaryImageUrl).toBe("https://img.test/b.jpg");
+    const gallery = dataOf(custom.gallery(base.slug)) as {
+      images: Array<{ url: string; primary: boolean }>;
+    };
+    expect(gallery.images.filter((i) => i.primary).map((i) => i.url)).toEqual([
+      "https://img.test/b.jpg",
+    ]);
+  });
+
   it("answers every product's detail and gallery with bodies the schemas accept", () => {
     expect(slugs.length).toBeGreaterThan(12);
     for (const slug of slugs.filter((s) => s !== NO_PRICE_SLUG)) {

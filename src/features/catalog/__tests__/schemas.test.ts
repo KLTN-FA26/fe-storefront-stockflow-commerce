@@ -26,6 +26,41 @@ describe("catalogue schemas follow the BE DTOs", () => {
     expect(page).toMatchObject({ page: 0, totalElements: 1, hasNext: false });
   });
 
+  it("parses the card fields of a row: primaryImageUrl and skus (no price, no stock)", () => {
+    const page = catalogPageDtoSchema.parse(
+      bePage({
+        items: [
+          {
+            ...beCard,
+            primaryImageUrl: "https://cdn.example.vn/p/white.jpg",
+            skus: [{ sku: "CUP-PAPER-8OZ-WHT", name: "Ly trắng" }, { sku: "CUP-PAPER-8OZ-KRAFT" }],
+          },
+        ],
+      }),
+    );
+    expect(page.items[0]).toMatchObject({
+      primaryImageUrl: "https://cdn.example.vn/p/white.jpg",
+      skus: [{ sku: "CUP-PAPER-8OZ-WHT", name: "Ly trắng" }, { sku: "CUP-PAPER-8OZ-KRAFT" }],
+    });
+  });
+
+  it("parses a row with an empty skus list and no image (a product with no approved picture)", () => {
+    const page = catalogPageDtoSchema.parse(bePage({ items: [{ ...beCard, skus: [] }] }));
+    expect(page.items[0]?.skus).toEqual([]);
+    expect(page.items[0]?.primaryImageUrl).toBeUndefined();
+  });
+
+  it("refuses a SKU entry with no sku, and an empty image URL", () => {
+    expect(
+      catalogPageDtoSchema.safeParse(bePage({ items: [{ ...beCard, skus: [{ name: "x" }] }] }))
+        .success,
+    ).toBe(false);
+    expect(
+      catalogPageDtoSchema.safeParse(bePage({ items: [{ ...beCard, primaryImageUrl: "" }] }))
+        .success,
+    ).toBe(false);
+  });
+
   it("requires the PageResponse paging flags", () => {
     const { hasNext: _omit, ...withoutHasNext } = bePage();
     expect(catalogPageDtoSchema.safeParse(withoutHasNext).success).toBe(false);

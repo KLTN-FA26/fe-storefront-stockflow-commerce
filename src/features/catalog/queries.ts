@@ -51,7 +51,16 @@ export function useCatalogGallery(slug: string, enabled = true) {
   });
 }
 
-/** One detail and one gallery per card: the card row itself carries no image, SKU or price. */
+/**
+ * Whether the list row already carries what a card needs: the BE sends `skus` on every row (and
+ * `primaryImageUrl` when the product has an image). A row without it comes from an older BE.
+ */
+export const hasCardFields = (card: CatalogCard) => card.skus != null;
+
+/**
+ * The fallback for rows without card fields (an older BE): one detail and one gallery for each of
+ * the cards given. Pass only the rows that need it; a row that has the fields costs no call.
+ */
 export function useCardDetails(cards: readonly CatalogCard[], enabled = true) {
   const products = useQueries({
     queries: cards.map((card) => ({

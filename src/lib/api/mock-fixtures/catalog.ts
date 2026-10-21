@@ -47,7 +47,7 @@ export interface MockProduct {
   published?: boolean;
   variants: MockVariant[];
   /** Pictures keyed by SKU; the first is the primary image. */
-  images: Array<{ sku?: string; url: string; altText?: string }>;
+  images: Array<{ sku?: string; url: string; altText?: string; primary?: boolean }>;
 }
 
 export interface MockResult {
@@ -134,6 +134,18 @@ export function createMockCatalog(
       .flatMap((p) => p.variants)
       .find((v) => v.sku === sku);
 
+  /** BE rule: the primary image leads, then the listing order (several variants may each have a primary). */
+  const isPrimary = (product: MockProduct, index: number) =>
+    product.images[index]?.primary ?? (index === 0 && !product.images.some((i) => i.primary));
+  const leadImage = (product: MockProduct) =>
+    product.images
+      .map((image, index) => ({ image, index }))
+      .sort(
+        (a, b) =>
+          Number(isPrimary(product, b.index)) - Number(isPrimary(product, a.index)) ||
+          a.index - b.index,
+      )[0]?.image;
+
   const imageId = (product: MockProduct, index: number) =>
     `${product.productId.slice(0, 24)}${String(index + 1).padStart(12, "0")}`;
 
@@ -177,6 +189,9 @@ export function createMockCatalog(
           slug: p.slug,
           title: p.title,
           ...(p.seoTitle ? { seoTitle: p.seoTitle } : {}),
+          // Card fields (BE CatalogCardResponse): the primary image and the variants, never a price or stock.
+          ...(leadImage(p) ? { primaryImageUrl: leadImage(p)!.url } : {}),
+          skus: p.variants.map((v) => ({ sku: v.sku, name: `${p.title} · ${v.sku}` })),
         })),
         page,
         size,
@@ -221,7 +236,7 @@ export function createMockCatalog(
           url: image.url,
           ...(image.altText ? { altText: image.altText } : {}),
           sortOrder: index,
-          primary: index === 0,
+          primary: isPrimary(product, index),
         })),
       });
     },
