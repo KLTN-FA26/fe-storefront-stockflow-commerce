@@ -20,6 +20,15 @@ export function CreditNote({ credit, total }: { credit: CreditSummary; total: nu
       </div>
     );
   }
+  if (outlook === "NO_LIMIT") {
+    return (
+      <div role="status">
+        <Alert tone="warning" title={`Hạn mức công nợ của bạn là ${money(0)}.`}>
+          Đơn công nợ sẽ được giữ lại để duyệt công nợ trước khi được xử lý. Bạn vẫn đặt hàng được.
+        </Alert>
+      </div>
+    );
+  }
   if (outlook === "OVER_LIMIT") {
     return (
       <div role="status">

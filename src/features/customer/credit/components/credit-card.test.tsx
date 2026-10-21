@@ -1,5 +1,4 @@
 import { screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api/client";
@@ -32,7 +31,7 @@ describe("CreditCard (account page, SFCREDIT)", () => {
     expect(await screen.findByRole("heading", { name: "Công nợ" })).toBeInTheDocument();
     const value = (label: string) => screen.getByText(label).nextElementSibling;
     expect(value("Hạn mức")).toHaveTextContent(/50\.000\.000/);
-    expect(value("Đang nợ")).toHaveTextContent(/12\.000\.000/);
+    expect(value("Dư nợ")).toHaveTextContent(/12\.000\.000/);
     expect(value("Còn lại")).toHaveTextContent(/38\.000\.000/);
     expect(screen.getByText(/Kỳ hạn thanh toán/)).toHaveTextContent("30 ngày");
     expect(screen.getByRole("img", { name: "Đã dùng 24% hạn mức" })).toBeInTheDocument();
@@ -51,7 +50,7 @@ describe("CreditCard (account page, SFCREDIT)", () => {
     renderWithProviders(<CreditCard />);
 
     expect(await screen.findByText("Bạn có khoản công nợ quá hạn.")).toBeInTheDocument();
-    expect(screen.getByText("Đang nợ").nextElementSibling).toHaveTextContent(/1\.000\.000/);
+    expect(screen.getByText("Dư nợ").nextElementSibling).toHaveTextContent(/1\.000\.000/);
     expect(screen.queryByText(/Kỳ hạn thanh toán/)).not.toBeInTheDocument();
   });
 
@@ -63,16 +62,37 @@ describe("CreditCard (account page, SFCREDIT)", () => {
     await vi.waitFor(() => expect(container).toBeEmptyDOMElement());
   });
 
-  it("says it could not load, and retries", async () => {
-    const get = vi
-      .spyOn(api, "get")
-      .mockRejectedValueOnce(new ApiError(403, "FORBIDDEN", "Không có quyền"))
-      .mockResolvedValue({ data: { allowedTerms: ["CREDIT"], creditLimit: 5_000_000 } });
+  it("shows nothing while the terms cannot be loaded: a prepaid-only customer must not get a credit warning", async () => {
+    vi.spyOn(api, "get").mockRejectedValue(new ApiError(403, "FORBIDDEN", "Không có quyền"));
+    const { container } = renderWithProviders(<CreditCard />);
+
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalled());
+    await vi.waitFor(() => expect(container).toBeEmptyDOMElement());
+    expect(screen.queryByText(/công nợ/i)).not.toBeInTheDocument();
+  });
+
+  it("explains that the owed figure counts delivered orders still unpaid", async () => {
+    answer({ allowedTerms: ["CREDIT"], creditLimit: 5_000_000, exposure: 1_000_000 });
+    renderWithProviders(<CreditCard />);
+    expect(await screen.findByText(/kể cả đơn đã giao/)).toBeInTheDocument();
+  });
+
+  it("shows a customer allowed credit with a limit of zero, and says every credit order is held", async () => {
+    // The BE omits a null limit (NON_NULL): only the allowed term says credit is on.
+    answer({ allowedTerms: ["PREPAID", "CREDIT"], defaultTerm: "PREPAID" });
     renderWithProviders(<CreditCard />);
 
-    expect(await screen.findByText("Không tải được thông tin công nợ.")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Thử lại" }));
-    expect(await screen.findByText("Hạn mức")).toBeInTheDocument();
-    expect(get).toHaveBeenCalledTimes(2);
+    expect(await screen.findByRole("heading", { name: "Công nợ" })).toBeInTheDocument();
+    expect(screen.getByText("Hạn mức").nextElementSibling).toHaveTextContent(/^0\s?₫$/);
+    expect(screen.getByText("Hạn mức công nợ của bạn là 0 ₫.")).toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("shows no credit figures when the credit fields cannot be read, yet keeps the terms", async () => {
+    answer({ allowedTerms: ["PREPAID", "CREDIT"], creditLimit: "lots" });
+    const { container } = renderWithProviders(<CreditCard />);
+
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalled());
+    await vi.waitFor(() => expect(container).toBeEmptyDOMElement());
   });
 });

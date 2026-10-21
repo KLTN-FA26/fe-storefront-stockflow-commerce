@@ -161,7 +161,7 @@ describe("signInCustomer", () => {
     expect(seen).not.toContain(true);
   });
 
-  it("refuses a CUSTOMER login that has no customer profile, and leaves nothing half signed in", async () => {
+  it("treats no customer profile as not a customer account, even with every permission", async () => {
     vi.spyOn(api, "post").mockImplementation(async (url) => ({
       data: url === "/identity/auth/login" ? tokenResponse : undefined,
     }));
@@ -170,9 +170,9 @@ describe("signInCustomer", () => {
       if (url === "/identity/me/permissions") return { data: myPermissions(CUSTOMER_PERMISSIONS) };
       throw new ApiError(404, "CUSTOMER_NOT_FOUND", "Customer not found");
     });
-    await expect(signInCustomer({ username: "u", password: "p" })).rejects.toMatchObject({
-      code: "CUSTOMER_NOT_FOUND",
-    });
+    await expect(signInCustomer({ username: "u", password: "p" })).rejects.toBeInstanceOf(
+      NotCustomerError,
+    );
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
   });
 

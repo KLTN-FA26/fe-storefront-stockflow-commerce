@@ -5,10 +5,29 @@ import { creditOutlook, creditSummary } from "./selectors";
 const dto = (over: Record<string, unknown> = {}) => ({ allowedTerms: ["CREDIT"], ...over });
 
 describe("creditSummary", () => {
-  it("is undefined for a customer without credit: no limit, or a limit of zero", () => {
-    expect(creditSummary(dto())).toBeUndefined();
-    expect(creditSummary(dto({ creditLimit: 0 }))).toBeUndefined();
-    expect(creditSummary(dto({ creditLimit: null }))).toBeUndefined();
+  it("is undefined for a customer who may not order on credit and has no limit", () => {
+    const prepaid = (over: Record<string, unknown> = {}) =>
+      dto({ allowedTerms: ["PREPAID", "DEPOSIT"], ...over });
+    expect(creditSummary(prepaid())).toBeUndefined();
+    expect(creditSummary(prepaid({ creditLimit: 0 }))).toBeUndefined();
+    expect(creditSummary(prepaid({ creditLimit: null }))).toBeUndefined();
+  });
+
+  it("is a zero limit for a customer allowed credit without one: every credit order is held", () => {
+    for (const over of [{}, { creditLimit: 0 }, { creditLimit: null }]) {
+      expect(creditSummary(dto(over))).toEqual({
+        currency: "VND",
+        limit: 0,
+        exposure: 0,
+        available: 0,
+        termDays: undefined,
+        overdue: false,
+      });
+    }
+  });
+
+  it("is undefined when the credit fields could not be read", () => {
+    expect(creditSummary(dto({ creditLimit: 5_000, creditUnreadable: true }))).toBeUndefined();
   });
 
   it("reads the limit, what is owed, what is left, the days to pay and the overdue flag", () => {
@@ -58,6 +77,10 @@ describe("creditOutlook", () => {
   it("is within the limit up to exactly what is left", () => {
     expect(creditOutlook(credit, 600)).toBe("WITHIN_LIMIT");
     expect(creditOutlook(credit, 601)).toBe("OVER_LIMIT");
+  });
+
+  it("says there is no limit for a zero limit, before comparing amounts", () => {
+    expect(creditOutlook(creditSummary(dto())!, 1)).toBe("NO_LIMIT");
   });
 
   it("is held for an overdue receivable whatever the total", () => {
