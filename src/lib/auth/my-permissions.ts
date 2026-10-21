@@ -1,10 +1,10 @@
 /**
  * The signed-in user's effective permissions — BE GET /identity/me/permissions (MeController).
  *
- * Storefront customers all share the CUSTOMER role, so this is not a role matrix like the
- * back office: it only lets a screen drop an action an admin has taken away from the role
- * (e.g. `sales-orders:UPDATE` for cancelling), instead of offering it and failing with 403.
- * UI-only — the BE re-checks every call.
+ * The one source for "may this account do X": sign-in reads it to decide whether the account may
+ * use the storefront at all, and a screen reads it to drop an action an admin has taken away
+ * (e.g. `sales-orders:UPDATE` for cancelling) instead of offering it and failing with 403.
+ * The `roles` it carries are for display only. UI-only — the BE re-checks every call.
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -26,15 +26,21 @@ export const myPermissionKeys = {
   all: ["my-permissions"] as const,
 };
 
-export async function getMyPermissions(signal?: AbortSignal): Promise<MyPermissions> {
-  const { data } = await api.get<unknown>("/identity/me/permissions", signal ? { signal } : {});
+export async function getMyPermissions(
+  options: { signal?: AbortSignal; headers?: Record<string, string> } = {},
+): Promise<MyPermissions> {
+  // `headers` carries a token that is not stored yet (sign-in checks the account before storing it).
+  const { data } = await api.get<unknown>("/identity/me/permissions", {
+    ...(options.signal ? { signal: options.signal } : {}),
+    ...(options.headers ? { headers: options.headers } : {}),
+  });
   return myPermissionsDtoSchema.parse(data);
 }
 
 export function useMyPermissions() {
   return useQuery({
     queryKey: myPermissionKeys.all,
-    queryFn: ({ signal }) => getMyPermissions(signal),
+    queryFn: ({ signal }) => getMyPermissions({ signal }),
     ...QUERY_TIMES.master,
   });
 }

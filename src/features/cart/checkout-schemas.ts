@@ -50,18 +50,3 @@ export const placedOrderDtoSchema = z.object({
 
 export type PlaceOrderInput = z.input<typeof placeOrderInputSchema>;
 export type PlacedOrder = z.infer<typeof placedOrderDtoSchema>;
-
-// ── GET /orders/payment-terms — what the signed-in customer may be sold on (BE CreditPosition) ──
-// The BE sends more than the checkout needs (the credit limit, what is owed, what is left). That
-// is back-office money: it is neither parsed nor kept here, so no screen can show it. Jackson
-// drops null fields (NON_NULL), so every optional field is nullish.
-
-export const paymentTermsDtoSchema = z.object({
-  // Strings, not an enum: a term newer than this FE is dropped by resolvePaymentTerms, not a parse failure.
-  allowedTerms: z.array(z.string()),
-  defaultTerm: z.string().nullish(),
-  // DEPOSIT only: the share of the total the customer's terms ask up front.
-  depositPercent: z.number().gt(0).lt(100).nullish(),
-});
-
-export type PaymentTermsDto = z.infer<typeof paymentTermsDtoSchema>;

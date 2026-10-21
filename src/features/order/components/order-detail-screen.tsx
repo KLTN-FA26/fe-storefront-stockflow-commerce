@@ -14,6 +14,7 @@ import { useCancelMyOrder } from "../mutations";
 import { useKnownCancellationRequest, useOrder } from "../queries";
 import { isValidOrderId } from "../schemas";
 import { CancellationDialog } from "./cancellation-dialog";
+import { OrderCancellationCard } from "./order-cancellation-card";
 import { CopyOrderNumber } from "./copy-order-number";
 import { OrderDeliveryCard, OrderLinesCard, OrderTotalCard } from "./order-detail-sections";
 import { OrderHelpCard } from "./order-help-card";
@@ -107,6 +108,9 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
           <OrderTotalCard order={order} />
           <OrderPaymentCard order={order} />
           <OrderDeliveryCard order={order} />
+          {order.cancellationRequest && order.cancellationRequest.status !== "PENDING" ? (
+            <OrderCancellationCard request={order.cancellationRequest} />
+          ) : null}
           <OrderHelpCard
             order={order}
             onCancel={(mode) => {
@@ -114,7 +118,11 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
               setDialog(mode);
             }}
             mayCancel={mayCancel}
-            requestPending={known.data !== undefined}
+            requestPending={
+              order.cancellationRequest
+                ? order.cancellationRequest.status === "PENDING"
+                : known.data !== undefined
+            }
           />
         </div>
       </div>

@@ -1,4 +1,6 @@
-import { PAYMENT_TERMS, type CheckoutPaymentTerm, type PaymentTermsDto } from "./checkout-schemas";
+import { creditSummary, type CreditSummary, type PaymentTermsDto } from "@/lib/payment-terms";
+
+import { PAYMENT_TERMS, type CheckoutPaymentTerm } from "./checkout-schemas";
 
 /** What the checkout shows and sends for one payment term. */
 export interface PaymentTermOption {
@@ -12,13 +14,16 @@ export interface PaymentTermChoice {
   options: PaymentTermOption[];
   defaultTerm: CheckoutPaymentTerm;
   depositPercent: number | undefined;
+  /** The customer's own credit position (SFCREDIT); undefined without credit. */
+  credit: CreditSummary | undefined;
 }
 
 const isTerm = (value: string): value is CheckoutPaymentTerm =>
   (PAYMENT_TERMS as readonly string[]).includes(value);
 
 // kltn-docs 15-payment §4: prepaid confirms on full payment; a deposit confirms the order and releases
-// it to production; credit is paid after delivery. The credit limit is back-office data and is never shown.
+// it to production; credit is paid after delivery, and the customer's own credit position is shown
+// beside the CREDIT term (SFCREDIT).
 function describe(
   term: CheckoutPaymentTerm,
   depositPercent: number | undefined,
@@ -65,6 +70,7 @@ export function resolvePaymentTerms(dto: PaymentTermsDto): PaymentTermChoice | u
     options: allowed.map((term) => describe(term, depositPercent)),
     defaultTerm: requested && allowed.includes(requested) ? requested : first,
     depositPercent,
+    credit: creditSummary(dto),
   };
 }
 

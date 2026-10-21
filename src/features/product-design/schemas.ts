@@ -9,7 +9,6 @@ export const designStatusSchema = z.enum([
   "Cancelled",
 ]);
 export const preflightResultSchema = z.enum(["Pass", "Warning", "Fail"]);
-export const designRoleSchema = z.enum(["Customer", "Sales Staff", "E-commerce Admin", "System"]);
 
 export const designElementSchema = z.object({
   id: z.string().min(1),

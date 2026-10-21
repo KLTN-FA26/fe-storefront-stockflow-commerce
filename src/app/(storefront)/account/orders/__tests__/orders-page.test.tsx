@@ -521,12 +521,24 @@ describe("OrderDetailScreen: asking Sales to cancel (202)", () => {
     expect(api.post).not.toHaveBeenCalled();
   });
 
-  it("learns a request is already waiting from the BE's 409, and shows that state", async () => {
+  it("shows a request already waiting from the order itself, and does not offer another", async () => {
     const order = seeded("ON_HOLD");
-    // Asked earlier (another tab, an earlier visit): the BE knows, this page does not.
+    // Asked earlier (another tab, an earlier visit): the order detail carries it.
     book.cancel(order.orderId, { reasonCode: "CUSTOMER_REQUEST" });
     renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
+
+    expect(await screen.findByText("Đã gửi yêu cầu huỷ.")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Gửi yêu cầu huỷ đơn hàng/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("learns a request is already waiting from the BE's 409, and shows that state", async () => {
+    const order = seeded("ON_HOLD");
+    renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
     await userEvent.click(await request());
+    // Asked meanwhile (another tab): the BE knows, this open page does not.
+    book.cancel(order.orderId, { reasonCode: "CUSTOMER_REQUEST" });
     await userEvent.click(screen.getByRole("button", { name: "Gửi yêu cầu huỷ" }));
 
     expect(await screen.findByText("Đã gửi yêu cầu huỷ.")).toBeInTheDocument();
@@ -673,5 +685,83 @@ describe("OrderDetailScreen: asking Sales about an order on hold", () => {
     expect(
       within(screen.getByRole("dialog")).getByText(/Đơn đã được chuyển cho sản xuất hoặc kho/),
     ).toBeInTheDocument();
+  });
+});
+
+describe("OrderDetailScreen: a cancellation request that is no longer waiting", () => {
+  it("says an EXPIRED request was closed because the order moved on, in Vietnamese, never the system's English", async () => {
+    const order = seeded("SHIPPED"); // the seed's shipped order carries a request closed by the system
+    renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
+
+    const card = (await screen.findByRole("heading", { name: "Yêu cầu huỷ đơn" })).closest(
+      "section",
+    )!;
+    expect(within(card).getByText("Đã đóng")).toBeInTheDocument();
+    expect(card).toHaveTextContent(/trước khi Sales kịp quyết định/);
+    expect(card).toHaveTextContent(/Tôi muốn đổi địa chỉ nhận hàng/);
+    expect(card).toHaveTextContent(/Đóng lúc/);
+    expect(document.body.textContent).not.toMatch(/Closed: the order is/);
+    // Not "waiting": no pending alert, and an order this far cannot be asked about again.
+    expect(screen.queryByText("Đã gửi yêu cầu huỷ.")).not.toBeInTheDocument();
+  });
+
+  it("shows a request Sales rejected with the answer they wrote, and lets the customer ask again", async () => {
+    const order = seeded("IN_PRODUCTION");
+    book.cancel(order.orderId, { reasonCode: "CUSTOMER_REQUEST" });
+    book.closeCancellationRequest(order.orderId, "REJECTED", "Đơn đã in xong, không huỷ được.");
+    renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
+
+    const card = (await screen.findByRole("heading", { name: "Yêu cầu huỷ đơn" })).closest(
+      "section",
+    )!;
+    expect(within(card).getByText("Không được chấp nhận")).toBeInTheDocument();
+    expect(card).toHaveTextContent("Phản hồi từ Sales: Đơn đã in xong, không huỷ được.");
+    expect(
+      await screen.findByRole("button", { name: /Gửi yêu cầu huỷ đơn hàng/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows an accepted request", async () => {
+    const order = seeded("IN_PRODUCTION");
+    book.cancel(order.orderId, { reasonCode: "CUSTOMER_REQUEST" });
+    book.closeCancellationRequest(order.orderId, "APPROVED");
+    renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
+
+    expect(await screen.findByText("Đã chấp nhận")).toBeInTheDocument();
+  });
+
+  it("shows a waiting request as waiting, not in the closed-request card", async () => {
+    const order = seeded("IN_PRODUCTION");
+    book.cancel(order.orderId, { reasonCode: "CUSTOMER_REQUEST" });
+    renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
+
+    expect(await screen.findByText("Đã gửi yêu cầu huỷ.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Yêu cầu huỷ đơn" })).not.toBeInTheDocument();
+  });
+
+  it("is neutral about a request status newer than this FE", async () => {
+    const order = seeded("IN_PRODUCTION");
+    const real = vi.mocked(api.get).getMockImplementation()!;
+    vi.mocked(api.get).mockImplementation(async (url, config) => {
+      const result = (await real(url, config)) as { data: Record<string, unknown> };
+      return url.startsWith("/orders/me/")
+        ? {
+            data: {
+              ...result.data,
+              cancellationRequest: {
+                status: "ESCALATED",
+                requestedAt: "2026-10-20T08:00:00Z",
+              },
+            },
+          }
+        : result;
+    });
+    renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
+
+    const card = (await screen.findByRole("heading", { name: "Yêu cầu huỷ đơn" })).closest(
+      "section",
+    )!;
+    expect(within(card).getByText("Đang cập nhật")).toBeInTheDocument();
+    expect(card).not.toHaveTextContent("ESCALATED");
   });
 });

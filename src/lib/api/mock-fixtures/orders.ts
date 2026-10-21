@@ -66,11 +66,18 @@ export interface MockHistoryEntry {
   reasonCode?: string;
 }
 
+/** BE CancellationRequestStatus. EXPIRED is closed by the system (no decider): the order moved on first. */
+export type MockCancellationStatus = "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
+
 export interface MockCancellationRequest {
   requestId: string;
+  status: MockCancellationStatus;
   reasonCode: string;
   note?: string;
   requestedAt: string;
+  decidedAt?: string;
+  /** What Sales (or the system, in English) answered. */
+  decisionNote?: string;
 }
 
 export interface MockOrder {
@@ -99,7 +106,7 @@ export interface MockOrder {
   /** Status changes, oldest first (BE order status history). */
   history: MockHistoryEntry[];
   cancellationReasonCode?: string;
-  /** A customer's cancellation request waiting for Sales; the BE gives the customer no read of it. */
+  /** The customer's latest cancellation request; GET /orders/me/{id} returns it as `cancellationRequest`. */
   pendingCancellation?: MockCancellationRequest;
   /** Stock was held by this mock when the order was placed, so cancelling gives it back. */
   stockHeld?: boolean;
@@ -112,6 +119,10 @@ export interface MockCreditTerms {
   depositPercent: number;
   creditLimit: number;
   creditTermDays: number;
+  /** Owed on credit orders delivered-not-yet-paid before this session (added to what the session places). */
+  exposure?: number;
+  /** An overdue receivable: credit orders wait for approval whatever the limit. */
+  overdue?: boolean;
 }
 
 const PAYMENT_TERM_VALUES = ["PREPAID", "DEPOSIT", "CREDIT"];
@@ -256,6 +267,22 @@ const toDetail = (order: MockOrder) => {
         }
       : {}),
     paymentTerm: order.paymentTerm,
+    ...(order.pendingCancellation
+      ? {
+          cancellationRequest: {
+            status: order.pendingCancellation.status,
+            reasonCode: order.pendingCancellation.reasonCode,
+            ...(order.pendingCancellation.note ? { note: order.pendingCancellation.note } : {}),
+            requestedAt: order.pendingCancellation.requestedAt,
+            ...(order.pendingCancellation.decidedAt
+              ? { decidedAt: order.pendingCancellation.decidedAt }
+              : {}),
+            ...(order.pendingCancellation.decisionNote
+              ? { decisionNote: order.pendingCancellation.decisionNote }
+              : {}),
+          },
+        }
+      : {}),
     ...(order.shippingAddress ? { shippingAddress: order.shippingAddress } : {}),
     payment: {
       status: paymentStatus(order),
@@ -353,6 +380,13 @@ export function createMockOrderBook(
     ),
   ];
 
+  // Owed on credit orders not yet delivered: what the terms start with plus what this session placed.
+  const exposure = () =>
+    (terms.exposure ?? 0) +
+    orders
+      .filter((o) => o.requestId && o.paymentTerm === "CREDIT" && o.status !== "CANCELLED")
+      .reduce((sum, o) => sum + o.totalAmount, 0);
+
   /** BE PlaceOrderRequest bean validation, plus OrderWebMapper.wholeVnd. */
   function validatePlace(body: Record<string, unknown>) {
     const errors: Array<{ field: string; message: string; code: string }> = [];
@@ -439,9 +473,8 @@ export function createMockOrderBook(
     },
 
     /**
-     * GET /orders/payment-terms (BE CreditPosition): the terms the caller may use, the default and
-     * the deposit share. Like the BE it also carries back-office money (limit, exposure, what is
-     * left) that the storefront must not read: the checkout schema drops it.
+     * GET /orders/payment-terms (BE CreditPosition): the terms the caller may use, the default, the
+     * deposit share and the caller's own credit position (limit, what is owed, what is left).
      */
     paymentTerms(): MockResult {
       const allowed = allowedTerms();
@@ -454,12 +487,12 @@ export function createMockOrderBook(
           ? {
               creditLimit: terms.creditLimit,
               creditTermDays: terms.creditTermDays,
-              exposure: 0,
-              availableCredit: terms.creditLimit,
+              exposure: exposure(),
+              availableCredit: terms.creditLimit - exposure(),
             }
           : {}),
         currency: "VND",
-        hasOverdue: false,
+        hasOverdue: terms.overdue === true,
       });
     },
 
@@ -567,7 +600,7 @@ export function createMockOrderBook(
       sequence += 1;
       const status: MockOrderStatus =
         term === "CREDIT"
-          ? total <= terms.creditLimit
+          ? !terms.overdue && total <= terms.creditLimit - exposure()
             ? "CONFIRMED"
             : "ON_HOLD"
           : "PENDING_PAYMENT";
@@ -648,7 +681,7 @@ export function createMockOrderBook(
           `Order ${order.orderNumber} is ${order.status} and can no longer be cancelled; raise a return instead`,
         );
       }
-      if (order.pendingCancellation) {
+      if (order.pendingCancellation?.status === "PENDING") {
         return fail(
           409,
           "ORDER_CANCELLATION_REQUEST_PENDING",
@@ -658,6 +691,7 @@ export function createMockOrderBook(
       sequence += 1;
       order.pendingCancellation = {
         requestId: `c4a1ce11-0000-4000-8000-${sequence.toString(16).padStart(12, "0")}`,
+        status: "PENDING",
         reasonCode,
         ...(note ? { note } : {}),
         requestedAt: new Date().toISOString(),
@@ -672,8 +706,21 @@ export function createMockOrderBook(
       );
     },
 
-    /** Test hook: what a pending request looks like to Sales (the customer cannot read it). */
+    /** Test hook: the order's latest cancellation request, as Sales see it (with its id). */
     pendingCancellationOf: (orderId: string) => own(orderId)?.pendingCancellation,
+
+    /** Test hook: Sales decide the waiting request, or the system closes it (EXPIRED) because the order moved on. */
+    closeCancellationRequest(
+      orderId: string,
+      status: Exclude<MockCancellationStatus, "PENDING">,
+      decisionNote?: string,
+    ) {
+      const request = own(orderId)?.pendingCancellation;
+      if (!request) return;
+      request.status = status;
+      request.decidedAt = new Date().toISOString();
+      if (decisionNote) request.decisionNote = decisionNote;
+    },
   };
 }
 
@@ -807,6 +854,21 @@ function seedOrder(n: number, customerId: string, status: MockOrderStatus): Mock
     paidAmount,
     ...(paymentTerm === "DEPOSIT" ? { depositRequired } : {}),
     ...(paymentTerm === "CREDIT" ? { creditTermDays: 30 } : {}),
+    // One shipped order shows a request the system closed because the order moved on (EXPIRED).
+    ...(status === "SHIPPED" && n === 2
+      ? {
+          pendingCancellation: {
+            requestId: uuid("c4a1ce11", n),
+            status: "EXPIRED" as const,
+            reasonCode: "CUSTOMER_REQUEST",
+            note: "Tôi muốn đổi địa chỉ nhận hàng",
+            requestedAt: new Date(placed.getTime() + 3 * HOUR).toISOString(),
+            decidedAt: new Date(placed.getTime() + 8 * HOUR).toISOString(),
+            decisionNote:
+              "Closed: the order is SHIPPED and can no longer be cancelled; ask for a return instead.",
+          },
+        }
+      : {}),
     history: PATH[status].map((step, i) => ({
       status: step,
       occurredAt: new Date(placed.getTime() + i * 2 * HOUR).toISOString(),

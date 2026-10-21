@@ -1,5 +1,8 @@
+import type { SemanticTone } from "@/lib/domain/types";
+
 import type {
   CancellationReasonCode,
+  CancellationRequestStatus,
   DeliveryState,
   HoldReason,
   PaymentStatus,
@@ -94,3 +97,39 @@ export function requestReason(
       "Đơn đã được chuyển cho sản xuất hoặc kho nên bạn không thể tự huỷ. Yêu cầu của bạn sẽ được Sales xem xét; việc huỷ có thể phát sinh chi phí cho phần việc đã làm. Đơn giữ nguyên cho đến khi có quyết định.",
   };
 }
+
+/**
+ * A cancellation request's state in the customer's wording, with a tone for its badge and what it
+ * means for the order. `note` is fixed text, not the BE's `decisionNote`: for EXPIRED that is
+ * English system text, and for the others Sales' own answer is shown beside it.
+ */
+export const CANCELLATION_REQUEST_META: Record<
+  CancellationRequestStatus,
+  { label: string; tone: SemanticTone; note: string }
+> = {
+  PENDING: {
+    label: "Đang chờ xem xét",
+    tone: "info",
+    note: "Sales đang xem xét. Đơn giữ nguyên trạng thái cho đến khi có quyết định.",
+  },
+  APPROVED: {
+    label: "Đã chấp nhận",
+    tone: "positive",
+    note: "Sales đã chấp nhận yêu cầu huỷ của bạn.",
+  },
+  REJECTED: {
+    label: "Không được chấp nhận",
+    tone: "warning",
+    note: "Sales không chấp nhận yêu cầu huỷ nên đơn vẫn được xử lý bình thường.",
+  },
+  EXPIRED: {
+    label: "Đã đóng",
+    tone: "muted",
+    note: "Đơn đã được đóng gói, giao đi, kết thúc hoặc huỷ theo cách khác trước khi Sales kịp quyết định, vì vậy yêu cầu huỷ này đã được đóng. Hãy xem trạng thái hiện tại của đơn; nếu cần hỗ trợ hoặc muốn trả hàng, hãy chat với chúng tôi.",
+  },
+  UNKNOWN: {
+    label: "Đang cập nhật",
+    tone: "muted",
+    note: "Hãy chat với chúng tôi nếu bạn cần biết tình trạng yêu cầu huỷ này.",
+  },
+};

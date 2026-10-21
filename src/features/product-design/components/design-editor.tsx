@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { CanvasToolbar } from "@/components/storefront/canvas-toolbar";
 import { DesignCanvas } from "@/components/storefront/design-canvas";
 import { PreflightReport } from "@/components/storefront/preflight-report";
+import { useMyPermissions } from "@/lib/auth/my-permissions";
 
 import {
   allowedActions,
@@ -19,19 +20,19 @@ import {
 import { ElementPanel } from "./element-panel";
 import { VariantRecheck } from "./variant-recheck";
 
-import type { DesignDto, DesignRole } from "..";
+import type { DesignDto } from "..";
 
 interface DesignEditorProps {
   design: DesignDto;
-  role?: DesignRole;
 }
 
-export function DesignEditor({ design, role = "Customer" }: DesignEditorProps) {
+export function DesignEditor({ design }: DesignEditorProps) {
   const [variantChanged, setVariantChanged] = useState(false);
   const submit = useSubmitDesign();
   const confirm = useConfirmDesign();
   const stats = useMemo(() => computeDesignStats(design), [design]);
-  const actions = allowedActions(design.status, role);
+  const { data: myPermissions } = useMyPermissions();
+  const actions = allowedActions(design.status, myPermissions?.permissions);
   const canSubmit = actions.includes("submit") && stats.isReady;
   const canConfirm = actions.includes("confirm") && !hasPreflightFail(design);
   const canAddToCart = design.status === "Confirmed";

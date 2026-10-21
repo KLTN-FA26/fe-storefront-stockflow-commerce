@@ -6,11 +6,20 @@ import { ApiError } from "@/lib/api/error";
 import { useCartStore } from "@/lib/store/use-cart-store";
 
 import { NotCustomerError, signInCustomer, signOutCustomer } from "./customer-session";
+import { STOREFRONT_PERMISSIONS } from "./permission-codes";
 import { useAuthStore } from "./auth-store";
 import { registerSessionQueryClient } from "./session";
 
 const CUSTOMER_ID = "c0ffee00-0000-4000-8000-000000000010";
 const tokenResponse = { accessToken: "tok", tokenType: "Bearer", expiresInSeconds: 3600 };
+// A role's NAME decides nothing: what an account may do is the permission list the BE sends.
+const CUSTOMER_PERMISSIONS = [...STOREFRONT_PERMISSIONS, "sales-orders:UPDATE"];
+const STAFF_PERMISSIONS = ["sales-orders:READ", "sales-orders:CREATE", "customer-customers:READ"];
+const myPermissions = (permissions: readonly string[], roles: string[] = ["ANY_ROLE_NAME"]) => ({
+  roles,
+  permissions,
+  dataScope: "OWN",
+});
 const me = (roles: string[], extra: Record<string, unknown> = {}) => ({
   userId: "11111111-1111-4111-8111-111111111111",
   username: "nam@example.vn",
@@ -22,7 +31,12 @@ const me = (roles: string[], extra: Record<string, unknown> = {}) => ({
 });
 
 function backend(
-  opts: { roles?: string[]; meExtra?: Record<string, unknown>; customers?: () => unknown } = {},
+  opts: {
+    roles?: string[];
+    permissions?: readonly string[];
+    meExtra?: Record<string, unknown>;
+    customers?: () => unknown;
+  } = {},
 ) {
   const calls: string[] = [];
   vi.spyOn(api, "post").mockImplementation(async (url, _body, config) => {
@@ -38,6 +52,9 @@ function backend(
     expect(config?.headers).toEqual({ Authorization: "Bearer tok" });
     expect(useAuthStore.getState().tokens).toBeNull();
     if (url === "/identity/me") return { data: me(opts.roles ?? ["CUSTOMER"], opts.meExtra) };
+    if (url === "/identity/me/permissions") {
+      return { data: myPermissions(opts.permissions ?? CUSTOMER_PERMISSIONS, opts.roles) };
+    }
     if (url === "/customers/me") return { data: opts.customers?.() ?? { customerId: CUSTOMER_ID } };
     throw new Error(`unexpected ${url}`);
   });
@@ -57,7 +74,12 @@ describe("signInCustomer", () => {
       mustChangePassword: false,
     });
 
-    expect(calls).toEqual(["POST /identity/auth/login", "GET /identity/me", "GET /customers/me"]);
+    expect(calls).toEqual([
+      "POST /identity/auth/login",
+      "GET /identity/me",
+      "GET /identity/me/permissions",
+      "GET /customers/me",
+    ]);
     expect(api.post).toHaveBeenCalledWith("/identity/auth/login", {
       username: "nam@example.vn",
       password: "pw",
@@ -94,8 +116,28 @@ describe("signInCustomer", () => {
     expect(useCartStore.getState().lines).toHaveLength(1);
   });
 
+  it("lets in any account that holds the storefront permissions, whatever its role is called", async () => {
+    backend({ roles: ["WHOLESALE_PARTNER"] });
+    await expect(signInCustomer({ username: "u", password: "p" })).resolves.toEqual({
+      mustChangePassword: false,
+    });
+  });
+
+  it("refuses an account that is a CUSTOMER by name but lacks a storefront permission", async () => {
+    for (const missing of STOREFRONT_PERMISSIONS) {
+      vi.restoreAllMocks();
+      backend({
+        roles: ["CUSTOMER"],
+        permissions: CUSTOMER_PERMISSIONS.filter((code) => code !== missing),
+      });
+      await expect(signInCustomer({ username: "u", password: "p" })).rejects.toBeInstanceOf(
+        NotCustomerError,
+      );
+    }
+  });
+
   it("refuses a staff account and signs it out again, at the BE too", async () => {
-    const calls = backend({ roles: ["SALES_STAFF"] });
+    const calls = backend({ roles: ["SALES_STAFF"], permissions: STAFF_PERMISSIONS });
     await expect(signInCustomer({ username: "staff", password: "p" })).rejects.toBeInstanceOf(
       NotCustomerError,
     );
@@ -113,7 +155,7 @@ describe("signInCustomer", () => {
   it("never shows a staff account as signed in, not even for a moment", async () => {
     const seen: boolean[] = [];
     const unsubscribe = useAuthStore.subscribe((state) => seen.push(state.isAuthenticated));
-    backend({ roles: ["SALES_STAFF"] });
+    backend({ roles: ["SALES_STAFF"], permissions: STAFF_PERMISSIONS });
     await signInCustomer({ username: "staff", password: "p" }).catch(() => undefined);
     unsubscribe();
     expect(seen).not.toContain(true);
@@ -125,6 +167,7 @@ describe("signInCustomer", () => {
     }));
     vi.spyOn(api, "get").mockImplementation(async (url) => {
       if (url === "/identity/me") return { data: me(["CUSTOMER"]) };
+      if (url === "/identity/me/permissions") return { data: myPermissions(CUSTOMER_PERMISSIONS) };
       throw new ApiError(404, "CUSTOMER_NOT_FOUND", "Customer not found");
     });
     await expect(signInCustomer({ username: "u", password: "p" })).rejects.toMatchObject({
@@ -152,7 +195,7 @@ describe("signInCustomer", () => {
 
   it("rejects a /identity/me answer that breaks the contract", async () => {
     vi.spyOn(api, "post").mockResolvedValue({ data: tokenResponse });
-    vi.spyOn(api, "get").mockResolvedValue({ data: { userId: "x" } }); // no roles
+    vi.spyOn(api, "get").mockResolvedValue({ data: { fullName: "x" } }); // no userId
     await expect(signInCustomer({ username: "u", password: "p" })).rejects.toThrow();
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
   });

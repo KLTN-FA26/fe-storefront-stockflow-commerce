@@ -2,6 +2,8 @@ import type { z } from "zod";
 
 import type {
   cancelOrderInputSchema,
+  cancellationRequestDtoSchema,
+  cancellationRequestStatusSchema,
   cancellationReasonCodeSchema,
   cancellationResultDtoSchema,
   deliveryStateSchema,
@@ -26,6 +28,8 @@ export type PaymentTerm = z.infer<typeof paymentTermSchema>;
 export type ProductionState = z.infer<typeof productionStateSchema>;
 export type HoldReason = z.infer<typeof holdReasonSchema>;
 export type CancellationReasonCode = z.infer<typeof cancellationReasonCodeSchema>;
+export type CancellationRequestStatus = z.infer<typeof cancellationRequestStatusSchema>;
+export type CancellationRequest = z.infer<typeof cancellationRequestDtoSchema>;
 export type OrderAddress = z.infer<typeof orderAddressDtoSchema>;
 export type OrderLine = z.infer<typeof orderLineDtoSchema>;
 /** One row of the order list (BE CustomerOrderCardResponse). */
