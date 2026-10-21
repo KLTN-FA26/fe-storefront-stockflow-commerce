@@ -3,9 +3,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ORDERS_QUERY_ROOT } from "@/lib/api/query-keys";
 import type { ApiError } from "@/lib/api/error";
 import { catalogReadKeys } from "@/lib/catalog/queries";
+import { paymentTermsKeys } from "@/lib/payment-terms";
 
 import { placeOrder } from "./checkout-api";
-import { checkoutKeys } from "./checkout-queries";
 import { isStaleCartError } from "./checkout-errors";
 import type { PlaceOrderInput, PlacedOrder } from "./checkout-schemas";
 
@@ -23,11 +23,13 @@ export function usePlaceOrder() {
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ORDERS_QUERY_ROOT }),
         queryClient.invalidateQueries({ queryKey: catalogReadKeys.availabilities() }),
+        // A credit order moves the balance the account page and the checkout show.
+        queryClient.invalidateQueries({ queryKey: paymentTermsKeys.all }),
       ]),
     onError: (error) => {
       // Sales changed the customer's terms since the checkout read them: read them again.
       if (error.code === "PAYMENT_TERM_NOT_ALLOWED") {
-        return queryClient.invalidateQueries({ queryKey: checkoutKeys.paymentTerms() });
+        return queryClient.invalidateQueries({ queryKey: paymentTermsKeys.all });
       }
       if (!isStaleCartError(error)) return;
       return Promise.all([

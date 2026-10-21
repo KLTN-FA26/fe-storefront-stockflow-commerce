@@ -16,6 +16,7 @@ import {
   type PaymentTermOption,
 } from "../checkout-payment-terms";
 import type { CheckoutPaymentTerm } from "../checkout-schemas";
+import { CreditNote } from "./credit-note";
 
 interface CheckoutPaymentTermsProps {
   /** The terms the customer may use; undefined while loading, on error, or when none is known. */
@@ -28,7 +29,7 @@ interface CheckoutPaymentTermsProps {
   onChange: (term: CheckoutPaymentTerm) => void;
   /** An earlier pick is waiting for the terms: ordering is paused until they load. */
   awaitingChoice?: boolean;
-  /** The cart's subtotal, for the deposit the DEPOSIT term asks up front. */
+  /** The cart's subtotal: the deposit the DEPOSIT term asks up front, and what CREDIT is set against. */
   subtotal: number;
 }
 
@@ -37,8 +38,8 @@ const GENERIC =
 
 /**
  * How the order is paid (kltn-docs 15 BR-01): a radio per term the customer is allowed, the default
- * preselected. With one allowed term there is nothing to choose, so it is stated, not offered. The
- * credit limit and what is owed are back-office data and are never shown here.
+ * preselected. With one allowed term there is nothing to choose, so it is stated, not offered. With
+ * CREDIT chosen, the customer's own credit left is set against the order's total (SFCREDIT).
  */
 export function CheckoutPaymentTerms({
   terms,
@@ -85,7 +86,9 @@ export function CheckoutPaymentTerms({
       ? depositAmount(subtotal, terms.depositPercent)
       : undefined;
   const note =
-    deposit === undefined ? null : (
+    selected?.term === "CREDIT" && terms.credit && subtotal > 0 ? (
+      <CreditNote credit={terms.credit} total={subtotal} />
+    ) : deposit === undefined ? null : (
       <p className="text-ink-secondary text-sm">
         Tiền cọc dự kiến:{" "}
         <span className="text-ink-primary font-semibold tabular-nums">{formatMoney(deposit)}</span>.

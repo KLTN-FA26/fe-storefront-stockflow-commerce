@@ -11,13 +11,13 @@ import {
   type MockCreditTerms,
   type MockOrderBook,
 } from "@/lib/api/mock-fixtures/orders";
+import { getPaymentTerms, paymentTermsDtoSchema } from "@/lib/payment-terms";
 import { useCartStore } from "@/lib/store/use-cart-store";
 import { fakeBackend } from "@/test/fake-backend";
 import { renderWithProviders, resetCart, signIn, signOut } from "@/test/render";
 
-import { getPaymentTerms } from "../checkout-api";
 import { resolvePaymentTerms } from "../checkout-payment-terms";
-import { paymentTermsDtoSchema, placeOrderInputSchema } from "../checkout-schemas";
+import { placeOrderInputSchema } from "../checkout-schemas";
 import { CheckoutScreen } from "../components/checkout-screen";
 import type { CheckoutCustomer } from "../checkout-types";
 
@@ -151,14 +151,66 @@ describe("checkout payment terms (kltn-docs 15 BR-01)", () => {
     expect(bodyOf()).not.toHaveProperty("paymentTerm"); // the only term is the default
   });
 
-  it("offers credit as a term, without saying anything about the limit", async () => {
+  it("offers credit as a term, and says nothing about the credit until it is picked", async () => {
     setup(terms({ allowed: ["PREPAID", "CREDIT"], creditLimit: 987_654_321 }));
     renderWithProviders(<CheckoutScreen customer={customer} />);
 
     const group = await termGroup();
     expect(within(group).getByRole("radio", { name: /Công nợ/ })).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/987/);
-    expect(document.body.textContent).not.toMatch(/hạn mức còn lại|dư nợ|đang nợ/i);
+    expect(screen.queryByText(/Hạn mức công nợ còn lại/)).not.toBeInTheDocument();
+  });
+
+  describe("credit left, against the order total (SFCREDIT)", () => {
+    const credit = (over: Partial<MockCreditTerms> = {}) =>
+      terms({ allowed: ["PREPAID", "CREDIT"], creditLimit: 50_000_000, ...over });
+    const pickCredit = async () =>
+      userEvent.click(await screen.findByRole("radio", { name: /Công nợ/ }));
+
+    it("shows what is left of the limit and what stays after this order, with the days to pay", async () => {
+      setup(credit({ exposure: 10_000_000, creditTermDays: 45 }));
+      renderWithProviders(<CheckoutScreen customer={customer} />);
+      await pickCredit();
+
+      const note = await screen.findByText(/Hạn mức công nợ còn lại/);
+      expect(note).toHaveTextContent(/40\.000\.000/);
+      expect(note).toHaveTextContent(/thanh toán trong 45 ngày kể từ khi giao hàng/);
+      expect(screen.queryByText("Đơn vượt hạn mức công nợ còn lại.")).not.toBeInTheDocument();
+    });
+
+    it("tells the customer an order above what is left will be held, and still lets them order", async () => {
+      setup(credit({ creditLimit: 1_000_000, exposure: 900_000 }));
+      renderWithProviders(<CheckoutScreen customer={customer} />);
+      await pickCredit();
+
+      const warning = await screen.findByText("Đơn vượt hạn mức công nợ còn lại.");
+      expect(warning.closest("div")).toHaveTextContent(/100\.000/);
+      expect(warning.closest("div")).toHaveTextContent(/duyệt công nợ/);
+      expect(await placeButton()).toBeEnabled();
+      await userEvent.click(await placeButton());
+      expect(
+        await screen.findByRole("heading", { name: "Đã nhận đơn, đang chờ duyệt công nợ" }),
+      ).toBeInTheDocument();
+    });
+
+    it("warns about an overdue receivable even when the limit would cover the order", async () => {
+      setup(credit({ overdue: true }));
+      renderWithProviders(<CheckoutScreen customer={customer} />);
+      await pickCredit();
+
+      expect(
+        await screen.findByText("Tài khoản đang có khoản công nợ quá hạn."),
+      ).toBeInTheDocument();
+      expect(await placeButton()).toBeEnabled();
+    });
+
+    it("says nothing about credit for another term", async () => {
+      setup(credit({ defaultTerm: "PREPAID" }));
+      renderWithProviders(<CheckoutScreen customer={customer} />);
+      await termGroup();
+      expect(screen.queryByText(/Hạn mức công nợ còn lại/)).not.toBeInTheDocument();
+      expect(screen.queryByText("Đơn vượt hạn mức công nợ còn lại.")).not.toBeInTheDocument();
+    });
   });
 
   it("uses a new request id when the term changes (the same key with another term would be refused)", async () => {
@@ -304,10 +356,8 @@ describe("payment term and the idempotency key", () => {
       if (url === "/orders/payment-terms") throw new ApiError(404, "CUSTOMER_NOT_FOUND", "x");
       return real(url, config);
     });
-    await client.refetchQueries({ queryKey: ["checkout", "payment-terms"] });
-    await waitFor(() =>
-      expect(client.getQueryState(["checkout", "payment-terms"])?.status).toBe("error"),
-    );
+    await client.refetchQueries({ queryKey: ["payment-terms"] });
+    await waitFor(() => expect(client.getQueryState(["payment-terms"])?.status).toBe("error"));
 
     // the choice is still there, and no notice says the order would use the account default
     expect(screen.getByRole("radio", { name: /Đặt cọc 30%/ })).toBeChecked();
@@ -319,7 +369,7 @@ describe("payment term and the idempotency key", () => {
 });
 
 describe("payment terms boundary", () => {
-  it("keeps only what the checkout needs: the credit limit and what is owed never leave the schema", () => {
+  it("keeps the customer's own credit position and drops what it does not read", () => {
     const dto = paymentTermsDtoSchema.parse({
       customerId: CUSTOMER_ID,
       allowedTerms: ["PREPAID", "CREDIT"],
@@ -331,7 +381,20 @@ describe("payment terms boundary", () => {
       currency: "VND",
       hasOverdue: true,
     });
-    expect(dto).toEqual({ allowedTerms: ["PREPAID", "CREDIT"], defaultTerm: "CREDIT" });
+    expect(dto).toEqual({
+      allowedTerms: ["PREPAID", "CREDIT"],
+      defaultTerm: "CREDIT",
+      creditLimit: 50_000_000,
+      creditTermDays: 45,
+      exposure: 12_000_000,
+      availableCredit: 38_000_000,
+      currency: "VND",
+      hasOverdue: true,
+    });
+    // A customer without credit: the BE omits the credit fields (NON_NULL).
+    expect(paymentTermsDtoSchema.parse({ allowedTerms: ["PREPAID"] })).toEqual({
+      allowedTerms: ["PREPAID"],
+    });
   });
 
   it("drops a term newer than the FE, falls back to the first allowed one, and keeps the BE order", () => {

@@ -170,6 +170,15 @@ export function registerAllMockRoutes(): void {
     );
   const deps: MockOrderDeps = {
     catalog,
+    // The demo customer buys on credit too, so the credit card and the checkout note can be tried.
+    terms: {
+      defaultTerm: "PREPAID",
+      allowed: ["PREPAID", "DEPOSIT", "CREDIT"],
+      depositPercent: 30,
+      creditLimit: 20_000_000,
+      creditTermDays: 30,
+      exposure: 12_000_000,
+    },
     shippingAddress: (addressId) => {
       const found = shippingAddresses().find((address) => address.addressId === addressId);
       // OrderResponse.Address: the order keeps the address text, not the book's ids.

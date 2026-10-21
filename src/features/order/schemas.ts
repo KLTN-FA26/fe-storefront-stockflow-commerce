@@ -184,6 +184,31 @@ export const orderTimelineEntryDtoSchema = z.object({
   reasonCode: cancellationReasonCodeSchema.nullish(),
 });
 
+/**
+ * BE CancellationRequestStatus. PENDING until Sales decide; EXPIRED is closed by the system (no
+ * decider) because the order was packed, handed over, delivered or cancelled first (BE PR #144).
+ */
+export const CANCELLATION_REQUEST_STATUSES = [
+  "PENDING",
+  "APPROVED",
+  "REJECTED",
+  "EXPIRED",
+] as const;
+export const cancellationRequestStatusSchema = tolerantEnum(CANCELLATION_REQUEST_STATUSES);
+
+/** The order detail's `cancellationRequest` (CustomerOrderDetailResponse): the latest request and its decision. */
+export const cancellationRequestDtoSchema = z.object({
+  status: cancellationRequestStatusSchema,
+  reasonCode: cancellationReasonCodeSchema.nullish(),
+  // What the customer wrote.
+  note: z.string().nullish(),
+  requestedAt: instantSchema,
+  // Set once Sales decided (or the system closed it).
+  decidedAt: instantSchema.nullish(),
+  // What Sales answered. For EXPIRED it is English system text: never shown, labels.ts explains instead.
+  decisionNote: z.string().nullish(),
+});
+
 /** GET /orders/me/{orderId} (CustomerOrderDetailResponse). */
 export const orderDtoSchema = z.object({
   orderId: beId(),
@@ -196,6 +221,8 @@ export const orderDtoSchema = z.object({
   total: z.number().nonnegative(),
   currency: currencySchema,
   placedAt: instantSchema,
+  // Absent when the customer never asked to cancel.
+  cancellationRequest: cancellationRequestDtoSchema.nullish(),
   shippingAddress: orderAddressDtoSchema.nullish(),
   payment: orderPaymentDtoSchema.nullish(),
   lines: z.array(orderLineDtoSchema),

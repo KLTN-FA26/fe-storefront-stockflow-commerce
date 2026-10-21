@@ -11,12 +11,12 @@ import { SurfaceCard } from "@/components/storefront/layout";
 import { OrderTotals } from "@/components/storefront/order-totals";
 import { describeApiError } from "@/lib/api/describe-error";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
+import { usePaymentTerms } from "@/lib/payment-terms";
 import { useCartStore } from "@/lib/store/use-cart-store";
 
 import { describeCheckoutError } from "../checkout-errors";
 import { usePlaceOrder } from "../checkout-mutations";
 import { resolvePaymentTerms } from "../checkout-payment-terms";
-import { useCheckoutPaymentTerms } from "../checkout-queries";
 import { PAYMENT_TERMS, type CheckoutPaymentTerm, type PlacedOrder } from "../checkout-schemas";
 import type { CheckoutCustomer } from "../checkout-types";
 import { ISSUE_MESSAGE } from "../selectors";
@@ -67,7 +67,7 @@ export function CheckoutScreen({ customer }: { customer: CheckoutCustomer }) {
     return PAYMENT_TERMS.find((term) => term === stored);
   });
   // What the customer may be sold on (kltn-docs 15 BR-01). Asked once the cart is worth ordering.
-  const termsQuery = useCheckoutPaymentTerms(signedIn === true && view.lines.length > 0);
+  const termsQuery = usePaymentTerms(signedIn === true && view.lines.length > 0);
   const terms = useMemo(
     () => (termsQuery.data ? resolvePaymentTerms(termsQuery.data) : undefined),
     [termsQuery.data],
