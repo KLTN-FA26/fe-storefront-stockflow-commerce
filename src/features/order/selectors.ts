@@ -1,4 +1,4 @@
-import type { Order, OrderTimelineEntry } from "./types";
+import type { DeliveryMode, Order, OrderTimelineEntry } from "./types";
 
 /**
  * The timeline as the customer reads it: one step per status group. The BE history has a row per
@@ -40,4 +40,19 @@ export function amountDue(order: Pick<Order, "total" | "payment" | "status">): n
     return undefined;
   }
   return Math.max(order.total - (payment.paidAmount ?? 0), 0);
+}
+
+/**
+ * The delivery modes the coordinator chose, once each, in shipment order. Empty while no shipment
+ * carries one (nothing handed over yet, or a shipment recorded before modes existed): the page then
+ * says the order is awaiting coordination. The customer view has no order-level mode.
+ */
+export function deliveryModes(order: Pick<Order, "shipments">): DeliveryMode[] {
+  const modes: DeliveryMode[] = [];
+  for (const shipment of order.shipments ?? []) {
+    if (shipment.deliveryMode && !modes.includes(shipment.deliveryMode)) {
+      modes.push(shipment.deliveryMode);
+    }
+  }
+  return modes;
 }

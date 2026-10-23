@@ -84,6 +84,10 @@ export const deliveryStateSchema = z
       : DELIVERY_STATE_UNKNOWN,
   );
 
+/** BE shipment deliveryMode: PARCEL (giao lẻ) or FULL_TRUCKLOAD (xe nguyên chuyến). */
+export const DELIVERY_MODES = ["PARCEL", "FULL_TRUCKLOAD"] as const;
+export const deliveryModeSchema = tolerantEnum(DELIVERY_MODES);
+
 /** BE CustomerOrders.ProductionState; NOT_REQUIRED is a line of stock goods. */
 export const PRODUCTION_STATES = [
   "NOT_REQUIRED",
@@ -176,6 +180,15 @@ export const orderPaymentDtoSchema = z.object({
   creditTermDays: z.number().int().nonnegative().nullish(),
 });
 
+/**
+ * One handed-over shipment of the order detail (BE CustomerOrderShipment). Only what the customer
+ * page reads: the mode the coordinator chose. The customer never picks it.
+ */
+export const orderShipmentDtoSchema = z.object({
+  status: z.string(),
+  deliveryMode: deliveryModeSchema.nullish(),
+});
+
 export const orderTimelineEntryDtoSchema = z.object({
   status: orderStatusSchema,
   statusGroup: orderStatusGroupSchema,
@@ -229,6 +242,8 @@ export const orderDtoSchema = z.object({
   // Oldest first.
   timeline: z.array(orderTimelineEntryDtoSchema).nullish(),
   deliveryState: deliveryStateSchema.nullish(),
+  // Oldest first; empty until the first handover. Absent on an older BE.
+  shipments: z.array(orderShipmentDtoSchema).nullish(),
 });
 
 export const orderPageDtoSchema = pageResponseSchema(orderCardDtoSchema);
