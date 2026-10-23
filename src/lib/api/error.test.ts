@@ -1,7 +1,7 @@
 import { AxiosError } from "axios";
 import { describe, expect, it } from "vitest";
 
-import { ApiError } from "./error";
+import { ApiError, type ApiErrorBody } from "./error";
 
 describe("ApiError backend envelope", () => {
   it("normalizes errorCode, fieldErrors and correlationId", () => {
@@ -33,5 +33,33 @@ describe("ApiError backend envelope", () => {
     });
     expect(error.fieldErrorDetails[0]?.code).toBe("Invalid");
     expect(error.correlationId).toBe("corr-123");
+  });
+});
+
+describe("ApiError details", () => {
+  const failure = (data: unknown) =>
+    ApiError.from(
+      new AxiosError("request failed", "ERR_BAD_REQUEST", undefined, undefined, {
+        data: data as ApiErrorBody,
+        status: 409,
+        statusText: "Conflict",
+        headers: {},
+        config: {} as never,
+      }),
+    );
+
+  it("keeps the structured details the BE sends", () => {
+    const error = failure({
+      success: false,
+      errorCode: "BALANCE_CREDIT_LIMIT_EXCEEDED",
+      message: "x",
+      details: { availableCredit: 100, currency: "VND" },
+    });
+    expect(error.details).toEqual({ availableCredit: 100, currency: "VND" });
+  });
+
+  it("has no details when the BE sends none or sends something that is not an object", () => {
+    expect(failure({ errorCode: "NOT_FOUND", message: "x" }).details).toBeUndefined();
+    expect(failure({ errorCode: "X", message: "x", details: [1] }).details).toBeUndefined();
   });
 });

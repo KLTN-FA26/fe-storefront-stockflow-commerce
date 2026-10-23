@@ -10,6 +10,10 @@ const coreFields = {
   defaultTerm: z.string().nullish(),
   // DEPOSIT only: the share of the total the customer's terms ask up front.
   depositPercent: z.number().gt(0).lt(100).nullish(),
+  // DEPOSIT only: how the balance after the deposit is paid. Strings, not an enum: a policy newer
+  // than this FE is dropped by the checkout, not a parse failure. Empty when deposits are not allowed.
+  depositBalancePolicy: z.string().nullish(),
+  allowedBalancePolicies: z.array(z.string()).nullish(),
 };
 
 // Credit orders: the limit, what is owed on credit orders not yet paid in full (it counts delivered
@@ -23,6 +27,9 @@ const creditFields = {
   currency: z.string().nullish(),
   // An overdue receivable: new credit orders wait for the credit approver.
   hasOverdue: z.boolean().nullish(),
+  // What is still unpaid on the overdue receivables (0 when none) and the earliest of their due dates (ISO date).
+  overdueAmount: z.number().nonnegative().nullish(),
+  oldestOverdueDueDate: z.string().nullish(),
 };
 
 export const paymentTermsDtoSchema = z.object({

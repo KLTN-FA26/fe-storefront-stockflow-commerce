@@ -15,6 +15,8 @@ export interface ApiErrorBody {
   fieldErrors?: ApiFieldError[] | Record<string, string>;
   correlationId?: string;
   timestamp?: string;
+  /** Machine-readable facts about the failure (e.g. the credit left); absent on most errors. */
+  details?: Record<string, unknown>;
 }
 
 export class ApiError extends Error {
@@ -23,6 +25,8 @@ export class ApiError extends Error {
   readonly fieldErrors: Record<string, string> | undefined;
   readonly fieldErrorDetails: readonly ApiFieldError[];
   readonly correlationId: string | undefined;
+  /** BE `details`: structured numbers/dates behind the code, so screens never parse `message`. */
+  readonly details: Readonly<Record<string, unknown>> | undefined;
 
   constructor(
     status: number,
@@ -30,6 +34,7 @@ export class ApiError extends Error {
     message: string,
     fieldErrors?: ApiFieldError[] | Record<string, string>,
     correlationId?: string,
+    details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "ApiError";
@@ -38,6 +43,7 @@ export class ApiError extends Error {
     this.fieldErrorDetails = normalizeFieldErrorDetails(fieldErrors);
     this.fieldErrors = toFieldErrorMap(this.fieldErrorDetails);
     this.correlationId = correlationId;
+    this.details = details;
   }
 
   /** Create from an AxiosError (used in response interceptor). */
@@ -59,6 +65,7 @@ export class ApiError extends Error {
       data?.message ?? err.message ?? "Đã xảy ra lỗi",
       data?.fieldErrors,
       data?.correlationId,
+      isRecord(data?.details) ? data.details : undefined,
     );
   }
 
@@ -81,3 +88,6 @@ function toFieldErrorMap(errors: readonly ApiFieldError[]): Record<string, strin
   }
   return result;
 }
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
