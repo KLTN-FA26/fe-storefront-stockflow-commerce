@@ -21,6 +21,8 @@ export const receivableKindSchema = tolerantEnum(RECEIVABLE_KINDS);
 export const receivableDtoSchema = z.object({
   receivableId: beId(),
   orderId: beId(),
+  // BE SCRUM-193; absent on an older BE or a row older than the column.
+  orderNumber: z.string().min(1).nullish(),
   kind: receivableKindSchema.nullish(),
   amount: z.number().nonnegative(),
   paidAmount: z.number().nonnegative(),

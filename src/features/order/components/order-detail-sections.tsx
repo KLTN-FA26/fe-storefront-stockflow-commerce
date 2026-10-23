@@ -72,7 +72,7 @@ const CLOSED_STATUSES: ReadonlySet<Order["status"]> = new Set(["CANCELLED", "RET
 
 /**
  * Read-only: the delivery method is the coordinator's choice, never the customer's. Shown as the
- * shipments carry it ("Giao lẻ" / "Xe nguyên chuyến"), or as awaiting coordination while none does.
+ * order carries it, else as the shipments carry it ("Giao lẻ" / "Xe nguyên chuyến"), or as awaiting coordination while none does.
  * A cancelled or returned order has nothing left to coordinate, so it says nothing.
  */
 function DeliveryMethod({ order }: { order: Order }) {

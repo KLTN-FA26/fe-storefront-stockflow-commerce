@@ -37,6 +37,14 @@ describe("receivables/me", () => {
     expect(parsed.items[0]).toMatchObject({ outstanding: 800_000, status: "OVERDUE" });
   });
 
+  it("reads the order number when the BE sends it, and works without it (older BE)", () => {
+    const parsed = receivablePageDtoSchema.parse(
+      page([{ ...row, orderNumber: "SO-20261021-000123" }, row]),
+    );
+    expect(parsed.items[0]?.orderNumber).toBe("SO-20261021-000123");
+    expect(parsed.items[1]?.orderNumber).toBeUndefined();
+  });
+
   it("reads a status or kind newer than this FE as UNKNOWN, and a missing due date", () => {
     const { dueDate: _due, ...rest } = row;
     const parsed = receivablePageDtoSchema.parse(
