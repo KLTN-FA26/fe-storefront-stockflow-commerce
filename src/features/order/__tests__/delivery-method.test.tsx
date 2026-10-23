@@ -26,6 +26,20 @@ describe("delivery mode (read-only, the coordinator's choice)", () => {
     expect(deliveryModes(orderWith({ shipments: [shipment("DRONE")] }))).toEqual(["UNKNOWN"]);
   });
 
+  it("prefers the order-level mode over the shipments', and falls back to them without it", () => {
+    expect(
+      deliveryModes(orderWith({ deliveryMode: "FULL_TRUCKLOAD", shipments: [shipment("PARCEL")] })),
+    ).toEqual(["FULL_TRUCKLOAD"]);
+    expect(deliveryModes(orderWith({ deliveryMode: "DRONE" }))).toEqual(["UNKNOWN"]);
+    expect(deliveryModes(orderWith({ shipments: [shipment("PARCEL")] }))).toEqual(["PARCEL"]);
+  });
+
+  it("shows the order-level mode before anything is handed over", () => {
+    render(<OrderDeliveryCard order={orderWith({ deliveryMode: "FULL_TRUCKLOAD" })} />);
+    expect(screen.getByText("Xe nguyên chuyến")).toBeInTheDocument();
+    expect(screen.queryByText("Đang chờ điều phối")).not.toBeInTheDocument();
+  });
+
   it("shows Giao lẻ", () => {
     render(<OrderDeliveryCard order={orderWith({ shipments: [shipment("PARCEL")] })} />);
     expect(screen.getByText("Phương thức giao:")).toBeInTheDocument();

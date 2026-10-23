@@ -43,11 +43,12 @@ export function amountDue(order: Pick<Order, "total" | "payment" | "status">): n
 }
 
 /**
- * The delivery modes the coordinator chose, once each, in shipment order. Empty while no shipment
- * carries one (nothing handed over yet, or a shipment recorded before modes existed): the page then
- * says the order is awaiting coordination. The customer view has no order-level mode.
+ * The delivery modes the coordinator chose. The order-level mode wins when the BE sends it; else
+ * the shipments' modes, once each, in shipment order (an older BE, or an order the BE has no mode
+ * for). Empty when neither carries one: the page then says the order is awaiting coordination.
  */
-export function deliveryModes(order: Pick<Order, "shipments">): DeliveryMode[] {
+export function deliveryModes(order: Pick<Order, "shipments" | "deliveryMode">): DeliveryMode[] {
+  if (order.deliveryMode) return [order.deliveryMode];
   const modes: DeliveryMode[] = [];
   for (const shipment of order.shipments ?? []) {
     if (shipment.deliveryMode && !modes.includes(shipment.deliveryMode)) {

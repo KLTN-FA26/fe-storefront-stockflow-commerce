@@ -61,6 +61,7 @@ describe("MyReceivables (account page)", () => {
         row({
           receivableId: "8d2f6f0e-3c36-4e0e-9a43-2b0f0d6a1c33",
           orderId: "1c4f6f0e-3c36-4e0e-9a43-2b0f0d6a1c44",
+          orderNumber: "SO-20261021-000123",
           amount: 2_000_000,
           paidAmount: 0,
           outstanding: 2_000_000,
@@ -93,6 +94,11 @@ describe("MyReceivables (account page)", () => {
       "/account/orders/0b3f6f0e-3c36-4e0e-9a43-2b0f0d6a1c22",
     );
 
+    // The order number links to the order when the BE sends it; the row without it keeps "Xem đơn hàng".
+    expect(within(items[1]!).getByRole("link", { name: /Đơn SO-20261021-000123/ })).toHaveAttribute(
+      "href",
+      "/account/orders/1c4f6f0e-3c36-4e0e-9a43-2b0f0d6a1c44",
+    );
     expect(items[1]).not.toHaveAttribute("data-overdue");
     expect(within(items[1]!).getByText("Chưa đến hạn")).toBeInTheDocument();
     expect(receivableCalls()[0]).toEqual([

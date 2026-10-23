@@ -242,6 +242,8 @@ export const orderDtoSchema = z.object({
   // Oldest first.
   timeline: z.array(orderTimelineEntryDtoSchema).nullish(),
   deliveryState: deliveryStateSchema.nullish(),
+  // The order-level mode the coordinator set (BE SCRUM-209); absent on an older BE.
+  deliveryMode: deliveryModeSchema.nullish(),
   // Oldest first; empty until the first handover. Absent on an older BE.
   shipments: z.array(orderShipmentDtoSchema).nullish(),
 });

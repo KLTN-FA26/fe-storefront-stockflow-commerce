@@ -63,7 +63,8 @@ function Row({ receivable }: { receivable: Receivable }) {
           href={STORE_ROUTES.account.orders.detail(receivable.orderId)}
           className="text-accent focus-visible:ring-accent inline-flex min-h-11 items-center rounded font-semibold underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:outline-none"
         >
-          {RECEIVABLE_KIND_LABEL[receivable.kind ?? "UNKNOWN"]} · Xem đơn hàng
+          {RECEIVABLE_KIND_LABEL[receivable.kind ?? "UNKNOWN"]} ·{" "}
+          {receivable.orderNumber ? `Đơn ${receivable.orderNumber}` : "Xem đơn hàng"}
         </Link>
         <Badge className={cn("h-7 rounded-full px-3 font-semibold", TONE_CLASSES[tone])}>
           {RECEIVABLE_STATUS_LABEL[receivable.status]}
