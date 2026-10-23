@@ -22,6 +22,7 @@ describe("creditSummary", () => {
         available: 0,
         termDays: undefined,
         overdue: false,
+        overdueAmount: 0,
       });
     }
   });
@@ -49,6 +50,7 @@ describe("creditSummary", () => {
       available: 38_000_000,
       termDays: 30,
       overdue: true,
+      overdueAmount: 0,
     });
   });
 
@@ -60,6 +62,7 @@ describe("creditSummary", () => {
       available: 10_000_000,
       termDays: undefined,
       overdue: false,
+      overdueAmount: 0,
     });
   });
 
@@ -68,6 +71,25 @@ describe("creditSummary", () => {
       dto({ creditLimit: 1_000, exposure: 1_500, availableCredit: -500, currency: "EUR" }),
     );
     expect(summary).toMatchObject({ available: 0, currency: "VND" });
+  });
+});
+
+describe("creditSummary overdue figures", () => {
+  it("reads what is overdue and since when", () => {
+    expect(
+      creditSummary(
+        dto({
+          creditLimit: 5_000_000,
+          hasOverdue: true,
+          overdueAmount: 1_300_000,
+          oldestOverdueDueDate: "2026-10-13",
+        }),
+      ),
+    ).toMatchObject({
+      overdue: true,
+      overdueAmount: 1_300_000,
+      oldestOverdueDueDate: "2026-10-13",
+    });
   });
 });
 

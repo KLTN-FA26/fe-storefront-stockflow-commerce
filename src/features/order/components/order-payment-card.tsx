@@ -1,3 +1,4 @@
+import { TransferInstructionsSection } from "@/components/storefront/transfer-instructions";
 import { formatMoney } from "@/lib/format/money";
 
 import { PAYMENT_STATUS_LABEL, PAYMENT_TERM_LABEL } from "../labels";
@@ -49,6 +50,11 @@ export function OrderPaymentCard({ order }: { order: Order }) {
           <Row label="Hạn thanh toán">{payment.creditTermDays} ngày sau khi giao</Row>
         ) : null}
       </dl>
+      {/* Only while money is still due: the BE says NONE otherwise, and a shop without a bank account
+          set up should not warn about an order that owes nothing. */}
+      {due !== undefined && due > 0 ? (
+        <TransferInstructionsSection orderId={order.orderId} />
+      ) : null}
     </section>
   );
 }

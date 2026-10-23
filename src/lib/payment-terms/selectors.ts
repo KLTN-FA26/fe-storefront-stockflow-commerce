@@ -14,6 +14,10 @@ export interface CreditSummary {
   termDays: number | undefined;
   /** An overdue receivable: new credit orders wait for approval whatever the limit says. */
   overdue: boolean;
+  /** What is still unpaid on the overdue receivables; 0 when none or when the BE does not say. */
+  overdueAmount: number;
+  /** ISO date of the earliest overdue due date; undefined when none. */
+  oldestOverdueDueDate: string | undefined;
 }
 
 const isCurrency = (value: string | null | undefined): value is Currency =>
@@ -37,6 +41,8 @@ export function creditSummary(dto: PaymentTermsDto): CreditSummary | undefined {
     available: Math.max(0, dto.availableCredit ?? limit - exposure),
     termDays: dto.creditTermDays ?? undefined,
     overdue: dto.hasOverdue === true,
+    overdueAmount: dto.overdueAmount ?? 0,
+    oldestOverdueDueDate: dto.oldestOverdueDueDate ?? undefined,
   };
 }
 

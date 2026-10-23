@@ -2,7 +2,8 @@ import { MapPin } from "lucide-react";
 
 import { formatMoney } from "@/lib/format/money";
 
-import { DELIVERY_STATE_LABEL } from "../labels";
+import { DELIVERY_MODE_LABEL, DELIVERY_MODE_PENDING_LABEL, DELIVERY_STATE_LABEL } from "../labels";
+import { deliveryModes } from "../selectors";
 import type { Order, OrderAddress } from "../types";
 import { LineProduction } from "./line-production";
 
@@ -67,6 +68,28 @@ export function OrderTotalCard({ order }: { order: Order }) {
 const addressLine = (address: OrderAddress) =>
   [address.line1, address.line2, address.wardName, address.provinceName].filter(Boolean).join(", ");
 
+const CLOSED_STATUSES: ReadonlySet<Order["status"]> = new Set(["CANCELLED", "RETURNED"]);
+
+/**
+ * Read-only: the delivery method is the coordinator's choice, never the customer's. Shown as the
+ * shipments carry it ("Giao lẻ" / "Xe nguyên chuyến"), or as awaiting coordination while none does.
+ * A cancelled or returned order has nothing left to coordinate, so it says nothing.
+ */
+function DeliveryMethod({ order }: { order: Order }) {
+  const modes = deliveryModes(order);
+  if (modes.length === 0 && CLOSED_STATUSES.has(order.status)) return null;
+  return (
+    <p className="text-sm">
+      <span className="text-ink-secondary">Phương thức giao: </span>
+      <span className="text-ink-primary font-medium">
+        {modes.length > 0
+          ? modes.map((mode) => DELIVERY_MODE_LABEL[mode]).join(", ")
+          : DELIVERY_MODE_PENDING_LABEL}
+      </span>
+    </p>
+  );
+}
+
 /**
  * Where the order goes and where delivery stands. The customer view carries the shipping address
  * only (no contact or billing block), and NON_NULL omits it when the BE has none. The delivery
@@ -89,6 +112,7 @@ export function OrderDeliveryCard({ order }: { order: Order }) {
           {DELIVERY_STATE_LABEL[order.deliveryState]}
         </p>
       ) : null}
+      <DeliveryMethod order={order} />
       {ship ? (
         <div className="flex gap-3">
           <MapPin aria-hidden className="text-ink-tertiary mt-0.5 size-5 shrink-0" />

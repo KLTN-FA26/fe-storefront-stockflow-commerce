@@ -19,6 +19,11 @@ export const checkoutLineInputSchema = z.object({
 export const PAYMENT_TERMS = ["PREPAID", "DEPOSIT", "CREDIT"] as const;
 export type CheckoutPaymentTerm = (typeof PAYMENT_TERMS)[number];
 
+// How the balance of a DEPOSIT order is paid (BE DepositBalancePolicy). The customer may pick only
+// one of `allowedBalancePolicies` from GET /orders/payment-terms.
+export const BALANCE_POLICIES = ["BEFORE_DELIVERY", "ON_DELIVERY", "ON_CREDIT"] as const;
+export type BalancePolicy = (typeof BALANCE_POLICIES)[number];
+
 /**
  * `paymentTerm` is the term the customer picked among those GET /orders/payment-terms allows them;
  * omitted, the BE uses the customer's default. A term they may not use is 409
@@ -33,6 +38,9 @@ export const placeOrderInputSchema = z.object({
   shippingAddressId: beId(),
   lines: z.array(checkoutLineInputSchema).min(1),
   paymentTerm: z.enum(PAYMENT_TERMS).optional(),
+  // DEPOSIT orders only: sent on another term the BE answers 400 VALIDATION_FAILED. Omitted, the BE
+  // applies the customer's own `depositBalancePolicy`.
+  balancePolicy: z.enum(BALANCE_POLICIES).optional(),
 });
 
 // ── Response — the part of BE OrderResponse the storefront uses. Extra fields (stock holds,

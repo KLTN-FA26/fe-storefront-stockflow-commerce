@@ -1,12 +1,11 @@
 "use client";
 
 import { RefreshCw } from "lucide-react";
-import { cn } from "cn";
+import type { ReactNode } from "react";
 
 import { Alert, Skeleton } from "@/components/shared";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { RadioGroup } from "@/components/ui/radio-group";
 import { describeApiError } from "@/lib/api/describe-error";
 import { formatMoney } from "@/lib/format/money";
 
@@ -16,6 +15,7 @@ import {
   type PaymentTermOption,
 } from "../checkout-payment-terms";
 import type { CheckoutPaymentTerm } from "../checkout-schemas";
+import { ChoiceCard } from "./choice-card";
 import { CreditNote } from "./credit-note";
 
 interface CheckoutPaymentTermsProps {
@@ -31,6 +31,8 @@ interface CheckoutPaymentTermsProps {
   awaitingChoice?: boolean;
   /** The cart's subtotal: the deposit the DEPOSIT term asks up front, and what CREDIT is set against. */
   subtotal: number;
+  /** DEPOSIT only: how the balance is paid, shown under the deposit note while DEPOSIT is chosen. */
+  balanceSlot?: ReactNode;
 }
 
 const GENERIC =
@@ -50,6 +52,7 @@ export function CheckoutPaymentTerms({
   onChange,
   subtotal,
   awaitingChoice = false,
+  balanceSlot,
 }: CheckoutPaymentTermsProps) {
   if (isLoading) {
     return (
@@ -96,11 +99,14 @@ export function CheckoutPaymentTerms({
       </p>
     );
 
+  const balance = selected?.term === "DEPOSIT" ? balanceSlot : null;
+
   if (terms.options.length === 1 && selected) {
     return (
       <div className="space-y-2">
         <Option option={selected} chosen />
         {note}
+        {balance}
       </div>
     );
   }
@@ -117,6 +123,7 @@ export function CheckoutPaymentTerms({
         ))}
       </RadioGroup>
       {note}
+      {balance}
     </div>
   );
 }
@@ -144,15 +151,12 @@ function Option({
     );
   }
   return (
-    <Label
-      htmlFor={`term-${option.term}`}
-      className={cn(
-        "bg-bg-surface hover:border-border-strong focus-within:ring-accent flex min-h-11 cursor-pointer items-start gap-3 rounded-[var(--r-md)] border p-3 text-left font-normal transition-colors focus-within:ring-2 sm:p-4",
-        chosen ? "border-accent bg-accent/5" : "border-border-default",
-      )}
-    >
-      <RadioGroupItem id={`term-${option.term}`} value={option.term} className="mt-1" />
-      {body}
-    </Label>
+    <ChoiceCard
+      id={`term-${option.term}`}
+      value={option.term}
+      label={option.label}
+      description={option.description}
+      chosen={chosen}
+    />
   );
 }

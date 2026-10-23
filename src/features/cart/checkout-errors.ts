@@ -1,5 +1,9 @@
-import { describeApiError } from "@/lib/api/describe-error";
+import { z } from "zod";
+
+import { describeApiError, withLookup } from "@/lib/api/describe-error";
 import { ApiError } from "@/lib/api/error";
+import { formatDate } from "@/lib/format/date";
+import { formatMoney } from "@/lib/format/money";
 
 /**
  * POST /orders failures by BE `errorCode` (ErrorCode.java), in Vietnamese. The BE message is
@@ -25,6 +29,10 @@ const MESSAGE_BY_CODE: Record<string, string> = {
     "Điều khoản thanh toán của tài khoản hiện không cho phép đặt đơn này. Vui lòng liên hệ Sales để cập nhật.",
   CUSTOMER_CREDIT_OVERDUE:
     "Tài khoản đang có công nợ quá hạn nên chưa thể đặt thêm đơn công nợ. Vui lòng thanh toán khoản quá hạn hoặc liên hệ Sales.",
+  BALANCE_CREDIT_LIMIT_EXCEEDED:
+    "Phần còn lại của đơn vượt hạn mức công nợ còn lại của bạn nên chưa thể ghi vào công nợ. Hãy chọn cách thanh toán phần còn lại khác hoặc liên hệ Sales.",
+  BALANCE_POLICY_NOT_ALLOWED:
+    "Cách thanh toán phần còn lại bạn chọn hiện không được áp dụng cho tài khoản. Hãy chọn một cách khác trong danh sách.",
   CUSTOMER_NOT_ACTIVE:
     "Tài khoản của bạn chưa được kích hoạt hoặc đang tạm khoá nên chưa thể đặt hàng. Vui lòng liên hệ Sales.",
   SHIPPING_ADDRESS_REQUIRED:
@@ -49,7 +57,72 @@ const MESSAGE_BY_CODE: Record<string, string> = {
     "Thông tin đơn hàng chưa hợp lệ. Vui lòng tải lại trang, kiểm tra giỏ hàng rồi thử lại.",
 };
 
-export const describeCheckoutError = (error: unknown) => describeApiError(error, MESSAGE_BY_CODE);
+// BE `details` of the two credit refusals (BALANCE_CREDIT_LIMIT_EXCEEDED, CUSTOMER_CREDIT_OVERDUE).
+// Every field is optional: a refusal whose details are missing or malformed falls back to the static text.
+const creditDetailsSchema = z.object({
+  availableCredit: z.number().optional(),
+  creditLimit: z.number().optional(),
+  exposure: z.number().optional(),
+  requiredAmount: z.number().optional(),
+  currency: z.enum(["VND", "USD", "CNY"]).optional(),
+  overdueAmount: z.number().optional(),
+  oldestOverdueDueDate: z.string().optional(),
+});
+type CreditDetails = z.infer<typeof creditDetailsSchema>;
+
+/** The two refusals that mean "the balance cannot go on credit": another way to pay it fixes them. */
+const CREDIT_REFUSALS = new Set(["BALANCE_CREDIT_LIMIT_EXCEEDED", "CUSTOMER_CREDIT_OVERDUE"]);
+export const isCreditRefusal = (error: unknown) =>
+  error instanceof ApiError && CREDIT_REFUSALS.has(error.code);
+
+/** Codes after which the customer's terms or credit position changed: the terms are read again. */
+export const isTermsChangedError = (error: unknown) =>
+  error instanceof ApiError &&
+  (error.code === "PAYMENT_TERM_NOT_ALLOWED" ||
+    error.code === "BALANCE_POLICY_NOT_ALLOWED" ||
+    CREDIT_REFUSALS.has(error.code));
+
+const readCreditDetails = (error: ApiError): CreditDetails | undefined => {
+  const parsed = creditDetailsSchema.safeParse(error.details ?? {});
+  return parsed.success ? parsed.data : undefined;
+};
+
+function describeCreditRefusal(error: ApiError, prepayOffered: boolean): string | undefined {
+  const details = readCreditDetails(error);
+  if (!details) return undefined;
+  const money = (amount: number) => formatMoney(amount, details.currency ?? "VND");
+  const fix = prepayOffered
+    ? " Bạn có thể chọn “Trả trước khi giao” cho phần còn lại, hoặc liên hệ Sales."
+    : " Vui lòng liên hệ Sales.";
+  if (error.code === "BALANCE_CREDIT_LIMIT_EXCEEDED") {
+    if (details.availableCredit === undefined) return undefined;
+    const needed =
+      details.requiredAmount === undefined
+        ? "Phần còn lại của đơn"
+        : `Phần còn lại của đơn là ${money(details.requiredAmount)}`;
+    const limit =
+      details.creditLimit === undefined ? "" : ` (hạn mức ${money(details.creditLimit)})`;
+    return `${needed}, nhưng hạn mức công nợ còn lại của bạn chỉ còn ${money(details.availableCredit)}${limit}, nên chưa thể ghi vào công nợ.${fix}`;
+  }
+  if (details.overdueAmount === undefined) return undefined;
+  const since = details.oldestOverdueDueDate
+    ? ` (sớm nhất đến hạn ngày ${formatDate(details.oldestOverdueDueDate)})`
+    : "";
+  return `Tài khoản đang có công nợ quá hạn ${money(details.overdueAmount)}${since} nên chưa thể ghi thêm vào công nợ.${fix}`;
+}
+
+/**
+ * The customer-facing text for a failed POST /orders. The two credit refusals carry the numbers in
+ * `details`, so they quote the credit left and the overdue amount; `prepayOffered` says the screen
+ * can offer "Trả trước khi giao" as the way out, and the text then points at it.
+ */
+export function describeCheckoutError(error: unknown, opts: { prepayOffered?: boolean } = {}) {
+  if (error instanceof ApiError && CREDIT_REFUSALS.has(error.code)) {
+    const text = describeCreditRefusal(error, opts.prepayOffered === true);
+    if (text) return withLookup(text, error);
+  }
+  return describeApiError(error, MESSAGE_BY_CODE);
+}
 
 /**
  * Codes after which the cart's price list or stock is out of date: the cart re-reads both so the

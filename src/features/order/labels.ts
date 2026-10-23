@@ -3,6 +3,7 @@ import type { SemanticTone } from "@/lib/domain/types";
 import type {
   CancellationReasonCode,
   CancellationRequestStatus,
+  DeliveryMode,
   DeliveryState,
   HoldReason,
   PaymentStatus,
@@ -44,6 +45,16 @@ export const DELIVERY_STATE_LABEL: Record<DeliveryState, string> = {
   RETURNED: "Đã trả lại",
   UNKNOWN: "Đang cập nhật",
 };
+
+/** How the goods travel, as the coordinator chose it (the customer does not choose). */
+export const DELIVERY_MODE_LABEL: Record<DeliveryMode, string> = {
+  PARCEL: "Giao lẻ",
+  FULL_TRUCKLOAD: "Xe nguyên chuyến",
+  UNKNOWN: "Đang cập nhật",
+};
+
+/** Shown while no shipment carries a mode: the coordinator has not set one, or not yet. */
+export const DELIVERY_MODE_PENDING_LABEL = "Đang chờ điều phối";
 
 /** Why an ON_HOLD order waits (BE holdReasonPublic): the only two things a customer is told. */
 export const HOLD_REASON_LABEL: Record<HoldReason, string> = {

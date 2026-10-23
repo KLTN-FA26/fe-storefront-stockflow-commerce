@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { CreditCard, RefreshCw, ShieldCheck } from "lucide-react";
 
@@ -11,18 +11,19 @@ import { SurfaceCard } from "@/components/storefront/layout";
 import { OrderTotals } from "@/components/storefront/order-totals";
 import { describeApiError } from "@/lib/api/describe-error";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
-import { usePaymentTerms } from "@/lib/payment-terms";
 import { useCartStore } from "@/lib/store/use-cart-store";
 
-import { describeCheckoutError } from "../checkout-errors";
+import { describeCheckoutError, isCreditRefusal } from "../checkout-errors";
 import { usePlaceOrder } from "../checkout-mutations";
-import { resolvePaymentTerms } from "../checkout-payment-terms";
-import { PAYMENT_TERMS, type CheckoutPaymentTerm, type PlacedOrder } from "../checkout-schemas";
+import { balanceAmount } from "../checkout-payment-terms";
+import type { PlacedOrder } from "../checkout-schemas";
 import type { CheckoutCustomer } from "../checkout-types";
 import { ISSUE_MESSAGE } from "../selectors";
 import { useCartView } from "../use-cart-view";
-import { forgetRequestId, readPickedTerm, rememberPickedTerm, requestIdFor } from "../request-id";
+import { useCheckoutPayment } from "../use-checkout-payment";
+import { forgetRequestId, requestIdFor } from "../request-id";
 import { CheckoutAddressPicker } from "./checkout-address-picker";
+import { CheckoutBalancePolicy } from "./checkout-balance-policy";
 import { CheckoutLines } from "./checkout-lines";
 import { CheckoutPaymentTerms } from "./checkout-payment-terms";
 import { OrderPlacedPanel } from "./order-placed-panel";
@@ -61,32 +62,19 @@ export function CheckoutScreen({ customer }: { customer: CheckoutCustomer }) {
   const place = usePlaceOrder();
   const [placed, setPlaced] = useState<PlacedOrder>();
   const [pickedAddress, setPickedAddress] = useState<string>();
-  // Kept in sessionStorage with the request id: a reload must not change what the order is.
-  const [pickedTerm, setPickedTerm] = useState<CheckoutPaymentTerm | undefined>(() => {
-    const stored = readPickedTerm();
-    return PAYMENT_TERMS.find((term) => term === stored);
-  });
   // What the customer may be sold on (kltn-docs 15 BR-01). Asked once the cart is worth ordering.
-  const termsQuery = usePaymentTerms(signedIn === true && view.lines.length > 0);
-  const terms = useMemo(
-    () => (termsQuery.data ? resolvePaymentTerms(termsQuery.data) : undefined),
-    [termsQuery.data],
-  );
-  // The pick if it is still allowed, else the customer's default. Terms read earlier still count
-  // when a refetch fails (stale data is kept), so what is shown and what is sent stay the same.
-  const paymentTerm =
-    (pickedTerm && terms?.options.some((o) => o.term === pickedTerm) ? pickedTerm : undefined) ??
-    terms?.defaultTerm;
-  // Only a term that differs from the customer's default is sent, and keyed: the BE applies the
-  // default itself, so the same order is the same request whether or not the terms were readable.
-  const sentTerm = paymentTerm && paymentTerm !== terms?.defaultTerm ? paymentTerm : undefined;
-  // No terms to check an earlier pick against: ordering waits for them, rather than placing an
-  // order that may differ from the one the earlier pick sent.
-  const awaitingTerms = !terms && !termsQuery.isPending && pickedTerm !== undefined;
-  const pickTerm = (term: CheckoutPaymentTerm) => {
-    setPickedTerm(term);
-    rememberPickedTerm(term);
-  };
+  const {
+    termsQuery,
+    terms,
+    paymentTerm,
+    sentTerm,
+    balanceChoice,
+    balancePolicy,
+    sentBalance,
+    awaitingTerms,
+    pickTerm,
+    pickBalance,
+  } = useCheckoutPayment(signedIn === true && view.lines.length > 0);
 
   const addresses = customer.addresses ?? [];
   const addressId =
@@ -101,8 +89,18 @@ export function CheckoutScreen({ customer }: { customer: CheckoutCustomer }) {
     quantity: row.line.quantity,
     unitPrice: row.unitPrice ?? 0,
   }));
-  // The term is part of the content: the same key with another term would be IDEMPOTENCY_KEY_REUSED.
-  const contentKey = JSON.stringify([customer.customerId, addressId, lines, sentTerm ?? null]);
+  // The term and the balance policy are part of the content: the same key with another one would be
+  // IDEMPOTENCY_KEY_REUSED.
+  const contentKey = JSON.stringify([
+    customer.customerId,
+    addressId,
+    lines,
+    sentTerm ?? null,
+    sentBalance ?? null,
+  ]);
+  // "Trả trước khi giao" is the way out of a credit refusal when the customer may use it.
+  const prepayOffered =
+    balanceChoice?.options.some((option) => option.policy === "BEFORE_DELIVERY") === true;
 
   if (placed) return <OrderPlacedPanel order={placed} />;
   if (signedIn === undefined || !hydrated || customer.isLoading) {
@@ -149,6 +147,7 @@ export function CheckoutScreen({ customer }: { customer: CheckoutCustomer }) {
         shippingAddressId: addressId,
         lines,
         ...(sentTerm ? { paymentTerm: sentTerm } : {}),
+        ...(sentBalance ? { balancePolicy: sentBalance } : {}),
       },
       {
         // Show the order and empty the cart in one step: emptied first, the screen would flash
@@ -158,6 +157,10 @@ export function CheckoutScreen({ customer }: { customer: CheckoutCustomer }) {
           setPlaced(order);
           forgetRequestId();
           useCartStore.getState().clear();
+        },
+        // The balance cannot go on credit: pre-select the way out, so fixing it is one tap.
+        onError: (error) => {
+          if (isCreditRefusal(error) && prepayOffered) pickBalance("BEFORE_DELIVERY");
         },
       },
     );
@@ -205,9 +208,30 @@ export function CheckoutScreen({ customer }: { customer: CheckoutCustomer }) {
             error={termsQuery.error}
             onRetry={() => void termsQuery.refetch()}
             value={paymentTerm}
-            onChange={pickTerm}
+            onChange={(term) => {
+              place.reset();
+              pickTerm(term);
+            }}
             awaitingChoice={awaitingTerms}
             subtotal={view.subtotal}
+            balanceSlot={
+              balanceChoice ? (
+                <CheckoutBalancePolicy
+                  choice={balanceChoice}
+                  value={balancePolicy}
+                  onChange={(policy) => {
+                    place.reset();
+                    pickBalance(policy);
+                  }}
+                  balance={
+                    terms?.depositPercent
+                      ? balanceAmount(view.subtotal, terms.depositPercent)
+                      : undefined
+                  }
+                  credit={terms?.credit}
+                />
+              ) : null
+            }
           />
         </SurfaceCard>
       </div>
@@ -220,7 +244,10 @@ export function CheckoutScreen({ customer }: { customer: CheckoutCustomer }) {
         {place.error ? (
           <div role="alert">
             <Alert tone="danger" title="Không đặt được hàng.">
-              {describeCheckoutError(place.error)}
+              {describeCheckoutError(place.error, { prepayOffered })}
+              {isCreditRefusal(place.error) && prepayOffered && balancePolicy === "BEFORE_DELIVERY"
+                ? " Chúng tôi đã chọn sẵn “Trả trước khi giao” cho bạn, hãy kiểm tra rồi đặt hàng lại."
+                : ""}
             </Alert>
           </div>
         ) : blockedLine?.issue ? (
