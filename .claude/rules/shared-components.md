@@ -13,12 +13,12 @@ Before writing a new component, check whether `components/ui`, `components/share
 
 ## Layers
 
-| Directory | Purpose | Rule |
-| --- | --- | --- |
-| `components/ui/` | shadcn/Radix primitives | primitive-level only; add missing primitive when needed |
-| `components/shared/` | reusable cross-storefront building blocks | no business/API imports |
-| `components/storefront/` | ecommerce/customer-facing compositions | can know storefront UX patterns |
-| `features/*/components/` | module-specific UI | can know feature business rules |
+| Directory                | Purpose                                   | Rule                                                    |
+| ------------------------ | ----------------------------------------- | ------------------------------------------------------- |
+| `components/ui/`         | shadcn/Radix primitives                   | primitive-level only; add missing primitive when needed |
+| `components/shared/`     | reusable cross-storefront building blocks | no business/API imports                                 |
+| `components/storefront/` | ecommerce/customer-facing compositions    | can know storefront UX patterns                         |
+| `features/*/components/` | module-specific UI                        | can know feature business rules                         |
 
 ## Storefront components to reuse
 
@@ -41,8 +41,6 @@ Before writing a new component, check whether `components/ui`, `components/share
 - `<OrderTotals>`
 - `<CheckoutStepper>`
 - `<AddressForm>`
-- `<ShippingMethodSelector>`
-- `<PaymentMethodSelector>`
 
 ### Order and customer
 

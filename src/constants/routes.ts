@@ -2,7 +2,6 @@
  * Storefront routes — same pattern as ADMIN_ROUTES but for (storefront) group.
  */
 
-
 export const APP_ROUTES = {
   home: "/",
   login: "/login",
@@ -25,9 +24,6 @@ export const STORE_ROUTES = {
     shipping: "/checkout/shipping",
     payment: "/checkout/payment",
     review: "/checkout/review",
-  },
-  payment: {
-    result: (id: string) => `/payment/${id}`,
   },
   chat: {
     list: "/chat",
