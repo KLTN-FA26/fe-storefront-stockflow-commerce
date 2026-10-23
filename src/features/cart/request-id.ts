@@ -10,6 +10,7 @@
  * The same slot remembers the payment term the customer picked (`term`): it is part of the order's
  * content, so it must survive the same reload, or the key computed after it would differ from the
  * one the (possibly already placed) order was sent with. It lives and dies with the request id.
+ * The balance policy of a DEPOSIT order (`balance`) is part of the content the same way.
  */
 const SLOT = "stockflow:storefront:checkout-request";
 
@@ -18,6 +19,8 @@ interface Slot {
   id: string;
   /** The payment term picked for the order in progress; absent until the customer picks one. */
   term?: string;
+  /** The balance policy picked for the order in progress (DEPOSIT orders); absent until picked. */
+  balance?: string;
 }
 
 function read(): Slot | undefined {
@@ -29,6 +32,7 @@ function read(): Slot | undefined {
           key: slot.key,
           id: slot.id,
           ...(typeof slot.term === "string" ? { term: slot.term } : {}),
+          ...(typeof slot.balance === "string" ? { balance: slot.balance } : {}),
         }
       : undefined;
   } catch {
@@ -48,6 +52,7 @@ export function requestIdFor(contentKey: string): string {
         key: contentKey,
         id,
         ...(stored?.term ? { term: stored.term } : {}),
+        ...(stored?.balance ? { balance: stored.balance } : {}),
       } satisfies Slot),
     );
   } catch {
@@ -59,18 +64,30 @@ export function requestIdFor(contentKey: string): string {
 /** The payment term picked for the order in progress, as left by {@link rememberPickedTerm}. */
 export const readPickedTerm = (): string | undefined => read()?.term;
 
-/** Keep the customer's pick across a reload (see the note on top); the request id is not touched. */
-export function rememberPickedTerm(term: string): void {
+/** Keep a pick across a reload (see the note on top); the request id is not touched. */
+function remember(patch: Pick<Slot, "term"> | Pick<Slot, "balance">): void {
   const stored = read();
   try {
     sessionStorage.setItem(
       SLOT,
-      JSON.stringify({ key: stored?.key ?? "", id: stored?.id ?? "", term } satisfies Slot),
+      JSON.stringify({
+        ...stored,
+        key: stored?.key ?? "",
+        id: stored?.id ?? "",
+        ...patch,
+      } satisfies Slot),
     );
   } catch {
-    // Without storage the pick lasts until a reload; the key then follows the default term.
+    // Without storage the pick lasts until a reload; the key then follows the default.
   }
 }
+
+export const rememberPickedTerm = (term: string): void => remember({ term });
+
+/** The balance policy picked for the order in progress, as left by {@link rememberPickedBalance}. */
+export const readPickedBalance = (): string | undefined => read()?.balance;
+
+export const rememberPickedBalance = (balance: string): void => remember({ balance });
 
 /** The order exists now: the next one with the same content is a new order and needs a new key. */
 export function forgetRequestId(): void {
