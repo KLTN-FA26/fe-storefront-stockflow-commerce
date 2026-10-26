@@ -80,6 +80,18 @@ describe("mock catalogue satisfies the FE catalogue contract", () => {
     }
   });
 
+  it("tells a customizable product from a standard one on the card and the detail, as the schemas read them", () => {
+    const cards = catalogPageDtoSchema.parse(dataOf(catalog.list({ size: 200 }))).items;
+    expect(cards.find((c) => c.slug === "tui-giay-kraft")?.kind).toBe("CUSTOMIZABLE");
+    expect(cards.find((c) => c.slug === "nap-ly-90mm")?.kind).toBe("STANDARD");
+    expect(catalogProductDtoSchema.parse(dataOf(catalog.detail("tui-giay-kraft"))).kind).toBe(
+      "CUSTOMIZABLE",
+    );
+    expect(catalogProductDtoSchema.parse(dataOf(catalog.detail("nap-ly-90mm"))).kind).toBe(
+      "STANDARD",
+    );
+  });
+
   it("answers a product with an unpriced variant like the BE: 409 PRICE_NOT_AVAILABLE on the detail only", () => {
     expect(catalog.detail(NO_PRICE_SLUG)).toMatchObject({
       status: 409,

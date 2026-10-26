@@ -187,3 +187,39 @@ describe("ProductDetailScreen", () => {
     expect(screen.getByRole("link", { name: "Chat với Sales" })).toBeInTheDocument();
   });
 });
+
+describe("ProductDetailScreen design entry", () => {
+  it("offers 'Bắt đầu thiết kế' for a customizable product, for the chosen SKU", async () => {
+    renderWithProviders(<ProductDetailScreen slug="ly-giay-2-lop-8oz" />);
+    await addButton();
+    expect(screen.getByRole("link", { name: "Bắt đầu thiết kế" })).toHaveAttribute(
+      "href",
+      "/design/new?product=ly-giay-2-lop-8oz&sku=CUP-PAPER-8OZ-WHT",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "CUP-PAPER-8OZ-KRAFT" }));
+    expect(screen.getByRole("link", { name: "Bắt đầu thiết kế" })).toHaveAttribute(
+      "href",
+      "/design/new?product=ly-giay-2-lop-8oz&sku=CUP-PAPER-8OZ-KRAFT",
+    );
+  });
+
+  it("offers no design entry for a standard product", async () => {
+    renderWithProviders(<ProductDetailScreen slug="hop-giay-mang-di-m" />);
+    await addButton();
+    expect(screen.queryByRole("link", { name: "Bắt đầu thiết kế" })).not.toBeInTheDocument();
+  });
+
+  it("offers no design entry while the BE does not say the product is customizable", async () => {
+    const real = vi.mocked(api.get).getMockImplementation()!;
+    vi.mocked(api.get).mockImplementation(async (url, config) => {
+      const result = (await real(url, config)) as { data: { kind?: string } };
+      if (url !== "/catalog/products/ly-giay-2-lop-8oz") return result;
+      const { kind: _kind, ...withoutKind } = result.data;
+      return { data: withoutKind };
+    });
+    renderWithProviders(<ProductDetailScreen slug="ly-giay-2-lop-8oz" />);
+    await addButton();
+    expect(screen.queryByRole("link", { name: "Bắt đầu thiết kế" })).not.toBeInTheDocument();
+  });
+});

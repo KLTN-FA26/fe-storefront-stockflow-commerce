@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
 
-import { STORE_ROUTES } from "@/constants";
 import { Alert } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { AvailabilityBadge } from "@/components/storefront/availability-badge";
@@ -28,6 +27,8 @@ interface ProductPurchasePanelProps {
   quantity: number;
   onQuantityChange: (quantity: number) => void;
   onAdd: () => void;
+  /** The design launcher for the chosen SKU; null for a product that cannot be customized. */
+  designHref: string | null;
 }
 
 export function ProductPurchasePanel({
@@ -40,6 +41,7 @@ export function ProductPurchasePanel({
   quantity,
   onQuantityChange,
   onAdd,
+  designHref,
 }: ProductPurchasePanelProps) {
   const availability = availabilityOf(sku);
   const unitPrice = unitPriceFor(schedule, quantity);
@@ -105,7 +107,7 @@ export function ProductPurchasePanel({
       </div>
 
       <div className="space-y-3">
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className={designHref ? "grid gap-3 sm:grid-cols-2" : "grid gap-3"}>
           <Button
             type="button"
             className="min-h-11 rounded-[var(--r-md)]"
@@ -115,9 +117,11 @@ export function ProductPurchasePanel({
             <ShoppingCart className="size-4" aria-hidden="true" />
             Thêm vào giỏ
           </Button>
-          <Button asChild variant="secondary" className="min-h-11 rounded-[var(--r-md)]">
-            <Link href={STORE_ROUTES.design.new}>Bắt đầu thiết kế</Link>
-          </Button>
+          {designHref ? (
+            <Button asChild variant="secondary" className="min-h-11 rounded-[var(--r-md)]">
+              <Link href={designHref}>Bắt đầu thiết kế</Link>
+            </Button>
+          ) : null}
         </div>
         {availability === "OUT_OF_STOCK" ? (
           <p className="bg-bg-subtle text-ink-secondary rounded-[var(--r-md)] p-3 text-sm">

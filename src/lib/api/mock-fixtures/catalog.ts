@@ -14,7 +14,9 @@
  *  - /prices leaves out a SKU with no price (it cannot be ordered either);
  *  - a product with a variant that has no base price has no readable detail: 409 PRICE_NOT_AVAILABLE;
  *  - an unknown slug is 404 NOT_FOUND; unknown SKUs are OUT_OF_STOCK in /availability;
- *  - every call needs a signed-in caller; availability and prices need a CUSTOMER (mock: always).
+ *  - every call needs a signed-in caller; availability and prices need a CUSTOMER (mock: always);
+ *  - `kind` (STANDARD | CUSTOMIZABLE) on the detail and the list card is proposed (spec 2026-10-25
+ *    §7.2 P2): the BE's responses do not carry it yet; `kindOf` is what the design mock asks.
  * NON_NULL serialisation: absent optional fields are omitted, never sent as null.
  * Intentionally independent from mock-data.ts (legacy, non-BE shapes).
  */
@@ -35,10 +37,14 @@ export interface MockVariant {
   listPrice?: number;
 }
 
+/** BE `product.products.kind`: a CUSTOMIZABLE product's variants carry design templates. */
+export type MockProductKind = "STANDARD" | "CUSTOMIZABLE";
+
 export interface MockProduct {
   productId: string;
   slug: string;
   title: string;
+  kind: MockProductKind;
   description?: string;
   seoTitle?: string;
   /** Position in the "newest" order: higher = listed more recently. */
@@ -188,6 +194,7 @@ export function createMockCatalog(
           productId: p.productId,
           slug: p.slug,
           title: p.title,
+          kind: p.kind,
           ...(p.seoTitle ? { seoTitle: p.seoTitle } : {}),
           // Card fields (BE CatalogCardResponse): the primary image and the variants, never a price or stock.
           ...(leadImage(p) ? { primaryImageUrl: leadImage(p)!.url } : {}),
@@ -213,6 +220,7 @@ export function createMockCatalog(
         productId: product.productId,
         slug: product.slug,
         title: product.title,
+        kind: product.kind,
         ...(product.description ? { description: product.description } : {}),
         ...(product.seoTitle ? { seoTitle: product.seoTitle } : {}),
         variants: product.variants.map((v) => ({
@@ -223,6 +231,21 @@ export function createMockCatalog(
         })),
         galleryUrl: `/api/v1/catalog/products/${product.slug}/gallery`,
       });
+    },
+
+    /**
+     * What the design backend asks of the catalogue: a product's id, kind and every SKU. Unlike the
+     * detail it does not need a price, so a customizable product awaiting one is still answered.
+     */
+    kindOf(slug: string): { productId: string; kind: MockProductKind; skus: string[] } | undefined {
+      const product = bySlug(slug);
+      return product
+        ? {
+            productId: product.productId,
+            kind: product.kind,
+            skus: product.variants.map((v) => v.sku),
+          }
+        : undefined;
     },
 
     /** GET /catalog/products/{slug}/gallery */
@@ -364,6 +387,8 @@ const LOGO = "/logo.png";
 interface Spec {
   slug: string;
   title: string;
+  /** Absent = STANDARD. */
+  kind?: MockProductKind;
   description?: string;
   variants: Array<{
     sku: string;
@@ -381,6 +406,7 @@ const SPECS: Spec[] = [
   {
     slug: "ly-giay-2-lop-8oz",
     title: "Ly giấy 2 lớp 8oz",
+    kind: "CUSTOMIZABLE",
     description:
       "Ly giấy hai lớp cách nhiệt, miệng 80 mm, đóng thùng 1.000 cái.\nPhù hợp cà phê mang đi và đồ uống nóng.",
     variants: [
@@ -398,6 +424,7 @@ const SPECS: Spec[] = [
   {
     slug: "ly-giay-2-lop-12oz",
     title: "Ly giấy 2 lớp 12oz",
+    kind: "CUSTOMIZABLE",
     description: "Ly giấy hai lớp 12oz, miệng 90 mm.",
     variants: [
       {
@@ -413,12 +440,14 @@ const SPECS: Spec[] = [
   {
     slug: "ly-nhua-pet-500ml",
     title: "Ly nhựa PET 500ml",
+    kind: "CUSTOMIZABLE",
     description: "Ly nhựa PET trong suốt 500 ml, dùng cho trà sữa và đồ uống lạnh.",
     variants: [{ sku: "CUP-PET-500ML", stock: 0, price: 1250, moq: 500, source: "BASE" }],
   },
   {
     slug: "ly-giay-in-logo",
     title: "Ly giấy in logo theo yêu cầu",
+    kind: "CUSTOMIZABLE",
     description: "Ly in thương hiệu riêng. Giá theo báo giá của Sales.",
     variants: [{ sku: "CUP-CUSTOM-LOGO", stock: 20000 }],
   },
@@ -432,6 +461,7 @@ const SPECS: Spec[] = [
   {
     slug: "tui-giay-kraft",
     title: "Túi giấy kraft quai xoắn",
+    kind: "CUSTOMIZABLE",
     description: "Túi giấy kraft nâu, quai xoắn, nhiều cỡ.",
     variants: [
       { sku: "BAG-KRAFT-M", stock: 15000, price: 1800, bulk: 1650, moq: 500, source: "BASE" },
@@ -505,6 +535,7 @@ const SPECS: Spec[] = [
   {
     slug: "ly-giay-kraft-16oz",
     title: "Ly giấy kraft 16oz (chờ niêm yết giá)",
+    kind: "CUSTOMIZABLE",
     variants: [{ sku: "CUP-KRAFT-16OZ", stock: 3000, noListPrice: true }],
   },
   {
@@ -519,6 +550,7 @@ export function seedMockCatalog(): MockProduct[] {
     productId: id(index + 1),
     slug: spec.slug,
     title: spec.title,
+    kind: spec.kind ?? "STANDARD",
     ...(spec.description ? { description: spec.description } : {}),
     listedOrder: SPECS.length - index,
     variants: spec.variants.map((v) => ({

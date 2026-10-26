@@ -172,6 +172,9 @@ export function ProductDetailScreen({ slug }: { slug: string }) {
               pricesState={pricesState}
               quantity={quantity}
               onQuantityChange={setTypedQuantity}
+              designHref={
+                data.kind === "CUSTOMIZABLE" ? STORE_ROUTES.design.newFor(data.slug, sku) : null
+              }
               onAdd={() => {
                 add(
                   {

@@ -11,12 +11,14 @@ import { MOCK_DATA, registerMockRoute, paginate } from "./mock-adapter";
 import { registerAuthMockRoutes } from "./mock-auth";
 import { registerCatalogMockRoutes } from "./mock-catalog";
 import { MOCK_CUSTOMER_ID, registerCustomerAddressMockRoutes } from "./mock-customer-addresses";
+import { MOCK_DESIGN_USER_ID, registerDesignMockRoutes } from "./mock-design";
 import { createMockCatalog, seedMockCatalog } from "./mock-fixtures/catalog";
 import {
   createMockAddressBook,
   seedMockAddresses,
   type MockAddress,
 } from "./mock-fixtures/customer-addresses";
+import { createMockDesignStudio } from "./mock-fixtures/designs";
 import { createMockOrderBook, seedMockOrders, type MockOrderDeps } from "./mock-fixtures/orders";
 import { registerMyPermissionsMockRoute } from "./mock-my-permissions";
 import { registerOrderMockRoutes } from "./mock-orders";
@@ -161,6 +163,17 @@ export function registerAllMockRoutes(): void {
   // reserves from the same stock, so an order moves what the catalogue shows.
   const catalog = createMockCatalog(seedMockCatalog());
   registerCatalogMockRoutes(catalog);
+
+  // Module 12 — design studio (BE design workflow + the proposed endpoints, see mock-design.ts).
+  // It asks the same catalogue which products are customizable, so a design can only start from a
+  // product the PDP offers. The owner is a UUID user id: the profile's `userId` below is not one.
+  registerDesignMockRoutes(
+    createMockDesignStudio({
+      userId: MOCK_DESIGN_USER_ID,
+      customerId: MOCK_CUSTOMER_ID,
+      catalogKindOf: (slug) => catalog.kindOf(slug),
+    }),
+  );
 
   // Modules 14/17 — checkout and customer order history (BE-shaped fixture, see mock-orders.ts).
   // The legacy GET /orders/:id (mock-data shapes) is gone: first match wins, and it swallowed /orders/me.
