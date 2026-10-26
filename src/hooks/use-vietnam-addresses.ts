@@ -18,15 +18,15 @@ export interface AddressOption {
   label: string;
 }
 
-// Configured in .env.example (NEXT_PUBLIC_, so it is inlined into the client bundle).
-const API_BASE = process.env.NEXT_PUBLIC_VIETNAM_PROVINCES_API_URL;
+// Configured in .env.example; next.config.ts inlines it into the client bundle.
+const API_BASE = process.env.VIETNAM_PROVINCES_API_URL;
 
 function toOptions(items: ProvinceApiItem[] | undefined): AddressOption[] {
   return (items ?? []).map((item) => ({ value: String(item.code), label: item.name }));
 }
 
 async function fetchJson<T>(path: string): Promise<T> {
-  if (!API_BASE) throw new Error("Thiếu cấu hình NEXT_PUBLIC_VIETNAM_PROVINCES_API_URL");
+  if (!API_BASE) throw new Error("Thiếu cấu hình VIETNAM_PROVINCES_API_URL");
   const response = await fetch(`${API_BASE}${path}`);
   if (!response.ok) throw new Error(`Không tải được danh mục địa chỉ (HTTP ${response.status})`);
   return (await response.json()) as T;

@@ -11,7 +11,7 @@ function wrapper({ children }: { children: ReactNode }) {
 // API_BASE is read at module load, so each case re-imports the hook with its own env.
 async function loadHook(apiUrl: string) {
   vi.resetModules();
-  vi.stubEnv("NEXT_PUBLIC_VIETNAM_PROVINCES_API_URL", apiUrl);
+  vi.stubEnv("VIETNAM_PROVINCES_API_URL", apiUrl);
   return (await import("./use-vietnam-addresses")).useVietnamAddresses;
 }
 
@@ -54,7 +54,7 @@ describe("useVietnamAddresses", () => {
     const { result } = renderHook(() => useVietnamAddresses(""), { wrapper });
 
     await waitFor(() =>
-      expect(result.current.error?.message).toContain("NEXT_PUBLIC_VIETNAM_PROVINCES_API_URL"),
+      expect(result.current.error?.message).toContain("VIETNAM_PROVINCES_API_URL"),
     );
     expect(fetchMock).not.toHaveBeenCalled();
   });
