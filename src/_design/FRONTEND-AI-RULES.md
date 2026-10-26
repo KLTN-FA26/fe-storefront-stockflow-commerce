@@ -82,7 +82,7 @@ Toàn bộ app chạy trên **một design mode: Storefront (TMĐT)** — khác 
 | Cường độ accent | Mạnh ở CTA mua hàng, giá, khuyến mãi |
 | Typography | Lớn hơn ở heading sản phẩm/giá, gọn (compact retail); `tabular-nums` cho số/giá |
 | Motion | Mượt, có chủ đích (200–320ms), reveal sản phẩm; tôn trọng `prefers-reduced-motion` |
-| Thiết bị | **Mobile-first 100%** (khách hàng). Target chạm ≥ 44px |
+| Thiết bị | **Mobile-first 100%** (khách hàng). Target chạm ≥ 44px. **Ngoại lệ:** trình thiết kế module 12 chỉ hỗ trợ desktop (§4.2) |
 | Shell | `<StorefrontShell>` — dải thông báo + header 2 tầng sticky (search + danh mục) + footer đầy đủ + nút chat nổi (giỏ hàng nằm ở header) |
 
 > **Quy tắc:** không tái tạo pattern back-office (sidebar cố định, DataTable data-dense, toolbar filter phức tạp) trong app này. Danh sách storefront ưu tiên grid + filter drawer trên mobile.
@@ -171,7 +171,7 @@ Storefront **được dùng bóng nhẹ** (khác back-office): card: border + `-
 - **Minimalist, marketing-focused.** Ưu tiên hình ảnh sản phẩm (`next/image`, `sizes` đúng, `object-cover`). Khoảng trắng `lg`/`xl`.
 - Bo góc `lg`/`xl`, bóng nhẹ, nhiều không gian thở.
 - Accent brand (ink) mạnh ở CTA mua hàng; `accent` (blue) cho link/giá nhấn.
-- **Mobile-first 100%.** Catalog & Cart responsive hoàn chỉnh, tối ưu chạm (≥ 44px). Filter → **drawer/sheet** trên mobile.
+- **Mobile-first 100%.** Catalog & Cart responsive hoàn chỉnh, tối ưu chạm (≥ 44px). Filter → **drawer/sheet** trên mobile. Trừ trình thiết kế module 12: chỉ desktop (§4.2).
 
 ### 4.1.1 Quy chuẩn shadcn-first
 
@@ -183,8 +183,13 @@ Storefront **được dùng bóng nhẹ** (khác back-office): card: border + `-
 
 ### 4.2 Module 12 — Thiết kế 2D/3D (màn phức tạp nhất)
 
-Layout **Canvas chia màn hình**:
-- **Desktop:** ~60% Viewer 2D/3D (trái) + ~40% bảng công cụ (phải). **Mobile:** xếp dọc, viewer trên, công cụ dạng bottom-sheet/tab.
+**Chỉ hỗ trợ desktop — không hỗ trợ mobile** (quyết định 26/10/2026):
+- Trình thiết kế và màn bắt đầu (`/design/new`, `/design/[id]`) chỉ mở trên máy tính/laptop với cửa sổ **≥ 1024px**. Điện thoại, máy tính bảng (kể cả iPad, mọi hướng xoay) và cửa sổ hẹp hơn chỉ thấy thông báo _"Chức năng thiết kế chỉ hỗ trợ trên máy tính"_ (`DesktopOnlyGate`), kèm "Sao chép liên kết" và "Thiết kế của tôi".
+- **Không** làm layout studio cho điện thoại hay máy tính bảng (không bottom-sheet, không xếp dọc). Các quy tắc mobile-first của tài liệu này không áp dụng cho studio; trang danh sách `/design` vẫn mobile-first.
+- Thao tác cảm ứng chỉ giữ cho laptop cảm ứng (pinch zoom, vẽ một ngón).
+
+Layout desktop **Canvas chia màn hình**:
+- Thanh công cụ + tùy chọn công cụ (trái) · khung 2D (giữa) · **xem trước 3D ở cột rộng nhất**, chiếm phần lớn chiều cao, trên bảng Thuộc tính / Lớp / Kiểm tra (phải).
 - Vùng 2D hiển thị **3 lớp guide**: `print area` (nét liền) → `safe area` (nét đứt trong) → `bleed` (nét chấm đỏ nhạt ngoài mép). Cảnh báo realtime (viền đỏ + toast) khi phần tử tràn print area / đè vùng cấm.
 - **Toolbar (`<CanvasToolbar>`):** upload ảnh (validate định dạng/dung lượng/**DPI** → cảnh báo "ảnh mờ"), thêm text (font cho phép, cỡ, màu, canh), hình khối/clipart/template, kéo–thả/xoay/scale/canh.
 - **Live 3D Preview:** map texture 2D lên model realtime; khách xoay/zoom. **Bắt buộc** disclaimer: _"Màu sắc hiển thị có thể sai lệch so với thành phẩm in thật"_. **Fallback:** WebGL lỗi → ảnh tĩnh; model lỗi → preview 2D phẳng + nhãn "preview 3D không khả dụng".
