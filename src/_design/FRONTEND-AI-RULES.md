@@ -11,7 +11,7 @@
 ## 0. Nguyên tắc bất di bất dịch (đọc trước tiên)
 
 1. **Documentation-Driven.** Trước khi sinh bất kỳ UI nào, mở module tương ứng trong `docs/` và đọc 2 bảng: **"Trạng thái / Vòng đời"** và **"Ràng buộc nghiệp vụ (Business Rules) & Edge case"**. Đây là nguồn quyết định CTA nào `enable`/`disable`.
-2. **Đây là app storefront thuần.** Mọi màn hình dùng **một design mode duy nhất — Mode B (airy, mobile-first)**. KHÔNG có mode data-dense back-office ở repo này. Không import/khôi phục pattern sidebar quản trị.
+2. **Đây là app storefront thuần.** Mọi màn hình dùng **một design mode duy nhất — Mode B (compact retail, mobile-first)**. KHÔNG có mode data-dense back-office ở repo này. Không import/khôi phục pattern sidebar quản trị.
 3. **Không tự bịa nghiệp vụ.** Logic nào không rõ → tra `docs/open-questions/`. Nếu chưa chốt → dùng mock data hợp lý và **đánh dấu giả định** bằng comment `// ASSUMPTION (open-question Xn): ...`.
 4. **Mock data phải khớp docs.** Số lượng trạng thái, tên trạng thái (kèm tiếng Anh gốc), vòng đời phải **đúng y hệt** bảng trong module. Không rút gọn, không thêm trạng thái không có trong docs.
 5. **Token trước, hardcode sau.** KHÔNG bao giờ viết màu hex / px trần trong component. Luôn dùng CSS variable token trong `globals.css` (mục 3) hoặc utility Tailwind đã map token (`bg-bg-surface`, `text-ink-primary`, `rounded-[var(--r-lg)]`…).
@@ -75,15 +75,15 @@ Toàn bộ app chạy trên **một design mode: Storefront (TMĐT)** — khác 
 
 | Trục | **Mode B — Storefront (app này)** |
 |------|-----------------------------------|
-| Mật độ | **Airy**: padding `lg`/`xl`, nhiều khoảng trắng (`--card-pad: 24px`) |
-| Mục tiêu | Marketing, ưu tiên hình ảnh sản phẩm, cảm giác thoáng |
+| Mật độ | **Compact retail**: `--card-pad` 16px mobile / 20px ≥ sm |
+| Mục tiêu | Marketing, ưu tiên hình ảnh sản phẩm, gọn kiểu retail chuyên nghiệp |
 | Danh sách | **Grid card** (`<ProductGrid>`), ít bảng, nhiều ảnh |
 | Bo góc | `lg`/`xl` (12–16px) — mềm mại, thân thiện |
 | Cường độ accent | Mạnh ở CTA mua hàng, giá, khuyến mãi |
-| Typography | Lớn hơn ở heading sản phẩm/giá, thoáng; `tabular-nums` cho số/giá |
+| Typography | Lớn hơn ở heading sản phẩm/giá, gọn (compact retail); `tabular-nums` cho số/giá |
 | Motion | Mượt, có chủ đích (200–320ms), reveal sản phẩm; tôn trọng `prefers-reduced-motion` |
-| Thiết bị | **Mobile-first 100%** (khách hàng). Target chạm ≥ 44px |
-| Shell | `<StorefrontShell>` — header mỏng sticky + footer + floating cart/chat |
+| Thiết bị | **Mobile-first 100%** (khách hàng). Target chạm ≥ 44px. **Ngoại lệ:** trình thiết kế module 12 chỉ hỗ trợ desktop (§4.2) |
+| Shell | `<StorefrontShell>` — dải thông báo + header 2 tầng sticky (search + danh mục) + footer đầy đủ + nút chat nổi (giỏ hàng nằm ở header) |
 
 > **Quy tắc:** không tái tạo pattern back-office (sidebar cố định, DataTable data-dense, toolbar filter phức tạp) trong app này. Danh sách storefront ưu tiên grid + filter drawer trên mobile.
 
@@ -129,10 +129,10 @@ Token định nghĩa **một lần** trong `src/app/globals.css` (`:root` + `@th
 
 > Badge render 3 sắc thái từ mỗi semantic: nền = tone@~12% alpha, chữ/icon = tone@100%, viền = tone@~24%. Xem mục 6.1.
 
-### 3.2 Spacing (airy)
+### 3.2 Spacing (compact retail)
 
-Scale 4px. Storefront dùng biến density thoáng:
-- `--card-pad: 24px` (card sản phẩm/panel), `--el-gap: 12px` (gap phần tử).
+Scale 4px. Storefront dùng biến density compact retail:
+- `--card-pad: 16px` mobile / `20px` từ `sm` (card sản phẩm/panel), `--el-gap: 12px` (gap phần tử).
 - Section gap `32–48px`; hero khoảng trắng lớn.
 - Padding container: `px-4 sm:px-6 lg:px-8`, `max-w-7xl` cho vùng nội dung chính.
 
@@ -156,7 +156,7 @@ Quy tắc: giá tiền → `font-display`/lớn, weight 700, `tabular-nums`. Mã
 
 ### 3.5 Bóng đổ
 
-Storefront **được dùng bóng nhẹ** (khác back-office): `--sh-sm` (dropdown), `--sh-md` (card sản phẩm, sticky header), `--sh-lg` (modal, sheet, floating cart/chat). Card sản phẩm hover: nâng nhẹ (`hover:-translate-y-1 hover:shadow-lg`).
+Storefront **được dùng bóng nhẹ** (khác back-office): card: border + `--sh-sm`; card sản phẩm hover nâng lên `--sh-md`, không translate. `--sh-md` cho dropdown/popover/sticky header; `--sh-lg` cho modal, sheet, nút chat nổi.
 
 ### 3.6 Z-index (cố định, không tự bịa)
 
@@ -171,20 +171,25 @@ Storefront **được dùng bóng nhẹ** (khác back-office): `--sh-sm` (dropdo
 - **Minimalist, marketing-focused.** Ưu tiên hình ảnh sản phẩm (`next/image`, `sizes` đúng, `object-cover`). Khoảng trắng `lg`/`xl`.
 - Bo góc `lg`/`xl`, bóng nhẹ, nhiều không gian thở.
 - Accent brand (ink) mạnh ở CTA mua hàng; `accent` (blue) cho link/giá nhấn.
-- **Mobile-first 100%.** Catalog & Cart responsive hoàn chỉnh, tối ưu chạm (≥ 44px). Filter → **drawer/sheet** trên mobile.
+- **Mobile-first 100%.** Catalog & Cart responsive hoàn chỉnh, tối ưu chạm (≥ 44px). Filter → **drawer/sheet** trên mobile. Trừ trình thiết kế module 12: chỉ desktop (§4.2).
 
 ### 4.1.1 Quy chuẩn shadcn-first
 
 - Mọi control tương tác phải dùng shadcn/ui (`components/ui/*`) hoặc shared component đã chuẩn hoá. Không viết raw `<button>`, `<input>`, `<select>`, `<textarea>`, custom dropdown/modal trong page-level nếu shadcn/shared đã đáp ứng.
 - Mapping: raw `button` → `<Button>`; `input` → `<Input>`; `textarea` → `<Textarea>`; select đơn → `<Select>`; multi-select/facet → `<Popover>` + `<Command>` + `<Checkbox>`; modal/confirm → `<Dialog>`/`<ConfirmDialog>`; status → `<StatusBadge>`; tag → `<Badge>`.
 - Ngoại lệ raw/native chỉ trong `components/ui/*` khi bọc radix/native primitive, element layout/semantic không có hành vi, hidden/file input, Next `<Link>/<Image>`, SVG/icon, primitive cần `asChild`.
-- CTA mua hàng dùng `<Button>` mặc định (nền `brand`, chữ `ink-inverse`), thường **bo tròn** (`rounded-full`) theo phong cách storefront. Button phụ → `variant="outline"`/`secondary`; icon-only/floating → `variant` phù hợp + `size="icon"`.
+- CTA mua hàng dùng `<Button>` mặc định (nền `brand`, chữ `ink-inverse`), bo góc `rounded-[var(--r-md)]`, cao `min-h-11` theo phong cách retail; `rounded-full` chỉ dùng cho chip/badge/icon button. Button phụ → `variant="outline"`/`secondary`; icon-only/floating → `variant` phù hợp + `size="icon"`.
 - Với shadcn `<Select>` luôn có visible label; `<Checkbox>` convert `checked === true` trước khi ghi boolean.
 
 ### 4.2 Module 12 — Thiết kế 2D/3D (màn phức tạp nhất)
 
-Layout **Canvas chia màn hình**:
-- **Desktop:** ~60% Viewer 2D/3D (trái) + ~40% bảng công cụ (phải). **Mobile:** xếp dọc, viewer trên, công cụ dạng bottom-sheet/tab.
+**Chỉ hỗ trợ desktop — không hỗ trợ mobile** (quyết định 26/10/2026):
+- Trình thiết kế và màn bắt đầu (`/design/new`, `/design/[id]`) chỉ mở trên máy tính/laptop với cửa sổ **≥ 1024px**. Điện thoại, máy tính bảng (kể cả iPad, mọi hướng xoay) và cửa sổ hẹp hơn chỉ thấy thông báo _"Chức năng thiết kế chỉ hỗ trợ trên máy tính"_ (`DesktopOnlyGate`), kèm "Sao chép liên kết" và "Thiết kế của tôi".
+- **Không** làm layout studio cho điện thoại hay máy tính bảng (không bottom-sheet, không xếp dọc). Các quy tắc mobile-first của tài liệu này không áp dụng cho studio; trang danh sách `/design` vẫn mobile-first.
+- Thao tác cảm ứng chỉ giữ cho laptop cảm ứng (pinch zoom, vẽ một ngón).
+
+Layout desktop **Canvas chia màn hình**:
+- Thanh công cụ + tùy chọn công cụ (trái) · khung 2D (giữa) · **xem trước 3D ở cột rộng nhất**, chiếm phần lớn chiều cao, trên bảng Thuộc tính / Lớp / Kiểm tra (phải).
 - Vùng 2D hiển thị **3 lớp guide**: `print area` (nét liền) → `safe area` (nét đứt trong) → `bleed` (nét chấm đỏ nhạt ngoài mép). Cảnh báo realtime (viền đỏ + toast) khi phần tử tràn print area / đè vùng cấm.
 - **Toolbar (`<CanvasToolbar>`):** upload ảnh (validate định dạng/dung lượng/**DPI** → cảnh báo "ảnh mờ"), thêm text (font cho phép, cỡ, màu, canh), hình khối/clipart/template, kéo–thả/xoay/scale/canh.
 - **Live 3D Preview:** map texture 2D lên model realtime; khách xoay/zoom. **Bắt buộc** disclaimer: _"Màu sắc hiển thị có thể sai lệch so với thành phẩm in thật"_. **Fallback:** WebGL lỗi → ảnh tĩnh; model lỗi → preview 2D phẳng + nhãn "preview 3D không khả dụng".
@@ -289,7 +294,7 @@ Trong `components/shared/`: `PageHeader` · `PageContainer` · `SectionTitle`(n�
 
 - **Motion:** Framer Motion, 200–320ms, ease mượt; reveal sản phẩm, transition trang nhẹ. Bọc trong `prefers-reduced-motion` (đã có ở `globals.css`).
 - **Ảnh:** `next/image` bắt buộc; `fill` + `sizes` đúng cho card/gallery; `object-cover`; placeholder blur cho PDP.
-- **A11y:** target chạm ≥ 44px; `focus-visible` (đã set outline brand ở base layer); `aria-label` cho icon-only button (floating cart/chat đã có); contrast đạt; keyboard nav cho gallery/variant/stepper.
+- **A11y:** target chạm ≥ 44px; `focus-visible` (đã set outline brand ở base layer); `aria-label` cho icon-only button (nút chat nổi đã có; giỏ hàng nằm ở header); contrast đạt; keyboard nav cho gallery/variant/stepper.
 
 ---
 

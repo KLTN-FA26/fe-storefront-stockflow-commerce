@@ -12,6 +12,8 @@ export default defineConfig({
     passWithNoTests: true,
     coverage: {
       provider: "v8",
+      // lcov is what SonarQube Cloud reads (sonar-project.properties); text-summary keeps the CI log short.
+      reporter: ["text-summary", "lcov"],
       include: [
         "src/lib/domain/**",
         "src/lib/auth/**",
@@ -20,6 +22,7 @@ export default defineConfig({
         "src/features/**/selectors.*",
         "src/features/**/schemas.*",
         "src/features/**/lifecycle.*",
+        "src/features/product-design/engine/**",
       ],
     },
   },

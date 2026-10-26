@@ -2,7 +2,6 @@
  * Storefront routes — same pattern as ADMIN_ROUTES but for (storefront) group.
  */
 
-
 export const APP_ROUTES = {
   home: "/",
   login: "/login",
@@ -11,12 +10,15 @@ export const APP_ROUTES = {
 export const STORE_ROUTES = {
   catalog: {
     list: "/catalog",
-    detail: (slug: string) => `/catalog/${slug}`,
+    detail: (slug: string) => `/catalog/products/${slug}`,
     search: "/search",
   },
   design: {
     list: "/design",
     new: "/design/new",
+    /** The launcher for a product, and for one of its SKUs when the customer already chose it. */
+    newFor: (slug: string, sku?: string | null) =>
+      `/design/new?product=${encodeURIComponent(slug)}${sku ? `&sku=${encodeURIComponent(sku)}` : ""}`,
     detail: (id: string) => `/design/${id}`,
   },
   cart: "/cart",
@@ -25,9 +27,6 @@ export const STORE_ROUTES = {
     shipping: "/checkout/shipping",
     payment: "/checkout/payment",
     review: "/checkout/review",
-  },
-  payment: {
-    result: (id: string) => `/payment/${id}`,
   },
   chat: {
     list: "/chat",

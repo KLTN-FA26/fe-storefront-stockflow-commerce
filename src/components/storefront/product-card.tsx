@@ -1,38 +1,71 @@
 import Image from "next/image";
 import Link from "next/link";
+import { ImageOff } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/cn";
+import { isRemoteImage } from "@/lib/remote-image";
 
 import { AvailabilityBadge } from "./availability-badge";
 import { PriceDisplay } from "./price-display";
-import { RatingStars } from "./rating-stars";
 
-interface ProductCardProps {
+export interface ProductCardProps {
   href: string;
   name: string;
-  imageSrc: string;
-  price: number;
-  compareAtPrice?: number;
-  badge?: string;
-  rating?: number;
-  reviewCount?: number;
-  availability?: "in-stock" | "low-stock" | "out-of-stock";
+  imageSrc?: string | undefined;
+  imageAlt?: string | undefined;
+  /** The customer's unit price; absent while loading or when the product has no price for them. */
+  price?: number | undefined;
+  priceLabel?: string | undefined;
+  availability?: "in-stock" | "low-stock" | "out-of-stock" | undefined;
 }
 
-export function ProductCard({ href, name, imageSrc, price, compareAtPrice, badge, rating, reviewCount, availability = "in-stock" }: ProductCardProps) {
+export function ProductCard({
+  href,
+  name,
+  imageSrc,
+  imageAlt,
+  price,
+  priceLabel,
+  availability,
+}: ProductCardProps) {
   return (
-    <Link href={href} className="group block rounded-xl bg-bg-surface p-3 shadow-md transition duration-300 hover:-translate-y-1 hover:shadow-lg">
-      <div className="relative aspect-square overflow-hidden rounded-lg bg-bg-subtle">
-        <Image src={imageSrc} alt={name} fill sizes="(min-width: 1024px) 25vw, 50vw" className="object-cover transition duration-300 group-hover:scale-105" />
-        {badge && <Badge className="absolute left-3 top-3 rounded-full">{badge}</Badge>}
+    <Link
+      href={href}
+      className="group bg-bg-surface border-border-default hover:border-border-strong focus-visible:ring-accent flex h-full flex-col overflow-hidden rounded-[var(--r-lg)] border shadow-[var(--sh-sm)] transition-[border-color,box-shadow] duration-200 hover:shadow-[var(--sh-md)] focus-visible:ring-2 focus-visible:outline-none"
+    >
+      <div className="bg-bg-subtle relative aspect-square overflow-hidden">
+        {imageSrc ? (
+          <Image
+            src={imageSrc}
+            alt={imageAlt ?? name}
+            fill
+            unoptimized={isRemoteImage(imageSrc)}
+            sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, 50vw"
+            className={cn(
+              "object-contain p-6 transition-transform duration-300 group-hover:scale-105 sm:p-8",
+              availability === "out-of-stock" && "opacity-60",
+            )}
+          />
+        ) : (
+          <span className="text-ink-tertiary absolute inset-0 flex items-center justify-center">
+            <ImageOff className="size-8" aria-hidden="true" />
+            <span className="sr-only">Chưa có hình ảnh</span>
+          </span>
+        )}
       </div>
-      <div className="mt-4 space-y-2">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="line-clamp-2 text-sm font-semibold text-ink-primary">{name}</h3>
-          <AvailabilityBadge status={availability} />
+      <div className="flex flex-1 flex-col gap-1.5 p-3">
+        <h3 className="text-ink-primary group-hover:text-accent line-clamp-2 text-sm font-medium transition-colors">
+          {name}
+        </h3>
+        {availability ? <AvailabilityBadge status={availability} /> : null}
+        <div className="mt-auto pt-1">
+          {typeof price === "number" ? (
+            <>
+              {priceLabel ? <span className="text-ink-tertiary text-xs">{priceLabel} </span> : null}
+              <PriceDisplay price={price} size="sm" />
+            </>
+          ) : null}
         </div>
-        {typeof rating === "number" && <RatingStars rating={rating} count={reviewCount} />}
-        <PriceDisplay price={price} compareAtPrice={compareAtPrice} size="sm" />
       </div>
     </Link>
   );

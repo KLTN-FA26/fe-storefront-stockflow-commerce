@@ -17,6 +17,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { makeQueryClient } from "@/lib/api/query-client";
 import { activateMockAdapter } from "@/lib/api/mock-adapter";
+import { registerSessionQueryClient } from "@/lib/auth/session";
 
 const MockModeContext = createContext(false);
 
@@ -26,7 +27,11 @@ export function useIsMock(): boolean {
 }
 
 export function AppProviders({ children, isMock }: { children: React.ReactNode; isMock: boolean }) {
-  const [queryClient] = useState(() => makeQueryClient());
+  const [queryClient] = useState(() => {
+    const client = makeQueryClient();
+    registerSessionQueryClient(client); // so a sign-out or a lost session can empty the cache
+    return client;
+  });
 
   // Activate the mock adapter synchronously on first render, BEFORE any
   // child effect can fire a request. A `useEffect` here runs too late —

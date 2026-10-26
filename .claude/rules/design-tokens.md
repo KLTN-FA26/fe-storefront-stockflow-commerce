@@ -61,7 +61,8 @@ Render lifecycle/status text through `<StatusBadge domain status>` when availabl
 ## Spacing and radius
 
 - Use the project spacing scale and density variables.
-- Storefront card/panel padding should usually use `p-[var(--card-pad)]`.
+- Storefront card/panel padding should usually use `p-[var(--card-pad)]` (compact retail: 16px mobile / 20px ≥ sm).
+- Cards: border + `--sh-sm`; product card hover raises to `--sh-md` without translate.
 - Storefront cards use `rounded-[var(--r-lg)]` or `rounded-[var(--r-xl)]`.
 - Touch targets must be at least 44px.
 

@@ -6,4 +6,4 @@
  */
 
 export { toneOf, STATUS_LABEL_VI, type SemanticTone } from "@/lib/status-map";
-export type { StatusDomain, Currency, RoleName } from "./types";
+export type { StatusDomain, Currency } from "./types";

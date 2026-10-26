@@ -1,4 +1,5 @@
-export type SemanticTone = "positive" | "info" | "warning" | "danger" | "neutral" | "muted" | "special";
+export type SemanticTone =
+  "positive" | "info" | "warning" | "danger" | "neutral" | "muted" | "special";
 
 export type StatusDomain =
   | "product"
@@ -28,15 +29,3 @@ export type StatusDomain =
   | "customer";
 
 export type Currency = "VND" | "USD" | "CNY";
-
-export type RoleName =
-  | "System Admin"
-  | "Procurement Staff"
-  | "Warehouse Staff"
-  | "Warehouse Manager"
-  | "Inventory Planner"
-  | "QC Staff"
-  | "Accountant"
-  | "E-commerce Admin"
-  | "Sales Staff"
-  | "Order Coordinator";

@@ -1,6 +1,90 @@
-export { getDesign, listDesigns, updateDesignElements, submitDesign, confirmDesign } from "./api";
-export { allowedActions, canMoveDesign, DESIGN_TRANSITIONS, isDesignTerminal, nextDesignStatuses } from "./lifecycle";
-export { useConfirmDesign, useSubmitDesign, useUpdateDesign } from "./mutations";
-export { designKeys, useDesign, useDesigns } from "./queries";
-export { computeDesignStats, hasPreflightFail } from "./selectors";
-export type { ConfirmDesignInput, DesignDto, DesignElement, DesignRole, DesignStatus, DesignUpdateInput, PreflightIssue, PreflightResult } from "./types";
+export {
+  createAutosaver,
+  type AutosaveChange,
+  type AutosaveOptions,
+  type Autosaver,
+  type AutosaveState,
+} from "./autosave";
+export {
+  confirmDesign,
+  createDesign,
+  forkDesign,
+  getArtifactDownloadUrl,
+  getAssetDownloadUrl,
+  getCustomization,
+  getDesign,
+  getDesignDocument,
+  getDesignHistory,
+  getDesignSnapshot,
+  listArtifacts,
+  listDesignAssets,
+  listDesigns,
+  requestChanges,
+  requestTechnicalReview,
+  reviseSpecification,
+  saveDesignDocument,
+  submitForConfirmation,
+  uploadArtifact,
+  uploadDesignAsset,
+  withdrawConfirmation,
+} from "./api";
+export {
+  PROPOSED_ENDPOINTS_LIVE,
+  designCapabilities,
+  type DesignCapabilities,
+} from "./capabilities";
+export { describeDesignError, isDesignApiUnavailable, isDesignConflict } from "./errors";
+export {
+  DESIGN_UI_STATE_META,
+  allowedActions,
+  deriveUiState,
+  type DesignAction,
+  type DesignUiState,
+} from "./lifecycle";
+export {
+  invalidateDesign,
+  useConfirmDesign,
+  useCreateDesign,
+  useFinalizeDesign,
+  useForkDesign,
+  useRequestChanges,
+  useSaveDesignDocument,
+  useUploadAsset,
+  useWithdrawConfirmation,
+  type DesignReasonInput,
+  type DesignWriteTarget,
+  type FinalizeTarget,
+  type UploadAssetInput,
+} from "./mutations";
+export {
+  designKeys,
+  useCustomization,
+  useDesign,
+  useDesignArtifacts,
+  useDesignAssets,
+  useDesignDocument,
+  useDesignHistory,
+  useDesignList,
+  useDesignSnapshot,
+  useDownloadLink,
+  type DownloadLinkKind,
+} from "./queries";
+export { changeReasonInputSchema, createDesignInputSchema } from "./schemas";
+export { designCardView, type DesignCardView } from "./selectors";
+export type {
+  ArtifactRole,
+  ChangeReasonInput,
+  CreateDesignInput,
+  Customization,
+  DesignArtifact,
+  DesignAsset,
+  DesignDecision,
+  DesignDecisionPage,
+  DesignDocumentRecord,
+  DesignDraft,
+  DesignListParams,
+  DesignPage,
+  DesignSnapshot,
+  DesignStatus,
+  DownloadLink,
+} from "./types";

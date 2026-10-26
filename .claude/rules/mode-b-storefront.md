@@ -1,5 +1,5 @@
 ---
-description: Mode B storefront modules 12-18 — Ink + Blue, ecommerce, airy, mobile-first
+description: Mode B storefront modules 12-18 — Ink + Blue, ecommerce, compact retail, mobile-first
 globs:
   - "src/app/(storefront)/**"
   - "src/components/storefront/**"
@@ -16,28 +16,28 @@ All routes in this repository are customer-facing storefront. The design languag
 
 Use current storefront tokens:
 
-| Role | Token classes |
-| --- | --- |
-| page background | `bg-bg-base` |
-| card/panel | `bg-bg-surface` |
-| subtle section | `bg-bg-subtle` |
-| hover/selected | `bg-bg-muted` |
-| border | `border-border-default`, `border-border-strong` |
-| primary text | `text-ink-primary` |
-| secondary text | `text-ink-secondary` |
-| tertiary text | `text-ink-tertiary` |
-| primary action | `bg-accent`, `text-accent` |
-| inverse text | `text-ink-inverse` |
+| Role            | Token classes                                   |
+| --------------- | ----------------------------------------------- |
+| page background | `bg-bg-base`                                    |
+| card/panel      | `bg-bg-surface`                                 |
+| subtle section  | `bg-bg-subtle`                                  |
+| hover/selected  | `bg-bg-muted`                                   |
+| border          | `border-border-default`, `border-border-strong` |
+| primary text    | `text-ink-primary`                              |
+| secondary text  | `text-ink-secondary`                            |
+| tertiary text   | `text-ink-tertiary`                             |
+| primary action  | `bg-accent`, `text-accent`                      |
+| inverse text    | `text-ink-inverse`                              |
 
 Do not introduce back-office/admin styling, caramel legacy theme, or one-off hex colors.
 
 ## Density and shape
 
 - Mobile-first from 320px upward.
-- Card/panel padding: usually `p-[var(--card-pad)]`.
-- Section gaps: roomy (`space-y-6`, `space-y-8`, `gap-6`, `gap-8`).
+- Card/panel padding: usually `p-[var(--card-pad)]` (compact retail: 16px mobile / 20px ≥ sm).
+- Section gaps: compact (`gap-8 lg:gap-10` between sections; `gap-3`/`gap-4` inside grids).
 - Card radius: `rounded-[var(--r-lg)]` or `rounded-[var(--r-xl)]`.
-- Product/checkout cards may use light `shadow-md`/`shadow-lg`.
+- Cards: border + `--sh-sm`; product card hover raises to `--sh-md` without translate.
 - Touch targets must be at least 44px.
 
 ## Style
@@ -51,7 +51,7 @@ Do not introduce back-office/admin styling, caramel legacy theme, or one-off hex
 ## Module 12 — Product Design
 
 - Desktop layout: large viewer/canvas with side tools or report panel.
-- Mobile layout: stacked sections; tool panels may become sheet/tabs.
+- Desktop only (decision 2026-10-26): the studio and its launcher (`/design/new`, `/design/[id]`) open on a computer with a window ≥ 1024 px; phones, tablets (iPad included) and narrower windows get the desktop-only notice (`DesktopOnlyGate`). The mobile rules of this file (mobile-first, stacked sections, sheets/drawers) stay right for the rest of the storefront but do not apply to the Module 12 studio: do not add a phone or tablet studio layout. The `/design` list stays mobile-first.
 - Preflight result must be visible.
 - `Fail` blocks confirm.
 - `Warning` requires customer risk confirmation before production.

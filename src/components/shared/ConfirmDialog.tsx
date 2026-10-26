@@ -87,21 +87,19 @@ export function ConfirmDialog({
           <Button
             type="button"
             variant="outline"
-            size="sm"
             onClick={() => { setReason(""); onOpenChange(false); }}
-            className="rounded-[var(--r-sm)] border-border-strong bg-bg-surface text-ink-primary hover:bg-bg-muted"
+            className="min-h-11 rounded-[var(--r-sm)] px-4 border-border-strong bg-bg-surface text-ink-primary hover:bg-bg-muted"
           >
             {cancelLabel}
           </Button>
           <Button variant="ghost"
             type="button"
-            size="sm"
             disabled={!canConfirm}
             onClick={handleConfirm}
             className={
               variant === "danger"
-                ? "rounded-[var(--r-sm)] bg-danger text-white hover:bg-danger/90 disabled:opacity-50"
-                : "rounded-[var(--r-sm)] bg-brand !text-ink-inverse hover:bg-brand-hover hover:!text-ink-inverse disabled:opacity-50"
+                ? "min-h-11 rounded-[var(--r-sm)] px-4 bg-danger text-white hover:bg-danger/90 disabled:opacity-50"
+                : "min-h-11 rounded-[var(--r-sm)] px-4 bg-brand !text-ink-inverse hover:bg-brand-hover hover:!text-ink-inverse disabled:opacity-50"
             }
           >
             {confirmLabel}

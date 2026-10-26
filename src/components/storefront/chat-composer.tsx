@@ -21,9 +21,9 @@ export function ChatComposer({ placeholder = "Nhập tin nhắn...", onSend }: C
   };
 
   return (
-    <div className="flex gap-2 rounded-xl border border-border-default bg-bg-surface p-2 shadow-md">
+    <div className="flex items-end gap-2 rounded-[var(--r-lg)] border border-border-default bg-bg-surface p-2 shadow-[var(--card-shadow)] focus-within:border-border-strong">
       <Textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder={placeholder} className="min-h-11 resize-none border-0 shadow-none" />
-      <Button type="button" size="icon" className="h-11 w-11 rounded-full" onClick={submit} disabled={!message.trim()}><Send className="h-4 w-4" /></Button>
+      <Button type="button" size="icon" className="size-11 shrink-0 rounded-full" onClick={submit} disabled={!message.trim()}><Send className="h-4 w-4" /></Button>
     </div>
   );
 }

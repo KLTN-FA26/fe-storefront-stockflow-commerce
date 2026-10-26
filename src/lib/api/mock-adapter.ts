@@ -14,7 +14,7 @@
 
 import * as MOCK_DATA from "@/lib/mock-data";
 
-import type { AxiosRequestConfig } from "axios";
+import { AxiosError, type AxiosRequestConfig, type InternalAxiosRequestConfig } from "axios";
 import { api } from "./client";
 
 /* ── Types ───────────────────────────────────────────────────────────── */
@@ -77,6 +77,27 @@ function matchRoute(
   return null;
 }
 
+/* ── Settle ──────────────────────────────────────────────────────────── */
+
+/**
+ * Reject non-2xx like axios' built-in adapters do (custom adapters must settle themselves),
+ * so the client's error interceptor turns mock error bodies into ApiError.
+ */
+function settle(config: AxiosRequestConfig, res: MockResponse): MockResponse {
+  if (res.status >= 200 && res.status < 300) return res;
+  const body = res.data as { message?: unknown } | null | undefined;
+  const message =
+    typeof body?.message === "string" ? body.message : `Request failed with status code ${res.status}`;
+  const internal = config as InternalAxiosRequestConfig;
+  throw new AxiosError(
+    message,
+    res.status >= 500 ? AxiosError.ERR_BAD_RESPONSE : AxiosError.ERR_BAD_REQUEST,
+    internal,
+    null,
+    { status: res.status, statusText: "", data: res.data, headers: res.headers, config: internal },
+  );
+}
+
 /* ── Adapter ─────────────────────────────────────────────────────────── */
 
 /**
@@ -97,7 +118,7 @@ async function mockAdapter(config: AxiosRequestConfig): Promise<MockResponse> {
   const matched = matchRoute(method, url);
   if (!matched) {
     console.warn(`[mock-adapter] No handler for ${method} ${url}`);
-    return { status: 404, data: { message: "Not found" }, headers: {} };
+    return settle(config, { status: 404, data: { message: "Not found" }, headers: {} });
   }
 
   // Simulate latency
@@ -105,22 +126,22 @@ async function mockAdapter(config: AxiosRequestConfig): Promise<MockResponse> {
 
   // 5% random server error for resilience testing
   if (Math.random() < 0.05) {
-    return {
+    return settle(config, {
       status: 500,
       data: {
-        code: "MOCK_RANDOM_ERROR",
+        errorCode: "MOCK_RANDOM_ERROR",
         message: "Lỗi ngẫu nhiên từ mock server (5% chance)",
-        traceId: `mock-${Date.now()}`,
+        correlationId: `mock-${Date.now()}`,
       },
       headers: {},
-    };
+    });
   }
 
   // Inject URL params into config for handlers to use
   (config as AxiosRequestConfig & { _mockParams: Record<string, string> })._mockParams =
     matched.params;
 
-  return matched.handler(config);
+  return settle(config, await matched.handler(config));
 }
 
 /* ── Activate ────────────────────────────────────────────────────────── */

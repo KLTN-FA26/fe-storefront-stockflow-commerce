@@ -22,3 +22,5 @@ export {
 } from "./column-helpers";
 export { PageContainer } from "./PageContainer";
 export { Logo } from "./Logo";
+export { SearchableCombobox, type ComboboxOption } from "./SearchableCombobox";
+export { ScrollAfterItems } from "./ScrollAfterItems";

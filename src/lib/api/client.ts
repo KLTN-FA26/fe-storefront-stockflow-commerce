@@ -3,7 +3,8 @@
  *
  * Interceptors:
  *  - Request: attach JWT token (Authorization: Bearer) + warehouse header.
- *  - Response: normalise errors into ApiError. On 401 → try refresh → logout.
+ *  - Response: unwrap the backend ApiResponse envelope and normalise errors.
+ *    On 401 → logout and redirect; there is no refresh-token flow.
  *
  * When USE_MOCK=true the mock adapter (mock-adapter.ts) replaces
  * the default adapter so every call resolves against mock-data — component
@@ -14,8 +15,12 @@
  * rewrites "/api/:path*" to the real backend on the server side.
  */
 
-import axios, { type AxiosError } from "axios";
+import axios, { type AxiosError, type AxiosResponse } from "axios";
 import { ApiError, type ApiErrorBody } from "./error";
+import { useAuthStore } from "@/lib/auth/auth-store";
+import { isTokenExpired } from "@/lib/auth/jwt";
+import { endSession, redirectToLogin } from "@/lib/auth/session";
+import { useAppStore } from "@/lib/store/use-app-store";
 
 export const api = axios.create({
   baseURL: "/api",
@@ -25,101 +30,64 @@ export const api = axios.create({
 
 /* ── Request interceptor ─────────────────────────────────────────────── */
 
-api.interceptors.request.use((cfg) => {
-  try {
-    // Auth token — require() to avoid circular dependency at module init
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { useAuthStore } = require("@/lib/auth/auth-store");
-    const tokens = useAuthStore.getState().tokens;
-    if (tokens?.accessToken) {
-      cfg.headers.set("Authorization", `Bearer ${tokens.accessToken}`);
-    }
+/**
+ * Anonymous BE endpoints. They get no bearer: a stale token on a permitAll route is still run
+ * through the resource-server filter, which answers 401 for it before the endpoint is reached.
+ */
+const ANONYMOUS_PATHS = ["/identity/auth/login", "/customers/portal-activation"];
+const isAnonymous = (url: string | undefined) =>
+  ANONYMOUS_PATHS.some((path) => (url ?? "").split("?")[0] === path);
 
-    // Warehouse header
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { useAppStore } = require("@/lib/store/use-app-store");
-    const wh = useAppStore.getState().warehouseId;
-    if (wh) cfg.headers.set("X-Warehouse-Id", wh);
-  } catch {
-    // Store not initialised yet (SSR / test) — skip.
+api.interceptors.request.use((cfg) => {
+  if (isAnonymous(cfg.url)) return cfg;
+  const token = useAuthStore.getState().tokens?.accessToken;
+  if (token && isTokenExpired(token)) {
+    // Do not send a token the BE would refuse: sign out and come back here after signing in.
+    endSession();
+    redirectToLogin();
+    return Promise.reject(
+      new ApiError(401, "TOKEN_EXPIRED", "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."),
+    );
   }
+  // The stores are plain imports: client.ts is only reached from the browser at request time, and
+  // the auth store no longer imports anything that imports this file.
+  if (token) cfg.headers.set("Authorization", `Bearer ${token}`);
+  const warehouse = useAppStore.getState().warehouseId;
+  if (warehouse) cfg.headers.set("X-Warehouse-Id", warehouse);
   return cfg;
 });
 
 /* ── Response interceptor ────────────────────────────────────────────── */
 
-let isRefreshing = false;
-let refreshSubscribers: ((token: string) => void)[] = [];
-
-function onTokenRefreshed(token: string) {
-  refreshSubscribers.forEach((cb) => cb(token));
-  refreshSubscribers = [];
+interface ApiSuccessEnvelope {
+  success: true;
+  data: unknown;
 }
 
-api.interceptors.response.use(
-  (res) => res,
-  async (err: AxiosError<ApiErrorBody>) => {
-    const originalRequest = err.config;
+function isApiSuccessEnvelope(value: unknown): value is ApiSuccessEnvelope {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "success" in value &&
+    value.success === true &&
+    "data" in value
+  );
+}
 
-    // 401 → try refresh token (skip if already refreshing or if it's the refresh call itself)
-    if (
-      err.response?.status === 401 &&
-      originalRequest &&
-      !originalRequest.url?.includes("/auth/") &&
-      !(originalRequest as unknown as Record<string, unknown>)._retry
-    ) {
-      if (isRefreshing) {
-        // Queue this request until refresh completes
-        return new Promise((resolve) => {
-          refreshSubscribers.push((token: string) => {
-            originalRequest.headers.set("Authorization", `Bearer ${token}`);
-            resolve(api(originalRequest));
-          });
-        });
-      }
+function unwrapSuccess(response: AxiosResponse<unknown>): AxiosResponse<unknown> {
+  if (isApiSuccessEnvelope(response.data)) response.data = response.data.data;
+  return response;
+}
 
-      (originalRequest as unknown as Record<string, unknown>)._retry = true;
-      isRefreshing = true;
+function logoutAfterUnauthorized(): void {
+  endSession();
+  redirectToLogin();
+}
 
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { useAuthStore } = require("@/lib/auth/auth-store");
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { refreshTokenApi } = require("@/lib/auth/auth-api");
-        const refreshToken = useAuthStore.getState().tokens?.refreshToken;
-
-        if (!refreshToken) throw new Error("No refresh token");
-
-        const newTokens = await refreshTokenApi(refreshToken);
-        useAuthStore.getState().updateTokens(newTokens);
-
-        onTokenRefreshed(newTokens.accessToken);
-        isRefreshing = false;
-
-        originalRequest.headers.set("Authorization", `Bearer ${newTokens.accessToken}`);
-        return api(originalRequest);
-      } catch {
-        isRefreshing = false;
-        refreshSubscribers = [];
-
-        // Refresh failed → logout
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const { useAuthStore } = require("@/lib/auth/auth-store");
-          useAuthStore.getState().logout();
-        } catch {
-          /* noop */
-        }
-
-        // Redirect to login (client-side only, external navigation)
-        if (typeof window !== "undefined") {
-          window.location.replace("/login");
-        }
-
-        return Promise.reject(ApiError.from(err));
-      }
-    }
-
-    return Promise.reject(ApiError.from(err));
-  },
-);
+api.interceptors.response.use(unwrapSuccess, (err: AxiosError<ApiErrorBody> | ApiError) => {
+  // Already ours (the request interceptor refused an expired token): not an HTTP failure to translate.
+  if (err instanceof ApiError) return Promise.reject(err);
+  // A wrong password is also 401, but it is the login form's to show: not a lost session.
+  if (err.response?.status === 401 && !isAnonymous(err.config?.url)) logoutAfterUnauthorized();
+  return Promise.reject(ApiError.from(err));
+});
