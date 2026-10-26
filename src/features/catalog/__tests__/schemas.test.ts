@@ -73,6 +73,22 @@ describe("catalogue schemas follow the BE DTOs", () => {
     expect(parsed.variants).toHaveLength(2);
   });
 
+  it("reads the proposed `kind` on a product and a card, and parses a BE that sends none", () => {
+    expect(catalogProductDtoSchema.parse({ ...beProduct, kind: "CUSTOMIZABLE" }).kind).toBe(
+      "CUSTOMIZABLE",
+    );
+    const page = catalogPageDtoSchema.parse(bePage({ items: [{ ...beCard, kind: "STANDARD" }] }));
+    expect(page.items[0]?.kind).toBe("STANDARD");
+    expect(catalogProductDtoSchema.parse(beProduct).kind).toBeUndefined();
+  });
+
+  it("reads a kind it does not know as no kind, never failing the PDP or the page", () => {
+    expect(catalogProductDtoSchema.parse({ ...beProduct, kind: "BUNDLE" }).kind).toBeUndefined();
+    expect(catalogProductDtoSchema.parse({ ...beProduct, kind: null }).kind).toBeUndefined();
+    const page = catalogPageDtoSchema.parse(bePage({ items: [{ ...beCard, kind: "BUNDLE" }] }));
+    expect(page.items[0]?.kind).toBeUndefined();
+  });
+
   it("parses a gallery whose alt text and variant id are absent", () => {
     const parsed = catalogGalleryDtoSchema.parse(beGallery);
     expect(parsed.images[0]?.altText).toBeUndefined();

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { availabilityOf, createMockCatalog, seedMockCatalog, type MockResult } from "./catalog";
+import { MOCK_DESIGN_TEMPLATES } from "./design-templates";
 
 const catalog = () => createMockCatalog(seedMockCatalog());
 const dataOf = (result: MockResult) => (result.data as { data: unknown }).data;
@@ -162,5 +163,59 @@ describe("mock catalogue mirrors the BE catalogue rules", () => {
     expect(c.stockOf("CUP-PAPER-8OZ-KRAFT")).toBe(3);
     expect(c.reserve("CUP-PAPER-8OZ-KRAFT", 3)).toBe(true);
     expect(c.stockOf("CUP-PAPER-8OZ-KRAFT")).toBe(0);
+  });
+});
+
+describe("mock catalogue tells customizable products from standard ones", () => {
+  const CUSTOMIZABLE = [
+    "ly-giay-2-lop-8oz",
+    "ly-giay-2-lop-12oz",
+    "ly-nhua-pet-500ml",
+    "ly-giay-in-logo",
+    "tui-giay-kraft",
+    "ly-giay-kraft-16oz",
+  ];
+
+  it("sends `kind` on the detail", () => {
+    expect(dataOf(catalog().detail("tui-giay-kraft"))).toMatchObject({ kind: "CUSTOMIZABLE" });
+    expect(dataOf(catalog().detail("nap-ly-90mm"))).toMatchObject({ kind: "STANDARD" });
+  });
+
+  it("sends `kind` on every list card", () => {
+    const cards = pageOf(catalog().list({ size: 200 })).items as Array<Card & { kind?: string }>;
+    expect(cards.every((card) => card.kind === "STANDARD" || card.kind === "CUSTOMIZABLE")).toBe(
+      true,
+    );
+    expect(
+      cards
+        .filter((c) => c.kind === "CUSTOMIZABLE")
+        .map((c) => c.slug)
+        .sort(),
+    ).toEqual([...CUSTOMIZABLE].sort());
+  });
+
+  it("answers the design backend per slug: product id, kind and every SKU, even without a price", () => {
+    const c = catalog();
+    const bag = seedMockCatalog().find((p) => p.slug === "tui-giay-kraft")!;
+    expect(c.kindOf("tui-giay-kraft")).toEqual({
+      productId: bag.productId,
+      kind: "CUSTOMIZABLE",
+      skus: ["BAG-KRAFT-M", "BAG-KRAFT-L"],
+    });
+    // The detail of this product is 409 PRICE_NOT_AVAILABLE, but it is still customizable.
+    expect(c.detail("ly-giay-kraft-16oz").status).toBe(409);
+    expect(c.kindOf("ly-giay-kraft-16oz")).toMatchObject({ kind: "CUSTOMIZABLE" });
+    expect(c.kindOf("nap-ly-90mm")).toMatchObject({ kind: "STANDARD", skus: ["LID-90MM-BLK"] });
+    expect(c.kindOf("khong-ton-tai")).toBeUndefined();
+  });
+
+  it("is CUSTOMIZABLE exactly where a SKU has a design template", () => {
+    const c = catalog();
+    for (const product of seedMockCatalog()) {
+      const hasTemplate = product.variants.some((v) => v.sku in MOCK_DESIGN_TEMPLATES);
+      expect(c.kindOf(product.slug)?.kind, product.slug).toBe(
+        hasTemplate ? "CUSTOMIZABLE" : "STANDARD",
+      );
+    }
   });
 });

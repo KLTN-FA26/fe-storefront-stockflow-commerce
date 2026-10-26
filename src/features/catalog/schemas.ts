@@ -8,6 +8,15 @@ import { beId } from "@/lib/validation/primitives";
 // JSON, not null, so every optional field is `.nullish()`.
 // Ids are beId() (any 8-4-4-4-12 hex): the dev catalogue has ids without RFC version/variant bits.
 
+/**
+ * `kind` is proposed (spec 2026-10-25 §7.2 P2, `docs/superpowers/specs/2026-10-25-design-api-be-proposal.md`):
+ * the BE's product and card responses do not carry it yet, so it stays optional and a missing value
+ * reads as "not known to be customizable". A kind the FE does not know yet (a new BE value) reads
+ * the same way instead of failing the catalogue page or the PDP.
+ */
+export const productKindSchema = z.enum(["STANDARD", "CUSTOMIZABLE"]);
+const productKindField = productKindSchema.optional().catch(undefined);
+
 /** A variant on a list row: its SKU and name (never a price or stock; those are /prices and /availability). */
 export const catalogCardSkuDtoSchema = z.object({
   sku: z.string().min(1),
@@ -25,6 +34,7 @@ export const catalogCardDtoSchema = z.object({
   productId: beId(),
   slug: z.string().min(1),
   title: z.string().min(1),
+  kind: productKindField,
   seoTitle: z.string().nullish(),
   primaryImageUrl: z.string().min(1).nullish(),
   skus: z.array(catalogCardSkuDtoSchema).nullish(),
@@ -45,6 +55,7 @@ export const catalogProductDtoSchema = z.object({
   productId: beId(),
   slug: z.string().min(1),
   title: z.string().min(1),
+  kind: productKindField,
   description: z.string().nullish(),
   seoTitle: z.string().nullish(),
   seoDescription: z.string().nullish(),
