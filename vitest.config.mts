@@ -22,6 +22,7 @@ export default defineConfig({
         "src/features/**/selectors.*",
         "src/features/**/schemas.*",
         "src/features/**/lifecycle.*",
+        "src/features/product-design/engine/**",
       ],
     },
   },
