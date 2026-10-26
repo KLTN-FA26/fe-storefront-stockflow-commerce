@@ -16,6 +16,9 @@ export const STORE_ROUTES = {
   design: {
     list: "/design",
     new: "/design/new",
+    /** The launcher for a product, and for one of its SKUs when the customer already chose it. */
+    newFor: (slug: string, sku?: string | null) =>
+      `/design/new?product=${encodeURIComponent(slug)}${sku ? `&sku=${encodeURIComponent(sku)}` : ""}`,
     detail: (id: string) => `/design/${id}`,
   },
   cart: "/cart",
