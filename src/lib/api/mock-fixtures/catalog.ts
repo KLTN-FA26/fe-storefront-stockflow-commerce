@@ -15,8 +15,8 @@
  *  - a product with a variant that has no base price has no readable detail: 409 PRICE_NOT_AVAILABLE;
  *  - an unknown slug is 404 NOT_FOUND; unknown SKUs are OUT_OF_STOCK in /availability;
  *  - every call needs a signed-in caller; availability and prices need a CUSTOMER (mock: always);
- *  - `kind` (STANDARD | CUSTOMIZABLE) on the detail and the list card is proposed (spec 2026-10-25
- *    §7.2 P2): the BE's responses do not carry it yet; `kindOf` is what the design mock asks.
+ *  - `kind` (STANDARD | CUSTOMIZABLE) is on the detail and the list card (BE PR #200); `kindOf` is
+ *    what the design mock asks.
  * NON_NULL serialisation: absent optional fields are omitted, never sent as null.
  * Intentionally independent from mock-data.ts (legacy, non-BE shapes).
  */
