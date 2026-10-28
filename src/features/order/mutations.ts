@@ -4,9 +4,9 @@ import { toast } from "@/components/shared/Toast";
 import type { ApiError } from "@/lib/api/error";
 import { myPermissionKeys } from "@/lib/auth/my-permissions";
 
-import { cancelMyOrder } from "./api";
+import { cancelMyOrder, reorderQuotedOrder } from "./api";
 import { orderKeys, type KnownCancellationRequest } from "./queries";
-import type { CancelOrderInput, CancellationResult } from "./types";
+import type { CancelOrderInput, CancellationResult, ReorderedQuote } from "./types";
 
 /**
  * Cancelling re-reads the list and the order when it settles, success or not:
@@ -48,5 +48,15 @@ export function useCancelMyOrder() {
           ? queryClient.invalidateQueries({ queryKey: myPermissionKeys.all })
           : undefined,
       ]),
+  });
+}
+
+/**
+ * Asking for a quoted order again opens a draft quote for Sales; it changes nothing the customer's
+ * order screens show, so nothing is re-read. Errors are shown inline by the caller.
+ */
+export function useReorderQuotedOrder() {
+  return useMutation<ReorderedQuote, ApiError, { orderId: string; requestId: string }>({
+    mutationFn: ({ orderId, requestId }) => reorderQuotedOrder(orderId, requestId),
   });
 }

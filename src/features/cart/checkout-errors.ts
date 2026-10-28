@@ -42,6 +42,8 @@ const MESSAGE_BY_CODE: Record<string, string> = {
   DESIGN_QUOTE_REQUIRED:
     "Sản phẩm in theo thiết kế cần báo giá được chấp nhận trước khi đặt. Hãy chat với Sales.",
   DESIGN_SAMPLE_NOT_APPROVED: "Thiết kế trong đơn chưa có mẫu được duyệt. Hãy chat với Sales.",
+  DUPLICATE_ORDER_SUSPECTED:
+    "Bạn vừa đặt một đơn có cùng sản phẩm và số lượng. Hãy kiểm tra đơn trước đó rồi xác nhận nếu vẫn muốn đặt thêm.",
   IDEMPOTENCY_KEY_REUSED:
     "Đơn này đã được gửi trước đó với nội dung khác. Hãy tải lại trang và đặt lại.",
   IDEMPOTENT_REQUEST_IN_PROGRESS:
@@ -122,6 +124,25 @@ export function describeCheckoutError(error: unknown, opts: { prepayOffered?: bo
     if (text) return withLookup(text, error);
   }
   return describeApiError(error, MESSAGE_BY_CODE);
+}
+
+/**
+ * SCRUM-190: the BE found an order of this customer with the same lines placed within its window
+ * and created nothing; `details` names that order so the customer can look before confirming.
+ * Every field is optional: a refusal with missing details still asks, just without the order.
+ */
+const duplicateDetailsSchema = z.object({
+  orderId: z.string().min(1).optional(),
+  orderNumber: z.string().min(1).optional(),
+  placedAt: z.string().min(1).optional(),
+});
+export type DuplicateOrder = z.infer<typeof duplicateDetailsSchema>;
+
+/** The earlier order behind a 409 DUPLICATE_ORDER_SUSPECTED; undefined for any other failure. */
+export function readDuplicateOrder(error: unknown): DuplicateOrder | undefined {
+  if (!(error instanceof ApiError) || error.code !== "DUPLICATE_ORDER_SUSPECTED") return undefined;
+  const parsed = duplicateDetailsSchema.safeParse(error.details ?? {});
+  return parsed.success ? parsed.data : {};
 }
 
 /**

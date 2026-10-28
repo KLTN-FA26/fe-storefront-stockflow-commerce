@@ -5,6 +5,7 @@ import {
   cancellationResultDtoSchema,
   orderDtoSchema,
   orderPageDtoSchema,
+  reorderedQuoteDtoSchema,
 } from "./schemas";
 import type {
   CancelOrderInput,
@@ -12,6 +13,7 @@ import type {
   MyOrdersParams,
   Order,
   OrderPage,
+  ReorderedQuote,
 } from "./types";
 
 // BE OrderController: /api/v1/orders — the /v1 prefix lives in API_URL.
@@ -55,4 +57,21 @@ export async function cancelMyOrder(input: CancelOrderInput): Promise<Cancellati
     body,
   );
   return cancellationResultDtoSchema.parse(data);
+}
+
+/**
+ * POST /orders/{orderId}/reorder with `{ requestId }` (BE OrderController.reorder, 201): for an
+ * order that came from a quote, a new DRAFT quote at today's price list, for Sales to send; the old
+ * deal is not reused and nothing is payable. `requestId` makes a retried click return the same
+ * draft. An order bought at the price list is 409 ORDER_NOT_QUOTED: those are refilled into the
+ * basket instead (reorder.ts).
+ */
+export async function reorderQuotedOrder(
+  orderId: string,
+  requestId: string,
+): Promise<ReorderedQuote> {
+  const { data } = await api.post<unknown>(`/orders/${encodeURIComponent(orderId)}/reorder`, {
+    requestId,
+  });
+  return reorderedQuoteDtoSchema.parse(data);
 }

@@ -267,3 +267,47 @@ describe("order ids the dev BE really sends (no RFC version/variant bits)", () =
     expect(isValidOrderId("not-an-order")).toBe(false);
   });
 });
+
+describe("order detail: reorder data (SCRUM-190)", () => {
+  const line = beOrder.lines[0]!;
+
+  it("reads where a line's SKU is on sale and what the customer may do", () => {
+    const parsed = orderDtoSchema.parse({
+      ...beOrder,
+      allowedActions: { cancel: true, requestCancellation: false, reorder: true },
+      lines: [
+        {
+          ...line,
+          productSlug: "ao-thun",
+          productTitle: "Áo thun",
+          productImageUrl: "https://x/y.jpg",
+        },
+      ],
+    });
+    expect(parsed.allowedActions).toEqual({
+      cancel: true,
+      requestCancellation: false,
+      reorder: true,
+    });
+    expect(parsed.lines[0]).toMatchObject({ productSlug: "ao-thun", productTitle: "Áo thun" });
+  });
+
+  it("keeps null (not on sale) apart from absent (an older BE)", () => {
+    const parsed = orderDtoSchema.parse({
+      ...beOrder,
+      lines: [{ ...line, productSlug: null }, line],
+    });
+    expect(parsed.lines[0]?.productSlug).toBeNull();
+    expect(parsed.lines[1]?.productSlug).toBeUndefined();
+    expect(parsed.allowedActions).toBeUndefined();
+  });
+
+  it("reads a damaged allowedActions flag as false instead of failing the order", () => {
+    const parsed = orderDtoSchema.parse({ ...beOrder, allowedActions: { cancel: "yes" } });
+    expect(parsed.allowedActions).toEqual({
+      cancel: false,
+      requestCancellation: false,
+      reorder: false,
+    });
+  });
+});

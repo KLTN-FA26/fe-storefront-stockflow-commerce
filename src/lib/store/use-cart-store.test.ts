@@ -32,6 +32,34 @@ describe("client cart", () => {
     expect(useCartStore.getState().lines[0]?.quantity).toBe(1);
   });
 
+  it("puts several lines in at once, merging into the basket or replacing it (reorder)", () => {
+    const { add, addMany } = useCartStore.getState();
+    add(line("CUP-1"), 100);
+    add(line("CUP-9"), 5);
+    addMany(
+      [
+        { ...line("CUP-1"), quantity: 50 },
+        { ...line("cup-2"), quantity: 7 },
+      ],
+      "merge",
+    );
+    expect(useCartStore.getState().lines).toEqual([
+      { ...line("CUP-1"), quantity: 150 },
+      { ...line("CUP-9"), quantity: 5 },
+      { ...line("cup-2"), sku: "CUP-2", quantity: 7 },
+    ]);
+
+    addMany([{ ...line("CUP-3"), quantity: 1 }], "replace");
+    expect(useCartStore.getState().lines).toEqual([{ ...line("CUP-3"), quantity: 1 }]);
+  });
+
+  it("keeps merged quantities inside the cart's bounds", () => {
+    const { add, addMany } = useCartStore.getState();
+    add(line("CUP-1"), CART_QUANTITY_MAX - 1);
+    addMany([{ ...line("CUP-1"), quantity: 10 }], "merge");
+    expect(useCartStore.getState().lines[0]?.quantity).toBe(CART_QUANTITY_MAX);
+  });
+
   it("removes a line by SKU, whatever its case, and clears", () => {
     const { add, remove, clear } = useCartStore.getState();
     add(line("CUP-1"), 1);

@@ -97,6 +97,8 @@ export interface MockOrder {
   contactPhone?: string;
   shippingAddress?: MockOrderAddress;
   billingAddress?: MockOrderAddress;
+  /** Bought through an accepted quote: POST /orders/{id}/reorder drafts a new quote for it. */
+  fromQuote?: boolean;
   /** Idempotency key of the checkout that placed it (absent on seeded history). */
   requestId?: string;
   paymentTerm: MockPaymentTerm;
@@ -154,6 +156,7 @@ const fail = (
   errorCode: string,
   message: string,
   fieldErrors?: Array<{ field: string; message: string; code?: string }>,
+  details?: Record<string, unknown>,
 ): MockResult => ({
   status,
   data: {
@@ -161,6 +164,7 @@ const fail = (
     errorCode,
     message,
     ...(fieldErrors ? { fieldErrors } : {}),
+    ...(details ? { details } : {}),
     correlationId: `mock-${Date.now()}`,
     timestamp: new Date().toISOString(),
   },
@@ -254,8 +258,17 @@ const toCard = (order: MockOrder) => ({
   deliveryState: deliveryState(order.status),
 });
 
+const productFields = (listing: ReturnType<MockCatalog["listingOf"]>) =>
+  listing
+    ? {
+        productSlug: listing.slug,
+        productTitle: listing.title,
+        ...(listing.imageUrl ? { productImageUrl: listing.imageUrl } : {}),
+      }
+    : {};
+
 /** CustomerOrderDetailResponse: no reservations, checksums, actors or contact block. */
-const toDetail = (order: MockOrder) => {
+const toDetail = (order: MockOrder, listingOf?: MockCatalog["listingOf"]) => {
   const { lineCount: _lineCount, ...card } = toCard(order);
   return {
     ...card,
@@ -283,6 +296,12 @@ const toDetail = (order: MockOrder) => {
           },
         }
       : {}),
+    // CustomerOrdersService#allowedActions: reorder is true only for an order that came from a quote.
+    allowedActions: {
+      cancel: CANCELLABLE.has(order.status),
+      requestCancellation: REQUESTABLE.has(order.status) && !order.pendingCancellation,
+      reorder: order.fromQuote === true,
+    },
     ...(order.shippingAddress ? { shippingAddress: order.shippingAddress } : {}),
     payment: {
       status: paymentStatus(order),
@@ -298,6 +317,8 @@ const toDetail = (order: MockOrder) => {
       lineTotal: line.lineTotal,
       ...(line.designSnapshotId ? { designSnapshotId: line.designSnapshotId } : {}),
       production: production(order, line),
+      // Where the SKU is on sale today; NON_NULL drops them for a SKU that is not, and for a design line.
+      ...(listingOf && !line.designSnapshotId ? productFields(listingOf(line.sku)) : {}),
     })),
     timeline: order.history.map((entry) => ({
       status: entry.status,
@@ -330,6 +351,21 @@ const toPlaced = (order: MockOrder) => ({
   paymentTerm: order.paymentTerm,
   paymentStatus: paymentStatus(order),
 });
+
+/** BE stockflow.order.duplicate-window default (PT24H, awaiting the owner's confirmation). */
+const DUPLICATE_WINDOW_MS = 24 * 3_600_000;
+
+/** Same content = same total per SKU and design, whatever the order of the lines (DuplicateOrderService). */
+const contentOf = (
+  lines: ReadonlyArray<{ sku: string; quantity: number; designSnapshotId?: string }>,
+): string => {
+  const totals = new Map<string, number>();
+  for (const l of lines) {
+    const key = `${l.sku.toUpperCase()}|${l.designSnapshotId ?? ""}`;
+    totals.set(key, (totals.get(key) ?? 0) + l.quantity);
+  }
+  return JSON.stringify([...totals].sort(([a], [b]) => a.localeCompare(b)));
+};
 
 const MAX_PAGE_SIZE = 200;
 const DEFAULT_PAGE_SIZE = 20;
@@ -469,7 +505,7 @@ export function createMockOrderBook(
     /** GET /orders/me/{orderId} */
     get(orderId: string): MockResult {
       const order = own(orderId);
-      return order ? ok(toDetail(order)) : notFound(orderId);
+      return order ? ok(toDetail(order, deps.catalog?.listingOf)) : notFound(orderId);
     },
 
     /**
@@ -527,6 +563,33 @@ export function createMockOrderBook(
         quantity: l.quantity as number,
         unitPrice: l.unitPrice as number,
       }));
+      // SCRUM-190 (OrderController.refuseUnconfirmedDuplicate): the same lines placed by this customer
+      // within the window and not cancelled, unless the request confirms it.
+      if (body.confirmDuplicate !== true) {
+        const wanted = contentOf(lines);
+        const earlier = orders
+          .filter(
+            (o) =>
+              o.customerId === customerId &&
+              o.status !== "CANCELLED" &&
+              Date.now() - Date.parse(o.placedAt) < DUPLICATE_WINDOW_MS &&
+              contentOf(o.lines) === wanted,
+          )
+          .sort((a, b) => Date.parse(b.placedAt) - Date.parse(a.placedAt))[0];
+        if (earlier) {
+          return fail(
+            409,
+            "DUPLICATE_ORDER_SUSPECTED",
+            `Order ${earlier.orderNumber} with the same items was placed at ${earlier.placedAt}`,
+            undefined,
+            {
+              orderId: earlier.orderId,
+              orderNumber: earlier.orderNumber,
+              placedAt: earlier.placedAt,
+            },
+          );
+        }
+      }
       // SCRUM-428: a SKU is priced on the order's total of it; the client's price is only what it expects.
       const totals = new Map<string, number>();
       for (const l of lines) totals.set(l.sku, (totals.get(l.sku) ?? 0) + l.quantity);
@@ -637,6 +700,35 @@ export function createMockOrderBook(
       };
       orders.push(order);
       return ok(toPlaced(order), 201);
+    },
+
+    /**
+     * POST /orders/{orderId}/reorder with `{ requestId }` (QuoteService.reorder): a new DRAFT quote for an
+     * order that came from a quote; an order bought at the price list is 409 ORDER_NOT_QUOTED.
+     */
+    reorder(orderId: string, body: { requestId?: unknown } = {}): MockResult {
+      if (typeof body.requestId !== "string" || !UUID_RE.test(body.requestId)) {
+        return fail(400, "VALIDATION_FAILED", "Invalid request data", [
+          { field: "requestId", message: "requestId is required", code: "NotNull" },
+        ]);
+      }
+      const order = own(orderId);
+      if (!order) return notFound(orderId);
+      if (!order.fromQuote) {
+        return fail(
+          409,
+          "ORDER_NOT_QUOTED",
+          `Order ${order.orderNumber} was bought at the price list`,
+        );
+      }
+      return ok(
+        {
+          id: body.requestId,
+          quoteNumber: `QT-${order.orderNumber.slice(3)}-R`,
+          status: "DRAFT",
+        },
+        201,
+      );
     },
 
     /**

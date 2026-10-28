@@ -360,6 +360,21 @@ export function createMockCatalog(
       return reached ? { price: reached.unitPrice } : { error: "BELOW_MOQ" };
     },
 
+    /**
+     * Where a SKU is on sale (BE CatalogService.listings, SCRUM-190): the product page and its title
+     * and lead image; undefined for a SKU that is not on sale now.
+     */
+    listingOf(sku: string): { slug: string; title: string; imageUrl?: string } | undefined {
+      const product = visible().find((p) => p.variants.some((v) => v.sku === sku));
+      if (!product) return undefined;
+      const image = leadImage(product);
+      return {
+        slug: product.slug,
+        title: product.title,
+        ...(image ? { imageUrl: image.url } : {}),
+      };
+    },
+
     stockOf: (sku: string) => variantOf(sku)?.stock ?? 0,
 
     /** Holds units for an order (inventory.reserve); false when there are not enough. */

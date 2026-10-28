@@ -171,6 +171,12 @@ export const orderLineDtoSchema = z.object({
   production: z
     .object({ state: productionStateSchema, goodQuantity: z.number().int().nonnegative() })
     .nullish(),
+  // Where the line's SKU is on sale TODAY (SCRUM-190, BE PR #200): what a reorder needs to put the
+  // line back in the basket. `null` = the BE looked and the SKU is not on sale now (or it is a
+  // design line); absent = an older BE that does not send them, so the line cannot be refilled.
+  productSlug: z.string().min(1).nullish(),
+  productTitle: z.string().min(1).nullish(),
+  productImageUrl: z.string().min(1).nullish(),
 });
 
 export const orderPaymentDtoSchema = z.object({
@@ -222,6 +228,17 @@ export const cancellationRequestDtoSchema = z.object({
   decisionNote: z.string().nullish(),
 });
 
+/**
+ * What the customer may do with the order now (BE CustomerOrderAllowedActions). `reorder` is true
+ * only for an order that came from a quote (POST /orders/{id}/reorder drafts a new quote); an order
+ * bought at the price list has it false and is refilled into the basket instead.
+ */
+export const orderAllowedActionsDtoSchema = z.object({
+  cancel: z.boolean().catch(false),
+  requestCancellation: z.boolean().catch(false),
+  reorder: z.boolean().catch(false),
+});
+
 /** GET /orders/me/{orderId} (CustomerOrderDetailResponse). */
 export const orderDtoSchema = z.object({
   orderId: beId(),
@@ -236,6 +253,8 @@ export const orderDtoSchema = z.object({
   placedAt: instantSchema,
   // Absent when the customer never asked to cancel.
   cancellationRequest: cancellationRequestDtoSchema.nullish(),
+  // Absent on an older BE.
+  allowedActions: orderAllowedActionsDtoSchema.nullish(),
   shippingAddress: orderAddressDtoSchema.nullish(),
   payment: orderPaymentDtoSchema.nullish(),
   lines: z.array(orderLineDtoSchema),
@@ -246,6 +265,15 @@ export const orderDtoSchema = z.object({
   deliveryMode: deliveryModeSchema.nullish(),
   // Oldest first; empty until the first handover. Absent on an older BE.
   shipments: z.array(orderShipmentDtoSchema).nullish(),
+});
+
+/**
+ * POST /orders/{orderId}/reorder (BE QuoteResponse, the part the portal shows): the new DRAFT quote
+ * Sales will price and send. Everything is optional: the confirmation does not depend on it.
+ */
+export const reorderedQuoteDtoSchema = z.object({
+  quoteNumber: z.string().min(1).nullish(),
+  status: z.string().min(1).nullish(),
 });
 
 export const orderPageDtoSchema = pageResponseSchema(orderCardDtoSchema);

@@ -66,6 +66,20 @@ describe("mock adapter serves the storefront the way the BE does", () => {
     expect(detail).toMatchObject({ statusGroup: "AWAITING_PAYMENT", paymentTerm: "PREPAID" });
     expect(detail.shippingAddress?.recipientName).toBe(shipping.recipientName);
 
+    // The same lines again within the window are asked about first (SCRUM-190), naming the earlier order.
+    await expect(
+      placeOrder({
+        requestId: crypto.randomUUID(),
+        customerId,
+        shippingAddressId: shipping.addressId,
+        lines: [{ sku: "CUP-PAPER-8OZ-WHT", quantity: 1000, unitPrice: 780 }],
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "DUPLICATE_ORDER_SUSPECTED",
+      details: { orderId: placed.orderId, orderNumber: placed.orderNumber },
+    });
+
     // A refusal comes back as ApiError with the BE's code.
     await expect(
       placeOrder({
@@ -73,6 +87,7 @@ describe("mock adapter serves the storefront the way the BE does", () => {
         customerId,
         shippingAddressId: shipping.addressId,
         lines: [{ sku: "CUP-PAPER-8OZ-WHT", quantity: 1000, unitPrice: 1 }],
+        confirmDuplicate: true,
       }),
     ).rejects.toMatchObject({ status: 409, code: "CHECKOUT_PRICE_CHANGED" });
 

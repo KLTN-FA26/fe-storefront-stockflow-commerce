@@ -41,6 +41,9 @@ export const placeOrderInputSchema = z.object({
   // DEPOSIT orders only: sent on another term the BE answers 400 VALIDATION_FAILED. Omitted, the BE
   // applies the customer's own `depositBalancePolicy`.
   balancePolicy: z.enum(BALANCE_POLICIES).optional(),
+  // SCRUM-190: the same customer placed the same lines recently and the BE asked (409
+  // DUPLICATE_ORDER_SUSPECTED); true = the customer confirmed they want another. Sent only then.
+  confirmDuplicate: z.literal(true).optional(),
 });
 
 // ── Response — the part of BE OrderResponse the storefront uses. Extra fields (stock holds,
