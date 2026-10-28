@@ -15,6 +15,7 @@ export function settle(result: MockResult) {
       String(body.message),
       body.fieldErrors as never,
       String(body.correlationId),
+      body.details as never,
     );
   }
   return { data: body.data };
@@ -63,6 +64,10 @@ export function fakeBackend(deps: {
     const cancel = /^\/orders\/([^/]+)\/cancellation$/.exec(url);
     if (orders && cancel) {
       return settle(orders().cancel(cancel[1]!, body as Record<string, unknown> | undefined));
+    }
+    const reorder = /^\/orders\/([^/]+)\/reorder$/.exec(url);
+    if (orders && reorder) {
+      return settle(orders().reorder(reorder[1]!, body as { requestId?: unknown } | undefined));
     }
     throw new ApiError(404, "NOT_FOUND", `No fake route for POST ${url}`);
   });

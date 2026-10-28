@@ -75,3 +75,28 @@ export function describeCancelError(error: unknown): string {
   }
   return describeError(error);
 }
+
+/**
+ * Reordering a quoted order. The BE message is English developer text, so the customer gets text
+ * chosen by code: an order bought at the price list is not re-quoted (the basket path handles
+ * it), and a customer whose account cannot take new work is told to talk to Sales.
+ */
+const REORDER_MESSAGE_BY_CODE: Record<string, string> = {
+  ORDER_NOT_QUOTED:
+    "Đơn này được đặt theo bảng giá nên không cần báo giá mới. Hãy tải lại trang và bấm Đặt lại để thêm sản phẩm vào giỏ hàng.",
+  NOT_FOUND: "Không tìm thấy đơn hàng này trong tài khoản của bạn.",
+  IDEMPOTENCY_KEY_REUSED: "Yêu cầu này đã được gửi trước đó. Hãy tải lại trang và thử lại.",
+  CUSTOMER_NOT_ACTIVE:
+    "Tài khoản của bạn chưa được kích hoạt hoặc đang tạm khoá nên chưa thể đặt lại. Vui lòng liên hệ Sales.",
+  PRODUCT_NOT_PURCHASABLE:
+    "Có sản phẩm trong đơn cũ đã ngừng bán nên chưa tạo được báo giá mới. Hãy chat với Sales.",
+  RATE_LIMITED: "Bạn thao tác quá nhanh. Vui lòng đợi một chút rồi thử lại.",
+};
+
+export function describeReorderError(error: unknown): string {
+  if (isApiError(error)) {
+    const known = REORDER_MESSAGE_BY_CODE[error.code];
+    if (known) return withLookup(known, error);
+  }
+  return describeError(error);
+}

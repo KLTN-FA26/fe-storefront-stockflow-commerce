@@ -13,7 +13,7 @@ import { describeApiError } from "@/lib/api/describe-error";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 import { useCartStore } from "@/lib/store/use-cart-store";
 
-import { describeCheckoutError, isCreditRefusal } from "../checkout-errors";
+import { describeCheckoutError, isCreditRefusal, readDuplicateOrder } from "../checkout-errors";
 import { usePlaceOrder } from "../checkout-mutations";
 import { balanceAmount } from "../checkout-payment-terms";
 import type { PlacedOrder } from "../checkout-schemas";
@@ -24,6 +24,7 @@ import { useCheckoutPayment } from "../use-checkout-payment";
 import { forgetRequestId, requestIdFor } from "../request-id";
 import { CheckoutAddressPicker } from "./checkout-address-picker";
 import { CheckoutBalancePolicy } from "./checkout-balance-policy";
+import { CheckoutDuplicateNotice } from "./checkout-duplicate-notice";
 import { CheckoutLines } from "./checkout-lines";
 import { CheckoutPaymentTerms } from "./checkout-payment-terms";
 import { OrderPlacedPanel } from "./order-placed-panel";
@@ -138,7 +139,10 @@ export function CheckoutScreen({ customer }: { customer: CheckoutCustomer }) {
     !termsQuery.isPending &&
     !awaitingTerms;
 
-  const submit = () => {
+  const duplicate = readDuplicateOrder(place.error);
+
+  // `confirmDuplicate`: the customer was told the same lines were placed recently and said to go on.
+  const submit = (confirmDuplicate = false) => {
     if (!ready || !customer.customerId || !addressId) return;
     place.mutate(
       {
@@ -148,6 +152,7 @@ export function CheckoutScreen({ customer }: { customer: CheckoutCustomer }) {
         lines,
         ...(sentTerm ? { paymentTerm: sentTerm } : {}),
         ...(sentBalance ? { balancePolicy: sentBalance } : {}),
+        ...(confirmDuplicate ? { confirmDuplicate: true as const } : {}),
       },
       {
         // Show the order and empty the cart in one step: emptied first, the screen would flash
@@ -241,7 +246,13 @@ export function CheckoutScreen({ customer }: { customer: CheckoutCustomer }) {
           subtotal={view.subtotal}
           note="Giá cuối cùng được xác nhận khi đặt hàng; nếu giá đã đổi, bạn sẽ được báo trước khi đơn được tạo."
         />
-        {place.error ? (
+        {duplicate ? (
+          <CheckoutDuplicateNotice
+            earlier={duplicate}
+            onConfirm={() => submit(true)}
+            pending={place.isPending}
+          />
+        ) : place.error ? (
           <div role="alert">
             <Alert tone="danger" title="Không đặt được hàng.">
               {describeCheckoutError(place.error, { prepayOffered })}
@@ -263,11 +274,11 @@ export function CheckoutScreen({ customer }: { customer: CheckoutCustomer }) {
           <Button
             className="mt-4 min-h-11 w-full rounded-[var(--r-md)]"
             disabled={!ready || place.isPending}
-            onClick={submit}
+            onClick={() => submit()}
           >
             {place.isPending ? "Đang đặt hàng..." : "Đặt hàng"}
           </Button>
-          {place.error ? (
+          {place.error && !duplicate ? (
             <Button asChild variant="ghost" className="mt-2 min-h-11 w-full rounded-[var(--r-md)]">
               <Link href={STORE_ROUTES.cart}>Quay lại giỏ hàng</Link>
             </Button>

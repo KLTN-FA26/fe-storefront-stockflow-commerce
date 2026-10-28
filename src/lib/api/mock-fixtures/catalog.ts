@@ -15,8 +15,8 @@
  *  - a product with a variant that has no base price has no readable detail: 409 PRICE_NOT_AVAILABLE;
  *  - an unknown slug is 404 NOT_FOUND; unknown SKUs are OUT_OF_STOCK in /availability;
  *  - every call needs a signed-in caller; availability and prices need a CUSTOMER (mock: always);
- *  - `kind` (STANDARD | CUSTOMIZABLE) on the detail and the list card is proposed (spec 2026-10-25
- *    §7.2 P2): the BE's responses do not carry it yet; `kindOf` is what the design mock asks.
+ *  - `kind` (STANDARD | CUSTOMIZABLE) is on the detail and the list card (BE PR #200); `kindOf` is
+ *    what the design mock asks.
  * NON_NULL serialisation: absent optional fields are omitted, never sent as null.
  * Intentionally independent from mock-data.ts (legacy, non-BE shapes).
  */
@@ -358,6 +358,21 @@ export function createMockCatalog(
       if (tiers.length === 0) return { error: "NO_PRICE" };
       const reached = tiers.filter((t) => t.minQuantity <= quantity).at(-1);
       return reached ? { price: reached.unitPrice } : { error: "BELOW_MOQ" };
+    },
+
+    /**
+     * Where a SKU is on sale (BE CatalogService.listings, SCRUM-190): the product page and its title
+     * and lead image; undefined for a SKU that is not on sale now.
+     */
+    listingOf(sku: string): { slug: string; title: string; imageUrl?: string } | undefined {
+      const product = visible().find((p) => p.variants.some((v) => v.sku === sku));
+      if (!product) return undefined;
+      const image = leadImage(product);
+      return {
+        slug: product.slug,
+        title: product.title,
+        ...(image ? { imageUrl: image.url } : {}),
+      };
     },
 
     stockOf: (sku: string) => variantOf(sku)?.stock ?? 0,

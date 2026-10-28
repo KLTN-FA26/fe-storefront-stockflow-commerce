@@ -175,6 +175,8 @@ export function ProductDetailScreen({ slug }: { slug: string }) {
               designHref={
                 data.kind === "CUSTOMIZABLE" ? STORE_ROUTES.design.newFor(data.slug, sku) : null
               }
+              // A product printed to a design is quoted by Sales, never added to the cart.
+              quoteHref={data.kind === "CUSTOMIZABLE" ? STORE_ROUTES.chat.list : null}
               onAdd={() => {
                 add(
                   {

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ShoppingCart } from "lucide-react";
+import { MessageCircle, ShoppingCart } from "lucide-react";
 
 import { Alert } from "@/components/shared";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,11 @@ interface ProductPurchasePanelProps {
   onAdd: () => void;
   /** The design launcher for the chosen SKU; null for a product that cannot be customized. */
   designHref: string | null;
+  /**
+   * Where a customer asks Sales for a quote; set for a product printed to a design, which is quoted
+   * and never added to the cart (owner decision DESIGN-QUOTE, 28/10). null for stock goods.
+   */
+  quoteHref: string | null;
 }
 
 export function ProductPurchasePanel({
@@ -42,6 +47,7 @@ export function ProductPurchasePanel({
   onQuantityChange,
   onAdd,
   designHref,
+  quoteHref,
 }: ProductPurchasePanelProps) {
   const availability = availabilityOf(sku);
   const unitPrice = unitPriceFor(schedule, quantity);
@@ -108,21 +114,36 @@ export function ProductPurchasePanel({
 
       <div className="space-y-3">
         <div className={designHref ? "grid gap-3 sm:grid-cols-2" : "grid gap-3"}>
-          <Button
-            type="button"
-            className="min-h-11 rounded-[var(--r-md)]"
-            disabled={!canAdd}
-            onClick={onAdd}
-          >
-            <ShoppingCart className="size-4" aria-hidden="true" />
-            Thêm vào giỏ
-          </Button>
+          {quoteHref ? (
+            <Button asChild className="min-h-11 rounded-[var(--r-md)]">
+              <Link href={quoteHref}>
+                <MessageCircle className="size-4" aria-hidden="true" />
+                Liên hệ Sale báo giá
+              </Link>
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              className="min-h-11 rounded-[var(--r-md)]"
+              disabled={!canAdd}
+              onClick={onAdd}
+            >
+              <ShoppingCart className="size-4" aria-hidden="true" />
+              Thêm vào giỏ
+            </Button>
+          )}
           {designHref ? (
             <Button asChild variant="secondary" className="min-h-11 rounded-[var(--r-md)]">
               <Link href={designHref}>Bắt đầu thiết kế</Link>
             </Button>
           ) : null}
         </div>
+        {quoteHref ? (
+          <p className="bg-bg-subtle text-ink-secondary rounded-[var(--r-md)] p-3 text-sm">
+            Sản phẩm in theo thiết kế của bạn được báo giá riêng, nên không thêm vào giỏ hàng. Hãy
+            liên hệ Sale để được báo giá.
+          </p>
+        ) : null}
         {availability === "OUT_OF_STOCK" ? (
           <p className="bg-bg-subtle text-ink-secondary rounded-[var(--r-md)] p-3 text-sm">
             Phiên bản này đang hết hàng. Chọn phiên bản khác hoặc chat với Sales.

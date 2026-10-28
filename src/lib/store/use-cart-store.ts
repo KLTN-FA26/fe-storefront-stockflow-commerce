@@ -56,6 +56,11 @@ interface CartState {
   ownerId: string | null;
   lines: CartLine[];
   add: (line: Omit<CartLine, "quantity">, quantity: number) => void;
+  /**
+   * Reorder (SCRUM-190): several lines at once. `merge` adds them to what is in the basket (a SKU
+   * already there gains the quantity); otherwise they replace the whole basket.
+   */
+  addMany: (lines: readonly CartLine[], mode: "merge" | "replace") => void;
   setQuantity: (sku: string, quantity: number) => void;
   remove: (sku: string) => void;
   clear: () => void;
@@ -83,6 +88,21 @@ export const useCartStore = create<CartState>()(
               l === existing ? { ...l, quantity: clampQuantity(l.quantity + quantity) } : l,
             ),
           };
+        }),
+      addMany: (incoming, mode) =>
+        set((state) => {
+          const lines = mode === "replace" ? [] : [...state.lines];
+          for (const line of incoming) {
+            const sku = line.sku.toUpperCase();
+            const at = lines.findIndex((l) => sameSku(l.sku, sku));
+            const quantity = clampQuantity(line.quantity);
+            if (at === -1) lines.push({ ...line, sku, quantity });
+            else {
+              const existing = lines[at]!;
+              lines[at] = { ...existing, quantity: clampQuantity(existing.quantity + quantity) };
+            }
+          }
+          return { lines };
         }),
       setQuantity: (sku, quantity) =>
         set((state) => ({

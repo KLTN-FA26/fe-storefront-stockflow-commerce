@@ -379,4 +379,106 @@ describe("mock checkout (POST /orders) mirrors BE OrderServiceImpl.place", () =>
     expect(book.cancel(orderId).status).toBe(200);
     expect(catalog.stockOf("CUP-PAPER-8OZ-WHT")).toBe(120000);
   });
+
+  describe("SCRUM-190: the same order again and the reorder data", () => {
+    const another = (n: number) => "22222222-2222-4222-8222-22222222222" + n;
+
+    it("refuses the same lines placed again within the window with the earlier order in details", () => {
+      const book = checkoutBook();
+      const first = dataOf(book.place(request())) as { orderId: string; orderNumber: string };
+      const again = book.place(request({ requestId: another(1) }));
+      expect(again.status).toBe(409);
+      expect(errorOf(again)).toBe("DUPLICATE_ORDER_SUSPECTED");
+      expect((again.data as { details: unknown }).details).toMatchObject({
+        orderId: first.orderId,
+        orderNumber: first.orderNumber,
+        placedAt: expect.any(String),
+      });
+      // Nothing was created and no stock was held.
+      expect(catalog.stockOf("CUP-PAPER-8OZ-WHT")).toBe(119000);
+    });
+
+    it("places it when the request confirms, and treats a split SKU as its total", () => {
+      const book = checkoutBook();
+      book.place(
+        request({ lines: [{ sku: "CUP-PAPER-8OZ-WHT", quantity: 2000, unitPrice: 780 }] }),
+      );
+      const split = request({
+        requestId: another(1),
+        lines: [
+          { sku: "CUP-PAPER-8OZ-WHT", quantity: 1000, unitPrice: 780 },
+          { sku: "CUP-PAPER-8OZ-WHT", quantity: 1000, unitPrice: 780 },
+        ],
+      });
+      expect(errorOf(book.place(split))).toBe("DUPLICATE_ORDER_SUSPECTED");
+      expect(book.place({ ...split, confirmDuplicate: true }).status).toBe(201);
+    });
+
+    it("does not count a different quantity, a cancelled order or a retry of the same request", () => {
+      const book = checkoutBook();
+      const { orderId } = dataOf(book.place(request())) as { orderId: string };
+      expect(
+        book.place(
+          request({
+            requestId: another(1),
+            lines: [{ sku: "CUP-PAPER-8OZ-WHT", quantity: 2000, unitPrice: 780 }],
+          }),
+        ).status,
+      ).toBe(201);
+      expect(book.place(request()).status).toBe(201); // the retry returns the original order
+      book.cancel(orderId);
+      expect(book.place(request({ requestId: another(2) })).status).toBe(201);
+    });
+
+    it("tells where each stock SKU is on sale, and only for what is on sale", () => {
+      catalog = createMockCatalog(seedMockCatalog());
+      const seeded = seedMockOrders(ME).find((o) => o.customerId === ME)!;
+      const { designSnapshotId: _design, ...stock } = seeded.lines[0]!;
+      const sold = {
+        ...seeded,
+        lines: [
+          { ...stock, sku: "CUP-PAPER-8OZ-WHT" },
+          { ...stock, lineId: "x", sku: "GONE-SKU" },
+          {
+            ...seeded.lines[0]!,
+            lineId: "y",
+            sku: "CUP-PAPER-8OZ-WHT",
+            designSnapshotId: "9c0d1e2f-0000-4000-8000-000000000002",
+          },
+        ],
+      };
+      const book = createMockOrderBook(ME, [sold], { catalog });
+      const lines = (dataOf(book.get(sold.orderId)) as { lines: Array<Record<string, unknown>> })
+        .lines;
+      expect(lines[0]).toMatchObject({
+        productSlug: "ly-giay-2-lop-8oz",
+        productTitle: "Ly giấy 2 lớp 8oz",
+      });
+      expect(lines[1]).not.toHaveProperty("productSlug");
+      // A design line is quoted, never refilled: it carries no product to put back.
+      expect(lines[2]).not.toHaveProperty("productSlug");
+    });
+
+    it("drafts a quote for an order that came from a quote, and refuses the rest", () => {
+      const seeded = seedMockOrders(ME).find((o) => o.customerId === ME)!;
+      const quoted = {
+        ...seeded,
+        orderId: "0b7d3c1e-0000-4000-8000-00000000abcd",
+        fromQuote: true,
+      };
+      const book = createMockOrderBook(ME, [seeded, quoted]);
+      const detail = (id: string) =>
+        dataOf(book.get(id)) as { allowedActions: { reorder: boolean } };
+      expect(detail(seeded.orderId).allowedActions.reorder).toBe(false);
+      expect(detail(quoted.orderId).allowedActions.reorder).toBe(true);
+
+      const body = { requestId: another(1) };
+      const drafted = book.reorder(quoted.orderId, body);
+      expect(drafted.status).toBe(201);
+      expect(dataOf(drafted)).toMatchObject({ status: "DRAFT", quoteNumber: expect.any(String) });
+      expect(errorOf(book.reorder(seeded.orderId, body))).toBe("ORDER_NOT_QUOTED");
+      expect(book.reorder(foreignMockOrderId(), body).status).toBe(404);
+      expect(book.reorder(quoted.orderId, {}).status).toBe(400);
+    });
+  });
 });

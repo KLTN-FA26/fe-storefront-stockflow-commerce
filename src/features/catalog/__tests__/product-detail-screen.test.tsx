@@ -27,9 +27,27 @@ const addButton = async () => {
   await screen.findByRole("table", { name: "Giá theo số lượng" });
   return screen.findByRole("button", { name: "Thêm vào giỏ" });
 };
+/**
+ * The mock catalogue marks most print products CUSTOMIZABLE, and those are quoted rather than
+ * added to the cart (DESIGN-QUOTE). The purchase tests below are about stock goods, so they read
+ * the product as a BE does that does not send `kind`: not known to be customizable.
+ */
+function readProductsAsStockGoods() {
+  const real = vi.mocked(api.get).getMockImplementation()!;
+  vi.mocked(api.get).mockImplementation(async (url, config) => {
+    const result = (await real(url, config)) as { data: Record<string, unknown> };
+    if (result.data && typeof result.data === "object" && "kind" in result.data) {
+      const { kind: _kind, ...withoutKind } = result.data;
+      return { data: withoutKind };
+    }
+    return result;
+  });
+}
 const quantityField = (name = "Số lượng") => screen.getByRole("textbox", { name });
 
 describe("ProductDetailScreen", () => {
+  beforeEach(readProductsAsStockGoods);
+
   it("shows the product, its variants, the customer's price tiers and the MOQ", async () => {
     renderWithProviders(<ProductDetailScreen slug="ly-giay-2-lop-8oz" />);
 
@@ -191,7 +209,7 @@ describe("ProductDetailScreen", () => {
 describe("ProductDetailScreen design entry", () => {
   it("offers 'Bắt đầu thiết kế' for a customizable product, for the chosen SKU", async () => {
     renderWithProviders(<ProductDetailScreen slug="ly-giay-2-lop-8oz" />);
-    await addButton();
+    await screen.findByRole("table", { name: "Giá theo số lượng" });
     expect(screen.getByRole("link", { name: "Bắt đầu thiết kế" })).toHaveAttribute(
       "href",
       "/design/new?product=ly-giay-2-lop-8oz&sku=CUP-PAPER-8OZ-WHT",
@@ -221,5 +239,48 @@ describe("ProductDetailScreen design entry", () => {
     renderWithProviders(<ProductDetailScreen slug="ly-giay-2-lop-8oz" />);
     await addButton();
     expect(screen.queryByRole("link", { name: "Bắt đầu thiết kế" })).not.toBeInTheDocument();
+  });
+});
+
+describe("ProductDetailScreen: a product printed to a design is quoted, not added (DESIGN-QUOTE)", () => {
+  it("hides 'Thêm vào giỏ' and offers 'Liên hệ Sale báo giá' to the chat", async () => {
+    renderWithProviders(<ProductDetailScreen slug="ly-giay-2-lop-8oz" />);
+    await screen.findByRole("table", { name: "Giá theo số lượng" });
+
+    expect(screen.queryByRole("button", { name: "Thêm vào giỏ" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Liên hệ Sale báo giá" })).toHaveAttribute(
+      "href",
+      "/chat",
+    );
+    expect(screen.getByText(/được báo giá riêng, nên không thêm vào giỏ hàng/)).toBeInTheDocument();
+    // The design launcher is still there; the cart stays empty.
+    expect(screen.getByRole("link", { name: "Bắt đầu thiết kế" })).toBeInTheDocument();
+    expect(useCartStore.getState().lines).toEqual([]);
+  });
+
+  it("does so for every variant of the product, in stock or not", async () => {
+    renderWithProviders(<ProductDetailScreen slug="ly-giay-2-lop-8oz" />);
+    await screen.findByRole("table", { name: "Giá theo số lượng" });
+    await userEvent.click(screen.getByRole("button", { name: "CUP-PAPER-8OZ-KRAFT" }));
+    expect(screen.queryByRole("button", { name: "Thêm vào giỏ" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Liên hệ Sale báo giá" })).toBeInTheDocument();
+
+    renderWithProviders(<ProductDetailScreen slug="ly-nhua-pet-500ml" />);
+    await screen.findByRole("heading", { name: "Ly nhựa PET 500ml" });
+    expect(screen.queryByRole("button", { name: "Thêm vào giỏ" })).not.toBeInTheDocument();
+  });
+
+  it("keeps 'Thêm vào giỏ' for a stock product and offers no quote button", async () => {
+    renderWithProviders(<ProductDetailScreen slug="hop-giay-mang-di-m" />);
+    expect(await addButton()).toBeEnabled();
+    expect(screen.queryByRole("link", { name: "Liên hệ Sale báo giá" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/được báo giá riêng/)).not.toBeInTheDocument();
+  });
+
+  it("treats a product as stock goods while the BE does not say it is customizable", async () => {
+    readProductsAsStockGoods();
+    renderWithProviders(<ProductDetailScreen slug="ly-giay-2-lop-8oz" />);
+    expect(await addButton()).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Liên hệ Sale báo giá" })).not.toBeInTheDocument();
   });
 });

@@ -18,6 +18,7 @@ import { OrderCancellationCard } from "./order-cancellation-card";
 import { CopyOrderNumber } from "./copy-order-number";
 import { OrderDeliveryCard, OrderLinesCard, OrderTotalCard } from "./order-detail-sections";
 import { OrderHelpCard } from "./order-help-card";
+import { OrderReorder } from "./order-reorder";
 import { OrderPaymentCard } from "./order-payment-card";
 import { OrderTimelineCard } from "./order-timeline-card";
 import {
@@ -79,18 +80,23 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
     <div className="space-y-5">
       <div className="border-border-default border-b pb-3.5">
         <BackToOrders />
-        <h1 className="font-display text-ink-primary mt-1 text-xl font-bold sm:text-2xl">
-          Chi tiết đơn hàng
-        </h1>
-        <div className="text-ink-secondary mt-1 flex flex-wrap items-center gap-x-1 text-sm">
-          <span>
-            Mã đơn{" "}
-            <span className="text-ink-primary font-mono font-semibold tabular-nums">
-              {order.orderNumber}
-            </span>
-          </span>
-          <CopyOrderNumber orderNumber={order.orderNumber} />
-          <span>· Đặt lúc {formatDateTime(order.placedAt)}</span>
+        <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="font-display text-ink-primary text-xl font-bold sm:text-2xl">
+              Chi tiết đơn hàng
+            </h1>
+            <div className="text-ink-secondary mt-1 flex flex-wrap items-center gap-x-1 text-sm">
+              <span>
+                Mã đơn{" "}
+                <span className="text-ink-primary font-mono font-semibold tabular-nums">
+                  {order.orderNumber}
+                </span>
+              </span>
+              <CopyOrderNumber orderNumber={order.orderNumber} />
+              <span>· Đặt lúc {formatDateTime(order.placedAt)}</span>
+            </div>
+          </div>
+          <OrderReorder order={order} />
         </div>
       </div>
 
