@@ -1,0 +1,42 @@
+import { z } from "zod";
+
+import { NOTIFICATION_SEVERITIES } from "@/constants/notifications";
+
+/** UserNotificationResponse from BE #102: null fields may be entirely omitted. */
+export const notificationDto = z.object({
+  id: z.uuid(),
+  category: z.string().min(1),
+  severity: z.enum(NOTIFICATION_SEVERITIES),
+  title: z.string().min(1),
+  body: z.string().nullish(),
+  // Next.js router must never receive an arbitrary URL from a response.
+  link: z
+    .string()
+    .regex(/^\/(?![\\/])[^\\]*$/)
+    .nullish(),
+  sourceType: z.string().nullish(),
+  sourceId: z.string().nullish(),
+  createdAt: z.iso.datetime({ offset: true }),
+  readAt: z.iso.datetime({ offset: true }).nullish(),
+  read: z.boolean(),
+});
+
+export const inboxPageDto = z.object({
+  items: z.array(notificationDto),
+  page: z.number().int().nonnegative(),
+  size: z.number().int().positive(),
+  totalElements: z.number().int().nonnegative(),
+  totalPages: z.number().int().nonnegative(),
+  hasNext: z.boolean(),
+  hasPrevious: z.boolean(),
+  unreadCount: z.number().int().nonnegative(),
+});
+
+export const unreadCountDto = z.object({ unreadCount: z.number().int().nonnegative() });
+export const markAllReadDto = z.object({ updated: z.number().int().nonnegative() });
+
+export const inboxListParams = z.object({
+  unreadOnly: z.boolean(),
+  page: z.number().int().nonnegative(),
+  size: z.number().int().min(1).max(200),
+});
