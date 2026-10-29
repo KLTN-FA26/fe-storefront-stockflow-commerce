@@ -7,23 +7,24 @@ import { toast } from "sonner";
 
 import { NOTIFICATION_CONFIG, NOTIFICATION_LABELS } from "@/constants/notifications";
 
-import { useHasSession } from "@/lib/auth/use-signed-in";
-
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 import { useMarkAllRead, useMarkRead } from "../mutations";
-import { useMyInbox, useMyUnreadCount } from "../queries";
+import { useInboxOwner, useMyInbox, useMyUnreadCount } from "../queries";
 import { NotificationItems } from "./notification-items";
 
 import type { NotificationItem } from "../types";
 
 const L = NOTIFICATION_LABELS;
 
-/** Customer-only header action. Anonymous visitors don't fetch or see a personal inbox. */
+/**
+ * Customer-only header action. Without an inbox owner (anonymous, expired token, no user id) nothing
+ * is fetched or shown.
+ */
 export function NotificationBell() {
   const router = useRouter();
-  const hasSession = useHasSession();
+  const owner = useInboxOwner();
   const [open, setOpen] = useState(false);
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [page, setPage] = useState(0);
@@ -32,6 +33,10 @@ export function NotificationBell() {
   const markRead = useMarkRead();
   const markAll = useMarkAllRead();
   const unreadCount = count.data ?? inbox.data?.unreadCount ?? 0;
+  // Mark-all-read (or rows read elsewhere) can shrink the unread filter below the current page;
+  // step back to the last page that exists instead of an empty page with no pager.
+  const lastPage = Math.max(0, (inbox.data?.totalPages ?? 1) - 1);
+  if (inbox.data && page > lastPage) setPage(lastPage);
 
   const select = (item: NotificationItem) => {
     if (!item.read) markRead.mutate(item.id, { onError: () => toast.error(L.updateError) });
@@ -41,7 +46,7 @@ export function NotificationBell() {
     }
   };
 
-  if (!hasSession) return null;
+  if (owner === null) return null;
 
   return (
     <Popover

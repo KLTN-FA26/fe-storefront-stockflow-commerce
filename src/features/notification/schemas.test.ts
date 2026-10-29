@@ -31,10 +31,23 @@ describe("BE #102 inbox contract", () => {
     const read = { ...notice, read: true, readAt: "2026-10-15T00:00:00Z", body: null };
     expect(inboxPageDto.parse({ ...page, items: [read] }).items[0]?.readAt).toBe(read.readAt);
   });
-  it.each(["https://outside.test", "//outside.test", "/\\outside.test", "javascript:alert(1)"])(
-    "refuses unsafe in-app navigation: %s",
-    (link) => expect(() => inboxPageDto.parse({ ...page, items: [{ ...notice, link }] })).toThrow(),
-  );
+  it.each([
+    "https://outside.test",
+    "//outside.test",
+    "/\\outside.test",
+    "javascript:alert(1)",
+    "/\t/outside.test",
+    "/admin/inventory/alerts?kind=EXPIRED",
+    42,
+  ])("drops unsafe link %s to null without rejecting the rest of the page", (link) => {
+    const healthy = {
+      ...notice,
+      id: "88888888-8888-4888-8888-888888888888",
+      link: "/account/orders",
+    };
+    const parsed = inboxPageDto.parse({ ...page, items: [{ ...notice, link }, healthy] });
+    expect(parsed.items.map((item) => item.link)).toEqual([null, "/account/orders"]);
+  });
   it("requires a supported severity and overall unreadCount", () => {
     expect(() =>
       inboxPageDto.parse({ ...page, items: [{ ...notice, severity: "HIGH" }] }),

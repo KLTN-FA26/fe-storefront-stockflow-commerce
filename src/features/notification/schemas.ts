@@ -2,6 +2,8 @@ import { z } from "zod";
 
 import { NOTIFICATION_SEVERITIES } from "@/constants/notifications";
 
+import { toSafeNotificationPath } from "./link";
+
 /** UserNotificationResponse from BE #102: null fields may be entirely omitted. */
 export const notificationDto = z.object({
   id: z.uuid(),
@@ -9,11 +11,13 @@ export const notificationDto = z.object({
   severity: z.enum(NOTIFICATION_SEVERITIES),
   title: z.string().min(1),
   body: z.string().nullish(),
-  // Next.js router must never receive an arbitrary URL from a response.
+  // Only a canonical storefront path reaches the router (link.ts). An unsafe or malformed link drops
+  // to null for that one row — it must not reject the whole inbox page.
   link: z
     .string()
-    .regex(/^\/(?![\\/])[^\\]*$/)
-    .nullish(),
+    .nullish()
+    .catch(null)
+    .transform((link) => (link ? toSafeNotificationPath(link) : null)),
   sourceType: z.string().nullish(),
   sourceId: z.string().nullish(),
   createdAt: z.iso.datetime({ offset: true }),
