@@ -6,6 +6,7 @@ import { cn } from "@/lib/cn";
 
 import { HeaderAccountLink } from "@/features/auth/components/header-account-link";
 import { CartBadge } from "@/features/cart/components/cart-badge";
+import { NotificationBell } from "@/features/notification";
 import { ThemeToggle } from "@/components/storefront/theme-toggle";
 
 import { HeaderSearch } from "./header-search";
@@ -34,7 +35,7 @@ export function SiteHeader() {
           <Link
             href="/"
             className={cn(
-              "font-display shrink-0 rounded-sm text-lg font-bold tracking-tight",
+              "font-display shrink-0 rounded-sm text-base font-bold tracking-tight sm:text-lg",
               focusRing,
             )}
           >
@@ -48,6 +49,7 @@ export function SiteHeader() {
               <span className="sr-only lg:not-sr-only">Tư vấn</span>
             </Link>
             <HeaderAccountLink className={cn(actionLink, "hidden sm:inline-flex")} />
+            <NotificationBell />
             <ThemeToggle />
             <Link href={STORE_ROUTES.cart} className={cn(actionLink, "text-ink-primary")}>
               <span className="relative">
