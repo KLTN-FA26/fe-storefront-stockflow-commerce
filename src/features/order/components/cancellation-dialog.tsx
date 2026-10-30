@@ -85,69 +85,79 @@ export function CancellationDialog({
 
   return (
     <Dialog open={mode !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-          <DialogHeader>
-            <DialogTitle>{copy.title}</DialogTitle>
-            <DialogDescription>{description}</DialogDescription>
+      <DialogContent
+        showCloseButton={false}
+        className="border-border-default bg-bg-surface gap-0 rounded-[var(--r-xl)] border p-0 shadow-[var(--sh-lg)] ring-0 sm:max-w-md"
+      >
+        <form onSubmit={handleSubmit(onSubmit)} noValidate>
+          <DialogHeader className="border-border-default border-b px-4.5 py-4">
+            <DialogTitle className="text-ink-primary font-[family-name:var(--font-display)] text-[1.05rem] leading-tight font-semibold">
+              {copy.title}
+            </DialogTitle>
           </DialogHeader>
 
-          <Controller
-            control={control}
-            name="reasonCode"
-            render={({ field }) => (
-              <RadioGroup
-                value={field.value}
-                onValueChange={field.onChange}
-                aria-label="Lý do huỷ"
-                className="gap-1"
-              >
-                {CUSTOMER_REASON_OPTIONS.map((option) => (
-                  <Label
-                    key={option.value}
-                    htmlFor={`cancel-reason-${option.value}`}
-                    className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-normal"
-                  >
-                    <RadioGroupItem id={`cancel-reason-${option.value}`} value={option.value} />
-                    {option.label}
-                  </Label>
-                ))}
-              </RadioGroup>
-            )}
-          />
+          <div className="space-y-4 px-4.5 py-4.5">
+            <DialogDescription className="text-ink-secondary text-sm leading-relaxed">
+              {description}
+            </DialogDescription>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="cancel-note" className="text-sm font-medium">
-              Ghi chú{reasonCode === "OTHER" ? " (bắt buộc)" : " (không bắt buộc)"}
-            </Label>
-            <Textarea
-              id="cancel-note"
-              rows={3}
-              maxLength={CANCELLATION_NOTE_MAX}
-              aria-invalid={errors.note ? true : undefined}
-              aria-describedby={errors.note ? "cancel-note-error" : undefined}
-              {...register("note")}
+            <Controller
+              control={control}
+              name="reasonCode"
+              render={({ field }) => (
+                <RadioGroup
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  aria-label="Lý do huỷ"
+                  className="gap-1"
+                >
+                  {CUSTOMER_REASON_OPTIONS.map((option) => (
+                    <Label
+                      key={option.value}
+                      htmlFor={`cancel-reason-${option.value}`}
+                      className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-normal"
+                    >
+                      <RadioGroupItem id={`cancel-reason-${option.value}`} value={option.value} />
+                      {option.label}
+                    </Label>
+                  ))}
+                </RadioGroup>
+              )}
             />
-            {errors.note ? (
-              <p id="cancel-note-error" role="alert" className="text-danger text-sm">
-                {errors.note.message}
-              </p>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="cancel-note" className="text-sm font-medium">
+                Ghi chú{reasonCode === "OTHER" ? " (bắt buộc)" : " (không bắt buộc)"}
+              </Label>
+              <Textarea
+                id="cancel-note"
+                rows={3}
+                maxLength={CANCELLATION_NOTE_MAX}
+                aria-invalid={errors.note ? true : undefined}
+                aria-describedby={errors.note ? "cancel-note-error" : undefined}
+                {...register("note")}
+              />
+              {errors.note ? (
+                <p id="cancel-note-error" role="alert" className="text-danger text-sm">
+                  {errors.note.message}
+                </p>
+              ) : null}
+            </div>
+
+            {error ? (
+              <div role="alert">
+                <Alert tone="danger" title="Không thực hiện được.">
+                  {error}
+                </Alert>
+              </div>
             ) : null}
           </div>
 
-          {error ? (
-            <div role="alert">
-              <Alert tone="danger" title="Không thực hiện được.">
-                {error}
-              </Alert>
-            </div>
-          ) : null}
-
-          <DialogFooter>
+          <DialogFooter className="border-border-default bg-bg-subtle mx-0 mb-0 rounded-b-[var(--r-xl)] border-t px-4.5 py-3.5">
             <Button
               type="button"
               variant="outline"
-              className="min-h-11 rounded-[var(--r-md)] px-4"
+              className="border-border-strong bg-bg-surface text-ink-primary hover:bg-bg-muted min-h-11 rounded-[var(--r-sm)] px-4"
               onClick={() => onOpenChange(false)}
             >
               Quay lại
@@ -155,7 +165,7 @@ export function CancellationDialog({
             <Button
               type="submit"
               disabled={pending}
-              className="bg-danger hover:bg-danger/90 min-h-11 rounded-[var(--r-md)] px-4 text-white"
+              className="bg-danger hover:bg-danger/90 min-h-11 rounded-[var(--r-sm)] px-4 text-white disabled:opacity-50"
             >
               {pending ? copy.pending : copy.confirm}
             </Button>

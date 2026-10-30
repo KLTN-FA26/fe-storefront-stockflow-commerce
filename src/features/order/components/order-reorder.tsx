@@ -143,23 +143,30 @@ function BasketReorder({ order }: { order: Order }) {
     <>
       <ReorderButton onClick={start} orderNumber={order.orderNumber} />
       <Dialog open={step !== "closed"} onOpenChange={(open) => !open && setStep("closed")}>
-        <DialogContent>
+        <DialogContent
+          showCloseButton={false}
+          className="border-border-default bg-bg-surface gap-0 rounded-[var(--r-xl)] border p-0 shadow-[var(--sh-lg)] ring-0 sm:max-w-lg"
+        >
           {step === "choose" ? (
             <>
-              <DialogHeader>
-                <DialogTitle>Đặt lại đơn {order.orderNumber}</DialogTitle>
-                <DialogDescription>
+              <DialogHeader className="border-border-default border-b px-4.5 py-4">
+                <DialogTitle className="text-ink-primary font-[family-name:var(--font-display)] text-[1.05rem] leading-tight font-semibold">
+                  Đặt lại đơn {order.orderNumber}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3 px-4.5 py-4.5">
+                <DialogDescription className="text-ink-secondary text-sm leading-relaxed">
                   Giỏ hàng của bạn đang có {basketSize} sản phẩm. Bạn muốn thêm {plan.lines.length}{" "}
                   sản phẩm của đơn này vào giỏ hiện có, hay thay thế giỏ hàng? Giá và tồn kho được
                   cập nhật theo bảng giá hiện tại.
                 </DialogDescription>
-              </DialogHeader>
-              <SkippedLines plan={plan} />
-              <DialogFooter className="gap-2 sm:gap-2">
+                <SkippedLines plan={plan} />
+              </div>
+              <DialogFooter className="border-border-default bg-bg-subtle mx-0 mb-0 rounded-b-[var(--r-xl)] border-t px-4.5 py-3.5">
                 <Button
                   type="button"
-                  variant="ghost"
-                  className="min-h-11"
+                  variant="outline"
+                  className="border-border-strong bg-bg-surface text-ink-primary hover:bg-bg-muted min-h-11 rounded-[var(--r-sm)] px-4"
                   onClick={() => setStep("closed")}
                 >
                   Huỷ
@@ -167,42 +174,48 @@ function BasketReorder({ order }: { order: Order }) {
                 <Button
                   type="button"
                   variant="outline"
-                  className="min-h-11"
+                  className="border-border-strong bg-bg-surface text-ink-primary hover:bg-bg-muted min-h-11 rounded-[var(--r-sm)] px-4"
                   onClick={() => apply("replace")}
                 >
                   Thay thế giỏ hàng
                 </Button>
-                <Button type="button" className="min-h-11" onClick={() => apply("merge")}>
+                <Button
+                  type="button"
+                  className="min-h-11 rounded-[var(--r-sm)] px-4"
+                  onClick={() => apply("merge")}
+                >
                   Gộp vào giỏ hiện có
                 </Button>
               </DialogFooter>
             </>
           ) : (
             <>
-              <DialogHeader>
-                <DialogTitle>
+              <DialogHeader className="border-border-default border-b px-4.5 py-4">
+                <DialogTitle className="text-ink-primary font-[family-name:var(--font-display)] text-[1.05rem] leading-tight font-semibold">
                   {added > 0
                     ? `Đã thêm ${added} sản phẩm vào giỏ hàng`
                     : "Không có sản phẩm nào để đặt lại"}
                 </DialogTitle>
-                <DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 px-4.5 py-4.5">
+                <DialogDescription className="text-ink-secondary text-sm leading-relaxed">
                   {added > 0
                     ? "Giá và tồn kho được cập nhật theo bảng giá hiện tại, bạn sẽ thấy ngay trong giỏ hàng."
                     : `Đơn ${order.orderNumber} không có sản phẩm nào đặt lại được trực tiếp.`}
                 </DialogDescription>
-              </DialogHeader>
-              <SkippedLines plan={plan} />
-              <DialogFooter className="gap-2 sm:gap-2">
+                <SkippedLines plan={plan} />
+              </div>
+              <DialogFooter className="border-border-default bg-bg-subtle mx-0 mb-0 rounded-b-[var(--r-xl)] border-t px-4.5 py-3.5">
                 <Button
                   type="button"
-                  variant="ghost"
-                  className="min-h-11"
+                  variant="outline"
+                  className="border-border-strong bg-bg-surface text-ink-primary hover:bg-bg-muted min-h-11 rounded-[var(--r-sm)] px-4"
                   onClick={() => setStep("closed")}
                 >
                   Ở lại đơn hàng
                 </Button>
                 {added > 0 ? (
-                  <Button asChild className="min-h-11">
+                  <Button asChild className="min-h-11 rounded-[var(--r-sm)] px-4">
                     <Link href={STORE_ROUTES.cart}>Đến giỏ hàng</Link>
                   </Button>
                 ) : null}
