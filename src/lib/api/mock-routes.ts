@@ -21,6 +21,7 @@ import {
 import { createMockDesignStudio } from "./mock-fixtures/designs";
 import { createMockOrderBook, seedMockOrders, type MockOrderDeps } from "./mock-fixtures/orders";
 import { registerMyPermissionsMockRoute } from "./mock-my-permissions";
+import { registerNotificationMockRoutes } from "./mock-notifications";
 import { registerOrderMockRoutes } from "./mock-orders";
 
 export function mockPasswordResponse(body: unknown) {
@@ -653,6 +654,7 @@ export function registerAllMockRoutes(): void {
   // Sign-in and /identity/me (BE-shaped, see mock-auth.ts); the legacy staff mock users may sign in
   // too, which the storefront must refuse.
   registerAuthMockRoutes(MOCK_DATA.staffUsers);
+  registerNotificationMockRoutes();
 
   registerMockRoute("POST", "/identity/auth/logout", async () => {
     return { status: 200, data: { message: "Logged out" }, headers: {} };
