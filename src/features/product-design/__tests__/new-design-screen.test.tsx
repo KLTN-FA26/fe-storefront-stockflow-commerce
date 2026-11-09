@@ -10,6 +10,9 @@ import { renderWithProviders, signIn, signOut } from "@/test/render";
 import { NewDesignScreen } from "../components/new-design-screen";
 import { designBackend } from "./design-backend";
 
+// The mock adapter adds latency per request; give multi-request flows headroom under load.
+const WAIT = { timeout: 5000 };
+
 const env = vi.hoisted(() => ({ replace: vi.fn() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: env.replace, push: vi.fn() }),
@@ -35,8 +38,9 @@ describe("NewDesignScreen", () => {
     const { post } = await designBackend();
     renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
 
-    await waitFor(() =>
-      expect(env.replace).toHaveBeenCalledWith(expect.stringMatching(/^\/design\/.+/)),
+    await waitFor(
+      () => expect(env.replace).toHaveBeenCalledWith(expect.stringMatching(/^\/design\/.+/)),
+      WAIT,
     );
     expect(post).toHaveBeenCalledTimes(1);
     expect(post).toHaveBeenCalledWith("/designs", {
@@ -55,7 +59,7 @@ describe("NewDesignScreen", () => {
       </StrictMode>,
     );
 
-    await waitFor(() => expect(env.replace).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(env.replace).toHaveBeenCalledTimes(1), WAIT);
     expect(post).toHaveBeenCalledTimes(1);
   });
 
@@ -64,7 +68,9 @@ describe("NewDesignScreen", () => {
     const { post, get } = await designBackend();
     renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
 
-    expect(await screen.findByText("Đăng nhập để bắt đầu thiết kế")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Đăng nhập để bắt đầu thiết kế", undefined, WAIT),
+    ).toBeInTheDocument();
     const next = encodeURIComponent(`/design/new?product=${CUP}&sku=${CUP_SKU}`);
     expect(screen.getByRole("link", { name: "Đăng nhập" })).toHaveAttribute(
       "href",
@@ -78,7 +84,9 @@ describe("NewDesignScreen", () => {
     const { post } = await designBackend();
     renderWithProviders(<NewDesignScreen product="tui-giay-kraft" sku="BAG-KRAFT-L" />);
 
-    expect(await screen.findByText("Quy cách này chưa nhận thiết kế.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Quy cách này chưa nhận thiết kế.", undefined, WAIT),
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Chat với Sale" })).toHaveAttribute("href", "/chat");
     expect(post).not.toHaveBeenCalled();
   });
@@ -87,7 +95,7 @@ describe("NewDesignScreen", () => {
     const { post } = await designBackend();
     renderWithProviders(<NewDesignScreen product="ly-giay-kraft-16oz" sku={MOCK_BLOCKED_SKU} />);
 
-    expect(await screen.findByText(/không còn nhận thiết kế/)).toBeInTheDocument();
+    expect(await screen.findByText(/không còn nhận thiết kế/, undefined, WAIT)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Chat với Sale" })).toBeInTheDocument();
     expect(post).not.toHaveBeenCalled();
   });
@@ -99,7 +107,7 @@ describe("NewDesignScreen", () => {
     }
     renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
 
-    expect(await screen.findByText("Bạn đã có 50 bản nháp")).toBeInTheDocument();
+    expect(await screen.findByText("Bạn đã có 50 bản nháp", undefined, WAIT)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Thiết kế của tôi" })).toHaveAttribute(
       "href",
       "/design",
@@ -115,7 +123,7 @@ describe("NewDesignScreen", () => {
     }
     renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
 
-    await waitFor(() => expect(env.replace).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(env.replace).toHaveBeenCalledTimes(1), WAIT);
     expect(screen.queryByText("Bạn đã có 50 bản nháp")).not.toBeInTheDocument();
   });
 
@@ -124,8 +132,8 @@ describe("NewDesignScreen", () => {
     post.mockRejectedValueOnce(new ApiError(500, "SERVER_ERROR", "boom"));
     renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
 
-    await userEvent.click(await screen.findByRole("button", { name: /Thử lại/ }));
-    await waitFor(() => expect(env.replace).toHaveBeenCalledTimes(1));
+    await userEvent.click(await screen.findByRole("button", { name: /Thử lại/ }, WAIT));
+    await waitFor(() => expect(env.replace).toHaveBeenCalledTimes(1), WAIT);
     expect(post).toHaveBeenCalledTimes(2);
   });
 });
