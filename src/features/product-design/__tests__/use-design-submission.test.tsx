@@ -258,11 +258,30 @@ describe("useDesignSubmission", () => {
 
     await act(() => view.result.current.run());
     await act(() => view.result.current.retry());
-    await act(() => view.result.current.run());
 
     expect(view.result.current.step).toBe("done");
     expect(view.result.current.error).toBeUndefined();
     expect(autosave.setVersion).toHaveBeenCalledWith(4);
     expect(submitDesign).toHaveBeenCalledTimes(1);
+  });
+
+  it("submits a design that came back as a draft with a new run, and never on retry", async () => {
+    const { view } = await setup();
+    submitDesign.mockResolvedValueOnce(pending);
+    await act(() => view.result.current.run());
+    expect(view.result.current.step).toBe("done");
+
+    // The reviewer returned it: a draft again, one version on (the document record follows).
+    const record = await getDesignDocument(draft.id);
+    getDesignDocument.mockResolvedValue({ ...record, version: 5 });
+    submitDesign.mockResolvedValueOnce(designOf({ status: "PENDING_REVIEW", version: 6 }));
+    await act(() => view.result.current.run());
+
+    expect(view.result.current.step).toBe("done");
+    expect(submitDesign).toHaveBeenCalledTimes(2);
+    expect(submitDesign.mock.calls[1]![1].version).toBe(5);
+
+    await act(() => view.result.current.retry());
+    expect(submitDesign).toHaveBeenCalledTimes(2);
   });
 });

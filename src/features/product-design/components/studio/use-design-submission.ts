@@ -50,7 +50,7 @@ export function useDesignSubmission(design: Design) {
   const client = useQueryClient();
   const work = useRef<Work | null>(null);
   const busy = useRef(false);
-  /** The design was submitted: a second run would only meet INVALID_STATE. */
+  /** The attempt succeeded: `retry()` resumes a failed attempt only, so it must not submit again. */
   const isDone = useRef(false);
   const [state, setState] = useState<State>(IDLE);
 
@@ -148,7 +148,11 @@ export function useDesignSubmission(design: Design) {
   return {
     ...state,
     run: () => {
+      // A new attempt (also of a design that came back as a draft): forget the last one.
+      if (busy.current) return Promise.resolve();
       work.current = null;
+      isDone.current = false;
+      setState(IDLE);
       return execute();
     },
     retry: execute,
