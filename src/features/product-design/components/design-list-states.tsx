@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { MessageCircle, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
 import { Alert, EmptyState, Skeleton } from "@/components/shared";
@@ -62,27 +62,6 @@ export function DesignLoadError({
         {describeDesignError(error)}
       </Alert>
       <RetryButton onRetry={onRetry} retrying={retrying} />
-    </div>
-  );
-}
-
-/** Used by the launcher states (Task 8 retires them). */
-export const SALES_DESIGNS_FOR_YOU =
-  "Sales của StockFlow lên thiết kế theo yêu cầu của bạn. Nhắn Sales sản phẩm và logo bạn muốn in; bản thiết kế sẽ hiện trong “Thiết kế của tôi” để bạn xem và xác nhận.";
-
-/** "Nhắn Sales" and a way back; kept for the launcher states until Task 8 reworks them. */
-export function AskSalesActions({ back }: { back: { href: string; label: string } }) {
-  return (
-    <div className="flex flex-wrap justify-center gap-3">
-      <Button asChild className="min-h-11 rounded-[var(--r-md)] px-5">
-        <Link href={STORE_ROUTES.chat.list}>
-          <MessageCircle aria-hidden className="size-4" />
-          Nhắn Sales
-        </Link>
-      </Button>
-      <Button asChild variant="outline" className="min-h-11 rounded-[var(--r-md)] px-5">
-        <Link href={back.href}>{back.label}</Link>
-      </Button>
     </div>
   );
 }

@@ -20,6 +20,7 @@ export default async function NewDesignPage({
 }) {
   const params = await searchParams;
   const product = firstParam(params.product);
-  if (!product) return <LauncherMissingProduct />;
-  return <NewDesignScreen product={product} sku={firstParam(params.sku)} />;
+  const sku = firstParam(params.sku);
+  if (!product || !sku) return <LauncherMissingProduct />;
+  return <NewDesignScreen product={product} sku={sku} />;
 }

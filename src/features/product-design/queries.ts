@@ -51,10 +51,11 @@ export function useDesignList(params: DesignListParams) {
 }
 
 /** "x/50 bản nháp" (docs 12 §4.1, B37). */
-export function useDraftCount() {
+export function useDraftCount(enabled = true) {
   return useQuery({
     queryKey: designKeys.draftCount(),
     queryFn: ({ signal }) => getDraftCount(signal),
+    enabled,
     retry: retryTransient,
     ...QUERY_TIMES.list,
   });

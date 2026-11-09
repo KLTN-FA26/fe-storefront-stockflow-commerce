@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { MessageCircle, ShoppingCart } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { Alert } from "@/components/shared";
 import { Button } from "@/components/ui/button";
@@ -27,8 +28,8 @@ interface ProductPurchasePanelProps {
   quantity: number;
   onQuantityChange: (quantity: number) => void;
   onAdd: () => void;
-  /** The design launcher for the chosen SKU; null for a product that cannot be customized. */
-  designHref: string | null;
+  /** The design entry for the chosen SKU (composed by the page); absent for a product that cannot be customized. */
+  designEntry?: ReactNode;
   /**
    * Where a customer asks Sales for a quote; set for a product printed to a design, which is quoted
    * and never added to the cart (owner decision DESIGN-QUOTE, 28/10). null for stock goods.
@@ -46,7 +47,7 @@ export function ProductPurchasePanel({
   quantity,
   onQuantityChange,
   onAdd,
-  designHref,
+  designEntry,
   quoteHref,
 }: ProductPurchasePanelProps) {
   const availability = availabilityOf(sku);
@@ -113,12 +114,12 @@ export function ProductPurchasePanel({
       </div>
 
       <div className="space-y-3">
-        <div className={designHref ? "grid gap-3 sm:grid-cols-2" : "grid gap-3"}>
+        <div className={designEntry ? "grid gap-3 sm:grid-cols-2" : "grid gap-3"}>
           {quoteHref ? (
             <Button asChild className="min-h-11 rounded-[var(--r-md)]">
               <Link href={quoteHref}>
                 <MessageCircle className="size-4" aria-hidden="true" />
-                Liên hệ Sale báo giá
+                Chat với Sale
               </Link>
             </Button>
           ) : (
@@ -132,11 +133,7 @@ export function ProductPurchasePanel({
               Thêm vào giỏ
             </Button>
           )}
-          {designHref ? (
-            <Button asChild variant="secondary" className="min-h-11 rounded-[var(--r-md)]">
-              <Link href={designHref}>Bắt đầu thiết kế</Link>
-            </Button>
-          ) : null}
+          {designEntry ?? null}
         </div>
         {quoteHref ? (
           <p className="bg-bg-subtle text-ink-secondary rounded-[var(--r-md)] p-3 text-sm">

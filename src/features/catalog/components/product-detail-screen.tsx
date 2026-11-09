@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import { APP_ROUTES, STORE_ROUTES } from "@/constants";
 import { EmptyState, Skeleton, toast } from "@/components/shared";
@@ -39,7 +39,14 @@ const crumbs = (title?: string) => [
   ...(title ? [{ label: title }] : []),
 ];
 
-export function ProductDetailScreen({ slug }: { slug: string }) {
+export function ProductDetailScreen({
+  slug,
+  renderDesignEntry,
+}: {
+  slug: string;
+  /** The design feature's entry for a SKU, composed by the page: catalog never imports design. */
+  renderDesignEntry?: (sku: string) => ReactNode;
+}) {
   const signedIn = useSignedIn();
   const enabled = signedIn === true;
   const product = useCatalogProduct(slug, enabled);
@@ -172,9 +179,7 @@ export function ProductDetailScreen({ slug }: { slug: string }) {
               pricesState={pricesState}
               quantity={quantity}
               onQuantityChange={setTypedQuantity}
-              designHref={
-                data.kind === "CUSTOMIZABLE" ? STORE_ROUTES.design.newFor(data.slug, sku) : null
-              }
+              designEntry={data.kind === "CUSTOMIZABLE" ? renderDesignEntry?.(sku) : undefined}
               // A product printed to a design is quoted by Sales, never added to the cart.
               quoteHref={data.kind === "CUSTOMIZABLE" ? STORE_ROUTES.chat.list : null}
               onAdd={() => {

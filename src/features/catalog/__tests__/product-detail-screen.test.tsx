@@ -206,29 +206,30 @@ describe("ProductDetailScreen", () => {
   });
 });
 
+/** The product page composes the design feature's entry through this prop (catalog never imports design). */
+const renderEntry = (sku: string) => <p>{`design entry for ${sku}`}</p>;
+
 describe("ProductDetailScreen design entry", () => {
-  it("offers 'Bắt đầu thiết kế' for a customizable product, for the chosen SKU", async () => {
-    renderWithProviders(<ProductDetailScreen slug="ly-giay-2-lop-8oz" />);
-    await screen.findByRole("table", { name: "Giá theo số lượng" });
-    expect(screen.getByRole("link", { name: "Bắt đầu thiết kế" })).toHaveAttribute(
-      "href",
-      "/design/new?product=ly-giay-2-lop-8oz&sku=CUP-PAPER-8OZ-WHT",
+  it("renders the design entry of a customizable product for the chosen SKU", async () => {
+    renderWithProviders(
+      <ProductDetailScreen slug="ly-giay-2-lop-8oz" renderDesignEntry={renderEntry} />,
     );
+    await screen.findByRole("table", { name: "Giá theo số lượng" });
+    expect(screen.getByText("design entry for CUP-PAPER-8OZ-WHT")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "CUP-PAPER-8OZ-KRAFT" }));
-    expect(screen.getByRole("link", { name: "Bắt đầu thiết kế" })).toHaveAttribute(
-      "href",
-      "/design/new?product=ly-giay-2-lop-8oz&sku=CUP-PAPER-8OZ-KRAFT",
+    expect(screen.getByText("design entry for CUP-PAPER-8OZ-KRAFT")).toBeInTheDocument();
+  });
+
+  it("renders no design entry for a standard product", async () => {
+    renderWithProviders(
+      <ProductDetailScreen slug="hop-giay-mang-di-m" renderDesignEntry={renderEntry} />,
     );
-  });
-
-  it("offers no design entry for a standard product", async () => {
-    renderWithProviders(<ProductDetailScreen slug="hop-giay-mang-di-m" />);
     await addButton();
-    expect(screen.queryByRole("link", { name: "Bắt đầu thiết kế" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/design entry for/)).not.toBeInTheDocument();
   });
 
-  it("offers no design entry while the BE does not say the product is customizable", async () => {
+  it("renders no design entry while the BE does not say the product is customizable", async () => {
     const real = vi.mocked(api.get).getMockImplementation()!;
     vi.mocked(api.get).mockImplementation(async (url, config) => {
       const result = (await real(url, config)) as { data: { kind?: string } };
@@ -236,25 +237,24 @@ describe("ProductDetailScreen design entry", () => {
       const { kind: _kind, ...withoutKind } = result.data;
       return { data: withoutKind };
     });
-    renderWithProviders(<ProductDetailScreen slug="ly-giay-2-lop-8oz" />);
+    renderWithProviders(
+      <ProductDetailScreen slug="ly-giay-2-lop-8oz" renderDesignEntry={renderEntry} />,
+    );
     await addButton();
-    expect(screen.queryByRole("link", { name: "Bắt đầu thiết kế" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/design entry for/)).not.toBeInTheDocument();
   });
 });
 
 describe("ProductDetailScreen: a product printed to a design is quoted, not added (DESIGN-QUOTE)", () => {
-  it("hides 'Thêm vào giỏ' and offers 'Liên hệ Sale báo giá' to the chat", async () => {
+  it("hides 'Thêm vào giỏ' and offers 'Chat với Sale' to the chat", async () => {
     renderWithProviders(<ProductDetailScreen slug="ly-giay-2-lop-8oz" />);
     await screen.findByRole("table", { name: "Giá theo số lượng" });
 
     expect(screen.queryByRole("button", { name: "Thêm vào giỏ" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Liên hệ Sale báo giá" })).toHaveAttribute(
-      "href",
-      "/chat",
-    );
+    expect(screen.getByRole("link", { name: "Chat với Sale" })).toHaveAttribute("href", "/chat");
     expect(screen.getByText(/được báo giá riêng, nên không thêm vào giỏ hàng/)).toBeInTheDocument();
-    // The design launcher is still there; the cart stays empty.
-    expect(screen.getByRole("link", { name: "Bắt đầu thiết kế" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Liên hệ Sale báo giá" })).not.toBeInTheDocument();
+    // The cart stays empty.
     expect(useCartStore.getState().lines).toEqual([]);
   });
 
@@ -263,7 +263,7 @@ describe("ProductDetailScreen: a product printed to a design is quoted, not adde
     await screen.findByRole("table", { name: "Giá theo số lượng" });
     await userEvent.click(screen.getByRole("button", { name: "CUP-PAPER-8OZ-KRAFT" }));
     expect(screen.queryByRole("button", { name: "Thêm vào giỏ" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Liên hệ Sale báo giá" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Chat với Sale" })).toBeInTheDocument();
 
     renderWithProviders(<ProductDetailScreen slug="ly-nhua-pet-500ml" />);
     await screen.findByRole("heading", { name: "Ly nhựa PET 500ml" });
@@ -273,7 +273,7 @@ describe("ProductDetailScreen: a product printed to a design is quoted, not adde
   it("keeps 'Thêm vào giỏ' for a stock product and offers no quote button", async () => {
     renderWithProviders(<ProductDetailScreen slug="hop-giay-mang-di-m" />);
     expect(await addButton()).toBeEnabled();
-    expect(screen.queryByRole("link", { name: "Liên hệ Sale báo giá" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Chat với Sale" })).not.toBeInTheDocument();
     expect(screen.queryByText(/được báo giá riêng/)).not.toBeInTheDocument();
   });
 
@@ -281,6 +281,6 @@ describe("ProductDetailScreen: a product printed to a design is quoted, not adde
     readProductsAsStockGoods();
     renderWithProviders(<ProductDetailScreen slug="ly-giay-2-lop-8oz" />);
     expect(await addButton()).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Liên hệ Sale báo giá" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Chat với Sale" })).not.toBeInTheDocument();
   });
 });
