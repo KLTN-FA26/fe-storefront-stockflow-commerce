@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { MockReviewPanel } from "@/features/product-design/components/mock-review-panel";
 import { DesktopOnlyGate } from "@/features/product-design/components/desktop-only-gate";
 
 /**
@@ -11,6 +12,7 @@ export default function StudioLayout({ children }: { children: ReactNode }) {
   return (
     <div className="bg-bg-subtle text-ink-primary flex min-h-dvh flex-col">
       <DesktopOnlyGate>{children}</DesktopOnlyGate>
+      <MockReviewPanel />
     </div>
   );
 }

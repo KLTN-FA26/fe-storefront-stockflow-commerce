@@ -12,6 +12,7 @@ import {
   BUNDLE_ROLES,
   fail,
   fileRejected,
+  ok,
   type BundleRole,
   type MockResult,
 } from "./mock-fixtures/design-rows";
@@ -160,6 +161,8 @@ export function registerDesignMockRoutes(store: DesignMockStore | Promise<Design
     s.simulateReturn(id(config), bodyOf(config)),
   );
   route("POST", "/__mock/reset", (s) => s.reset());
+  // Whether the mock data survives a reload: the panel says so when it does not.
+  route("GET", "/__mock/storage", async (s) => ok({ persistent: s.persistent }));
 }
 
 /**

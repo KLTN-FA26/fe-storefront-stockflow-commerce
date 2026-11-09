@@ -77,4 +77,10 @@ describe("the app's design mock, read through the feature's API layer", () => {
     );
     expect(configs.map((c) => c.sku)).toEqual(Object.keys(MOCK_PRINT_CONFIGS));
   });
+
+  it("says through GET /__mock/storage whether the mock's data survives a reload", async () => {
+    // Memory storage in jsdom (no IndexedDB): the simulation panel warns the data is lost on reload.
+    const { data } = await api.get<unknown>("/__mock/storage");
+    expect(data).toEqual({ persistent: false });
+  });
 });
