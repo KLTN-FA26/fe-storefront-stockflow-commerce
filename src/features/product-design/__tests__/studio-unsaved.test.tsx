@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { STORE_ROUTES } from "@/constants";
+import { api } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/error";
 import type { DesignMockStore } from "@/lib/api/mock-fixtures/design-store";
 import { settle } from "@/test/fake-backend";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
@@ -11,7 +13,9 @@ import { renderWithProviders, signIn, signOut } from "@/test/render";
 import { DesignStudio } from "../components/studio/design-studio";
 import type { StudioServices } from "../components/studio/studio-context";
 import { unsavedDraftKey } from "../components/studio/unsaved-draft";
-import { setBackground } from "../engine";
+import { emptyDocument, setBackground } from "../engine";
+import { cup12oz } from "../engine/__tests__/fixtures";
+import { designKeys } from "../queries";
 import { designBackend, draftIn, STUDIO_PRODUCTS } from "./design-backend";
 import { TEST_FONTS } from "./fixtures";
 
@@ -193,4 +197,93 @@ describe("edits that are not stored yet", () => {
     expect(leave.defaultPrevented).toBe(true);
     expect(leave.returnValue).toBeTruthy();
   });
+});
+
+describe("autosave and the other writers of a design (R69)", () => {
+  /** What another tab or device saves: a green body. */
+  const elsewhere = () => {
+    const document = emptyDocument(cup12oz);
+    document.surfaces.BODY = { background: { kind: "color", color: "#00FF00" }, elements: [] };
+    return document;
+  };
+  const CONFLICT = { name: "Thiết kế đã thay đổi ở nơi khác" } as const;
+  const pastAutosave = () => act(() => new Promise((resolve) => setTimeout(resolve, 2000)));
+
+  it("opens the conflict dialog when the design is read again after another tab saved, and saves nothing over it", async () => {
+    const { store: studio, put } = await designBackend();
+    const id = await draftCup(studio);
+    const { seen, client } = await openStudio(id);
+    settle(await studio.putDocument(id, { version: 0, document: elsewhere() }));
+
+    // The window regains focus: the design is read again, at the other tab's version.
+    await act(() => client.invalidateQueries({ queryKey: designKeys.detail(id), exact: true }));
+    expect(await screen.findByRole("dialog", CONFLICT, { timeout: 4000 })).toBeInTheDocument();
+
+    paintBody(seen.current!, "#FF0000");
+    await pastAutosave();
+    expect(put).not.toHaveBeenCalled();
+    expect(settle(await studio.getDocument(id)).data).toMatchObject({ document: elsewhere() });
+  });
+
+  it("saves an edit over another tab's rename (a write that leaves the document as it was), without a dialog", async () => {
+    const { store: studio, put } = await designBackend();
+    const id = await draftCup(studio);
+    const { seen } = await openStudio(id);
+    // Renamed in another tab before this one read the design again: the version moved on to 1.
+    settle(await studio.rename(id, { name: "Ly đổi tên", version: 0 }));
+
+    paintBody(seen.current!, "#FF0000");
+
+    expect(await screen.findByText(SAVED, undefined, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    // Refused at 0 (stale), the stored document is still this tab's: sent again at 1.
+    expect(put.mock.calls.map(([, body]) => (body as { version: number }).version)).toEqual([0, 1]);
+    expect(settle(await studio.getDocument(id)).data).toMatchObject({ document: red });
+  });
+
+  it("does not save over another device's document when the design was read after it", async () => {
+    const realGet = api.get.bind(api);
+    const { store: studio, get, put } = await designBackend();
+    const id = await draftCup(studio);
+    // The document is read before another device saves; the design after it (a newer version).
+    const before = settle(await studio.getDocument(id));
+    settle(await studio.putDocument(id, { version: 0, document: elsewhere() }));
+    let stale = true;
+    get.mockImplementation(async (url, config) => {
+      if (stale && url === `/designs/${id}/document`) {
+        stale = false;
+        return before;
+      }
+      return realGet(url, config);
+    });
+    const { seen } = await openStudio(id);
+
+    expect(await screen.findByRole("dialog", CONFLICT, { timeout: 4000 })).toBeInTheDocument();
+    paintBody(seen.current!, "#FF0000");
+    await pastAutosave();
+    expect(put).not.toHaveBeenCalled();
+    expect(settle(await studio.getDocument(id)).data).toMatchObject({ document: elsewhere() });
+  });
+
+  it("asks for the stored document again after a failed read, and still finds the other save", async () => {
+    const realGet = api.get.bind(api);
+    const { store: studio, get } = await designBackend();
+    const id = await draftCup(studio);
+    const { client } = await openStudio(id);
+    settle(await studio.putDocument(id, { version: 0, document: elsewhere() }));
+    // The read fails past the query's own two retries.
+    let failures = 0;
+    get.mockImplementation(async (url, config) => {
+      if (failures < 3 && url === `/designs/${id}/document`) {
+        failures += 1;
+        throw new ApiError(503, "SERVICE_UNAVAILABLE", "Document service down");
+      }
+      return realGet(url, config);
+    });
+
+    await act(() => client.invalidateQueries({ queryKey: designKeys.detail(id), exact: true }));
+
+    expect(await screen.findByRole("dialog", CONFLICT, { timeout: 12_000 })).toBeInTheDocument();
+    expect(failures).toBe(3);
+  }, 25_000);
 });

@@ -261,6 +261,47 @@ describe("SubmitDialog on a preflight Pass", () => {
     expect(await designIn(store, id)).toMatchObject({ status: "PENDING_REVIEW" });
   });
 
+  it("gives way to the conflict dialog when the stored document changed elsewhere, sending nothing; reloaded, it is sent anew", async () => {
+    const user = userEvent.setup();
+    const renderer = fakeRenderer();
+    const { store, post } = await designBackend();
+    const id = await draftWith(store, [textAt("text", 170)]);
+    const seen = await openStudio(id, renderer);
+    // Another tab saves the document (it passes the preflight too) after this one opened it.
+    const elsewhere: DesignDocument = emptyDocument(cup12oz);
+    elsewhere.surfaces.BODY = {
+      background: { kind: "color", color: "#00FF00" },
+      elements: [textAt("text", 170, "Trà")],
+    };
+    settle(await store.putDocument(id, { version: 1, document: elsewhere }));
+
+    const dialog = await openSubmit(user);
+    await user.click(await within(dialog).findByRole("button", { name: "Gửi duyệt" }));
+
+    const conflict = await screen.findByRole(
+      "dialog",
+      { name: "Thiết kế đã thay đổi ở nơi khác" },
+      SUBMISSION,
+    );
+    expect(screen.queryByRole("dialog", { name: "Gửi duyệt" })).not.toBeInTheDocument();
+    expect(urlsOf(post)).toEqual([]);
+    expect(renderer.printSurface).not.toHaveBeenCalled();
+
+    await user.click(within(conflict).getByRole("button", { name: "Tải lại" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), SUBMISSION);
+    expect(seen.current!.editor.store.getState().document.surfaces.BODY).toEqual(
+      elsewhere.surfaces.BODY,
+    );
+
+    // Sent again, the reloaded document is drawn anew and submitted.
+    const again = await openSubmit(user);
+    await user.click(await within(again).findByRole("button", { name: "Gửi duyệt" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), SUBMISSION);
+    expect(urlsOf(post)).toEqual([`/designs/${id}/submissions`]);
+    expect(renderer.printSurface).toHaveBeenCalledTimes(1);
+    expect(await designIn(store, id)).toMatchObject({ status: "PENDING_REVIEW" });
+  });
+
   it("can be cancelled before anything is sent", async () => {
     const user = userEvent.setup();
     const { store, post } = await designBackend();
