@@ -14,8 +14,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import type { PreflightIssue } from "../../engine";
 import { describeDesignError } from "../../errors";
+import type { ReportedPreflightIssue } from "../../types";
 import { ExportError } from "./export-renderer";
 import { FailedIssues, useLocateIssue } from "./preflight-panel";
 import { STUDIO_ANNOUNCEMENTS } from "./studio-announcer";
@@ -32,8 +32,8 @@ function FailBody({
   issues,
   onLocate,
 }: {
-  issues: readonly PreflightIssue[];
-  onLocate: (issue: PreflightIssue) => void;
+  issues: readonly ReportedPreflightIssue[];
+  onLocate: (issue: ReportedPreflightIssue) => void;
 }) {
   return (
     <div className="flex flex-col gap-3">

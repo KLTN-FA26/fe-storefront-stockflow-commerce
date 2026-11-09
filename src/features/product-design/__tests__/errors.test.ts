@@ -91,13 +91,25 @@ describe("preflightIssuesOf", () => {
     expect(preflightIssuesOf(null)).toBeNull();
   });
 
+  it("reads a rule the engine does not know, so its message still shows", () => {
+    const added = { ruleId: "BLEED_MISSING", level: "fail", message: "Thiếu phần tràn lề." };
+
+    expect(
+      preflightIssuesOf(apiError(422, "PREFLIGHT_FAILED", { issues: [added, ...issues] })),
+    ).toEqual([added, ...issues]);
+  });
+
   it("is null for a PREFLIGHT_FAILED whose body it cannot read", () => {
     expect(preflightIssuesOf(apiError(422, "PREFLIGHT_FAILED"))).toBeNull();
     expect(preflightIssuesOf(apiError(422, "PREFLIGHT_FAILED", { issues: "x" }))).toBeNull();
-    expect(
-      preflightIssuesOf(
-        apiError(422, "PREFLIGHT_FAILED", { issues: [{ ruleId: "NOPE", level: "fail" }] }),
-      ),
-    ).toBeNull();
+    for (const unreadable of [
+      { ruleId: "NOPE", level: "fail" }, // no message
+      { ruleId: "", level: "fail", message: "x" }, // no rule
+      { ruleId: "NOPE", level: "warning", message: "x" }, // no such level (docs B18)
+    ]) {
+      expect(
+        preflightIssuesOf(apiError(422, "PREFLIGHT_FAILED", { issues: [unreadable] })),
+      ).toBeNull();
+    }
   });
 });

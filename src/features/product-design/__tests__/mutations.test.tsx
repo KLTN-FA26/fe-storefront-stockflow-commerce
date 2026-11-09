@@ -130,6 +130,17 @@ describe("useRenameDesign (spec §4.4: detail, lists)", () => {
       { queryKey: designKeys.lists() },
     ]);
   });
+
+  it("re-reads the design on a stale version (409 VERSION_CONFLICT), so a retry sends the current one", async () => {
+    vi.spyOn(api, "patch").mockRejectedValueOnce(new ApiError(409, "VERSION_CONFLICT", "x"));
+    const { invalidate, wrapper } = setup();
+    const { result } = renderHook(() => useRenameDesign(id), { wrapper });
+
+    result.current.mutate({ name: "Mới", version: 3 });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(invalidated(invalidate)).toEqual([{ queryKey: designKeys.detail(id), exact: true }]);
+  });
 });
 
 describe("useSaveDesignDocument (spec §4.4: detail version, lists updatedAt)", () => {

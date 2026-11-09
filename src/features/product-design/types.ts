@@ -17,6 +17,7 @@ import type {
   draftCountDtoSchema,
   printConfigDtoSchema,
   renameDesignInputSchema,
+  reportedPreflightIssueSchema,
   returnReasonInputSchema,
 } from "./schemas";
 
@@ -33,6 +34,8 @@ export type DownloadLink = z.infer<typeof downloadLinkDtoSchema>;
 export type DesignFileRole = z.infer<typeof designFileRoleSchema>;
 export type DesignFile = z.infer<typeof designFileDtoSchema>;
 export type PrintConfig = z.infer<typeof printConfigDtoSchema>;
+/** A failing check as the server reports it; the engine's `PreflightIssue` is one. */
+export type ReportedPreflightIssue = z.infer<typeof reportedPreflightIssueSchema>;
 
 export type CreateDesignInput = z.infer<typeof createDesignInputSchema>;
 export type ReturnReasonInput = z.infer<typeof returnReasonInputSchema>;

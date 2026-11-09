@@ -4,17 +4,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
 import { recordPreflightFailure, submitDesign } from "../../api";
-import { documentChecksum, runPreflight, type PreflightIssue } from "../../engine";
+import { documentChecksum, runPreflight } from "../../engine";
 import type { DesignDocument, PreflightReport } from "../../engine";
 import {
   isDesignConflict,
   isDesignGone,
   isDesignStateChanged,
+  isPreflightRefusal,
   preflightIssuesOf,
 } from "../../errors";
 import { invalidateDesign } from "../../mutations";
 import { designDocumentQuery, designKeys } from "../../queries";
-import type { Design } from "../../types";
+import type { Design, ReportedPreflightIssue } from "../../types";
 import { ExportError } from "./export-renderer";
 import { buildSubmissionBundle, type BundleStep, type SubmissionBundle } from "./submission-bundle";
 import { useStudio } from "./studio-context";
@@ -41,7 +42,8 @@ type State = {
   step: SubmitStep;
   fraction: number;
   error?: unknown;
-  issues: PreflightIssue[] | null;
+  /** The failing checks: the browser's preflight, or the server's (`422 PREFLIGHT_FAILED`). */
+  issues: ReportedPreflightIssue[] | null;
 };
 const IDLE: State = { step: "idle", fraction: 0, issues: null };
 
@@ -101,6 +103,8 @@ export function useDesignSubmission(design: Design) {
       try {
         const { version } = await readStored();
         await recordPreflightFailure(design.id, { version, issues: report.issues });
+        // "Lịch sử" lists the attempt it just recorded.
+        void client.invalidateQueries({ queryKey: designKeys.history(design.id) });
       } catch (error) {
         if (isDesignStateChanged(error) || isDesignGone(error)) {
           void invalidateDesign(client, design.id);
@@ -169,12 +173,13 @@ export function useDesignSubmission(design: Design) {
       work.current = null;
       autosave.conflict();
     } else if (
-      issues ||
+      isPreflightRefusal(error) ||
       isDesignConflict(error) ||
       isDesignStateChanged(error) ||
       isDesignGone(error)
     ) {
-      // The server judged otherwise (or the design moved on, or is gone): what was drawn is stale.
+      // The server judged otherwise — even with issues it could not list, sending the same bundle
+      // again meets the same 422 — or the design moved on, or is gone: what was drawn is stale.
       work.current = null;
       void invalidateDesign(client, design.id);
     }

@@ -143,13 +143,25 @@ const PREFLIGHT_RULE_IDS = {
   NO_CARTON_SPEC: "NO_CARTON_SPEC",
 } as const satisfies { [K in PreflightRuleId]: K };
 
-/** The engine's `PreflightIssue`, as `422 PREFLIGHT_FAILED` carries it in `details.issues`. */
+/** The engine's `PreflightIssue`: a rule the engine knows, its level and message, where it is. */
 export const preflightIssueSchema = z.object({
   ruleId: z.enum(PREFLIGHT_RULE_IDS),
   level: z.enum(["fail", "note"]),
   message: z.string(),
   surfaceCode: printAreaCodeSchema.exactOptional(),
   elementId: z.string().exactOptional(),
+});
+
+/** A rule id of the engine, or one the server checks that this engine does not know (yet). */
+export type ReportedRuleId = PreflightRuleId | (string & {});
+const reportedRuleId: z.ZodType<ReportedRuleId> = z.string().min(1);
+
+/**
+ * An issue of `422 PREFLIGHT_FAILED`, in `details.issues`: the engine's shape, but any non-empty
+ * `ruleId` is read, so a rule the server added still shows its message instead of losing them all.
+ */
+export const reportedPreflightIssueSchema = preflightIssueSchema.extend({
+  ruleId: reportedRuleId,
 });
 
 // ── Inputs: what the server refuses is refused before it is sent ──

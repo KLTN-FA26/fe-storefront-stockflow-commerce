@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 
-import type { PreflightIssue, PreflightLevel, PreflightReport, PrintAreaCode } from "../../engine";
+import type { PreflightLevel, PreflightReport, PrintAreaCode } from "../../engine";
+import type { ReportedPreflightIssue } from "../../types";
 import { usePreflightReport } from "./preflight-context";
 import { useStudio } from "./studio-context";
 
@@ -41,7 +42,10 @@ function SummaryChip({ report }: { report: PreflightReport }) {
  */
 export function useLocateIssue() {
   const { editor, viewerRef } = useStudio();
-  return ({ surfaceCode, elementId }: PreflightIssue) => {
+  return ({
+    surfaceCode,
+    elementId,
+  }: Pick<ReportedPreflightIssue, "surfaceCode" | "elementId">) => {
     if (!surfaceCode) return;
     editor.setActiveSurface(surfaceCode);
     editor.select(elementId ?? null);
@@ -50,7 +54,7 @@ export function useLocateIssue() {
 }
 
 /** One finding; with `onLocate` it is a button that shows where it is. */
-function IssueRow({ issue, onLocate }: { issue: PreflightIssue; onLocate?: () => void }) {
+function IssueRow({ issue, onLocate }: { issue: ReportedPreflightIssue; onLocate?: () => void }) {
   const { label, icon: Icon, tone } = LEVELS[issue.level];
   const body = (
     <>
@@ -89,8 +93,8 @@ function IssueGroup({
   onLocate,
 }: {
   title: string;
-  issues: PreflightIssue[];
-  onLocate?: (issue: PreflightIssue) => void;
+  issues: ReportedPreflightIssue[];
+  onLocate?: (issue: ReportedPreflightIssue) => void;
 }) {
   return (
     <div className="flex flex-col gap-1">
@@ -109,15 +113,15 @@ function IssueGroup({
 }
 
 /**
- * The failures of a preflight: those of the whole design first, then each print area's under its
- * name; clicking one on a surface calls `onLocate` with it.
+ * The failures of a preflight (the browser's, or the server's with any rule id): those of the whole
+ * design first, then each print area's under its name; clicking one on a surface calls `onLocate`.
  */
 export function FailedIssues({
   issues,
   onLocate,
 }: {
-  issues: readonly PreflightIssue[];
-  onLocate: (issue: PreflightIssue) => void;
+  issues: readonly ReportedPreflightIssue[];
+  onLocate: (issue: ReportedPreflightIssue) => void;
 }) {
   const { surfaces, template } = useStudio();
   const nameOf = (code: PrintAreaCode) =>

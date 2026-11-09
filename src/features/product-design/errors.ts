@@ -3,8 +3,8 @@ import { z } from "zod";
 import { describeApiError, hasErrorCode } from "@/lib/api/describe-error";
 import { ApiError } from "@/lib/api/error";
 
-import type { PreflightIssue } from "./engine/preflight/types";
-import { preflightIssueSchema } from "./schemas";
+import { reportedPreflightIssueSchema } from "./schemas";
+import type { ReportedPreflightIssue } from "./types";
 
 /** The error codes of the design API (spec 2026-11-09 §4.2, §9), as the customer reads them. */
 const MESSAGE_BY_CODE: Record<string, string> = {
@@ -33,13 +33,16 @@ export const isDesignStateChanged = (error: unknown) => hasErrorCode(error, "INV
 /** The design is not there any more (404 to a write): deleted in another tab. Re-read it. */
 export const isDesignGone = (error: unknown) => error instanceof ApiError && error.status === 404;
 
-const issuesSchema = z.object({ issues: z.array(preflightIssueSchema) });
+/** The server judged the design's preflight Fail (`422 PREFLIGHT_FAILED`), whatever it lists. */
+export const isPreflightRefusal = (error: unknown) => hasErrorCode(error, "PREFLIGHT_FAILED");
+
+const issuesSchema = z.object({ issues: z.array(reportedPreflightIssueSchema) });
 
 /**
- * The failing checks of a `422 PREFLIGHT_FAILED` (they ride in `details.issues`); null for any
- * other error, or for one whose issues cannot be read.
+ * The failing checks of a `422 PREFLIGHT_FAILED` (they ride in `details.issues`, any non-empty
+ * `ruleId`); null for any other error, or for one whose issues cannot be read.
  */
-export function preflightIssuesOf(error: unknown): PreflightIssue[] | null {
+export function preflightIssuesOf(error: unknown): ReportedPreflightIssue[] | null {
   if (!hasErrorCode(error, "PREFLIGHT_FAILED")) return null;
   const parsed = issuesSchema.safeParse(error.details);
   return parsed.success ? parsed.data.issues : null;

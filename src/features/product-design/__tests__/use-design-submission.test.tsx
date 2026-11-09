@@ -126,6 +126,19 @@ describe("useDesignSubmission", () => {
     expect(renderer.preview).not.toHaveBeenCalled();
   });
 
+  it("re-reads the history once the failure is recorded, so Lịch sử lists it", async () => {
+    const { view, client } = await setup({ filled: false });
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    recordPreflightFailure.mockResolvedValue(
+      {} as Awaited<ReturnType<typeof recordPreflightFailure>>,
+    );
+
+    await act(() => view.result.current.run());
+
+    expect(recordPreflightFailure).toHaveBeenCalledTimes(1);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: designKeys.history(draft.id) });
+  });
+
   it("check() saves and runs the preflight only: a Pass answers true and draws nothing", async () => {
     const { view, renderer, autosave } = await setup();
 
@@ -247,6 +260,37 @@ describe("useDesignSubmission", () => {
 
     expect(view.result.current.step).toBe("error");
     expect(view.result.current.issues).toEqual([issue]);
+  });
+
+  it("shows a server issue of a rule the engine does not know", async () => {
+    const { view } = await setup();
+    const added = { ruleId: "BLEED_MISSING", level: "fail", message: "Thiếu phần tràn lề." };
+    submitDesign.mockRejectedValue(
+      new ApiError(422, "PREFLIGHT_FAILED", "failed", undefined, undefined, { issues: [added] }),
+    );
+
+    await act(() => view.result.current.run());
+
+    expect(view.result.current.issues).toEqual([added]);
+  });
+
+  it("draws anew on Thử lại after any 422 PREFLIGHT_FAILED, even one whose issues it cannot read", async () => {
+    const { view, renderer } = await setup();
+    submitDesign.mockRejectedValueOnce(
+      new ApiError(422, "PREFLIGHT_FAILED", "failed", undefined, undefined, { issues: "x" }),
+    );
+    submitDesign.mockResolvedValueOnce(pending);
+
+    await act(() => view.result.current.run());
+    expect(view.result.current.step).toBe("error");
+    expect(view.result.current.issues).toBeNull();
+
+    await act(() => view.result.current.retry());
+
+    await waitFor(() => expect(view.result.current.step).toBe("done"));
+    // The same bundle would meet the same 422: the retry checked and drew it again.
+    expect(renderer.preview).toHaveBeenCalledTimes(2);
+    expect(submitDesign.mock.calls[1]![1].files).not.toBe(submitDesign.mock.calls[0]![1].files);
   });
 
   it("re-reads the design and does not loop on a 409 VERSION_CONFLICT", async () => {

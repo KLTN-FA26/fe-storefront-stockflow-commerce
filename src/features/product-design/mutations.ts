@@ -8,7 +8,7 @@ import {
   saveDesignDocument,
   uploadDesignAsset,
 } from "./api";
-import { isDesignGone, isDesignStateChanged } from "./errors";
+import { isDesignConflict, isDesignGone, isDesignStateChanged } from "./errors";
 import { designKeys } from "./queries";
 import type { Design, DesignDocumentRecord, RenameDesignInput, SaveDocumentInput } from "./types";
 
@@ -77,7 +77,8 @@ const cancelDesignRead = (client: QueryClient, id: string) =>
 /**
  * Rename moves the version on: the answer becomes the cached design, so the next write sends it,
  * and the cached document's version follows (one version for the design and its document, docs 12
- * BR-11). The caller hands the new version to autosave.
+ * BR-11). The caller hands the new version to autosave. A stale version (409 VERSION_CONFLICT:
+ * another tab saved or renamed) re-reads the design, so trying again sends the current one.
  */
 export function useRenameDesign(id: string) {
   const client = useQueryClient();
@@ -92,7 +93,12 @@ export function useRenameDesign(id: string) {
       );
       void client.invalidateQueries({ queryKey: designKeys.lists() });
     },
-    onError: (error) => reReadWhenStateChanged(client, id, error),
+    onError: (error) => {
+      reReadWhenStateChanged(client, id, error);
+      if (isDesignConflict(error)) {
+        void client.invalidateQueries({ queryKey: designKeys.detail(id), exact: true });
+      }
+    },
   });
 }
 
