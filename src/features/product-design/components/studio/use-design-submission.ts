@@ -8,7 +8,7 @@ import { documentChecksum, runPreflight, VARIANT_OK, type PreflightIssue } from 
 import type { PreflightReport } from "../../engine";
 import { isDesignConflict, isDesignStateChanged, preflightIssuesOf } from "../../errors";
 import { invalidateDesign } from "../../mutations";
-import { designDocumentQuery, designKeys, designQuery } from "../../queries";
+import { designDocumentQuery, designKeys } from "../../queries";
 import type { Design } from "../../types";
 import { ExportError } from "./export-renderer";
 import { buildSubmissionBundle, type BundleStep, type SubmissionBundle } from "./submission-bundle";
@@ -50,14 +50,21 @@ export function useDesignSubmission(design: Design) {
   const client = useQueryClient();
   const work = useRef<Work | null>(null);
   const busy = useRef(false);
+  /** The design was submitted: a second run would only meet INVALID_STATE. */
+  const isDone = useRef(false);
   const [state, setState] = useState<State>(IDLE);
 
-  const freshVersion = async () =>
-    (await client.fetchQuery({ ...designQuery(design.id), staleTime: 0 })).version;
-  /** Refuses to go on unless the stored document is still the drawn one (same checksum). */
+  /** The stored document, read fresh: it carries the design's version counter and the checksum. */
+  const readStored = () =>
+    client.fetchQuery({ ...designDocumentQuery(design.id), staleTime: 0 });
+  /**
+   * Refuses to go on unless the stored document is still the drawn one (same checksum); answers
+   * the version of that very read, so the version sent is the one of the document verified.
+   */
   const assertStoredIs = async (checksum: string) => {
-    const stored = await client.fetchQuery({ ...designDocumentQuery(design.id), staleTime: 0 });
+    const stored = await readStored();
     if (stored.checksum !== checksum) throw new DocumentChangedError(MESSAGES.changed);
+    return stored.version;
   };
 
   /** Flush, preflight, and (when it passes) draw the bundle. Null when the preflight failed. */
@@ -77,7 +84,7 @@ export function useDesignSubmission(design: Design) {
     });
     if (report.result === "Fail") {
       await recordPreflightFailure(design.id, {
-        version: await freshVersion(),
+        version: (await readStored()).version,
         issues: report.issues,
       });
       setState({ step: "error", fraction: 0, issues: report.issues });
@@ -100,24 +107,26 @@ export function useDesignSubmission(design: Design) {
   }
 
   async function execute() {
-    if (busy.current) return;
+    if (busy.current || isDone.current) return;
     busy.current = true;
     try {
       work.current ??= await prepare();
       const w = work.current;
       if (!w) return; // the preflight failed: `prepare` set the issues
       setState({ step: "upload", fraction: 0, issues: null });
-      await assertStoredIs(w.checksum);
+      const version = await assertStoredIs(w.checksum);
       const submitted = await submitDesign(design.id, {
-        version: await freshVersion(),
+        version,
         preflight: w.report,
         files: w.bundle,
       });
       client.setQueryData(designKeys.detail(design.id), submitted);
       autosave.setVersion(submitted.version); // the next save sends the version the submit left
-      await invalidateDesign(client, design.id);
       work.current = null;
+      isDone.current = true;
       setState({ step: "done", fraction: 1, issues: null });
+      // Re-reading is best effort: the design is submitted whatever it answers.
+      invalidateDesign(client, design.id).catch(() => undefined);
     } catch (error) {
       const issues = preflightIssuesOf(error);
       if (error instanceof DocumentChangedError) {

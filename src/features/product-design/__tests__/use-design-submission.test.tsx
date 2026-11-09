@@ -218,4 +218,51 @@ describe("useDesignSubmission", () => {
     expect(submitDesign.mock.calls[1]![1].files).toBe(submitDesign.mock.calls[0]![1].files);
     expect(autosave.flush).toHaveBeenCalledTimes(1);
   });
+
+  it("submits nothing when the stored document changes while it is rendered, and draws anew after", async () => {
+    const { view, autosave, renderer } = await setup();
+    const good = await getDesignDocument(draft.id);
+    renderer.printSurface.mockImplementationOnce(async () => {
+      getDesignDocument.mockResolvedValue({ ...good, checksum: "0".repeat(64) });
+      return [{ png: PNG_1x1, heightPx: 1 }];
+    });
+
+    await act(() => view.result.current.run());
+
+    expect(view.result.current.step).toBe("error");
+    expect(autosave.conflict).toHaveBeenCalledTimes(1);
+    expect(submitDesign).not.toHaveBeenCalled();
+
+    getDesignDocument.mockResolvedValue(good);
+    submitDesign.mockResolvedValue(pending);
+    await act(() => view.result.current.retry());
+
+    expect(renderer.preview).toHaveBeenCalledTimes(2);
+    expect(view.result.current.step).toBe("done");
+  });
+
+  it("sends the version of the document record it verified", async () => {
+    const { view } = await setup();
+    submitDesign.mockResolvedValue(pending);
+    getDesign.mockResolvedValue({ ...draft, version: 99 });
+
+    await act(() => view.result.current.run());
+
+    expect(submitDesign.mock.calls[0]![1].version).toBe(3);
+  });
+
+  it("stays done, and never submits twice, when the re-read after a successful submit fails", async () => {
+    const { view, client, autosave } = await setup();
+    submitDesign.mockResolvedValue(pending);
+    vi.spyOn(client, "invalidateQueries").mockRejectedValue(new Error("offline"));
+
+    await act(() => view.result.current.run());
+    await act(() => view.result.current.retry());
+    await act(() => view.result.current.run());
+
+    expect(view.result.current.step).toBe("done");
+    expect(view.result.current.error).toBeUndefined();
+    expect(autosave.setVersion).toHaveBeenCalledWith(4);
+    expect(submitDesign).toHaveBeenCalledTimes(1);
+  });
 });
