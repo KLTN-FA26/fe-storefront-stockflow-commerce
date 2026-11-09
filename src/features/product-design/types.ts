@@ -1,37 +1,53 @@
 import type { z } from "zod";
 
+import type { DesignDocument } from "./engine/document/schema";
+import type { PreflightIssue, PreflightReport } from "./engine/preflight/types";
 import type {
-  artifactRoleSchema,
-  changeReasonInputSchema,
   createDesignInputSchema,
-  customizationDtoSchema,
-  designArtifactDtoSchema,
   designAssetDtoSchema,
-  designDecisionDtoSchema,
-  designDecisionPageDtoSchema,
   designDocumentRecordDtoSchema,
-  designDraftDtoSchema,
+  designDtoSchema,
+  designEventDtoSchema,
+  designEventTypeSchema,
+  designFileDtoSchema,
+  designFileRoleSchema,
   designPageDtoSchema,
-  designSnapshotDtoSchema,
   designStatusSchema,
   downloadLinkDtoSchema,
+  draftCountDtoSchema,
+  printConfigDtoSchema,
+  renameDesignInputSchema,
+  returnReasonInputSchema,
 } from "./schemas";
 
 export type DesignStatus = z.infer<typeof designStatusSchema>;
-export type ArtifactRole = z.infer<typeof artifactRoleSchema>;
-export type DesignDraft = z.infer<typeof designDraftDtoSchema>;
-/** A page of drafts; `page` is 1-based here (the API layer shifts the BE's 0-based page). */
+export type Design = z.infer<typeof designDtoSchema>;
+/** A page of designs; `page` is 1-based here (the API layer shifts the wire's 0-based page). */
 export type DesignPage = z.infer<typeof designPageDtoSchema>;
-export type DesignDecision = z.infer<typeof designDecisionDtoSchema>;
-export type DesignDecisionPage = z.infer<typeof designDecisionPageDtoSchema>;
-export type DesignSnapshot = z.infer<typeof designSnapshotDtoSchema>;
-export type DesignArtifact = z.infer<typeof designArtifactDtoSchema>;
-export type DownloadLink = z.infer<typeof downloadLinkDtoSchema>;
+export type DraftCount = z.infer<typeof draftCountDtoSchema>;
+export type DesignEventType = z.infer<typeof designEventTypeSchema>;
+export type DesignEvent = z.infer<typeof designEventDtoSchema>;
 export type DesignDocumentRecord = z.infer<typeof designDocumentRecordDtoSchema>;
 export type DesignAsset = z.infer<typeof designAssetDtoSchema>;
-export type Customization = z.infer<typeof customizationDtoSchema>;
+export type DownloadLink = z.infer<typeof downloadLinkDtoSchema>;
+export type DesignFileRole = z.infer<typeof designFileRoleSchema>;
+export type DesignFile = z.infer<typeof designFileDtoSchema>;
+export type PrintConfig = z.infer<typeof printConfigDtoSchema>;
+
 export type CreateDesignInput = z.infer<typeof createDesignInputSchema>;
-export type ChangeReasonInput = z.infer<typeof changeReasonInputSchema>;
+export type ReturnReasonInput = z.infer<typeof returnReasonInputSchema>;
+
+/** Every write sends the version the customer is looking at; a stale one is refused (docs 12 BR-11). */
+type Versioned = { version: number };
+export type RenameDesignInput = z.infer<typeof renameDesignInputSchema> & Versioned;
+export type SaveDocumentInput = Versioned & { document: DesignDocument };
+export type DeleteDesignInput = Versioned;
+export type PreflightFailureInput = Versioned & { issues: PreflightIssue[] };
+
+/** One rendered file of a submission. */
+export type SubmissionFile = { name: string; type: string; bytes: Uint8Array };
+export type SubmissionFiles = Record<DesignFileRole, SubmissionFile>;
+export type SubmitDesignInput = Versioned & { preflight: PreflightReport; files: SubmissionFiles };
 
 /** 1-based page, as the screens and the URL hold it. */
 export type DesignListParams = {

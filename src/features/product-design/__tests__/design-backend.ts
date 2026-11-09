@@ -1,14 +1,14 @@
 import { vi } from "vitest";
 
 import { api } from "@/lib/api/client";
-import { ApiError } from "@/lib/api/error";
-import { createMockCatalog, seedMockCatalog } from "@/lib/api/mock-fixtures/catalog";
+import { activateMockAdapter } from "@/lib/api/mock-adapter";
+import { registerDesignMockRoutes } from "@/lib/api/mock-design";
+import { createMemoryStorage } from "@/lib/api/mock-fixtures/design-storage";
 import {
-  createMockDesignStudio,
-  type MockDesignStudio,
-  type MockResult,
-} from "@/lib/api/mock-fixtures/designs";
-import { settle } from "@/test/fake-backend";
+  createDesignMockStore,
+  type DesignMockDeps,
+  type DesignMockStore,
+} from "@/lib/api/mock-fixtures/design-store";
 
 import { readImageDimensions } from "../engine/assets/image-header";
 
@@ -19,111 +19,61 @@ import { readImageDimensions } from "../engine/assets/image-header";
 async function sizeFromHeader(blob: Blob) {
   const header = readImageDimensions(new Uint8Array(await blob.arrayBuffer()));
   if (!header) throw new Error("Not a readable image");
-  return { width: header.width, height: header.height };
+  return { widthPx: header.width, heightPx: header.height };
 }
 
+export type DesignBackend = {
+  /**
+   * The store behind the routes: a test can read or seed it directly, e.g.
+   * `settle(await store.getDocument(id)).data` with `settle` from `@/test/fake-backend`.
+   */
+  store: DesignMockStore;
+  /** Pass-through spies on the client: a test can say which calls were (not) made, and how. */
+  get: ReturnType<typeof spyOnGet>;
+  post: ReturnType<typeof spyOnPost>;
+  put: ReturnType<typeof spyOnPut>;
+  patch: ReturnType<typeof spyOnPatch>;
+  delete: ReturnType<typeof spyOnDelete>;
+};
+
+const spyOnGet = () => vi.spyOn(api, "get");
+const spyOnPost = () => vi.spyOn(api, "post");
+const spyOnPut = () => vi.spyOn(api, "put");
+const spyOnPatch = () => vi.spyOn(api, "patch");
+const spyOnDelete = () => vi.spyOn(api, "delete");
+
 /**
- * A mock design store over the seeded catalogue: the approved 12oz cup and the draft kraft bag.
- * Uploaded images are sized by `sizeFromHeader` and linked as `blob:mock/{size}` (jsdom has no
- * `URL.createObjectURL` either).
+ * The design API as the screens get it with the design mock on: the real client and its
+ * interceptors, the mock adapter and the app's design route table, over a fresh seeded store in
+ * memory (spec 2026-11-09 §5). Uploaded images are sized by their header and linked as
+ * `blob:mock/{key}`. Call it in each test (or `beforeEach`): it re-installs the spies an
+ * `afterEach(vi.restoreAllMocks)` removed. The mock adapter answers after ~0.2 s of simulated
+ * latency, with its 5% random error switched off.
  */
-export const mockStudio = () =>
-  createMockDesignStudio({
-    userId: "7d51f000-0000-4000-8000-0000000000d1",
-    customerId: "7d51f000-0000-4000-8000-0000000000d2",
-    catalogKindOf: createMockCatalog(seedMockCatalog()).kindOf,
+export async function designBackend(
+  deps: Omit<DesignMockDeps, "storage"> = {},
+): Promise<DesignBackend> {
+  vi.spyOn(console, "info").mockImplementation(() => {});
+  vi.spyOn(Math, "random").mockReturnValue(0.06); // no simulated 5% error, the shortest latency
+  activateMockAdapter();
+  // An unknown path settles only once `registerAllMockRoutes()` has run, so the routes registered
+  // below replace its design routes instead of being replaced by them.
+  vi.spyOn(console, "warn").mockImplementationOnce(() => {});
+  await api.get("/routes-ready-probe").catch(() => undefined);
+
+  const store = await createDesignMockStore({
+    storage: createMemoryStorage(),
     readImageSize: sizeFromHeader,
-    toUrl: (blob) => `blob:mock/${blob.size}`,
+    toUrl: (key) => `blob:mock/${key}`,
+    ...deps,
   });
-
-/** The `params` of an axios call as a plain record. */
-export const queryOf = (config: unknown) =>
-  ((config as { params?: Record<string, unknown> } | undefined)?.params ?? {}) as Record<
-    string,
-    unknown
-  >;
-
-/** The `Idempotency-Key` header of an axios call. */
-export const idempotencyKeyOf = (config: unknown) =>
-  (config as { headers?: Record<string, string> } | undefined)?.headers?.["Idempotency-Key"];
-
-/** The `file` part of a multipart body, or a 400 like the BE's when there is none. */
-function filePart(body: unknown): Blob {
-  const file = (body as FormData).get("file");
-  if (!(file instanceof Blob)) throw new ApiError(400, "VALIDATION_FAILED", "No file part");
-  return file;
-}
-
-/**
- * Routes the design calls of `api` to the mock store, the way the real client and BE would answer:
- * the list, one draft, its document and images (P3, P4) with their links, its artifacts and
- * snapshot, the P2 customization, P1 create, a fork, an image or artifact upload (multipart with
- * its `Idempotency-Key`), a document save, and the workflow writes (specification, review request
- * P5, confirmation request, confirmation, change request, withdrawal). P5 does not schedule the
- * mock QC answer: a test completes the review itself. Returns the spies so a test can say which
- * calls were (not) made.
- */
-export function fakeDesignBackend(studio: MockDesignStudio) {
-  const get = vi.spyOn(api, "get").mockImplementation(async (url, config) => {
-    if (url === "/designs") return settle(studio.list(queryOf(config)));
-    const customization = /^\/catalog\/products\/([^/]+)\/customization$/.exec(url);
-    if (customization) {
-      return settle(studio.customization(decodeURIComponent(customization[1]!)));
-    }
-    const link = /^\/designs\/([^/]+)\/artifacts\/([^/]+)\/download-url$/.exec(url);
-    if (link) return settle(studio.artifactLink(link[1]!, link[2]!));
-    const assetLink = /^\/designs\/([^/]+)\/assets\/([^/]+)\/download-url$/.exec(url);
-    if (assetLink) return settle(studio.assetLink(assetLink[1]!, assetLink[2]!));
-    const document = /^\/designs\/([^/]+)\/document$/.exec(url);
-    if (document) return settle(studio.getDocument(document[1]!));
-    const assets = /^\/designs\/([^/]+)\/assets$/.exec(url);
-    if (assets) return settle(studio.listAssets(assets[1]!));
-    const artifacts = /^\/designs\/([^/]+)\/artifacts$/.exec(url);
-    if (artifacts) return settle(studio.listArtifacts(artifacts[1]!));
-    const snapshot = /^\/designs\/([^/]+)\/snapshot$/.exec(url);
-    if (snapshot) return settle(studio.snapshot(snapshot[1]!));
-    const history = /^\/designs\/([^/]+)\/history$/.exec(url);
-    if (history) return settle(studio.history(history[1]!, queryOf(config)));
-    const draft = /^\/designs\/([^/]+)$/.exec(url);
-    if (draft) return settle(studio.get(draft[1]!));
-    throw new ApiError(404, "NOT_FOUND", `No fake route for GET ${url}`);
-  });
-  const workflow: Record<string, (id: string, body: never) => MockResult | Promise<MockResult>> = {
-    revisions: (id) => studio.fork(id),
-    "confirmation-withdrawals": (id, body) => studio.withdraw(id, body),
-    "change-requests": (id, body) => studio.requestChanges(id, body),
-    "technical-review-requests": (id, body) => studio.requestReview(id, body),
-    "confirmation-requests": (id, body) => studio.submit(id, body),
-    confirmations: (id, body) => studio.confirm(id, body),
+  registerDesignMockRoutes(store);
+  return {
+    store,
+    get: spyOnGet(),
+    post: spyOnPost(),
+    put: spyOnPut(),
+    patch: spyOnPatch(),
+    delete: spyOnDelete(),
   };
-  const post = vi.spyOn(api, "post").mockImplementation(async (url, body, config) => {
-    if (url === "/designs/mine") return settle(await studio.create(body as never));
-    const step = /^\/designs\/([^/]+)\/([a-z-]+)$/.exec(url);
-    const write = step ? workflow[step[2]!] : undefined;
-    if (step && write) return settle(await write(step[1]!, body as never));
-    const upload = /^\/designs\/([^/]+)\/assets$/.exec(url);
-    if (upload) {
-      const file = filePart(body);
-      const name = file instanceof File ? file.name : undefined;
-      return settle(await studio.uploadAsset(upload[1]!, file, idempotencyKeyOf(config), name));
-    }
-    const artifact = /^\/designs\/([^/]+)\/artifacts$/.exec(url);
-    if (artifact) {
-      const file = filePart(body);
-      const name = file instanceof File ? file.name : undefined;
-      const role = String(queryOf(config).role);
-      return settle(
-        await studio.uploadArtifact(artifact[1]!, role, file, idempotencyKeyOf(config), name),
-      );
-    }
-    throw new ApiError(404, "NOT_FOUND", `No fake route for POST ${url}`);
-  });
-  const put = vi.spyOn(api, "put").mockImplementation(async (url, body) => {
-    const document = /^\/designs\/([^/]+)\/document$/.exec(url);
-    if (document) return settle(await studio.putDocument(document[1]!, body as never));
-    const specification = /^\/designs\/([^/]+)\/specification$/.exec(url);
-    if (specification) return settle(studio.revise(specification[1]!, body as never));
-    throw new ApiError(404, "NOT_FOUND", `No fake route for PUT ${url}`);
-  });
-  return { get, post, put };
 }

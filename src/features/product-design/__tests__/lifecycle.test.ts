@@ -1,182 +1,115 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  DESIGN_UI_STATE_META,
+  DESIGN_STATUS_META,
+  DESIGN_TRANSITIONS,
+  RETURNED_META,
+  TERMINAL_STATUSES,
   allowedActions,
-  deriveUiState,
+  isReturned,
   type DesignAction,
-  type DesignUiState,
 } from "../lifecycle";
-import { designDraft, ids } from "./fixtures";
+import type { DesignStatus } from "../types";
+import { design, returnedDto } from "./fixtures";
 
-const T1 = "2026-10-25T08:00:00Z";
-const T2 = "2026-10-25T09:00:00Z";
-const A1 = ids.artifact;
+const STATUSES = [
+  "DRAFT",
+  "PENDING_REVIEW",
+  "APPROVED",
+  "ARCHIVED",
+] as const satisfies readonly DesignStatus[];
 
-const STATES = [
-  "editing",
-  "awaitingReview",
-  "changesRequested",
-  "reviewPassed",
-  "awaitingConfirmation",
-  "confirmed",
-] as const satisfies readonly DesignUiState[];
+/** Spec 2026-11-09 §3.2: every move the docs allow; anything else is refused. */
+const ALLOWED: ReadonlyArray<[DesignStatus, DesignStatus]> = [
+  ["DRAFT", "DRAFT"], // save, version + 1
+  ["DRAFT", "PENDING_REVIEW"], // submit, preflight Pass
+  ["DRAFT", "ARCHIVED"], // delete
+  ["PENDING_REVIEW", "APPROVED"], // approve
+  ["PENDING_REVIEW", "DRAFT"], // return with a reason
+];
 
-describe("deriveUiState (spec §7.5)", () => {
+const PAIRS = STATUSES.flatMap((from) => STATUSES.map((to) => [from, to] as const));
+
+describe("DESIGN_TRANSITIONS (spec §3.2)", () => {
+  it.each(PAIRS)("%s → %s is allowed exactly as the docs say", (from, to) => {
+    const expected = ALLOWED.some(([f, t]) => f === from && t === to);
+    expect(DESIGN_TRANSITIONS[from].includes(to)).toBe(expected);
+  });
+
+  it("makes APPROVED and ARCHIVED terminal: no way out of either", () => {
+    expect([...TERMINAL_STATUSES].sort()).toEqual(["APPROVED", "ARCHIVED"]);
+    for (const status of TERMINAL_STATUSES) expect(DESIGN_TRANSITIONS[status]).toEqual([]);
+  });
+
+  it("leaves a way out of every status that is not terminal", () => {
+    for (const status of STATUSES.filter((s) => !TERMINAL_STATUSES.has(s))) {
+      expect(DESIGN_TRANSITIONS[status].length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("allowedActions (spec §3.1)", () => {
   it.each([
-    [{ status: "APPROVED" }, "confirmed"],
-    [{ status: "SUBMITTED" }, "awaitingConfirmation"],
-    [{ technicalReviewPassed: true }, "reviewPassed"],
-    [{ reviewNotes: "Logo mờ" }, "changesRequested"],
-    [{ reviewRequestedAt: T2, updatedAt: T2 }, "awaitingReview"],
-    [{ reviewRequestedAt: T1, updatedAt: T2 }, "editing"],
-    // The real BE sends none of the P6 fields: an artifact on a DRAFT is a review in progress.
-    [
-      { currentArtifactId: A1, reviewRequestedAt: undefined, updatedAt: undefined },
-      "awaitingReview",
-    ],
-    [{}, "editing"],
-  ])("derives %j as %s", (overrides, state) => {
-    expect(deriveUiState(designDraft(overrides))).toBe(state);
-  });
+    ["DRAFT", ["edit", "rename", "save", "submit", "delete"]],
+    ["PENDING_REVIEW", []],
+    ["APPROVED", ["createRevision"]],
+    ["ARCHIVED", []],
+  ] as const satisfies ReadonlyArray<readonly [DesignStatus, readonly DesignAction[]]>)(
+    "%s allows %j",
+    (status, actions) => {
+      expect(allowedActions({ status })).toEqual(actions);
+    },
+  );
 
-  it("keeps a review request current while the document has not changed since", () => {
-    expect(deriveUiState(designDraft({ reviewRequestedAt: T2, updatedAt: T1 }))).toBe(
-      "awaitingReview",
-    );
-    // With no `updatedAt` there is no later change to compare with.
-    expect(deriveUiState(designDraft({ reviewRequestedAt: T1 }))).toBe("awaitingReview");
-  });
-
-  it("compares the P6 instants whatever their sub-second precision", () => {
-    expect(
-      deriveUiState(
-        designDraft({ reviewRequestedAt: "2026-10-25T08:00:00.123456Z", updatedAt: T1 }),
-      ),
-    ).toBe("awaitingReview");
-    expect(
-      deriveUiState(designDraft({ reviewRequestedAt: "2026-10-25T07:59:59.999Z", updatedAt: T1 })),
-    ).toBe("editing");
-  });
-
-  it("ignores the artifact fallback once the P6 fields tell the story", () => {
-    expect(
-      deriveUiState(designDraft({ currentArtifactId: A1, reviewRequestedAt: T1, updatedAt: T2 })),
-    ).toBe("editing");
-  });
-
-  it("reads a design whose review was voided as editing: the BE clears reviewRequestedAt, the artifact stays", () => {
-    // P6 present (updatedAt), no review request left: any edit or new artifact voids the review.
-    expect(deriveUiState(designDraft({ currentArtifactId: A1, updatedAt: T2 }))).toBe("editing");
-    expect(
-      deriveUiState(designDraft({ currentArtifactId: A1, updatedAt: T2, reviewRequestedAt: null })),
-    ).toBe("editing");
-  });
-
-  it("says editing for a draft with no artifact and no request, and for a blank note", () => {
-    expect(deriveUiState(designDraft({ currentArtifactId: null }))).toBe("editing");
-    expect(deriveUiState(designDraft({ reviewNotes: "   ", currentArtifactId: null }))).toBe(
-      "editing",
-    );
-  });
-
-  it("lets the first matching state win, in the order of spec §7.5", () => {
-    const everything = {
-      technicalReviewPassed: true,
-      reviewNotes: "Logo mờ",
-      currentArtifactId: A1,
-      reviewRequestedAt: T2,
-      updatedAt: T2,
-    };
-    expect(deriveUiState(designDraft({ ...everything, status: "APPROVED" }))).toBe("confirmed");
-    expect(deriveUiState(designDraft({ ...everything, status: "SUBMITTED" }))).toBe(
-      "awaitingConfirmation",
-    );
-    expect(deriveUiState(designDraft(everything))).toBe("reviewPassed");
-    expect(deriveUiState(designDraft({ ...everything, technicalReviewPassed: false }))).toBe(
-      "changesRequested",
-    );
-    expect(
-      deriveUiState(
-        designDraft({ ...everything, technicalReviewPassed: false, reviewNotes: null }),
-      ),
-    ).toBe("awaitingReview");
-  });
-
-  it("shows a customer change request (SUBMITTED to DRAFT) with its reason as changesRequested", () => {
-    expect(
-      deriveUiState(designDraft({ status: "DRAFT", reviewNotes: "Đổi màu nền sang trắng" })),
-    ).toBe("changesRequested");
-  });
-
-  it("treats the never-set REJECTED status like a draft the BE will refuse to write", () => {
-    expect(deriveUiState(designDraft({ status: "REJECTED" }))).toBe("editing");
+  it("is the same for a returned draft as for any draft", () => {
+    expect(allowedActions(design(returnedDto()))).toEqual(allowedActions({ status: "DRAFT" }));
   });
 });
 
-describe("DESIGN_UI_STATE_META", () => {
-  it("labels and tones every state as the spec says", () => {
-    expect(
-      STATES.map((s) => [s, DESIGN_UI_STATE_META[s].label, DESIGN_UI_STATE_META[s].tone]),
-    ).toEqual([
-      ["editing", "Đang thiết kế", "neutral"],
-      ["awaitingReview", "Chờ QC kiểm tra", "info"],
-      ["changesRequested", "QC yêu cầu sửa", "warning"],
-      ["reviewPassed", "Đạt kỹ thuật", "positive"],
-      ["awaitingConfirmation", "Chờ bạn xác nhận", "warning"],
-      ["confirmed", "Đã chốt", "positive"],
-    ]);
+describe("DESIGN_STATUS_META (spec §3.1)", () => {
+  it.each([
+    ["DRAFT", "Bản nháp", "neutral", true],
+    ["PENDING_REVIEW", "Chờ duyệt", "info", false],
+    ["APPROVED", "Đã duyệt", "positive", false],
+    ["ARCHIVED", "Đã xoá", "muted", false],
+  ] as const)("%s reads %s, tone %s, editable %s", (status, label, tone, editable) => {
+    expect(DESIGN_STATUS_META[status]).toMatchObject({ label, tone, editable });
   });
 
-  it("makes the design read-only once it waits for the customer's confirmation or is confirmed", () => {
-    expect(STATES.filter((s) => !DESIGN_UI_STATE_META[s].editable)).toEqual([
-      "awaitingConfirmation",
-      "confirmed",
-    ]);
-  });
-
-  it("tells the customer what happens next, in one short sentence each", () => {
-    expect(DESIGN_UI_STATE_META.editing.hint).toBe(
-      "Thiết kế đang được lưu tự động. Khi xong, hãy gửi QC kiểm tra.",
+  it("says what happens next in each status", () => {
+    expect(DESIGN_STATUS_META.DRAFT.hint).toBe(
+      "Thiết kế được lưu tự động. Khi xong, bấm Gửi duyệt.",
     );
-    for (const state of STATES) {
-      const { hint } = DESIGN_UI_STATE_META[state];
-      expect(hint.trim()).not.toBe("");
-      expect(hint.length).toBeLessThanOrEqual(120);
+    expect(DESIGN_STATUS_META.PENDING_REVIEW.hint).toBe(
+      "Quản lý kinh doanh đang duyệt thiết kế. Bạn sẽ nhận kết quả tại đây.",
+    );
+    expect(DESIGN_STATUS_META.APPROVED.hint).toBe(
+      "Thiết kế đã duyệt và không sửa được nữa. Muốn thay đổi, hãy tạo bản sửa.",
+    );
+    expect(DESIGN_STATUS_META.ARCHIVED.hint).toBe("Bản nháp đã xoá.");
+  });
+
+  it("lets the customer edit exactly where `edit` is allowed", () => {
+    for (const status of STATUSES) {
+      expect(DESIGN_STATUS_META[status].editable).toBe(allowedActions({ status }).includes("edit"));
     }
+  });
+
+  it("marks a returned draft 'Bị trả lại' with the warning tone", () => {
+    expect(RETURNED_META).toEqual({ label: "Bị trả lại", tone: "warning" });
   });
 });
 
-describe("allowedActions", () => {
-  it("offers finalize only after review passes and fork only when confirmed", () => {
-    expect(allowedActions("reviewPassed")).toContain("finalize");
-    expect(allowedActions("editing")).not.toContain("finalize");
-    expect(allowedActions("confirmed")).toEqual(expect.arrayContaining(["fork", "requestQuote"]));
-
-    const offering = (action: DesignAction) =>
-      STATES.filter((s) => allowedActions(s).includes(action));
-    expect(offering("finalize")).toEqual(["reviewPassed"]);
-    expect(offering("fork")).toEqual(["confirmed"]);
-    expect(offering("requestQuote")).toEqual(["confirmed"]);
+describe("isReturned", () => {
+  it("is true only for a DRAFT carrying its latest return", () => {
+    expect(isReturned(design(returnedDto()))).toBe(true);
+    expect(isReturned(design())).toBe(false);
   });
 
-  it("asks for QC review only while the customer is working or answering QC notes", () => {
-    const offering = STATES.filter((s) => allowedActions(s).includes("requestReview"));
-    expect(offering).toEqual(["editing", "changesRequested"]);
-  });
-
-  it("lets the customer answer a Sales submission three ways", () => {
-    expect(allowedActions("awaitingConfirmation")).toEqual([
-      "confirm",
-      "requestChanges",
-      "withdraw",
-    ]);
-    expect(allowedActions("confirmed")).not.toContain("confirm");
-  });
-
-  it("offers edit exactly where the design is editable", () => {
-    for (const state of STATES) {
-      expect(allowedActions(state).includes("edit")).toBe(DESIGN_UI_STATE_META[state].editable);
-    }
-  });
+  it.each(["PENDING_REVIEW", "APPROVED", "ARCHIVED"] as const)(
+    "is false for %s even with a return on record",
+    (status) => {
+      expect(isReturned(design(returnedDto({ status })))).toBe(false);
+    },
+  );
 });

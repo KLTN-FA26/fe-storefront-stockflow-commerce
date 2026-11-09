@@ -15,7 +15,7 @@ import { cup12oz } from "../engine/__tests__/fixtures";
 const T1 = "2026-10-25T08:00:00Z";
 const T2 = "2026-10-25T08:05:00Z";
 
-const conflict = () => new ApiError(409, "CONFLICT", "stale version");
+const conflict = () => new ApiError(409, "VERSION_CONFLICT", "stale version");
 const offline = () => new ApiError(0, "NETWORK_ERROR", "no network");
 const serverError = () => new ApiError(500, "INTERNAL", "boom");
 
@@ -199,12 +199,12 @@ describe("a version conflict (409)", () => {
     expect(states()).toEqual(["pending", "saving", "conflict"]);
   });
 
-  it("recognises an optimistic-lock race as a conflict too", async () => {
-    const save = vi.fn().mockRejectedValueOnce(new ApiError(409, "OPTIMISTIC_LOCK", "lost"));
+  it("does not take a design that changed status (409 INVALID_STATE) for a conflict", async () => {
+    const save = vi.fn().mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "moved on"));
     const { saver, last } = setup({ save });
     saver.schedule(d1);
     await saver.flush();
-    expect(last().state).toBe("conflict");
+    expect(last().state).toBe("error");
   });
 
   it("does not save on flush or retry afterwards", async () => {

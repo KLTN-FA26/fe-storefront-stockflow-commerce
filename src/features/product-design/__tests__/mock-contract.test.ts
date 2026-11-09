@@ -1,255 +1,164 @@
-// @vitest-environment node
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import {
-  MOCK_DESIGN_PRODUCT_SLUGS,
-  MOCK_DESIGN_TEMPLATES,
-} from "@/lib/api/mock-fixtures/design-templates";
-import {
-  MOCK_DESIGN_IDS,
-  MOCK_SEED_CHECKSUMS,
-  createMockDesignStudio,
-  snapshotChecksum,
-  type MockResult,
-} from "@/lib/api/mock-fixtures/designs";
+import { MOCK_PRINT_CONFIGS } from "@/lib/api/mock-fixtures/design-print-configs";
+import type { MockResult } from "@/lib/api/mock-fixtures/design-rows";
+import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/design-seed";
+import { createMemoryStorage } from "@/lib/api/mock-fixtures/design-storage";
+import { createDesignMockStore, type DesignMockStore } from "@/lib/api/mock-fixtures/design-store";
 
-import { emptyDocument } from "../engine/document/factory";
-import { documentChecksum } from "../engine/export/checksum";
-import { customizationTemplateSchema } from "../engine/template/schema";
+import { pngBytes } from "../engine/__tests__/fixtures";
+import { sha256Hex } from "../engine/export/checksum";
 import {
-  customizationDtoSchema,
-  designArtifactDtoSchema,
   designAssetDtoSchema,
-  designDecisionPageDtoSchema,
   designDocumentRecordDtoSchema,
-  designDraftDtoSchema,
+  designDtoSchema,
+  designEventDtoSchema,
+  designFileDtoSchema,
   designPageDtoSchema,
-  designSnapshotDtoSchema,
   downloadLinkDtoSchema,
+  draftCountDtoSchema,
+  preflightIssueSchema,
+  printConfigDtoSchema,
 } from "../schemas";
 
-// The mock BE must send what the FE schemas parse: a contract drift is caught here, not in a screen.
+// The mock must answer what the feature's schemas parse: a contract drift between the design mock
+// (src/lib/api/mock-fixtures/design-*) and schemas.ts fails here, not in a screen. The store's own
+// rules are tested next to it; this file only parses what it answers.
 
-const USER = "5e5e0000-0000-4000-8000-00000000000a";
-const CUSTOMER = "5e5e0000-0000-4000-8000-00000000000b";
-const png = (bytes = 8) =>
-  new File([new Uint8Array(bytes).fill(7)], "logo.png", { type: "image/png" });
+const { returned, pending, approved } = MOCK_DESIGN_IDS;
+const uuid = (n: number) => `5e5e0000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
 
-function studio() {
+let store: DesignMockStore;
+beforeEach(async () => {
   let n = 0;
-  return createMockDesignStudio({
-    userId: USER,
-    customerId: CUSTOMER,
-    newId: () => `5e5e0000-0000-4000-8000-${(0x1000 + n++).toString(16).padStart(12, "0")}`,
-    readImageSize: async () => ({ width: 1200, height: 800 }),
-    toUrl: (blob) => `blob:mock/${blob.size}`,
+  store = await createDesignMockStore({
+    storage: createMemoryStorage(),
+    newId: () => uuid(0x1000 + n++),
+    readImageSize: async () => ({ widthPx: 1200, heightPx: 800 }),
+    toUrl: (key) => `blob:mock/${key}`,
   });
-}
+});
 
-const body = (result: MockResult): unknown => {
+/** The body of a 2xx answer, unwrapped from its envelope. */
+function body(result: MockResult): unknown {
   expect(result.status, JSON.stringify(result.data)).toBeLessThan(300);
   return (result.data as { data: unknown }).data;
-};
+}
 const parse = <S extends z.ZodType>(schema: S, result: MockResult): z.infer<S> =>
   schema.parse(body(result));
 
-describe("mock design templates", () => {
-  it.each(Object.entries(MOCK_DESIGN_TEMPLATES))(
-    "%s parses with the engine template schema, cup sector included",
-    (sku, template) => {
-      expect(customizationTemplateSchema.parse(template)).toEqual(template);
-      expect(template.sku).toBe(sku);
-      expect(MOCK_DESIGN_PRODUCT_SLUGS[sku]).toBeTruthy();
+describe("reads", () => {
+  it("every listed design, its history, document, images and files parse", async () => {
+    const page = parse(designPageDtoSchema, await store.list({ page: 0, size: 200 }));
+    expect(page.items.map((d) => d.status).sort()).toEqual([
+      "APPROVED",
+      "DRAFT",
+      "DRAFT",
+      "PENDING_REVIEW",
+    ]);
+    for (const { id } of page.items) {
+      expect(parse(designDtoSchema, await store.get(id)).id).toBe(id);
+      parse(z.array(designEventDtoSchema), await store.history(id));
+      parse(designDocumentRecordDtoSchema, await store.getDocument(id));
+      parse(z.array(designAssetDtoSchema), await store.listAssets(id));
+      parse(z.array(designFileDtoSchema), await store.files(id));
+    }
+    expect(parse(draftCountDtoSchema, await store.draftCount())).toEqual({ drafts: 2, limit: 50 });
+  });
+
+  it("the approved design's image link parses", async () => {
+    const [logo] = parse(z.array(designAssetDtoSchema), await store.listAssets(approved));
+    expect(logo?.assetId).toBe(MOCK_DESIGN_IDS.logoAsset);
+    parse(downloadLinkDtoSchema, await store.assetLink(approved, logo!.assetId));
+  });
+
+  it.each(Object.values(MOCK_PRINT_CONFIGS).map((c) => [c.sku, c.product.slug] as const))(
+    "the print configuration of %s parses",
+    async (sku, slug) => {
+      expect(parse(printConfigDtoSchema, await store.printConfig(slug, sku)).sku).toBe(sku);
     },
   );
 
-  it("cover the eight customizable SKUs with unique codes and ids", () => {
-    const templates = Object.values(MOCK_DESIGN_TEMPLATES);
-    expect(templates.map((t) => t.code).sort()).toEqual([
-      "BAGL-4F",
-      "BAGM-4F",
-      "CUP12-BODY",
-      "CUP12-LOGO",
-      "CUP16-KRAFT",
-      "CUP8-KRAFT",
-      "CUP8-WHT",
-      "PET500-BODY",
-    ]);
-    expect(new Set(templates.map((t) => t.templateId)).size).toBe(templates.length);
-    expect(MOCK_DESIGN_TEMPLATES["CUP-PET-500ML"]).toMatchObject({ minDpi: 200 });
-    expect(
-      MOCK_DESIGN_TEMPLATES["BAG-KRAFT-L"]?.printAreas.map((a) => [a.code, a.widthMm, a.heightMm]),
-    ).toEqual([
-      ["FRONT", 320, 375],
-      ["BACK", 320, 375],
-      ["LEFT", 120, 375],
-      ["RIGHT", 120, 375],
-    ]);
-  });
-
-  it("round-trip through the customization answer, null fields restored", () => {
-    const s = studio();
-    for (const slug of new Set(Object.values(MOCK_DESIGN_PRODUCT_SLUGS))) {
-      const { templates, kind } = parse(customizationDtoSchema, s.customization(slug));
-      expect(kind).toBe("CUSTOMIZABLE");
-      expect(templates.length).toBeGreaterThan(0);
-      for (const template of templates)
-        expect(template).toEqual(MOCK_DESIGN_TEMPLATES[template.sku]);
-    }
+  it("the default print configuration of a product the mock does not know parses", async () => {
+    parse(printConfigDtoSchema, await store.printConfig("tui-giay-la", "TUI-1"));
+    parse(printConfigDtoSchema, await store.printConfig("ly-nhua-la", "LY-1"));
   });
 });
 
-describe("mock design studio answers parse with the DTO schemas", () => {
-  it("seeded designs: list, get, history, document, snapshot, links", () => {
-    const s = studio();
-    const page = parse(designPageDtoSchema, s.list());
-    expect(page.items.map((d) => d.id)).toEqual([
-      MOCK_DESIGN_IDS.draftBag,
-      MOCK_DESIGN_IDS.approvedCup,
-    ]);
-
-    const approved = parse(designDraftDtoSchema, s.get(MOCK_DESIGN_IDS.approvedCup));
-    expect(approved).toMatchObject({ status: "APPROVED", sku: "CUP-PAPER-12OZ-WHT" });
-    expect(parse(designDraftDtoSchema, s.get(MOCK_DESIGN_IDS.draftBag))).toMatchObject({
-      status: "DRAFT",
-    });
-    expect(
-      parse(designDecisionPageDtoSchema, s.history(MOCK_DESIGN_IDS.approvedCup)).items,
-    ).toHaveLength(3);
-
-    for (const id of [MOCK_DESIGN_IDS.approvedCup, MOCK_DESIGN_IDS.draftBag]) {
-      parse(designDocumentRecordDtoSchema, s.getDocument(id));
-    }
-    const snapshot = parse(designSnapshotDtoSchema, s.snapshot(MOCK_DESIGN_IDS.approvedCup));
-    expect(snapshot.id).toBe(MOCK_DESIGN_IDS.snapshot);
-    parse(z.array(designArtifactDtoSchema), s.listArtifacts(MOCK_DESIGN_IDS.approvedCup));
+describe("writes", () => {
+  it("create, rename, save, upload, revision and delete answer what the schemas parse", async () => {
+    const created = parse(
+      designDtoSchema,
+      await store.create({ productSlug: "tui-giay-kraft", sku: "BAG-KRAFT-M", name: "Túi" }),
+    );
+    const renamed = parse(
+      designDtoSchema,
+      await store.rename(created.id, { name: "Túi mới", version: created.version }),
+    );
+    const record = parse(designDocumentRecordDtoSchema, await store.getDocument(created.id));
     parse(
-      downloadLinkDtoSchema,
-      s.artifactLink(MOCK_DESIGN_IDS.approvedCup, MOCK_DESIGN_IDS.preview),
-    );
-    parse(z.array(designAssetDtoSchema), s.listAssets(MOCK_DESIGN_IDS.draftBag));
-    const logo = parse(z.array(designAssetDtoSchema), s.listAssets(MOCK_DESIGN_IDS.approvedCup));
-    expect(logo.map((a) => a.assetId)).toEqual([MOCK_DESIGN_IDS.logoAsset]);
-    parse(
-      downloadLinkDtoSchema,
-      s.assetLink(MOCK_DESIGN_IDS.approvedCup, MOCK_DESIGN_IDS.logoAsset),
-    );
-  });
-
-  it("the seeded checksums are the engine's checksum of the seeded documents", async () => {
-    const s = studio();
-    const doc = (id: string) => parse(designDocumentRecordDtoSchema, s.getDocument(id));
-    const cup = doc(MOCK_DESIGN_IDS.approvedCup);
-    const bag = doc(MOCK_DESIGN_IDS.draftBag);
-    expect(cup.checksum).toBe(MOCK_SEED_CHECKSUMS.cupDocument);
-    expect(bag.checksum).toBe(MOCK_SEED_CHECKSUMS.bagDocument);
-    expect(await documentChecksum(cup.document)).toBe(cup.checksum);
-    expect(await documentChecksum(bag.document)).toBe(bag.checksum);
-
-    const snapshot = parse(designSnapshotDtoSchema, s.snapshot(MOCK_DESIGN_IDS.approvedCup));
-    expect(snapshot.checksum).toBe(MOCK_SEED_CHECKSUMS.snapshot);
-    expect(await snapshotChecksum(snapshot.artifacts, cup.checksum)).toBe(snapshot.checksum);
-  });
-
-  it("a new design holds the engine's empty document of its template, at the draft's version", async () => {
-    const s = studio();
-    for (const [sku, templateCode] of [
-      ["CUP-PAPER-12OZ-WHT", "CUP12-BODY"],
-      ["BAG-KRAFT-M", "BAGM-4F"],
-    ] as const) {
-      const slug = MOCK_DESIGN_PRODUCT_SLUGS[sku]!;
-      const { productId, templates } = parse(customizationDtoSchema, s.customization(slug));
-      const draft = parse(
-        designDraftDtoSchema,
-        await s.create({ productId, sku, templateCode, name: "A" }),
-      );
-      const record = parse(designDocumentRecordDtoSchema, s.getDocument(draft.id));
-      expect(record.version).toBe(draft.version);
-      expect(record.document).toEqual(emptyDocument(templates.find((t) => t.sku === sku)!));
-      expect(record.checksum).toBe(await documentChecksum(record.document));
-    }
-  });
-
-  it("a whole workflow: every answer parses and the document checksum is the engine's", async () => {
-    const s = studio();
-    const draft = parse(
-      designDraftDtoSchema,
-      await s.create({
-        productId: parseProduct(s),
-        sku: "CUP-PAPER-12OZ-WHT",
-        templateCode: "CUP12-BODY",
-        name: "Ly A",
-      }),
-    );
-    const seeded = parse(designDocumentRecordDtoSchema, s.getDocument(MOCK_DESIGN_IDS.approvedCup));
-    const saved = parse(
       designDocumentRecordDtoSchema,
-      await s.putDocument(draft.id, { version: draft.version, document: seeded.document }),
+      await store.putDocument(created.id, { version: renamed.version, document: record.document }),
     );
-    expect(saved.checksum).toBe(await documentChecksum(saved.document));
-    expect(saved.document).toEqual(seeded.document);
+    const png = new Blob([pngBytes(1200, 800)], { type: "image/png" });
+    parse(designAssetDtoSchema, await store.uploadAsset(created.id, png, "logo.png", "k-1"));
+    parse(designDtoSchema, await store.revise(approved));
+    const current = parse(designDtoSchema, await store.get(created.id));
+    const removed = parse(
+      designDtoSchema,
+      await store.remove(created.id, { version: current.version }),
+    );
+    expect(removed.status).toBe("ARCHIVED");
+  });
 
-    const asset = parse(designAssetDtoSchema, await s.uploadAsset(draft.id, png(), "asset-key-01"));
-    parse(downloadLinkDtoSchema, s.assetLink(draft.id, asset.assetId));
+  it("a submission, a simulated return and approval, and a refused preflight parse", async () => {
+    const issues = [{ ruleId: "EMPTY_DESIGN", level: "fail", message: "Thiết kế trống." }];
+    const before = parse(designDtoSchema, await store.get(returned));
     parse(
-      designArtifactDtoSchema,
-      await s.uploadArtifact(draft.id, "CUSTOMER_PREVIEW", png(9), "preview-key-1"),
+      designEventDtoSchema,
+      await store.recordPreflightFailure(returned, { version: before.version, issues }),
     );
-    parse(
-      designArtifactDtoSchema,
-      await s.uploadArtifact(
-        draft.id,
-        "PRINT_READY",
-        new File([new Uint8Array(4)], "p.pdf", { type: "application/pdf" }),
+
+    const refused = await store.submit(returned, {
+      version: before.version,
+      preflight: { result: "Fail", issues },
+      checksums: {},
+      files: {},
+    });
+    expect(refused.status).toBe(422);
+    const details = (refused.data as { details?: { issues?: unknown } }).details;
+    expect(z.array(preflightIssueSchema).parse(details?.issues)).toEqual(issues);
+
+    const files = {
+      CUSTOMER_PREVIEW: new Blob([pngBytes(1600, 900)], { type: "image/png" }),
+      PRINT_READY: new Blob(["%PDF print"], { type: "application/pdf" }),
+      TECHNICAL_SPEC: new Blob(["%PDF spec"], { type: "application/pdf" }),
+    };
+    const checksums = Object.fromEntries(
+      await Promise.all(
+        Object.entries(files).map(async ([role, file]) => [
+          role,
+          await sha256Hex(new Uint8Array(await file.arrayBuffer())),
+        ]),
       ),
     );
-    expect(parse(z.array(designArtifactDtoSchema), s.listArtifacts(draft.id))).toHaveLength(2);
-
-    const revised = parse(
-      designDraftDtoSchema,
-      s.revise(draft.id, { version: current(s, draft.id), spec: "Tóm tắt" }),
-    );
-    expect(revised.spec).toBe("Tóm tắt");
-    const requested = parse(
-      designDraftDtoSchema,
-      s.requestReview(draft.id, { version: revised.version }),
-    );
-    expect(requested.reviewRequestedAt).toBe(requested.updatedAt);
-    const reviewed = parse(designDraftDtoSchema, s.completeReview(draft.id, true, "Đạt"));
-    expect(reviewed).toMatchObject({ technicalReviewPassed: true, reviewNotes: "Đạt" });
     const submitted = parse(
-      designDraftDtoSchema,
-      s.submit(draft.id, { version: reviewed.version }),
-    );
-    expect(submitted.status).toBe("SUBMITTED");
-    const snapshot = parse(
-      designSnapshotDtoSchema,
-      await s.confirm(draft.id, {
-        version: submitted.version,
-        artifactId: submitted.currentArtifactId,
+      designDtoSchema,
+      await store.submit(returned, {
+        version: before.version,
+        preflight: { result: "Pass", issues: [] },
+        checksums,
+        files,
       }),
     );
-    expect(snapshot.artifacts.map((a) => a.role)).toEqual(["CUSTOMER_PREVIEW", "PRINT_READY"]);
-    expect(await snapshotChecksum(snapshot.artifacts, saved.checksum)).toBe(snapshot.checksum);
+    expect(submitted.status).toBe("PENDING_REVIEW");
+    parse(z.array(designFileDtoSchema), await store.files(returned));
 
-    const fork = parse(designDraftDtoSchema, s.fork(draft.id));
-    expect(fork.parentSnapshotId).toBe(snapshot.id);
-    expect(parse(designDocumentRecordDtoSchema, s.getDocument(fork.id)).checksum).toBe(
-      saved.checksum,
-    );
-    parse(designDecisionPageDtoSchema, s.history(draft.id));
-    expect(
-      parse(designPageDtoSchema, s.list({ status: "APPROVED" })).items.map((d) => d.id),
-    ).toContain(draft.id);
+    const back = parse(designDtoSchema, await store.simulateReturn(returned, { reason: "Mờ" }));
+    expect(back.lastReturn?.reason).toBe("Mờ");
+    const approvedNow = parse(designDtoSchema, await store.simulateApprove(pending));
+    expect(approvedNow.approval).not.toBeNull();
+    parse(z.array(designEventDtoSchema), await store.history(pending));
   });
 });
-
-/** The id the catalogue gives the 12oz product (the store's default lookup is the seeded catalogue). */
-function parseProduct(s: ReturnType<typeof studio>): string {
-  return parse(customizationDtoSchema, s.customization("ly-giay-2-lop-12oz")).productId;
-}
-
-function current(s: ReturnType<typeof studio>, id: string): number {
-  return parse(designDraftDtoSchema, s.get(id)).version;
-}

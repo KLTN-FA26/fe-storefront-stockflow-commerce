@@ -8,32 +8,29 @@ import { ApiError } from "@/lib/api/error";
 
 import {
   invalidateDesign,
-  useConfirmDesign,
   useCreateDesign,
-  useFinalizeDesign,
-  useForkDesign,
-  useRequestChanges,
+  useCreateRevision,
+  useDeleteDesign,
+  useRenameDesign,
   useSaveDesignDocument,
   useUploadAsset,
-  useWithdrawConfirmation,
 } from "../mutations";
 import { designKeys } from "../queries";
+import type { Design } from "../types";
 import {
-  beAsset,
-  beDocumentRecord,
-  beDraft,
-  beSnapshot,
+  approvedDto,
+  assetDto,
   cupDocument,
-  designDraft,
+  design,
+  designDto,
+  documentRecordDto,
   ids,
-  proposedDraftFields,
-  validCreateInput,
 } from "./fixtures";
 
 afterEach(() => vi.restoreAllMocks());
 
-const design = ids.design;
-const path = (tail: string) => `/designs/${design}${tail}`;
+const id = ids.design;
+const listParams = { page: 1, size: 12 };
 
 function setup() {
   const client = new QueryClient({
@@ -46,318 +43,195 @@ function setup() {
   return { client, invalidate, wrapper };
 }
 
-type Spy = ReturnType<typeof setup>["invalidate"];
-const expectDesignInvalidated = (invalidate: Spy, id = design) => {
-  expect(invalidate).toHaveBeenCalledWith({ queryKey: designKeys.detail(id), exact: true });
-  expect(invalidate).toHaveBeenCalledWith({ queryKey: designKeys.lists() });
-  expect(invalidate).toHaveBeenCalledWith({ queryKey: designKeys.history(id) });
-  expect(invalidate).toHaveBeenCalledWith({ queryKey: designKeys.snapshot(id) });
-};
+/** The keys a mutation invalidated, in the shape it passed them. */
+const invalidated = (spy: ReturnType<typeof setup>["invalidate"]) =>
+  spy.mock.calls.map(([filters]) => filters);
 
-const submitted = (overrides: Record<string, unknown> = {}) =>
-  beDraft({ status: "SUBMITTED", version: 4, currentArtifactId: ids.artifact, ...overrides });
-const reviewPassed = designDraft({ technicalReviewPassed: true, currentArtifactId: ids.artifact });
+describe("create and revision (spec §4.4: lists, draftCount)", () => {
+  it("useCreateDesign creates the draft and re-reads the lists and the draft count", async () => {
+    const post = vi.spyOn(api, "post").mockResolvedValueOnce({ data: designDto({ version: 0 }) });
+    const { invalidate, wrapper } = setup();
+    const { result } = renderHook(() => useCreateDesign(), { wrapper });
 
-describe("useFinalizeDesign (submit, then confirm)", () => {
-  it("submits a DRAFT, confirms the artifact with the version the submit returned, and re-reads the design", async () => {
+    result.current.mutate({ productSlug: "ly", sku: "CUP-1", name: "Ly" });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(post).toHaveBeenCalledWith("/designs", { productSlug: "ly", sku: "CUP-1", name: "Ly" });
+    expect(result.current.data).toMatchObject({ id, version: 0 });
+    expect(invalidated(invalidate)).toEqual([
+      { queryKey: designKeys.lists() },
+      { queryKey: designKeys.draftCount() },
+    ]);
+  });
+
+  it("useCreateRevision creates a draft from an approved design and re-reads the same", async () => {
     const post = vi
       .spyOn(api, "post")
-      .mockResolvedValueOnce({ data: submitted() })
-      .mockResolvedValueOnce({ data: beSnapshot });
+      .mockResolvedValueOnce({ data: designDto({ id: ids.revision, version: 0 }) });
     const { invalidate, wrapper } = setup();
-    const { result } = renderHook(() => useFinalizeDesign(design), { wrapper });
+    const { result } = renderHook(() => useCreateRevision(), { wrapper });
 
-    result.current.mutate(reviewPassed);
+    result.current.mutate(id);
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(post).toHaveBeenCalledTimes(2);
-    expect(post).toHaveBeenNthCalledWith(1, path("/confirmation-requests"), { version: 3 });
-    expect(post).toHaveBeenNthCalledWith(2, path("/confirmations"), {
-      version: 4,
-      artifactId: ids.artifact,
-    });
-    expect(result.current.data).toMatchObject({ id: ids.snapshot });
-    expectDesignInvalidated(invalidate);
-  });
-
-  it("only confirms a design Sales already submitted", async () => {
-    const post = vi.spyOn(api, "post").mockResolvedValueOnce({ data: beSnapshot });
-    const { wrapper } = setup();
-    const { result } = renderHook(() => useFinalizeDesign(design), { wrapper });
-
-    result.current.mutate(designDraft(submitted()));
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(post).toHaveBeenCalledTimes(1);
-    expect(post).toHaveBeenCalledWith(path("/confirmations"), {
-      version: 4,
-      artifactId: ids.artifact,
-    });
-  });
-
-  it("re-reads the design even when the confirmation fails after the submission went through", async () => {
-    vi.spyOn(api, "post")
-      .mockResolvedValueOnce({ data: submitted() })
-      .mockRejectedValueOnce(new ApiError(409, "CONFLICT", "stale"));
-    const { invalidate, wrapper } = setup();
-    const { result } = renderHook(() => useFinalizeDesign(design), { wrapper });
-
-    result.current.mutate(reviewPassed);
-
-    await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(result.current.error).toMatchObject({ code: "CONFLICT" });
-    expectDesignInvalidated(invalidate);
-  });
-
-  it("refuses a design without a current artifact before it submits anything", async () => {
-    const post = vi.spyOn(api, "post");
-    const { wrapper } = setup();
-    const { result } = renderHook(() => useFinalizeDesign(design), { wrapper });
-
-    result.current.mutate(designDraft({ technicalReviewPassed: true, currentArtifactId: null }));
-
-    await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(post).not.toHaveBeenCalled();
-    expect(result.current.error).toMatchObject({ code: "DESIGN_ARTIFACT_MISSING" });
+    expect(post).toHaveBeenCalledWith(`/designs/${id}/revisions`);
+    expect(result.current.data?.id).toBe(ids.revision);
+    expect(invalidated(invalidate)).toEqual([
+      { queryKey: designKeys.lists() },
+      { queryKey: designKeys.draftCount() },
+    ]);
   });
 });
 
-describe("the customer's answers to a submitted design", () => {
-  it("confirm posts the artifact and version and re-reads the design", async () => {
-    const post = vi.spyOn(api, "post").mockResolvedValueOnce({ data: beSnapshot });
-    const { invalidate, wrapper } = setup();
-    const { result } = renderHook(() => useConfirmDesign(design), { wrapper });
+describe("useRenameDesign (spec §4.4: detail, lists)", () => {
+  it("puts the renamed design, with its new version, in the cache and re-reads the lists", async () => {
+    vi.spyOn(api, "patch").mockResolvedValueOnce({ data: designDto({ name: "Mới", version: 4 }) });
+    const { client, invalidate, wrapper } = setup();
+    client.setQueryData(designKeys.detail(id), design());
+    const { result } = renderHook(() => useRenameDesign(id), { wrapper });
 
-    result.current.mutate(designDraft(submitted()));
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(post).toHaveBeenCalledWith(path("/confirmations"), {
-      version: 4,
-      artifactId: ids.artifact,
-    });
-    expectDesignInvalidated(invalidate);
-  });
-
-  it("request changes posts the trimmed reason and re-reads the design", async () => {
-    const post = vi.spyOn(api, "post").mockResolvedValueOnce({ data: beDraft() });
-    const { invalidate, wrapper } = setup();
-    const { result } = renderHook(() => useRequestChanges(design), { wrapper });
-
-    result.current.mutate({ version: 4, reason: "  Đổi màu nền  " });
+    result.current.mutate({ name: "Mới", version: 3 });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(post).toHaveBeenCalledWith(path("/change-requests"), {
+    expect(client.getQueryData<Design>(designKeys.detail(id))).toMatchObject({
+      name: "Mới",
       version: 4,
-      reason: "Đổi màu nền",
     });
-    expectDesignInvalidated(invalidate);
+    // The answer is the fresh design: no refetch that could land with an older version.
+    expect(invalidated(invalidate)).toEqual([{ queryKey: designKeys.lists() }]);
   });
 
-  it("withdraw posts the reason and re-reads the design", async () => {
-    const post = vi.spyOn(api, "post").mockResolvedValueOnce({ data: beDraft() });
+  it("re-reads the design when it moved to another status meanwhile (409 INVALID_STATE)", async () => {
+    vi.spyOn(api, "patch").mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "x"));
     const { invalidate, wrapper } = setup();
-    const { result } = renderHook(() => useWithdrawConfirmation(design), { wrapper });
+    const { result } = renderHook(() => useRenameDesign(id), { wrapper });
 
-    result.current.mutate({ version: 4, reason: "Cần sửa logo" });
+    result.current.mutate({ name: "Mới", version: 3 });
 
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(post).toHaveBeenCalledWith(path("/confirmation-withdrawals"), {
-      version: 4,
-      reason: "Cần sửa logo",
-    });
-    expectDesignInvalidated(invalidate);
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(invalidated(invalidate)).toEqual([
+      { queryKey: designKeys.detail(id), exact: true },
+      { queryKey: designKeys.lists() },
+    ]);
   });
-
-  it.each([
-    ["request changes", useRequestChanges],
-    ["withdraw", useWithdrawConfirmation],
-  ])(
-    "%s re-reads the design when the BE answers 409 (the cached version is stale)",
-    async (_n, hook) => {
-      vi.spyOn(api, "post").mockRejectedValueOnce(new ApiError(409, "CONFLICT", "stale"));
-      const { invalidate, wrapper } = setup();
-      const { result } = renderHook(() => hook(design), { wrapper });
-
-      result.current.mutate({ version: 4, reason: "Cần sửa" });
-
-      await waitFor(() => expect(result.current.isError).toBe(true));
-      expectDesignInvalidated(invalidate);
-    },
-  );
 });
 
-describe("starting and forking", () => {
-  it("create posts the input and re-reads the lists", async () => {
-    const post = vi.spyOn(api, "post").mockResolvedValueOnce({ data: beDraft() });
-    const { invalidate, wrapper } = setup();
-    const { result } = renderHook(() => useCreateDesign(), { wrapper });
+describe("useSaveDesignDocument (spec §4.4: detail version, lists updatedAt)", () => {
+  it("caches the saved record, moves the design to its version, and re-reads the lists", async () => {
+    const saved = documentRecordDto({ version: 4, updatedAt: "2026-11-02T09:00:00Z" });
+    const put = vi.spyOn(api, "put").mockResolvedValueOnce({ data: saved });
+    const { client, invalidate, wrapper } = setup();
+    client.setQueryData(designKeys.detail(id), design());
+    const { result } = renderHook(() => useSaveDesignDocument(id), { wrapper });
+    const document = cupDocument();
 
-    result.current.mutate(validCreateInput);
+    result.current.mutate({ version: 3, document });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(post).toHaveBeenCalledWith("/designs/mine", validCreateInput);
-    expect(result.current.data).toMatchObject({ id: ids.design });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: designKeys.lists() });
+    expect(put).toHaveBeenCalledWith(`/designs/${id}/document`, { version: 3, document });
+    expect(client.getQueryData(designKeys.document(id))).toMatchObject({ version: 4 });
+    expect(client.getQueryData<Design>(designKeys.detail(id))).toMatchObject({
+      version: 4,
+      updatedAt: "2026-11-02T09:00:00Z",
+    });
+    expect(invalidated(invalidate)).toEqual([{ queryKey: designKeys.lists() }]);
   });
 
-  it("create leaves the lists alone when it fails", async () => {
-    vi.spyOn(api, "post").mockRejectedValueOnce(new ApiError(409, "PRODUCT_NOT_CUSTOMIZABLE", "x"));
+  it("re-reads the design on 409 INVALID_STATE, so the studio follows its new status", async () => {
+    vi.spyOn(api, "put").mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "x"));
     const { invalidate, wrapper } = setup();
-    const { result } = renderHook(() => useCreateDesign(), { wrapper });
+    const { result } = renderHook(() => useSaveDesignDocument(id), { wrapper });
 
-    result.current.mutate(validCreateInput);
+    result.current.mutate({ version: 3, document: cupDocument() });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(invalidated(invalidate)).toEqual([
+      { queryKey: designKeys.detail(id), exact: true },
+      { queryKey: designKeys.lists() },
+    ]);
+  });
+
+  it("leaves a stale version (409 VERSION_CONFLICT) to the conflict dialog", async () => {
+    vi.spyOn(api, "put").mockRejectedValueOnce(new ApiError(409, "VERSION_CONFLICT", "x"));
+    const { invalidate, wrapper } = setup();
+    const { result } = renderHook(() => useSaveDesignDocument(id), { wrapper });
+
+    result.current.mutate({ version: 3, document: cupDocument() });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(invalidate).not.toHaveBeenCalled();
   });
-
-  it("fork posts to the source design and re-reads the lists", async () => {
-    const post = vi.spyOn(api, "post").mockResolvedValueOnce({
-      data: beDraft({ id: ids.artifact2, parentSnapshotId: ids.snapshot }),
-    });
-    const { invalidate, wrapper } = setup();
-    const { result } = renderHook(() => useForkDesign(), { wrapper });
-
-    result.current.mutate(design);
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(post).toHaveBeenCalledWith(path("/revisions"));
-    expect(result.current.data).toMatchObject({ id: ids.artifact2 });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: designKeys.lists() });
-  });
 });
 
-describe("uploading an image", () => {
-  it("sends the file with the caller's idempotency key and re-reads the design's assets", async () => {
-    const post = vi.spyOn(api, "post").mockResolvedValueOnce({ data: beAsset });
+describe("useUploadAsset (spec §4.4: assets)", () => {
+  it("uploads the image with its key and re-reads the design's images", async () => {
+    const post = vi.spyOn(api, "post").mockResolvedValueOnce({ data: assetDto });
     const { invalidate, wrapper } = setup();
-    const { result } = renderHook(() => useUploadAsset(design), { wrapper });
-    const file = new Blob(["png"], { type: "image/png" });
+    const { result } = renderHook(() => useUploadAsset(id), { wrapper });
 
+    const file = new Blob(["x"], { type: "image/png" });
     result.current.mutate({ file, name: "logo.png", idempotencyKey: "key-1" });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(post).toHaveBeenCalledWith(
-      path("/assets"),
-      expect.any(FormData),
-      expect.objectContaining({ headers: expect.objectContaining({ "Idempotency-Key": "key-1" }) }),
-    );
-    expect(result.current.data).toMatchObject({ assetId: ids.asset });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: designKeys.assets(design) });
+    expect(post.mock.calls[0]?.[0]).toBe(`/designs/${id}/assets`);
+    expect(post.mock.calls[0]?.[2]).toMatchObject({ headers: { "Idempotency-Key": "key-1" } });
+    expect(invalidated(invalidate)).toEqual([{ queryKey: designKeys.assets(id) }]);
   });
 });
 
-describe("useSaveDesignDocument", () => {
-  const record = beDocumentRecord({ version: 4, updatedAt: "2026-10-25T08:10:00Z" });
-
-  it("stores the saved record, moves the cached design to its version and re-reads the lists", async () => {
-    const put = vi.spyOn(api, "put").mockResolvedValueOnce({ data: record });
+describe("useDeleteDesign (spec §4.4: lists, draftCount; removes detail)", () => {
+  it("archives the draft with its version, forgets its cache and re-reads the lists and count", async () => {
+    const del = vi
+      .spyOn(api, "delete")
+      .mockResolvedValueOnce({ data: designDto({ status: "ARCHIVED", version: 4 }) });
     const { client, invalidate, wrapper } = setup();
-    client.setQueryData(designKeys.detail(design), designDraft());
-    const { result } = renderHook(() => useSaveDesignDocument(design), { wrapper });
+    client.setQueryData(designKeys.detail(id), design());
+    client.setQueryData(designKeys.document(id), documentRecordDto());
+    client.setQueryData(designKeys.list(listParams), { items: [design()] });
+    const { result } = renderHook(() => useDeleteDesign(), { wrapper });
 
-    result.current.mutate({ version: 3, document: cupDocument() });
+    result.current.mutate({ id, version: 3 });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(put).toHaveBeenCalledWith(path("/document"), { version: 3, document: cupDocument() });
-    expect(client.getQueryData(designKeys.document(design))).toMatchObject({ version: 4 });
-    expect(client.getQueryData(designKeys.detail(design))).toMatchObject({ version: 4 });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: designKeys.lists() });
-    // Still editing: the BE has no review to reset, so the cached design stays as it is.
-    expect(invalidate).not.toHaveBeenCalledWith({
-      queryKey: designKeys.detail(design),
-      exact: true,
-    });
+    expect(del).toHaveBeenCalledWith(`/designs/${id}`, { data: { version: 3 } });
+    expect(client.getQueryData(designKeys.detail(id))).toBeUndefined();
+    expect(client.getQueryData(designKeys.document(id))).toBeUndefined();
+    expect(invalidated(invalidate)).toEqual([
+      { queryKey: designKeys.lists() },
+      { queryKey: designKeys.draftCount() },
+    ]);
   });
 
-  it("does not re-read a design that is editing again after its review was voided by an earlier save", async () => {
-    vi.spyOn(api, "put").mockResolvedValueOnce({ data: record });
+  it("re-reads the lists and the count when the delete is refused, and keeps the cache", async () => {
+    vi.spyOn(api, "delete").mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "x"));
     const { client, invalidate, wrapper } = setup();
-    // The BE clears reviewRequestedAt when an edit voids a review; the artifact stays current.
-    client.setQueryData(
-      designKeys.detail(design),
-      designDraft({
-        ...proposedDraftFields,
-        currentArtifactId: ids.artifact,
-        reviewRequestedAt: undefined,
-        reviewedAt: undefined,
-      }),
-    );
-    const { result } = renderHook(() => useSaveDesignDocument(design), { wrapper });
+    client.setQueryData(designKeys.detail(id), design());
+    const { result } = renderHook(() => useDeleteDesign(), { wrapper });
 
-    result.current.mutate({ version: 3, document: cupDocument() });
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(invalidate).not.toHaveBeenCalledWith({
-      queryKey: designKeys.detail(design),
-      exact: true,
-    });
-  });
-
-  it("re-reads the design when it was past editing: the BE resets the technical review on a save", async () => {
-    vi.spyOn(api, "put").mockResolvedValueOnce({ data: record });
-    const { client, invalidate, wrapper } = setup();
-    client.setQueryData(designKeys.detail(design), reviewPassed);
-    const { result } = renderHook(() => useSaveDesignDocument(design), { wrapper });
-
-    result.current.mutate({ version: 3, document: cupDocument() });
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: designKeys.detail(design), exact: true });
-  });
-
-  it("does not invent a design in the cache when it holds none", async () => {
-    vi.spyOn(api, "put").mockResolvedValueOnce({ data: record });
-    const { client, wrapper } = setup();
-    const { result } = renderHook(() => useSaveDesignDocument(design), { wrapper });
-
-    result.current.mutate({ version: 3, document: cupDocument() });
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(client.getQueryData(designKeys.detail(design))).toBeUndefined();
-    expect(client.getQueryData(designKeys.document(design))).toMatchObject({ version: 4 });
-  });
-
-  it("changes nothing in the cache when the save fails", async () => {
-    vi.spyOn(api, "put").mockRejectedValueOnce(new ApiError(409, "CONFLICT", "stale"));
-    const { client, invalidate, wrapper } = setup();
-    client.setQueryData(designKeys.detail(design), designDraft());
-    const { result } = renderHook(() => useSaveDesignDocument(design), { wrapper });
-
-    result.current.mutate({ version: 3, document: cupDocument() });
+    result.current.mutate({ id, version: 3 });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(client.getQueryData(designKeys.detail(design))).toMatchObject({ version: 3 });
-    expect(invalidate).not.toHaveBeenCalled();
+    expect(client.getQueryData(designKeys.detail(id))).toBeDefined();
+    expect(invalidated(invalidate)).toEqual([
+      { queryKey: designKeys.lists() },
+      { queryKey: designKeys.draftCount() },
+    ]);
   });
 });
 
-describe("invalidateDesign", () => {
-  it("marks the design, its lists, history, artifacts and snapshot stale, but not its document or assets", async () => {
-    const { client } = setup();
-    const keys = {
-      detail: designKeys.detail(design),
-      list: designKeys.list({ page: 1, size: 12 }),
-      history: designKeys.history(design),
-      artifacts: designKeys.artifacts(design),
-      snapshot: designKeys.snapshot(design),
-      document: designKeys.document(design),
-      assets: designKeys.assets(design),
-      otherDesign: designKeys.detail(ids.artifact2),
-    };
-    for (const key of Object.values(keys)) client.setQueryData(key, { cached: true });
+describe("invalidateDesign (spec §4.4: submit, simulated approve / return)", () => {
+  it("re-reads the design, its history and files, the lists and the draft count", async () => {
+    const { client, invalidate } = setup();
+    client.setQueryData(designKeys.detail(id), design(approvedDto()));
 
-    await invalidateDesign(client, design);
+    await invalidateDesign(client, id);
 
-    const stale = (key: readonly unknown[]) => client.getQueryState(key)?.isInvalidated;
-    expect(stale(keys.detail)).toBe(true);
-    expect(stale(keys.list)).toBe(true);
-    expect(stale(keys.history)).toBe(true);
-    expect(stale(keys.artifacts)).toBe(true);
-    expect(stale(keys.snapshot)).toBe(true);
-    // The editor holds the document and the images; a workflow step does not change them.
-    expect(stale(keys.document)).toBe(false);
-    expect(stale(keys.assets)).toBe(false);
-    expect(stale(keys.otherDesign)).toBe(false);
+    expect(invalidated(invalidate)).toEqual([
+      { queryKey: designKeys.detail(id), exact: true },
+      { queryKey: designKeys.history(id) },
+      { queryKey: designKeys.files(id) },
+      { queryKey: designKeys.lists() },
+      { queryKey: designKeys.draftCount() },
+    ]);
   });
 });

@@ -4,118 +4,83 @@ import { pageResponseSchema } from "@/lib/api/page-response";
 import { beId } from "@/lib/validation/primitives";
 
 import { designDocumentSchema } from "./engine/document/schema";
-import { customizationTemplateSchema } from "./engine/template/schema";
+import type { PreflightRuleId } from "./engine/preflight/types";
+import { customizationTemplateSchema, printAreaCodeSchema } from "./engine/template/schema";
 
-// DTOs mirror BE `origin/develop` (design module: DesignWorkflowController, DesignController) plus
-// the endpoints proposed in spec §7.2 (P1–P6), which the real BE does not serve yet.
-// Jackson runs with `default-property-inclusion: non_null`: a nullable field is absent from the
-// JSON, not null, so every nullable field is `.nullish()`. Ids are beId() (any 8-4-4-4-12 hex).
-// Engine schemas are imported from their own modules, never `engine/index.ts` (pulls three.js).
+// The design API the FE defines from docs 12 (spec 2026-11-09 §4.1): the mock serves it now, the BE
+// later. Nullable fields are sent as `null`, never left out, so they are `.nullable()`: a missing
+// one is a contract break. Engine schemas come from their own modules, never `engine/index.ts`
+// (it pulls three.js).
 
-/** `REJECTED` is declared by the BE but never set. */
-export const designStatusSchema = z.enum(["DRAFT", "SUBMITTED", "APPROVED", "REJECTED"]);
+/** docs 12 §4 (spec §3.1). */
+export const designStatusSchema = z.enum(["DRAFT", "PENDING_REVIEW", "APPROVED", "ARCHIVED"]);
 
-export const artifactRoleSchema = z.enum([
-  "CUSTOMER_PREVIEW",
-  "TECHNICAL_SPEC",
-  "PRINT_READY",
-  "PRODUCTION_INSTRUCTION",
-]);
-
-// A `java.time.Instant`: ISO-8601 with any sub-second precision. Kept as text; display formats it.
+// An instant as ISO-8601 text, any sub-second precision; display formats it.
 const instant = z.string().min(1);
 const checksum = z.string().min(1);
 const sizeBytes = z.number().int().nonnegative();
+const version = z.number().int().nonnegative();
+const code = z.string().min(1);
 
-/**
- * GET /designs/{id} and every workflow write (DesignDraftResponse). `version` is the optimistic-lock
- * token each write must echo back. The six fields after `version` are P6 (spec §7.2): absent on the
- * real BE.
- */
-export const designDraftDtoSchema = z.object({
+/** GET /designs/{id} and every write that answers the design. */
+export const designDtoSchema = z.object({
   id: beId(),
-  customerId: beId(),
-  productId: beId(),
-  ownerUserId: beId(),
-  assignedUserId: beId().nullish(),
-  reviewerUserId: beId().nullish(),
-  name: z.string(),
-  // A draft the customer starts (P1) has no specification text until the first review request.
-  spec: z.string().nullish(),
+  name: z.string().min(1),
   status: designStatusSchema,
-  currentArtifactId: beId().nullish(),
-  technicalReviewPassed: z.boolean(),
-  reviewNotes: z.string().nullish(),
-  version: z.number().int().nonnegative(),
-  parentSnapshotId: beId().nullish(),
-  // P6
-  productSlug: z.string().min(1).nullish(),
-  sku: z.string().min(1).nullish(),
-  templateCode: z.string().min(1).nullish(),
-  reviewRequestedAt: instant.nullish(),
-  reviewedAt: instant.nullish(),
-  updatedAt: instant.nullish(),
-  previewArtifactId: beId().nullish(),
+  product: z.object({ slug: code, title: z.string().min(1) }),
+  variant: z.object({ sku: code, label: z.string().min(1) }),
+  /** The optimistic-lock token every write echoes back (docs 12 BR-11). */
+  version,
+  projectId: beId().nullable(), // part E; always null in part A
+  sourceSnapshotId: beId().nullable(),
+  lastReturn: z.object({ reason: z.string().min(1), returnedAt: instant }).nullable(),
+  /** The latest CUSTOMER_PREVIEW, for cards. */
+  previewUrl: z.string().min(1).nullable(),
+  createdAt: instant,
+  updatedAt: instant,
+  submittedAt: instant.nullable(),
+  approvedAt: instant.nullable(),
+  approval: z.object({ snapshotId: beId(), skuCode: code, bundleChecksum: checksum }).nullable(),
 });
-export const designPageDtoSchema = pageResponseSchema(designDraftDtoSchema);
 
-/** GET /designs/{id}/history rows (DesignDecisionResponse). */
-export const designDecisionDtoSchema = z.object({
-  actorId: beId().nullish(),
-  artifactId: beId().nullish(),
-  decision: z.string().min(1),
-  notes: z.string().nullish(),
-  version: z.number().int().nonnegative(),
+/** GET /designs — `page` is 0-based here; the API layer shifts it. */
+export const designPageDtoSchema = pageResponseSchema(designDtoSchema);
+
+/** GET /designs/draft-count (docs 12 §4.1, B37). */
+export const draftCountDtoSchema = z.object({
+  drafts: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+});
+
+/** docs 12 §5.3 (spec §3.3). */
+export const designEventTypeSchema = z.enum([
+  "CREATED",
+  "DERIVED_FROM_SNAPSHOT",
+  "PREFLIGHT_FAILED",
+  "SUBMITTED_FOR_REVIEW",
+  "RETURNED",
+  "APPROVED",
+  "ARCHIVED",
+]);
+
+/** GET /designs/{id}/history rows, oldest first. */
+export const designEventDtoSchema = z.object({
+  type: designEventTypeSchema,
   at: instant,
-});
-export const designDecisionPageDtoSchema = pageResponseSchema(designDecisionDtoSchema);
-
-/** GET /designs/{id}/snapshot and the answer to a confirmation (DesignSnapshotResponse). */
-export const designSnapshotDtoSchema = z.object({
-  id: beId(),
-  draftId: beId(),
-  artifactId: beId().nullish(),
-  checksum: checksum.nullish(),
-  spec: z.string().nullish(),
-  confirmedBy: beId().nullish(),
-  confirmedAt: instant.nullish(),
-  artifacts: z.array(
-    z.object({
-      artifactId: beId(),
-      role: artifactRoleSchema,
-      originalName: z.string(),
-      contentType: z.string().min(1),
-      sizeBytes,
-      checksum,
-    }),
-  ),
+  version,
+  note: z.string().nullable(),
 });
 
-/** /designs/{id}/artifacts (DesignArtifactResponse). */
-export const designArtifactDtoSchema = z.object({
-  artifactId: beId(),
-  designId: beId(),
-  role: artifactRoleSchema,
-  originalName: z.string(),
-  contentType: z.string().min(1),
-  sizeBytes,
-  storedAt: instant,
-  checksum,
-});
-
-/** A short-lived presigned link (ArtifactDownloadResponse; P4 uses the same shape). */
-export const downloadLinkDtoSchema = z.object({ url: z.string().min(1), expiresAt: instant });
-
-/** P3: GET/PUT /designs/{id}/document. The document is the engine's schema, parsed in full. */
+/** GET/PUT /designs/{id}/document. The document is the engine's schema, parsed in full. */
 export const designDocumentRecordDtoSchema = z.object({
   designId: beId(),
-  version: z.number().int().nonnegative(),
+  version,
   document: designDocumentSchema,
   checksum,
   updatedAt: instant,
 });
 
-/** P4: a customer image stored for the design. */
+/** A customer image stored for the design. */
 export const designAssetDtoSchema = z.object({
   assetId: beId(),
   designId: beId(),
@@ -128,62 +93,85 @@ export const designAssetDtoSchema = z.object({
   storedAt: instant,
 });
 
-// ── P2: customization ──
+/** A short-lived link to a stored image. */
+export const downloadLinkDtoSchema = z.object({ url: z.string().min(1), expiresAt: instant });
 
-const MIME_BY_FORMAT: Record<string, string> = {
-  PNG: "image/png",
-  JPG: "image/jpeg",
-  JPEG: "image/jpeg",
-  WEBP: "image/webp",
-};
+/** The three files of a submission (spec §4.2). */
+export const designFileRoleSchema = z.enum(["CUSTOMER_PREVIEW", "PRINT_READY", "TECHNICAL_SPEC"]);
 
-/** `product.customization_templates.allowed_file_formats` holds short names; the engine wants MIME. */
-const toMime = (format: string) => {
-  const trimmed = format.trim();
-  return MIME_BY_FORMAT[trimmed.toUpperCase()] ?? trimmed.toLowerCase();
-};
+/** GET /designs/{id}/files: the bundle of the latest submission. */
+export const designFileDtoSchema = z.object({
+  role: designFileRoleSchema,
+  name: z.string().min(1),
+  sizeBytes,
+  sha256: checksum,
+  url: z.string().min(1),
+});
 
 /**
- * Reads a BE template row the way the engine's schema expects it (ASSUMPTION: P2 is not shipped,
- * so this is the proposed spelling): formats as lowercase MIME types, each once; an empty font list
- * or an absent nullable field as `null` (= no restriction); the BE drops nulls (non_null).
+ * GET /catalog/products/{slug}/variants/{sku}/print-config. File formats are lowercase MIME types,
+ * as the engine's template wants them (docs open-questions B34: 300 DPI, PNG/JPG, 50 MB).
  */
-function normalizeTemplate(raw: unknown): unknown {
-  if (typeof raw !== "object" || raw === null) return raw;
-  const row = raw as Record<string, unknown>;
-  const { allowedFileFormats, allowedFontCodes, maxColors } = row;
-  return {
-    ...row,
-    allowedFileFormats: Array.isArray(allowedFileFormats)
-      ? [...new Set(allowedFileFormats.map((f) => (typeof f === "string" ? toMime(f) : f)))]
-      : allowedFileFormats,
-    allowedFontCodes:
-      allowedFontCodes === undefined ||
-      (Array.isArray(allowedFontCodes) && !allowedFontCodes.length)
-        ? null
-        : allowedFontCodes,
-    maxColors: maxColors ?? null,
-  };
-}
-
-/** GET /catalog/products/{slug}/customization. */
-export const customizationDtoSchema = z.object({
-  productId: beId(),
-  kind: z.enum(["STANDARD", "CUSTOMIZABLE"]),
-  templates: z.array(z.preprocess(normalizeTemplate, customizationTemplateSchema)),
+export const printConfigDtoSchema = z.object({
+  sku: code,
+  product: z.object({ slug: code, title: z.string().min(1), status: code }),
+  variantStatus: z.enum(["ACTIVE", "BLOCKED", "OBSOLETE"]),
+  /** docs 12 BR-05, B25: needed before submitting. */
+  hasCartonSpec: z.boolean(),
+  template: customizationTemplateSchema,
+  fileRules: z.object({
+    minDpi: z.number().positive(),
+    formats: z.array(z.string().min(1)).min(1),
+    maxFileSizeMb: z.number().positive(),
+  }),
 });
 
-// ── Inputs: what the BE refuses is refused before it is sent ──
+/** Every engine rule, once: adding a rule to `PreflightRuleId` fails here until it is listed. */
+const PREFLIGHT_RULE_IDS = {
+  OUTSIDE_PRINT_AREA: "OUTSIDE_PRINT_AREA",
+  DPI_BELOW_MIN: "DPI_BELOW_MIN",
+  FONT_NOT_ALLOWED: "FONT_NOT_ALLOWED",
+  ASSET_INVALID: "ASSET_INVALID",
+  EMPTY_DESIGN: "EMPTY_DESIGN",
+  CROSSES_SAFE_AREA: "CROSSES_SAFE_AREA",
+  ON_SEAM: "ON_SEAM",
+  TOO_THIN: "TOO_THIN",
+  WHITE_ON_KRAFT: "WHITE_ON_KRAFT",
+  TOO_MANY_COLORS: "TOO_MANY_COLORS",
+  CMYK_CONVERSION: "CMYK_CONVERSION",
+  VARIANT_UNAVAILABLE: "VARIANT_UNAVAILABLE",
+  NO_CARTON_SPEC: "NO_CARTON_SPEC",
+} as const satisfies { [K in PreflightRuleId]: K };
 
-/** P1: POST /designs/mine. The name is `@Size(max = 200)` on the BE's own create request. */
+/** The engine's `PreflightIssue`, as `422 PREFLIGHT_FAILED` carries it in `details.issues`. */
+export const preflightIssueSchema = z.object({
+  ruleId: z.enum(PREFLIGHT_RULE_IDS),
+  level: z.enum(["fail", "note"]),
+  message: z.string(),
+  surfaceCode: printAreaCodeSchema.exactOptional(),
+  elementId: z.string().exactOptional(),
+});
+
+// ── Inputs: what the server refuses is refused before it is sent ──
+
+/** docs 12 §3: a name of 1–200 characters, set by the customer. */
+const designName = z
+  .string()
+  .trim()
+  .min(1, "Hãy đặt tên cho thiết kế")
+  .max(200, "Tên tối đa 200 ký tự");
+
+/** POST /designs: a design starts from a variant (docs 12 §4.1, BR-01, BR-02). */
 export const createDesignInputSchema = z.object({
-  productId: beId(),
-  sku: z.string().min(1),
-  templateCode: z.string().min(1),
-  name: z.string().trim().min(1, "Hãy đặt tên cho thiết kế").max(200, "Tên tối đa 200 ký tự"),
+  productSlug: z.string().trim().min(1),
+  sku: z.string().trim().min(1),
+  name: designName,
 });
 
-/** `ChangeRequest.reason`: `@NotBlank @Size(max = 2000)` on both change requests and withdrawals. */
-export const changeReasonInputSchema = z.object({
+/** PATCH /designs/{id}: the name field (the version travels beside it). */
+export const renameDesignInputSchema = z.object({ name: designName });
+
+/** docs 12 BR-06: a return needs a reason of 1–2,000 characters. */
+export const returnReasonInputSchema = z.object({
   reason: z.string().trim().min(1, "Hãy nhập lý do").max(2000, "Lý do tối đa 2000 ký tự"),
 });

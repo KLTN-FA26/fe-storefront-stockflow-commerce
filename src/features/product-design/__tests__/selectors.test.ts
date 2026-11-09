@@ -2,87 +2,83 @@ import { describe, expect, it } from "vitest";
 
 import { formatDateTime } from "@/lib/format";
 
-import { decisionView, defaultDesignName, designCardView } from "../selectors";
-import { designDraft, ids, proposedDraftFields } from "./fixtures";
+import { designEventDtoSchema } from "../schemas";
+import { defaultDesignName, designCardView, eventView } from "../selectors";
+import { approvedDto, design, eventDto, returnedDto } from "./fixtures";
+
+const event = (overrides: Record<string, unknown>) =>
+  designEventDtoSchema.parse(eventDto(overrides));
 
 describe("designCardView", () => {
-  it("shows the name, the SKU, the update time and the lifecycle state of a P6 draft", () => {
-    const view = designCardView(
-      designDraft({ ...proposedDraftFields, reviewRequestedAt: undefined, reviewedAt: undefined }),
+  it("shows the name, product · variant, last save, status and preview", () => {
+    expect(designCardView(design())).toEqual({
+      title: "Ly giấy logo quán",
+      subtitle: "Ly giấy 2 lớp 12oz · CUP-PAPER-12OZ-WHT",
+      updatedLabel: formatDateTime("2026-11-02T08:00:00Z"),
+      status: "DRAFT",
+      returnReason: null,
+      previewUrl: null,
+    });
+    expect(designCardView(design(approvedDto())).previewUrl).toBe("/logo.png");
+  });
+
+  it("gives the return reason only for a returned draft", () => {
+    expect(designCardView(design(returnedDto())).returnReason).toBe(
+      "Logo bị mờ, hãy dùng ảnh rõ hơn",
     );
-    expect(view).toEqual({
-      title: "Ly giấy logo quán",
-      subtitle: "CUP-PAPER-12OZ-WHT · CUP12-BODY",
-      updatedLabel: formatDateTime("2026-10-25T08:00:00Z"),
-      state: "editing",
-    });
-  });
-
-  it("has no subtitle and no update time on a real-BE draft (no P6 fields)", () => {
-    expect(designCardView(designDraft({ currentArtifactId: ids.artifact }))).toEqual({
-      title: "Ly giấy logo quán",
-      subtitle: "",
-      updatedLabel: null,
-      state: "awaitingReview",
-    });
-  });
-
-  it("shows an edited design that was already sent to QC as editing again", () => {
-    expect(
-      designCardView(
-        designDraft({
-          ...proposedDraftFields,
-          currentArtifactId: ids.artifact,
-          reviewRequestedAt: undefined,
-          reviewedAt: undefined,
-        }),
-      ).state,
-    ).toBe("editing");
-  });
-
-  it("falls back to the template code when the SKU is absent", () => {
-    expect(designCardView(designDraft({ templateCode: "BAG-M" })).subtitle).toBe("BAG-M");
+    expect(designCardView(design()).returnReason).toBeNull();
+    expect(designCardView(design(returnedDto({ status: "PENDING_REVIEW" }))).returnReason).toBe(
+      null,
+    );
   });
 
   it("does not throw on a timestamp it cannot read", () => {
-    expect(designCardView(designDraft({ updatedAt: "not a date" })).updatedLabel).toBeNull();
+    expect(designCardView(design({ updatedAt: "not a date" })).updatedLabel).toBeNull();
   });
 });
 
-describe("defaultDesignName", () => {
-  it("is the template name and the day and month in Ho Chi Minh time", () => {
-    // 17:30 UTC on the 25th is already the 26th at 00:30 in Vietnam.
-    expect(defaultDesignName("Ly giấy 12oz – in thân ly", new Date("2026-10-25T17:30:00Z"))).toBe(
-      "Ly giấy 12oz – in thân ly – 26/10",
-    );
-    expect(defaultDesignName("Túi kraft", new Date("2026-01-05T03:00:00Z"))).toBe(
-      "Túi kraft – 05/01",
+describe("defaultDesignName (spec §6.2)", () => {
+  it("is '{product title} · {variant label}'", () => {
+    expect(defaultDesignName("Ly giấy 2 lớp 12oz", "CUP-PAPER-12OZ-WHT")).toBe(
+      "Ly giấy 2 lớp 12oz · CUP-PAPER-12OZ-WHT",
     );
   });
 
-  it("keeps a long template name inside the 200 characters the BE accepts", () => {
-    const name = defaultDesignName("x".repeat(300), new Date("2026-10-25T03:00:00Z"));
+  it("cuts a long product title so the name is 200 characters and keeps the variant label", () => {
+    const name = defaultDesignName("x".repeat(250), "CUP-PAPER-12OZ-WHT");
     expect(name).toHaveLength(200);
-    expect(name.endsWith(" – 25/10")).toBe(true);
+    expect(name.endsWith(" · CUP-PAPER-12OZ-WHT")).toBe(true);
+  });
+
+  it("never exceeds 200 characters, even for a label that long", () => {
+    expect(defaultDesignName("Ly", "y".repeat(250)).length).toBeLessThanOrEqual(200);
   });
 });
 
-describe("decisionView", () => {
-  const at = "2026-10-25T09:30:00Z";
-
-  it("names a decision and keeps the notes written for the customer", () => {
-    expect(
-      decisionView({ decision: "TECHNICAL_REJECTED", notes: " Logo mờ ", version: 4, at }),
-    ).toEqual({ label: "QC yêu cầu sửa", notes: "Logo mờ", atLabel: formatDateTime(at) });
+describe("eventView (spec §3.3)", () => {
+  it.each([
+    ["CREATED", "Tạo thiết kế"],
+    ["DERIVED_FROM_SNAPSHOT", "Tạo bản sửa từ thiết kế đã duyệt"],
+    ["PREFLIGHT_FAILED", "Chưa đạt kiểm tra tự động"],
+    ["SUBMITTED_FOR_REVIEW", "Gửi duyệt"],
+    ["RETURNED", "Bị trả lại"],
+    ["APPROVED", "Đã duyệt"],
+    ["ARCHIVED", "Xoá bản nháp"],
+  ])("labels %s as %s, with its time", (type, label) => {
+    expect(eventView(event({ type }))).toMatchObject({
+      label,
+      atLabel: formatDateTime("2026-11-01T08:00:00Z"),
+    });
   });
 
-  it("leaves out notes that are not for the customer, and shows an unknown code as it is", () => {
-    expect(
-      decisionView({ decision: "SENT_TO_CUSTOMER", notes: "internal remark", version: 5, at }),
-    ).toMatchObject({ label: "Sales gửi thiết kế để bạn xác nhận", notes: null });
-    expect(decisionView({ decision: "SOMETHING_NEW", version: 6, at })).toMatchObject({
-      label: "SOMETHING_NEW",
-      notes: null,
-    });
+  it("shows the customer the return reason and the failed checks, not the internal notes", () => {
+    expect(eventView(event({ type: "RETURNED", note: " Logo bị mờ " })).note).toBe("Logo bị mờ");
+    expect(eventView(event({ type: "PREFLIGHT_FAILED", note: "Thiết kế trống" })).note).toBe(
+      "Thiết kế trống",
+    );
+    const approval = "SKU X-KH0010-001 · snapshot s · checksum c";
+    expect(eventView(event({ type: "APPROVED", note: approval })).note).toBeNull();
+    expect(eventView(event({ type: "DERIVED_FROM_SNAPSHOT", note: "snap" })).note).toBeNull();
+    expect(eventView(event({ type: "RETURNED", note: "  " })).note).toBeNull();
   });
 });

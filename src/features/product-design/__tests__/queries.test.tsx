@@ -7,37 +7,36 @@ import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error";
 
 import {
-  DESIGN_HISTORY_SIZE,
   DESIGN_POLL_MS,
   designKeys,
   downloadLinkStaleTime,
-  useCustomization,
+  printConfigKeys,
   useDesign,
-  useDesignArtifacts,
   useDesignAssets,
   useDesignDocument,
+  useDesignFiles,
   useDesignHistory,
   useDesignList,
-  useDesignSnapshot,
   useDownloadLink,
+  useDraftCount,
+  usePrintConfig,
 } from "../queries";
 import {
-  beArtifact,
-  beAsset,
-  beCustomization,
-  beDecision,
-  beDocumentRecord,
-  beDownload,
-  beDraft,
-  bePage,
-  beSnapshot,
+  approvedDto,
+  assetDto,
+  designDto,
+  documentRecordDto,
+  downloadDto,
+  eventDto,
+  fileDto,
   ids,
-  proposedDraftFields,
+  pageDto,
+  printConfigDto,
 } from "./fixtures";
 
 afterEach(() => vi.restoreAllMocks());
 
-const design = ids.design;
+const id = ids.design;
 
 function setup() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -47,8 +46,8 @@ function setup() {
   return { client, wrapper };
 }
 
-describe("designKeys", () => {
-  it("nests every per-design key under the detail key, and the list keys under lists()", () => {
+describe("query keys (spec §4.4)", () => {
+  it("nests every per-design key under detail(id), and the list keys under lists()", () => {
     expect(designKeys.all).toEqual(["designs"]);
     expect(designKeys.lists()).toEqual(["designs", "list"]);
     expect(designKeys.list({ page: 2, size: 12 })).toEqual([
@@ -56,26 +55,22 @@ describe("designKeys", () => {
       "list",
       { page: 2, size: 12 },
     ]);
-    expect(designKeys.details()).toEqual(["designs", "detail"]);
+    expect(designKeys.draftCount()).toEqual(["designs", "draft-count"]);
     expect(designKeys.detail("d-1")).toEqual(["designs", "detail", "d-1"]);
-    expect(designKeys.document("d-1")).toEqual(["designs", "detail", "d-1", "document"]);
-    expect(designKeys.assets("d-1")).toEqual(["designs", "detail", "d-1", "assets"]);
-    expect(designKeys.artifacts("d-1")).toEqual(["designs", "detail", "d-1", "artifacts"]);
-    expect(designKeys.history("d-1")).toEqual(["designs", "detail", "d-1", "history"]);
-    expect(designKeys.snapshot("d-1")).toEqual(["designs", "detail", "d-1", "snapshot"]);
-    expect(designKeys.customization("ly-giay")).toEqual(["designs", "customization", "ly-giay"]);
+    for (const part of ["history", "document", "assets", "files"] as const) {
+      expect(designKeys[part]("d-1")).toEqual(["designs", "detail", "d-1", part]);
+    }
+    expect(printConfigKeys.detail("ly", "CUP-1")).toEqual(["print-configs", "ly", "CUP-1"]);
   });
 
-  it("keeps presigned links out of what a workflow step invalidates", () => {
-    expect(designKeys.downloadLink("artifact", "d-1", "a-1").slice(0, 2)).not.toEqual(
-      designKeys.detail("d-1").slice(0, 2),
-    );
+  it("keeps short-lived links out of a design's keys", () => {
+    expect(designKeys.downloadLink("d-1", "a-1").slice(0, 3)).not.toEqual(designKeys.detail("d-1"));
   });
 });
 
-describe("reads that exist on the real BE", () => {
-  it("lists the caller's designs", async () => {
-    const get = vi.spyOn(api, "get").mockResolvedValueOnce({ data: bePage([beDraft()]) });
+describe("reads", () => {
+  it("lists the caller's designs with a 1-based page", async () => {
+    const get = vi.spyOn(api, "get").mockResolvedValueOnce({ data: pageDto([designDto()]) });
     const { wrapper } = setup();
     const { result } = renderHook(() => useDesignList({ page: 1, size: 12 }), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -83,57 +78,58 @@ describe("reads that exist on the real BE", () => {
       params: { page: 0, size: 12 },
       signal: expect.any(AbortSignal),
     });
-    expect(result.current.data?.items).toHaveLength(1);
+    expect(result.current.data).toMatchObject({ page: 1, items: [{ id }] });
   });
 
-  it("reads one design", async () => {
-    vi.spyOn(api, "get").mockResolvedValueOnce({ data: beDraft() });
+  it("reads the draft count, the history and the submitted files", async () => {
+    const get = vi.spyOn(api, "get").mockImplementation(async (url) => {
+      if (url === "/designs/draft-count") return { data: { drafts: 2, limit: 50 } };
+      if (url.endsWith("/history")) return { data: [eventDto()] };
+      return { data: [fileDto("CUSTOMER_PREVIEW")] };
+    });
     const { wrapper } = setup();
-    const { result } = renderHook(() => useDesign(design), { wrapper });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data).toMatchObject({ id: design, version: 3 });
+    const count = renderHook(() => useDraftCount(), { wrapper });
+    const history = renderHook(() => useDesignHistory(id), { wrapper });
+    const files = renderHook(() => useDesignFiles(id, true), { wrapper });
+    await waitFor(() => expect(count.result.current.data).toEqual({ drafts: 2, limit: 50 }));
+    await waitFor(() => expect(history.result.current.data?.[0]?.type).toBe("CREATED"));
+    await waitFor(() => expect(files.result.current.data?.[0]?.role).toBe("CUSTOMER_PREVIEW"));
+    expect(get).toHaveBeenCalledWith(`/designs/${id}/files`, expect.anything());
   });
 
-  it("reads the artifacts and the first page of the decision history", async () => {
-    const get = vi
-      .spyOn(api, "get")
-      .mockResolvedValueOnce({ data: [beArtifact] })
-      .mockResolvedValueOnce({ data: bePage([beDecision], { size: DESIGN_HISTORY_SIZE }) });
-    const { wrapper } = setup();
-    const artifacts = renderHook(() => useDesignArtifacts(design), { wrapper });
-    const history = renderHook(() => useDesignHistory(design), { wrapper });
-    await waitFor(() => expect(artifacts.result.current.isSuccess).toBe(true));
-    await waitFor(() => expect(history.result.current.isSuccess).toBe(true));
-    expect(get).toHaveBeenCalledWith(`/designs/${design}/artifacts`, expect.anything());
-    expect(get).toHaveBeenCalledWith(
-      `/designs/${design}/history`,
-      expect.objectContaining({ params: { page: 0, size: DESIGN_HISTORY_SIZE } }),
+  it("does not retry a 404: the same design answers 404 again", async () => {
+    const get = vi.spyOn(api, "get").mockRejectedValue(new ApiError(404, "NOT_FOUND", "x"));
+    const client = new QueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
     );
-    expect(history.result.current.data?.items[0]?.decision).toBe("TECHNICAL_REVIEW_PASSED");
+    const { result } = renderHook(() => useDesign(id), { wrapper });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(get).toHaveBeenCalledTimes(1);
   });
+});
 
-  it("polls every 5 s while the customer waits for QC or Sales, and stops after (R66)", async () => {
+describe("useDesign polls only while PENDING_REVIEW", () => {
+  it("re-reads every 5 s while the design waits for review, and stops once it is approved", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     try {
-      const waiting = beDraft({ ...proposedDraftFields, reviewedAt: undefined });
-      const passed = beDraft({ ...proposedDraftFields, technicalReviewPassed: true, version: 4 });
+      const pending = designDto({ status: "PENDING_REVIEW", version: 4 });
       const get = vi
         .spyOn(api, "get")
-        .mockResolvedValueOnce({ data: waiting })
-        .mockResolvedValueOnce({ data: waiting })
-        .mockResolvedValue({ data: passed });
+        .mockResolvedValueOnce({ data: pending })
+        .mockResolvedValueOnce({ data: pending })
+        .mockResolvedValue({ data: approvedDto() });
       const { wrapper } = setup();
-      const { result } = renderHook(() => useDesign(design), { wrapper });
+      const { result } = renderHook(() => useDesign(id), { wrapper });
       // Real-timer waits: RTL's `waitFor` would poll on the faked `setInterval`.
-      await vi.waitFor(() => expect(result.current.data?.technicalReviewPassed).toBe(false));
+      await vi.waitFor(() => expect(result.current.data?.status).toBe("PENDING_REVIEW"));
 
       await act(() => vi.advanceTimersByTimeAsync(DESIGN_POLL_MS));
       expect(get).toHaveBeenCalledTimes(2);
       await act(() => vi.advanceTimersByTimeAsync(DESIGN_POLL_MS));
-      await vi.waitFor(() => expect(result.current.data?.technicalReviewPassed).toBe(true));
+      await vi.waitFor(() => expect(result.current.data?.status).toBe("APPROVED"));
       expect(get).toHaveBeenCalledTimes(3);
 
-      // Past the wait (the review passed): no more polling.
       await act(() => vi.advanceTimersByTimeAsync(6 * DESIGN_POLL_MS));
       expect(get).toHaveBeenCalledTimes(3);
     } finally {
@@ -141,11 +137,26 @@ describe("reads that exist on the real BE", () => {
     }
   });
 
-  it("refetches a waiting design whenever the window regains focus", async () => {
-    const waiting = beDraft({ status: "SUBMITTED" });
-    const get = vi.spyOn(api, "get").mockResolvedValue({ data: waiting });
+  it.each(["DRAFT", "APPROVED"])("never polls a %s design", async (status) => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const get = vi.spyOn(api, "get").mockResolvedValue({ data: designDto({ status }) });
+      const { wrapper } = setup();
+      const { result } = renderHook(() => useDesign(id), { wrapper });
+      await vi.waitFor(() => expect(result.current.isSuccess).toBe(true));
+      await act(() => vi.advanceTimersByTimeAsync(4 * DESIGN_POLL_MS));
+      expect(get).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("re-reads a design waiting for review whenever the window regains focus", async () => {
+    const get = vi
+      .spyOn(api, "get")
+      .mockResolvedValue({ data: designDto({ status: "PENDING_REVIEW" }) });
     const { wrapper } = setup();
-    const { result } = renderHook(() => useDesign(design), { wrapper });
+    const { result } = renderHook(() => useDesign(id), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     act(() => {
@@ -157,25 +168,14 @@ describe("reads that exist on the real BE", () => {
     // Fresh data (well within the detail stale time) is read again anyway.
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
   });
-
-  it("does not retry a 404: the same design answers 404 again", async () => {
-    const get = vi.spyOn(api, "get").mockRejectedValue(new ApiError(404, "NOT_FOUND", "x"));
-    const client = new QueryClient();
-    const wrapper = ({ children }: { children: ReactNode }) => (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-    const { result } = renderHook(() => useDesign(design), { wrapper });
-    await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(get).toHaveBeenCalledTimes(1);
-  });
 });
 
-describe("reads of proposed endpoints only run when the caller says the capability is on", () => {
+describe("reads that wait for their caller", () => {
   it.each([
-    ["document", (on: boolean) => useDesignDocument(design, on)],
-    ["assets", (on: boolean) => useDesignAssets(design, on)],
-    ["snapshot", (on: boolean) => useDesignSnapshot(design, on)],
-    ["customization", (on: boolean) => useCustomization("ly-giay", on)],
+    ["document", (on: boolean) => useDesignDocument(id, on)],
+    ["assets", (on: boolean) => useDesignAssets(id, on)],
+    ["files", (on: boolean) => useDesignFiles(id, on)],
+    ["print config", (on: boolean) => usePrintConfig("ly", "CUP-1", on)],
   ])("%s: no request while disabled", async (_name, hook) => {
     const get = vi.spyOn(api, "get");
     const { wrapper } = setup();
@@ -185,32 +185,28 @@ describe("reads of proposed endpoints only run when the caller says the capabili
     expect(result.current.fetchStatus).toBe("idle");
   });
 
-  it("reads the stored document once enabled, with no 404-means-empty fallback", async () => {
-    const get = vi.spyOn(api, "get").mockResolvedValueOnce({ data: beDocumentRecord() });
+  it("reads the document and the images once enabled", async () => {
+    const get = vi.spyOn(api, "get").mockImplementation(async (url) => ({
+      data: url.endsWith("/document") ? documentRecordDto() : [assetDto],
+    }));
     const { wrapper } = setup();
-    const { result } = renderHook(() => useDesignDocument(design, true), { wrapper });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(get).toHaveBeenCalledWith(`/designs/${design}/document`, expect.anything());
-    expect(result.current.data?.version).toBe(3);
+    const document = renderHook(() => useDesignDocument(id, true), { wrapper });
+    const assets = renderHook(() => useDesignAssets(id, true), { wrapper });
+    await waitFor(() => expect(document.result.current.data?.version).toBe(3));
+    await waitFor(() => expect(assets.result.current.data?.[0]?.assetId).toBe(ids.asset));
+    expect(get).toHaveBeenCalledWith(`/designs/${id}/document`, expect.anything());
+    expect(get).toHaveBeenCalledWith(`/designs/${id}/assets`, expect.anything());
   });
 
-  it("surfaces a missing document as an error instead of inventing an empty one", async () => {
-    vi.spyOn(api, "get").mockRejectedValueOnce(new ApiError(404, "NOT_FOUND", "x"));
-    const { wrapper } = setup();
-    const { result } = renderHook(() => useDesignDocument(design, true), { wrapper });
-    await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(result.current.data).toBeUndefined();
-  });
-
-  it("is not refetched behind an editor's back when the window regains focus", async () => {
+  it("does not refetch the document behind an editor's back when the window regains focus", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
       const get = vi.spyOn(api, "get").mockImplementation(async (url) => ({
-        data: url.endsWith("/document") ? beDocumentRecord() : beDraft(),
+        data: url.endsWith("/document") ? documentRecordDto() : designDto(),
       }));
       const { wrapper } = setup();
-      const document = renderHook(() => useDesignDocument(design, true), { wrapper });
-      const detail = renderHook(() => useDesign(design), { wrapper });
+      const document = renderHook(() => useDesignDocument(id, true), { wrapper });
+      const detail = renderHook(() => useDesign(id), { wrapper });
       await waitFor(() => expect(document.result.current.isSuccess).toBe(true));
       await waitFor(() => expect(detail.result.current.isSuccess).toBe(true));
       expect(get).toHaveBeenCalledTimes(2);
@@ -223,118 +219,80 @@ describe("reads of proposed endpoints only run when the caller says the capabili
 
       // The design is re-read on focus; the document the editor holds is not.
       await waitFor(() => expect(get).toHaveBeenCalledTimes(3));
-      expect(get).toHaveBeenLastCalledWith(`/designs/${design}`, expect.anything());
+      expect(get).toHaveBeenLastCalledWith(`/designs/${id}`, expect.anything());
     } finally {
       focusManager.setFocused(undefined);
       vi.useRealTimers();
     }
   });
+});
 
-  it("reads assets, the snapshot and the customization once enabled", async () => {
-    const get = vi
-      .spyOn(api, "get")
-      .mockResolvedValueOnce({ data: [beAsset] })
-      .mockResolvedValueOnce({ data: beSnapshot })
-      .mockResolvedValueOnce({ data: beCustomization() });
+describe("usePrintConfig", () => {
+  it("reads the variant's print configuration", async () => {
+    const get = vi.spyOn(api, "get").mockResolvedValueOnce({ data: printConfigDto() });
     const { wrapper } = setup();
-    const assets = renderHook(() => useDesignAssets(design, true), { wrapper });
-    const snapshot = renderHook(() => useDesignSnapshot(design, true), { wrapper });
-    const customization = renderHook(() => useCustomization("ly-giay", true), { wrapper });
-    await waitFor(() => expect(assets.result.current.isSuccess).toBe(true));
-    await waitFor(() => expect(snapshot.result.current.isSuccess).toBe(true));
-    await waitFor(() => expect(customization.result.current.isSuccess).toBe(true));
-    expect(get).toHaveBeenCalledWith(`/designs/${design}/assets`, expect.anything());
-    expect(get).toHaveBeenCalledWith(`/designs/${design}/snapshot`, expect.anything());
-    expect(get).toHaveBeenCalledWith("/catalog/products/ly-giay/customization", expect.anything());
+    const { result } = renderHook(() => usePrintConfig("ly giấy", "CUP-1", true), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toMatchObject({ variantStatus: "ACTIVE" });
+    expect(get).toHaveBeenCalledWith(
+      "/catalog/products/ly%20gi%E1%BA%A5y/variants/CUP-1/print-config",
+      expect.anything(),
+    );
+  });
+
+  it("answers null for a variant without one (404): it is an answer, not a failure", async () => {
+    vi.spyOn(api, "get").mockRejectedValueOnce(new ApiError(404, "NOT_FOUND", "x"));
+    const { wrapper } = setup();
+    const { result } = renderHook(() => usePrintConfig("ly", "CUP-1", true), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBeNull();
+  });
+
+  it("keeps any other failure an error", async () => {
+    vi.spyOn(api, "get").mockRejectedValue(new ApiError(403, "FORBIDDEN", "x"));
+    const { wrapper } = setup();
+    const { result } = renderHook(() => usePrintConfig("ly", "CUP-1", true), { wrapper });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error).toMatchObject({ code: "FORBIDDEN" });
   });
 });
 
 describe("downloadLinkStaleTime", () => {
-  const fetchedAt = Date.parse("2026-10-25T08:00:00Z");
+  const fetchedAt = Date.parse("2026-11-01T08:00:00Z");
 
   it("is the time from the fetch to expiry, minus 30 s", () => {
-    expect(downloadLinkStaleTime({ url: "u", expiresAt: "2026-10-25T08:05:00Z" }, fetchedAt)).toBe(
+    expect(downloadLinkStaleTime({ url: "u", expiresAt: "2026-11-01T08:05:00Z" }, fetchedAt)).toBe(
       270_000,
     );
   });
 
   it("is zero for a link that expires within 30 s, has expired or cannot be read", () => {
     const stale = (expiresAt: string) => downloadLinkStaleTime({ url: "u", expiresAt }, fetchedAt);
-    expect(stale("2026-10-25T08:00:20Z")).toBe(0);
-    expect(stale("2026-10-25T07:00:00Z")).toBe(0);
+    expect(stale("2026-11-01T08:00:20Z")).toBe(0);
+    expect(stale("2026-11-01T07:00:00Z")).toBe(0);
     expect(stale("soon")).toBe(0);
     expect(downloadLinkStaleTime(undefined, fetchedAt)).toBe(0);
   });
 });
 
-describe("useDownloadLink", () => {
-  it("asks the artifact route for an artifact and the asset route for an asset", async () => {
-    const get = vi.spyOn(api, "get").mockResolvedValue({ data: beDownload });
+describe("useDownloadLink (images)", () => {
+  it("asks for an image's short-lived link", async () => {
+    const get = vi.spyOn(api, "get").mockResolvedValue({ data: downloadDto });
     const { wrapper } = setup();
-    const artifact = renderHook(() => useDownloadLink("artifact", design, ids.artifact, true), {
-      wrapper,
-    });
-    const asset = renderHook(() => useDownloadLink("asset", design, ids.asset, true), { wrapper });
-    await waitFor(() => expect(artifact.result.current.isSuccess).toBe(true));
-    await waitFor(() => expect(asset.result.current.isSuccess).toBe(true));
-    expect(get).toHaveBeenCalledWith(
-      `/designs/${design}/artifacts/${ids.artifact}/download-url`,
-      expect.anything(),
-    );
-    expect(get).toHaveBeenCalledWith(
-      `/designs/${design}/assets/${ids.asset}/download-url`,
-      expect.anything(),
-    );
-    expect(artifact.result.current.data).toEqual(beDownload);
+    const { result } = renderHook(() => useDownloadLink(id, ids.asset, true), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(get).toHaveBeenCalledWith(`/designs/${id}/assets/${ids.asset}/url`, expect.anything());
+    expect(result.current.data).toEqual(downloadDto);
   });
 
-  it("makes no request while disabled or without an id (a draft with no preview yet)", async () => {
+  it("makes no request while disabled or without an id", async () => {
     const get = vi.spyOn(api, "get");
     const { wrapper } = setup();
-    const off = renderHook(() => useDownloadLink("artifact", design, ids.artifact, false), {
-      wrapper,
-    });
-    const noId = renderHook(() => useDownloadLink("artifact", design, undefined, true), {
-      wrapper,
-    });
+    const off = renderHook(() => useDownloadLink(id, ids.asset, false), { wrapper });
+    const noId = renderHook(() => useDownloadLink(id, undefined, true), { wrapper });
     await Promise.resolve();
     expect(get).not.toHaveBeenCalled();
     expect(off.result.current.fetchStatus).toBe("idle");
     expect(noId.result.current.fetchStatus).toBe("idle");
-  });
-
-  it("keeps a link fresh until 30 s before it expires, then reads a new one", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-10-25T08:00:00Z"));
-    try {
-      const get = vi.spyOn(api, "get").mockResolvedValue({
-        data: { url: "https://files.example.vn/p.png?sig=1", expiresAt: "2026-10-25T08:05:00Z" },
-      });
-      const { client, wrapper } = setup();
-      const { result } = renderHook(() => useDownloadLink("artifact", design, ids.artifact, true), {
-        wrapper,
-      });
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      const query = client
-        .getQueryCache()
-        .find({ queryKey: designKeys.downloadLink("artifact", design, ids.artifact) })!;
-
-      // React Query asks for the stale time again each time it decides, so ask the same way here.
-      const isStale = () => {
-        const staleTime = (query.observers[0]!.options.staleTime as (q: typeof query) => number)(
-          query,
-        );
-        return query.isStaleByTime(staleTime);
-      };
-      vi.setSystemTime(new Date("2026-10-25T08:02:00Z"));
-      expect(isStale()).toBe(false);
-      vi.setSystemTime(new Date("2026-10-25T08:04:29Z"));
-      expect(isStale()).toBe(false);
-      vi.setSystemTime(new Date("2026-10-25T08:04:31Z"));
-      expect(isStale()).toBe(true);
-      expect(get).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.useRealTimers();
-    }
   });
 });
