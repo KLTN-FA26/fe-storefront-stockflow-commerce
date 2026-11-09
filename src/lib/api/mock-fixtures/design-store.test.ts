@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { emptyDocument } from "@/features/product-design/engine/document/factory";
 import type { DesignDocument } from "@/features/product-design/engine/document/schema";
@@ -482,6 +482,19 @@ describe("design mock store", () => {
       expect.objectContaining({ ruleId: "EMPTY_DESIGN", level: "fail" }),
     ]);
 
+    // docs 12 §3: a background colour alone is not a design either.
+    const blank = data<DesignDocumentRecordDto>(await store.getDocument(empty.id));
+    const backgroundOnly = {
+      ...blank.document,
+      surfaces: { BODY: { background: { kind: "color", color: "#336699" }, elements: [] } },
+    };
+    await store.putDocument(empty.id, { version: blank.version, document: backgroundOnly });
+    const refusedBackground = await submitPassing(store, empty.id);
+    expect(refusal(refusedBackground)).toEqual([422, "PREFLIGHT_FAILED"]);
+    expect(errorOf(refusedBackground).details?.issues).toEqual([
+      expect.objectContaining({ ruleId: "EMPTY_DESIGN", level: "fail" }),
+    ]);
+
     const record = data<DesignDocumentRecordDto>(await store.getDocument(empty.id));
     const withImage = {
       ...record.document,
@@ -508,7 +521,7 @@ describe("design mock store", () => {
     // Every refusal is on the record, and the design stays a DRAFT.
     expect(
       data<DesignEventDto[]>(await store.history(empty.id)).map((event) => event.type),
-    ).toEqual(["CREATED", "PREFLIGHT_FAILED", "PREFLIGHT_FAILED"]);
+    ).toEqual(["CREATED", "PREFLIGHT_FAILED", "PREFLIGHT_FAILED", "PREFLIGHT_FAILED"]);
     expect((await design(store, MOCK_DESIGN_IDS.draft)).status).toBe("DRAFT");
   });
 
@@ -533,6 +546,17 @@ describe("design mock store", () => {
     });
     expect(data(recorded)).toEqual(last);
     expect(await design(store, id)).toEqual(before);
+
+    // A write like any other: a stale (or unknown, ahead) version is refused and nothing is recorded.
+    const events = data<DesignEventDto[]>(await store.history(id));
+    for (const version of [before.version - 1, before.version + 1]) {
+      expect(refusal(await store.recordPreflightFailure(id, { version, issues }))).toEqual([
+        409,
+        "VERSION_CONFLICT",
+      ]);
+    }
+    expect(data<DesignEventDto[]>(await store.history(id))).toEqual(events);
+
     const pending = await design(store, MOCK_DESIGN_IDS.pending);
     expect(
       refusal(await store.recordPreflightFailure(pending.id, { version: pending.version, issues })),
@@ -724,6 +748,72 @@ describe("design mock store", () => {
       Array.from(new Uint8Array(32).fill(7)),
     );
     expect(data<{ items: DesignDto[] }>(await second.list()).items).toHaveLength(5);
+  });
+
+  it("two stores over one storage (two tabs) see each other's writes; a stale tab answers 409", async () => {
+    const storage = createMemoryStorage();
+    const tabA = await makeStore({ storage });
+    const tabB = await makeStore({ storage });
+
+    const created = await createCup(tabA);
+    expect(await design(tabB, created.id)).toEqual(created);
+
+    // Both tabs look at version 0; A saves first, so B's save of version 0 is stale.
+    const seen = data<DesignDocumentRecordDto>(await tabB.getDocument(created.id));
+    await fillDocument(tabA, created.id);
+    expect(
+      refusal(
+        await tabB.putDocument(created.id, { version: seen.version, document: seen.document }),
+      ),
+    ).toEqual([409, "VERSION_CONFLICT"]);
+
+    // A submits while B still edits the version it last read: B learns the state changed.
+    const current = data<DesignDocumentRecordDto>(await tabB.getDocument(created.id));
+    expect((await submitPassing(tabA, created.id)).status).toBe(200);
+    expect(
+      refusal(
+        await tabB.putDocument(created.id, {
+          version: current.version,
+          document: current.document,
+        }),
+      ),
+    ).toEqual([409, "INVALID_STATE"]);
+    expect((await design(tabB, created.id)).status).toBe("PENDING_REVIEW");
+  });
+
+  it("a storage that cannot be read answers 500 and is never seeded over; reset starts again", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const memory = createMemoryStorage();
+    await memory.save({ rows: { designs: "not a shape this store knows" } });
+    const saves: unknown[] = [];
+    const recording: DesignMockStorage = {
+      ...memory,
+      save: async (snapshot) => {
+        saves.push(snapshot);
+        await memory.save(snapshot);
+      },
+    };
+
+    const unreadable = await makeStore({
+      storage: { ...recording, load: () => Promise.reject(new Error("disk error")) },
+    });
+    expect(refusal(await unreadable.list())).toEqual([500, "DESIGN_MOCK_FAILED"]);
+    expect(refusal(await unreadable.create({ ...CUP12, name: "A" }))).toEqual([
+      500,
+      "DESIGN_MOCK_FAILED",
+    ]);
+
+    const foreign = await makeStore({ storage: recording });
+    expect(refusal(await foreign.get(MOCK_DESIGN_IDS.draft))).toEqual([500, "DESIGN_MOCK_FAILED"]);
+    expect(saves).toEqual([]);
+    expect(errors).toHaveBeenCalledWith(
+      expect.stringContaining("[mock-design]"),
+      expect.anything(),
+    );
+
+    expect((await foreign.reset()).status).toBe(200);
+    expect(data(await foreign.draftCount())).toEqual({ drafts: 2, limit: 50 });
+    errors.mockRestore();
   });
 
   it("an asset row whose blob is gone answers assetLink 404 and list keeps the row", async () => {

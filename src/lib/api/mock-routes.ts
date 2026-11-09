@@ -103,7 +103,7 @@ export function mockPasswordResponse(body: unknown) {
   };
 }
 
-export async function registerAllMockRoutes(): Promise<void> {
+export function registerAllMockRoutes(): void {
   /* ====================================================================
    * Module 18 — Customer profile (self-service)
    * ==================================================================*/
@@ -163,11 +163,6 @@ export async function registerAllMockRoutes(): Promise<void> {
   // reserves from the same stock, so an order moves what the catalogue shows.
   const catalog = createMockCatalog(seedMockCatalog());
   registerCatalogMockRoutes(catalog);
-
-  // Module 12 — design (spec 2026-11-09 §4–§5, see mock-design.ts): the docs' design API over a
-  // store that persists to IndexedDB (memory when the browser refuses it). Its print
-  // configurations cover the CUSTOMIZABLE SKUs of the same catalogue.
-  await setUpDesignMock();
 
   // Modules 14/17 — checkout and customer order history (BE-shaped fixture, see mock-orders.ts).
   // The legacy GET /orders/:id (mock-data shapes) is gone: first match wins, and it swallowed /orders/me.
@@ -652,4 +647,10 @@ export async function registerAllMockRoutes(): Promise<void> {
   registerMockRoute("POST", "/identity/auth/logout", async () => {
     return { status: 200, data: { message: "Logged out" }, headers: {} };
   });
+
+  // Module 12 — design (spec 2026-11-09 §4–§5, see mock-design.ts), last: the docs' design API over
+  // a store that persists to IndexedDB (memory when the browser refuses it); its print
+  // configurations cover the CUSTOMIZABLE SKUs of the same catalogue. Only design requests wait for
+  // its store, and its failures answer design requests only (logged), never the other routes.
+  void setUpDesignMock();
 }

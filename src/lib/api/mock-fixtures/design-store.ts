@@ -1,8 +1,13 @@
 /**
  * The design mock backend (spec 2026-11-09 §4, §5): the docs' lifecycle — DRAFT → PENDING_REVIEW
- * → APPROVED, DRAFT → ARCHIVED — for the one mock customer it serves, the caller. Its state lives
- * in memory and is written whole through `DesignMockStorage` after every write, awaited before the
- * answer, so a reload (IndexedDB) finds designs, documents, images and submitted files again.
+ * → APPROVED, DRAFT → ARCHIVED — for the one mock customer it serves, the caller.
+ *
+ * Every operation runs alone (this tab's queue, plus a Web Lock shared by all tabs when the browser
+ * has one), starts from the snapshot as stored right now, and a write saves the whole state through
+ * `DesignMockStorage` before it answers: a reload (IndexedDB) finds designs, documents, images and
+ * submitted files again, and two tabs see each other's writes (`design-store-access.ts`). Only an
+ * empty storage is seeded; one that cannot be read answers 500 and is never written over. Any other
+ * failure (no `crypto.subtle` outside a secure context, a storage error) answers 500 too, logged.
  *
  * Rules (docs 12):
  *  - every write sends the version it saw; a stale one is 409 VERSION_CONFLICT (BR-11);
@@ -54,6 +59,7 @@ import {
 } from "./design-rows";
 import { seedDesignState } from "./design-seed";
 import type { DesignMockStorage } from "./design-storage";
+import { createExclusive, loadState } from "./design-store-access";
 import { createDesignFiles } from "./design-store-files";
 
 export interface DesignMockDeps {
@@ -83,17 +89,9 @@ async function browserImageSize(blob: Blob) {
 const defaultToUrl = (key: string, blob: Blob) =>
   typeof URL.createObjectURL === "function" ? URL.createObjectURL(blob) : `blob:mock/${key}`;
 
-/** A snapshot this store can read; anything else (an older shape) is replaced by the seed. */
-function isState(rows: Record<string, unknown>): rows is DesignMockState {
-  const { designs, documents, assets, history, files, seq } = rows;
-  return (
-    [designs, assets, history, files].every(Array.isArray) &&
-    typeof documents === "object" &&
-    documents !== null &&
-    typeof seq === "object" &&
-    seq !== null
-  );
-}
+/** 500: the operation failed (logged); nothing it would have written was saved. */
+const mockFailed = () =>
+  fail(500, "DESIGN_MOCK_FAILED", "The design mock could not answer; see the browser console");
 
 function toInt(value: unknown, fallback: number): number {
   if (value === undefined || value === null || value === "") return fallback;
@@ -136,8 +134,28 @@ export async function createDesignMockStore(deps: DesignMockDeps) {
     return fresh;
   }
 
-  const loaded = await storage.load().catch(() => null);
-  let state: DesignMockState = loaded && isState(loaded.rows) ? loaded.rows : await seeded();
+  /** The state of the operation running now: set from storage at its start (see `operation`). */
+  let state!: DesignMockState;
+  const exclusive = createExclusive();
+
+  /**
+   * An operation of the store: alone, over the state as stored right now (seeded only when the
+   * storage is empty). A failure answers 500 and is logged, never thrown at the adapter.
+   */
+  function operation<A extends unknown[]>(run: (...args: A) => Promise<MockResult>) {
+    return (...args: A): Promise<MockResult> =>
+      exclusive(async () => {
+        try {
+          const stored = await loadState(storage);
+          if (stored === "unreadable") return mockFailed();
+          state = stored ?? (await seeded());
+          return await run(...args);
+        } catch (error) {
+          console.error("[mock-design] A design mock operation failed.", error);
+          return mockFailed();
+        }
+      });
+  }
 
   const persist = () => storage.save({ rows: state });
   const find = (id: string) => state.designs.find((d) => d.id === id && d.status !== "ARCHIVED");
@@ -233,12 +251,12 @@ export async function createDesignMockStore(deps: DesignMockDeps) {
     };
   }
 
-  return {
-    /** false for memory storage: the simulation panel says data is lost on reload. */
-    persistent: storage.persistent,
-
+  /** The store's own operations, as `operation` runs them. */
+  const ops = {
     /** GET /designs?status=&page=&size= — newest updated first, 0-based pages, never ARCHIVED. */
-    async list(query: { status?: unknown; page?: unknown; size?: unknown } = {}) {
+    async list(
+      query: { status?: unknown; page?: unknown; size?: unknown } = {},
+    ): Promise<MockResult> {
       const status = query.status === "" ? undefined : query.status;
       if (status !== undefined && !DESIGN_STATUSES.some((s) => s === status)) {
         return fail(400, "UNSUPPORTED_PARAMETER", "Unsupported status filter");
@@ -292,7 +310,6 @@ export async function createDesignMockStore(deps: DesignMockDeps) {
       if (drafts() >= DRAFT_LIMIT) return draftLimit();
       const document = emptyDocument(config.template);
       const checksum = await documentChecksum(document);
-      if (drafts() >= DRAFT_LIMIT) return draftLimit(); // another create may have run meanwhile
 
       const at = stamp();
       const row = newDraft(
@@ -357,25 +374,16 @@ export async function createDesignMockStore(deps: DesignMockDeps) {
       // Kept as sent (the schema only checked it), so its checksum is the browser's.
       const saved = structuredClone(document) as DesignDocument;
       const checksum = await documentChecksum(saved);
-
-      // Past the await: the design may have moved meanwhile (another tab).
-      if (find(id) !== row || row.status !== "DRAFT") return invalidState();
-      if (row.version !== version) return versionConflict();
       touch(row);
       state.documents[id] = { designId: id, document: saved, checksum, updatedAt: row.updatedAt };
       await persist();
       return ok(documentRecord(row));
     },
 
-    listAssets: uploads.listAssets,
-    uploadAsset: uploads.uploadAsset,
-    assetLink: uploads.assetLink,
-    submit: uploads.submit,
-    files: uploads.files,
-
     /**
      * POST /designs/{id}/preflight-failures `{ version, issues }` — the browser's preflight refused
-     * a submit (docs 12 §5.3): on the record at the version it checked, nothing else changes.
+     * a submit (docs 12 §5.3): on the record, nothing else changes. A write like any other: a stale
+     * version is 409 VERSION_CONFLICT (spec §4).
      */
     async recordPreflightFailure(id: string, body: unknown): Promise<MockResult> {
       const row = find(id);
@@ -386,6 +394,7 @@ export async function createDesignMockStore(deps: DesignMockDeps) {
         return invalid("issues", "issues must list what failed");
       }
       if (row.status !== "DRAFT") return invalidState();
+      if (row.version !== version) return versionConflict();
       const event = record(row, "PREFLIGHT_FAILED", issuesNote(issues), version);
       await persist();
       return ok(toEventDto(event), 201);
@@ -435,14 +444,6 @@ export async function createDesignMockStore(deps: DesignMockDeps) {
       return ok(await uploads.toDto(row), 201);
     },
 
-    /** GET /catalog/products/{slug}/variants/{sku}/print-config */
-    async printConfig(slug: string, sku: string): Promise<MockResult> {
-      const config = configFor(slug, sku);
-      return config
-        ? ok(config)
-        : fail(404, "NOT_FOUND", "This variant has no print configuration");
-    },
-
     /**
      * Mock-only POST /__mock/designs/{id}/approve — PENDING_REVIEW → APPROVED: the submitted bundle
      * and the document are frozen under a snapshot id and a checksum, and a customer SKU code is
@@ -457,8 +458,6 @@ export async function createDesignMockStore(deps: DesignMockDeps) {
         return fail(409, "INVALID_STATE", "The submitted bundle is incomplete");
       }
       const checksum = await bundleChecksum(bundle, state.documents[id]!.checksum);
-
-      if (find(id) !== row || row.status !== "PENDING_REVIEW") return invalidState();
       const approvedOfSku = state.designs.filter(
         (d) => d.approval && d.variant.sku === row.variant.sku,
       ).length;
@@ -488,14 +487,55 @@ export async function createDesignMockStore(deps: DesignMockDeps) {
       await persist();
       return ok(await uploads.toDto(row));
     },
+  };
 
-    /** Mock-only POST /__mock/reset — everything cleared, the seed written again. */
-    async reset(): Promise<MockResult> {
-      await storage.clear();
-      urls.clear();
-      state = await seeded();
-      return ok(null);
+  return {
+    /** false for memory storage: the simulation panel says data is lost on reload. */
+    persistent: storage.persistent,
+
+    list: operation(ops.list),
+    draftCount: operation(ops.draftCount),
+    create: operation(ops.create),
+    get: operation(ops.get),
+    rename: operation(ops.rename),
+    history: operation(ops.history),
+    getDocument: operation(ops.getDocument),
+    putDocument: operation(ops.putDocument),
+    listAssets: operation(uploads.listAssets),
+    uploadAsset: operation(uploads.uploadAsset),
+    assetLink: operation(uploads.assetLink),
+    submit: operation(uploads.submit),
+    files: operation(uploads.files),
+    recordPreflightFailure: operation(ops.recordPreflightFailure),
+    remove: operation(ops.remove),
+    revise: operation(ops.revise),
+    simulateApprove: operation(ops.simulateApprove),
+    simulateReturn: operation(ops.simulateReturn),
+
+    /** GET /catalog/products/{slug}/variants/{sku}/print-config — the fixtures, not the state. */
+    async printConfig(slug: string, sku: string): Promise<MockResult> {
+      const config = configFor(slug, sku);
+      return config
+        ? ok(config)
+        : fail(404, "NOT_FOUND", "This variant has no print configuration");
     },
+
+    /**
+     * Mock-only POST /__mock/reset — everything cleared, the seed written again. It reads nothing
+     * first: it is the way out of a storage the other operations cannot read.
+     */
+    reset: (): Promise<MockResult> =>
+      exclusive(async () => {
+        try {
+          await storage.clear();
+          urls.clear();
+          state = await seeded();
+          return ok(null);
+        } catch (error) {
+          console.error("[mock-design] Resetting the design mock failed.", error);
+          return mockFailed();
+        }
+      }),
   };
 }
 

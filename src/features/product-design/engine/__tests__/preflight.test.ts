@@ -587,30 +587,48 @@ describe("EMPTY_DESIGN", () => {
     expect(runPreflight(input(docOf({ FRONT: content([]) }))).issues).toEqual([empty]);
   });
 
-  it("counts only visible elements", () => {
+  it("fails a design whose only elements are hidden", () => {
     const doc = onFront(textEl("ghost", { hidden: true }));
     expect(runPreflight(input(doc)).issues).toEqual([empty]);
   });
 
-  it("is satisfied by an element on any surface", () => {
-    const doc = docOf({ BACK: content([textEl("t")]) });
-    expect(ruleIds(runPreflight(input(doc)).issues)).not.toContain("EMPTY_DESIGN");
-  });
-
-  it("is satisfied by a background on any surface", () => {
+  it("fails a design with only a background colour or pattern (docs 12 §3)", () => {
     const solid = docOf({ LEFT: content([], { kind: "color", color: "#336699" }) });
-    expect(ruleIds(runPreflight(input(solid)).issues)).not.toContain("EMPTY_DESIGN");
+    expect(runPreflight(input(solid)).issues).toEqual([empty]);
 
     const pattern = docOf({
       FRONT: content([], {
         kind: "pattern",
         patternId: "dots",
-        colors: ["#336699", "#FFFFFF"],
+        colors: ["#336699", "#222222"],
         scale: 1,
         rotationDeg: 0,
       }),
     });
-    expect(ruleIds(runPreflight(input(pattern)).issues)).not.toContain("EMPTY_DESIGN");
+    expect(runPreflight(input(pattern)).issues).toEqual([empty]);
+  });
+
+  it("is satisfied by one text on any surface", () => {
+    const doc = docOf({ BACK: content([textEl("t")]) });
+    expect(ruleIds(runPreflight(input(doc)).issues)).not.toContain("EMPTY_DESIGN");
+  });
+
+  it("is satisfied by one drawing", () => {
+    const pen = drawingEl("pen", {
+      strokes: [
+        {
+          mode: "draw",
+          color: "#000000",
+          sizeMm: 2,
+          points: [
+            [-1, 0, 0.5],
+            [1, 0, 0.5],
+          ],
+        },
+      ],
+      placement: { u: 130, v: 140, rotationDeg: 0, scale: 1 },
+    });
+    expect(ruleIds(runPreflight(input(onFront(pen))).issues)).not.toContain("EMPTY_DESIGN");
   });
 });
 

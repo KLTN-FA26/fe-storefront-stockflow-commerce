@@ -151,9 +151,9 @@ export function activateMockAdapter(): void {
   // import is async even though the module is already bundled, so the
   // adapter must await `routesReady` (set below) rather than assume routes
   // exist by the time the first request arrives.
-  routesReady = import("./mock-routes").then(({ registerAllMockRoutes }) =>
-    registerAllMockRoutes(),
-  );
+  routesReady = import("./mock-routes").then(({ registerAllMockRoutes }) => {
+    registerAllMockRoutes();
+  });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (api.defaults as any).adapter = mockAdapter;

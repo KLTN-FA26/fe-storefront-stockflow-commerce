@@ -110,17 +110,15 @@ export function elementContentIssues(scope: SurfaceScope, el: DesignElement): Pr
 }
 
 /**
- * `EMPTY_DESIGN`: nothing visible and no background on any surface. A design on one face of a
- * bag is not empty, so this is a document-level issue with no surface.
+ * `EMPTY_DESIGN`: no visible image, text or drawing on any surface; a background (colour or
+ * pattern) alone is not a design. A design on one face of a bag is not empty, so this is a
+ * document-level issue with no surface.
  */
 export function emptyDesignIssues(input: PreflightInput): PreflightIssue[] {
-  const hasContent = input.surfaces.order.some((code) => {
-    const content = input.document.surfaces[code];
-    return (
-      content !== undefined &&
-      (content.background.kind !== "none" || content.elements.some((el) => !el.hidden))
-    );
-  });
+  // docs 12 §3 (BR-05): a design has at least one element — an image, a text or a drawing.
+  const hasContent = input.surfaces.order.some(
+    (code) => input.document.surfaces[code]?.elements.some((el) => !el.hidden) ?? false,
+  );
   if (hasContent) return [];
   return [{ ruleId: "EMPTY_DESIGN", level: "fail", message: "Thiết kế chưa có nội dung." }];
 }

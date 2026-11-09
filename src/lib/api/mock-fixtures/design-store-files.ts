@@ -48,7 +48,10 @@ import type { DesignMockStorage } from "./design-storage";
 const BYTES_PER_MB = 1024 * 1024;
 const LINK_TTL_MS = 5 * 60_000;
 
-/** What the store lends this module. */
+/**
+ * What the store lends this module. Its functions run inside the store's operations: alone, over
+ * the state just loaded from storage, so a check and the write after it cannot be interleaved.
+ */
 export interface FilesContext {
   state(): DesignMockState;
   storage: DesignMockStorage;
@@ -131,11 +134,10 @@ export function createDesignFiles(ctx: FilesContext) {
     const surfaces = Object.entries(document.surfaces) as Array<
       [PrintAreaCode, DesignDocument["surfaces"][PrintAreaCode]]
     >;
-    // As the engine's EMPTY_DESIGN: a background or a visible element on some surface.
+    // docs 12 §3 (BR-05), as the engine's EMPTY_DESIGN: a visible image, text or drawing on some
+    // surface; a background (colour or pattern) alone is not a design.
     const hasContent = surfaces.some(
-      ([, surface]) =>
-        surface !== undefined &&
-        (surface.background.kind !== "none" || surface.elements.some((el) => !el.hidden)),
+      ([, surface]) => surface?.elements.some((el) => !el.hidden) ?? false,
     );
     if (!hasContent) {
       issues.push({ ruleId: "EMPTY_DESIGN", level: "fail", message: "Thiết kế chưa có nội dung." });
@@ -160,7 +162,6 @@ export function createDesignFiles(ctx: FilesContext) {
 
   /** 422 PREFLIGHT_FAILED, on the record (docs 12 §5.3); the design stays as it was. */
   async function refusePreflight(row: DesignRow, issues: PreflightIssue[]): Promise<MockResult> {
-    if (ctx.find(row.id) !== row || row.status !== "DRAFT") return invalidState();
     ctx.record(row, "PREFLIGHT_FAILED", issuesNote(issues), row.version);
     await ctx.persist();
     return preflightFailed(issues);
@@ -205,7 +206,6 @@ export function createDesignFiles(ctx: FilesContext) {
         return fileRejected("The file is not a readable image");
       }
 
-      // Past the awaits the checks and the write run without interruption.
       const uploadKey = key?.trim() || null;
       const earlier = uploadKey ? assetsOf(id).find((a) => a.uploadKey === uploadKey) : undefined;
       if (earlier) {
@@ -213,7 +213,6 @@ export function createDesignFiles(ctx: FilesContext) {
           ? ok(toAssetDto(earlier), 201)
           : fail(422, "IDEMPOTENCY_KEY_REUSED", "This key was already used for another file");
       }
-      if (ctx.find(id)?.status !== "DRAFT") return invalidState();
       const asset: AssetRow = {
         designId: id,
         assetId: ctx.newId(),
@@ -284,9 +283,6 @@ export function createDesignFiles(ctx: FilesContext) {
       const mismatched = BUNDLE_ROLES.filter((role, i) => sent[role] !== hashes[i]);
       if (mismatched.length) return fileRejected(`Checksum mismatch: ${mismatched.join(", ")}`);
 
-      // Past the awaits: the design may have moved meanwhile (another tab).
-      if (ctx.find(id) !== row || row.status !== "DRAFT") return invalidState();
-      if (row.version !== version) return versionConflict();
       const storedAt = ctx.stamp();
       const state = ctx.state();
       state.files = state.files.filter((f) => f.designId !== id);

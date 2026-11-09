@@ -10,6 +10,7 @@ import type { AxiosRequestConfig } from "axios";
 import { registerMockRoute } from "./mock-adapter";
 import {
   BUNDLE_ROLES,
+  fail,
   fileRejected,
   type BundleRole,
   type MockResult,
@@ -88,90 +89,92 @@ function submissionOf(config: AxiosRequestConfig): DesignSubmission {
   };
 }
 
-export function registerDesignMockRoutes(store: DesignMockStore): void {
+/** 503: the design mock never started (logged once by `setUpDesignMock`). */
+const unavailable = () =>
+  fail(503, "DESIGN_MOCK_UNAVAILABLE", "The design mock did not start; see the browser console");
+
+/**
+ * Registers the design routes over `store`. A pending store is waited for by each design request
+ * only, so the rest of the mock never waits on it; a store that failed to start answers 503.
+ */
+export function registerDesignMockRoutes(store: DesignMockStore | Promise<DesignMockStore>): void {
+  const ready = Promise.resolve(store);
+  ready.catch(() => undefined); // answered per request below, logged by `setUpDesignMock`
+
+  const route = (
+    method: string,
+    pattern: string,
+    run: (store: DesignMockStore, config: AxiosRequestConfig) => Promise<MockResult>,
+  ) =>
+    registerMockRoute(method, pattern, async (config) => {
+      const started = await ready.catch(() => null);
+      return respond(started ? await run(started, config) : unavailable());
+    });
   const id = (config: AxiosRequestConfig) => param(config, "id");
 
   /* ── Designs ── */
 
-  registerMockRoute("GET", "/designs", async (config) =>
-    respond(await store.list(queryParams(config))),
-  );
-  registerMockRoute("GET", "/designs/draft-count", async () => respond(await store.draftCount()));
-  registerMockRoute("POST", "/designs", async (config) =>
-    respond(await store.create(bodyOf(config))),
-  );
-  registerMockRoute("GET", "/designs/:id", async (config) => respond(await store.get(id(config))));
-  registerMockRoute("PATCH", "/designs/:id", async (config) =>
-    respond(await store.rename(id(config), bodyOf(config))),
-  );
-  registerMockRoute("DELETE", "/designs/:id", async (config) =>
-    respond(await store.remove(id(config), bodyOf(config))),
-  );
-  registerMockRoute("GET", "/designs/:id/history", async (config) =>
-    respond(await store.history(id(config))),
-  );
-
-  registerMockRoute("GET", "/designs/:id/document", async (config) =>
-    respond(await store.getDocument(id(config))),
-  );
-  registerMockRoute("PUT", "/designs/:id/document", async (config) =>
-    respond(await store.putDocument(id(config), bodyOf(config))),
-  );
+  route("GET", "/designs", (s, config) => s.list(queryParams(config)));
+  route("GET", "/designs/draft-count", (s) => s.draftCount());
+  route("POST", "/designs", (s, config) => s.create(bodyOf(config)));
+  route("GET", "/designs/:id", (s, config) => s.get(id(config)));
+  route("PATCH", "/designs/:id", (s, config) => s.rename(id(config), bodyOf(config)));
+  route("DELETE", "/designs/:id", (s, config) => s.remove(id(config), bodyOf(config)));
+  route("GET", "/designs/:id/history", (s, config) => s.history(id(config)));
+  route("GET", "/designs/:id/document", (s, config) => s.getDocument(id(config)));
+  route("PUT", "/designs/:id/document", (s, config) => s.putDocument(id(config), bodyOf(config)));
 
   /* ── Images ── */
 
-  registerMockRoute("GET", "/designs/:id/assets", async (config) =>
-    respond(await store.listAssets(id(config))),
-  );
-  registerMockRoute("POST", "/designs/:id/assets", async (config) => {
+  route("GET", "/designs/:id/assets", (s, config) => s.listAssets(id(config)));
+  route("POST", "/designs/:id/assets", async (s, config) => {
     const file = blobPart(formOf(config), "file");
-    if (!file) return respond(fileRejected("The file part is required"));
-    return respond(
-      await store.uploadAsset(id(config), file, undefined, headerOf(config, "Idempotency-Key")),
-    );
+    if (!file) return fileRejected("The file part is required");
+    return s.uploadAsset(id(config), file, undefined, headerOf(config, "Idempotency-Key"));
   });
-  registerMockRoute("GET", "/designs/:id/assets/:assetId/url", async (config) =>
-    respond(await store.assetLink(id(config), param(config, "assetId"))),
+  route("GET", "/designs/:id/assets/:assetId/url", (s, config) =>
+    s.assetLink(id(config), param(config, "assetId")),
   );
 
   /* ── Submitting and after ── */
 
-  registerMockRoute("POST", "/designs/:id/submissions", async (config) =>
-    respond(await store.submit(id(config), submissionOf(config))),
+  route("POST", "/designs/:id/submissions", (s, config) =>
+    s.submit(id(config), submissionOf(config)),
   );
-  registerMockRoute("POST", "/designs/:id/preflight-failures", async (config) =>
-    respond(await store.recordPreflightFailure(id(config), bodyOf(config))),
+  route("POST", "/designs/:id/preflight-failures", (s, config) =>
+    s.recordPreflightFailure(id(config), bodyOf(config)),
   );
-  registerMockRoute("GET", "/designs/:id/files", async (config) =>
-    respond(await store.files(id(config))),
-  );
-  registerMockRoute("POST", "/designs/:id/revisions", async (config) =>
-    respond(await store.revise(id(config))),
-  );
+  route("GET", "/designs/:id/files", (s, config) => s.files(id(config)));
+  route("POST", "/designs/:id/revisions", (s, config) => s.revise(id(config)));
 
   /* ── Catalogue ── */
 
-  registerMockRoute("GET", "/catalog/products/:slug/variants/:sku/print-config", async (config) =>
-    respond(await store.printConfig(param(config, "slug"), param(config, "sku"))),
+  route("GET", "/catalog/products/:slug/variants/:sku/print-config", (s, config) =>
+    s.printConfig(param(config, "slug"), param(config, "sku")),
   );
 
   /* ── Reviewer simulation (mock only, spec §4.3) ── */
 
-  registerMockRoute("POST", "/__mock/designs/:id/approve", async (config) =>
-    respond(await store.simulateApprove(id(config))),
+  route("POST", "/__mock/designs/:id/approve", (s, config) => s.simulateApprove(id(config)));
+  route("POST", "/__mock/designs/:id/return", (s, config) =>
+    s.simulateReturn(id(config), bodyOf(config)),
   );
-  registerMockRoute("POST", "/__mock/designs/:id/return", async (config) =>
-    respond(await store.simulateReturn(id(config), bodyOf(config))),
-  );
-  registerMockRoute("POST", "/__mock/reset", async () => respond(await store.reset()));
+  route("POST", "/__mock/reset", (s) => s.reset());
 }
 
 /**
- * Opens the design mock's storage (IndexedDB, memory when the browser refuses it), creates the
- * store and registers its routes: the one set-up path for the full mock and the design-only one.
+ * Registers the design routes now and opens the design mock's storage (IndexedDB, memory when the
+ * browser refuses it) behind them: the one set-up path for the full mock and the design-only one.
+ * Nothing waits for it but design requests; if it fails, they answer 503 and the console says why.
  */
-export async function setUpDesignMock(): Promise<DesignMockStore> {
-  const store = await createDesignMockStore({ storage: await openDesignStorage() });
+export function setUpDesignMock(): Promise<DesignMockStore> {
+  const store = openDesignStorage().then((storage) => createDesignMockStore({ storage }));
   registerDesignMockRoutes(store);
+  store.catch((error: unknown) => {
+    console.error(
+      "[mock-design] The design mock did not start; design requests answer 503.",
+      error,
+    );
+  });
   return store;
 }
