@@ -8,3 +8,6 @@
  */
 
 export const IS_MOCK = process.env.USE_MOCK === "true";
+
+/** Module 12 runs on the mock until the BE serves the docs' design API (spec 2026-11-09 §5). */
+export const DESIGN_API_MOCKED = true;

@@ -14,7 +14,12 @@
 
 import * as MOCK_DATA from "@/lib/mock-data";
 
-import { AxiosError, type AxiosRequestConfig, type InternalAxiosRequestConfig } from "axios";
+import axios, {
+  AxiosError,
+  type AxiosAdapter,
+  type AxiosRequestConfig,
+  type InternalAxiosRequestConfig,
+} from "axios";
 import { api } from "./client";
 
 /* ── Types ───────────────────────────────────────────────────────────── */
@@ -158,4 +163,38 @@ export function activateMockAdapter(): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (api.defaults as any).adapter = mockAdapter;
   console.info("[mock-adapter] Activated — all API calls will be served from mock-data.ts");
+}
+
+/* ── Design-only mock (Module 12) ────────────────────────────────────── */
+
+const DESIGN_PATH =
+  /^(?:\/api\/v1)?(?:\/designs(?:\/.*)?|\/catalog\/products\/[^/]+\/variants\/[^/]+\/print-config|\/__mock(?:\/.*)?)$/;
+
+/** Whether a request URL belongs to the design API the mock serves (query string ignored). */
+export function isDesignMockPath(url: string | undefined): boolean {
+  return url !== undefined && DESIGN_PATH.test(url.replace(/\?.*$/, ""));
+}
+
+let designMockActive = false;
+
+/**
+ * Serves only the design API from the mock; every other request keeps the adapter that was in
+ * place. Calling it again is a no-op (React StrictMode runs the provider's initializer twice).
+ */
+export function activateDesignMockAdapter(): void {
+  if (designMockActive) return;
+  designMockActive = true;
+
+  routesReady = import("./mock-design").then(({ setUpDesignMock }) => {
+    // Its own start-up failure is logged there; design routes then answer 503.
+    setUpDesignMock().catch(() => undefined);
+  });
+
+  const realAdapter = axios.getAdapter(api.defaults.adapter ?? axios.defaults.adapter);
+  const routed: AxiosAdapter = (config) =>
+    isDesignMockPath(config.url)
+      ? (mockAdapter(config) as ReturnType<AxiosAdapter>)
+      : realAdapter(config);
+  api.defaults.adapter = routed;
+  console.info("[mock-adapter] Activated for the design API only — other calls reach the BE");
 }

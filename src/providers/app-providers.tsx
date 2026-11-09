@@ -16,7 +16,8 @@ import React, { createContext, useContext, useState } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { makeQueryClient } from "@/lib/api/query-client";
-import { activateMockAdapter } from "@/lib/api/mock-adapter";
+import { activateDesignMockAdapter, activateMockAdapter } from "@/lib/api/mock-adapter";
+import { DESIGN_API_MOCKED } from "@/lib/config";
 import { registerSessionQueryClient } from "@/lib/auth/session";
 
 const MockModeContext = createContext(false);
@@ -42,7 +43,9 @@ export function AppProviders({ children, isMock }: { children: React.ReactNode; 
   // `api` axios instance is a module-level singleton shared with the
   // server, so this must never run during SSR/prerender.
   useState(() => {
-    if (isMock && typeof window !== "undefined") activateMockAdapter();
+    if (typeof window === "undefined") return;
+    if (isMock) activateMockAdapter();
+    else if (DESIGN_API_MOCKED) activateDesignMockAdapter();
   });
 
   return (
