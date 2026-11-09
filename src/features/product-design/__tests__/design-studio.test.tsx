@@ -11,7 +11,7 @@ import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { DesignStudio } from "../components/studio/design-studio";
 import type { StudioServices } from "../components/studio/studio-context";
-import { addElement, removeElement, runPreflight, setBackground } from "../engine";
+import { addElement, removeElement, runPreflight, setBackground, VARIANT_OK } from "../engine";
 import { imageEl } from "../engine/__tests__/fixtures";
 import { designKeys } from "../queries";
 import { fakeDesignBackend, mockStudio } from "./design-backend";
@@ -358,6 +358,7 @@ describe("DesignStudio", () => {
       sizer,
       assets: assetStatus,
       fontStatus,
+      variant: VARIANT_OK,
     });
     expect(report.issues).toContainEqual(
       expect.objectContaining({

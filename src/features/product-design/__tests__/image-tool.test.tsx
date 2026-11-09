@@ -322,11 +322,11 @@ describe("uploading an image", () => {
     expect(insideSafe(services, image!)).toBe(true);
   });
 
-  // The mock template's minDpi is 150: under it is blurry, under the print file's 300 DPI soft, from there fine.
+  // The mock template's minDpi is 150: under it is blurry, from there fine (no middle band).
   // 3:1 pictures are placed at 60 % of the safe width, so the DPI follows from the picture's width.
   it.each([
     [600, "danger"],
-    [1200, "warning"],
+    [1200, "positive"],
     [3000, "positive"],
   ] as const)("reads a %i px wide picture as %s", async (width, tone) => {
     const user = userEvent.setup();
@@ -496,8 +496,8 @@ describe("image properties", () => {
     await user.type(scale, "500");
     await user.tab();
     expect(element(services).placement.scale).toBe(5);
-    expect(screen.getByText(/DPI/)).toHaveTextContent("203 DPI – sẽ mờ");
-    expect(screen.getByText(/DPI/)).toHaveAttribute("data-tone", "warning"); // 150 ≤ 203 < 225
+    expect(screen.getByText(/DPI/)).toHaveTextContent("203 DPI ✓");
+    expect(screen.getByText(/DPI/)).toHaveAttribute("data-tone", "positive"); // 203 ≥ 150
 
     await user.clear(scale);
     await user.type(scale, "1000");

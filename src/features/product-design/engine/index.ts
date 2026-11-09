@@ -133,12 +133,8 @@ export {
 // Preflight
 export { runPreflight } from "./preflight/run";
 export { isKraft, isNearWhite, relativeLuminance } from "./preflight/rules/color";
-export {
-  dpiTier,
-  placedDpi,
-  printDpi,
-  PRINT_DPI_FLOOR,
-} from "./preflight/rules/resolution";
+export { VARIANT_OK } from "./preflight/rules/variant";
+export { dpiTier, placedDpi, printDpi, PRINT_DPI_FLOOR } from "./preflight/rules/resolution";
 export type {
   PreflightAsset,
   PreflightInput,
@@ -146,6 +142,7 @@ export type {
   PreflightLevel,
   PreflightReport,
   PreflightRuleId,
+  PreflightVariant,
 } from "./preflight/types";
 
 // Export

@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  CircleCheck,
-  CircleX,
-  Info,
-  MessageSquareText,
-  RotateCw,
-  TriangleAlert,
-} from "lucide-react";
+import { CircleCheck, CircleX, Info, MessageSquareText, RotateCw } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,23 +12,25 @@ import { useStudio } from "./studio-context";
 
 const LEVELS: Record<PreflightLevel, { label: string; icon: typeof Info; tone: string }> = {
   fail: { label: "Lỗi", icon: CircleX, tone: "text-danger" },
-  warning: { label: "Cảnh báo", icon: TriangleAlert, tone: "text-warning" },
-  info: { label: "Lưu ý", icon: Info, tone: "text-info" },
+  note: { label: "Lưu ý", icon: Info, tone: "text-info" },
 };
 
-/** "Đạt", "{n} cảnh báo" or "{n} lỗi": the worst level found and how often it occurs. */
+/** "Đạt", or "Không đạt" with how many issues are in the way. */
 function SummaryChip({ report }: { report: PreflightReport }) {
-  const count = (level: PreflightLevel) => report.issues.filter((i) => i.level === level).length;
-  const { text, classes } =
-    report.result === "Fail"
-      ? { text: `${count("fail")} lỗi`, classes: "bg-danger/10 text-danger" }
-      : report.result === "Warning"
-        ? { text: `${count("warning")} cảnh báo`, classes: "bg-warning/10 text-warning" }
-        : { text: "Đạt", classes: "bg-positive/10 text-positive" };
+  const failed = report.result === "Fail";
   return (
-    <Badge className={cn("h-7 rounded-full px-3 text-sm font-semibold tabular-nums", classes)}>
-      {report.result === "Pass" ? <CircleCheck aria-hidden className="mr-1 size-4" /> : null}
-      {text}
+    <Badge
+      className={cn(
+        "h-7 rounded-full px-3 text-sm font-semibold tabular-nums",
+        failed ? "bg-danger/10 text-danger" : "bg-positive/10 text-positive",
+      )}
+    >
+      {failed ? (
+        <CircleX aria-hidden className="mr-1 size-4" />
+      ) : (
+        <CircleCheck aria-hidden className="mr-1 size-4" />
+      )}
+      {failed ? "Không đạt" : "Đạt"}
     </Badge>
   );
 }
@@ -120,10 +115,12 @@ export function PreflightPanel() {
   const nameOf = (code: PrintAreaCode) =>
     template.printAreas.find((area) => area.code === code)?.name ?? code;
   const notes = design.reviewNotes?.trim();
-  const general = report.issues.filter((issue) => !issue.surfaceCode);
+  const fails = report.issues.filter((issue) => issue.level === "fail");
+  const printNotes = report.issues.filter((issue) => issue.level === "note");
+  const general = fails.filter((issue) => !issue.surfaceCode);
   const imageFailed = report.issues.some((issue) => issue.ruleId === "ASSET_INVALID");
   const groups = surfaces.order
-    .map((code) => ({ code, issues: report.issues.filter((i) => i.surfaceCode === code) }))
+    .map((code) => ({ code, issues: fails.filter((i) => i.surfaceCode === code) }))
     .filter(({ issues }) => issues.length > 0);
 
   const locate = ({ surfaceCode, elementId }: PreflightIssue) => {
@@ -157,6 +154,9 @@ export function PreflightPanel() {
       {groups.map(({ code, issues }) => (
         <IssueGroup key={code} title={nameOf(code)} issues={issues} onLocate={locate} />
       ))}
+      {printNotes.length > 0 ? (
+        <IssueGroup title="Lưu ý khi in" issues={printNotes} onLocate={locate} />
+      ) : null}
       {imageFailed ? (
         <Button
           type="button"

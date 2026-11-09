@@ -10,11 +10,6 @@ const TIERS = {
     classes: "bg-danger/10 text-danger",
     advice: "Thấp hơn mức in rõ tối thiểu của sản phẩm. Hãy thu nhỏ ảnh hoặc dùng ảnh lớn hơn.",
   },
-  low: {
-    tone: "warning",
-    classes: "bg-warning/10 text-warning",
-    advice: "Gần mức tối thiểu, bản in có thể hơi mờ.",
-  },
   ok: {
     tone: "positive",
     classes: "bg-positive/10 text-positive",
@@ -27,8 +22,7 @@ const TIERS = {
 
 /**
  * The resolution the image reaches where it sits: the worse of its two axes at the placed size,
- * judged by the same thresholds as the print check (under `minDpi`, or under the print file's DPI
- * `printDpi(minDpi)` = max(`minDpi`, 300), is blurry).
+ * judged by the same threshold as the print check (under `minDpi` is blurry).
  */
 export function DpiBadge({
   element,

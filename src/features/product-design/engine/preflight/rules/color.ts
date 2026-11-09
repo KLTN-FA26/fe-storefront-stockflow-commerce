@@ -57,7 +57,7 @@ export function elementColorIssues(scope: SurfaceScope, el: DesignElement): Pref
   return [
     {
       ruleId: "WHITE_ON_KRAFT",
-      level: "warning",
+      level: "note",
       message: "Giấy kraft không in được màu trắng.",
       surfaceCode: scope.code,
       elementId: el.id,
@@ -79,7 +79,7 @@ export function surfaceColorIssues(scope: SurfaceScope): PreflightIssue[] {
   if (isKraft(template) && backgroundColors(background).some(isNearWhite)) {
     issues.push({
       ruleId: "WHITE_ON_KRAFT",
-      level: "warning",
+      level: "note",
       message: "Giấy kraft không in được màu trắng.",
       surfaceCode: scope.code,
     });
@@ -96,7 +96,7 @@ export function surfaceColorIssues(scope: SurfaceScope): PreflightIssue[] {
     if (colors.size > maxColors || hasImage) {
       issues.push({
         ruleId: "TOO_MANY_COLORS",
-        level: "warning",
+        level: "note",
         message: `Thiết kế dùng nhiều màu hơn mức cho phép (${maxColors}).`,
         surfaceCode: scope.code,
       });
@@ -112,7 +112,7 @@ export function colorModeIssues(template: CustomizationTemplate): PreflightIssue
   return [
     {
       ruleId: "CMYK_CONVERSION",
-      level: "info",
+      level: "note",
       message: "Màu sẽ được chuyển sang CMYK khi in, có thể nhạt hơn trên màn hình.",
     },
   ];

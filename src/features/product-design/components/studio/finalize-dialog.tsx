@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Alert } from "@/components/shared";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -13,7 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 
 import { describeDesignError } from "../../errors";
 import { useOptionalPreflightReport } from "./preflight-context";
@@ -55,8 +53,6 @@ const COPY: Record<
   },
 };
 
-const RISK_CONSENT = "Tôi đã xem các cảnh báo và chấp nhận rủi ro khi in";
-
 function FinalizeBody({
   mode,
   onPending,
@@ -70,11 +66,8 @@ function FinalizeBody({
   // No report where the document is not loaded (the workflow-only view): nothing to weigh.
   const issues = useOptionalPreflightReport()?.issues ?? [];
   const { submit, pending, refusal, error } = useFinalize(mode);
-  const [accepted, setAccepted] = useState(false);
-  const consentId = useId();
   const copy = COPY[mode];
   const fails = issues.filter((issue) => issue.level === "fail");
-  const warnings = issues.filter((issue) => issue.level === "warning");
 
   useEffect(() => onPending(pending), [onPending, pending]);
 
@@ -88,23 +81,6 @@ function FinalizeBody({
         <Alert tone="danger" title={copy.blocked}>
           <IssueMessages issues={fails} />
         </Alert>
-      ) : warnings.length > 0 ? (
-        <div className="flex flex-col gap-2">
-          <Alert tone="warning" title="Thiết kế còn cảnh báo khi in:">
-            <IssueMessages issues={warnings} />
-          </Alert>
-          <Label
-            htmlFor={consentId}
-            className="text-ink-primary flex min-h-11 cursor-pointer items-center gap-3 text-sm font-normal"
-          >
-            <Checkbox
-              id={consentId}
-              checked={accepted}
-              onCheckedChange={(checked) => setAccepted(checked === true)}
-            />
-            {RISK_CONSENT}
-          </Label>
-        </div>
       ) : null}
       {refusal || error ? (
         <div role="alert">
@@ -126,7 +102,7 @@ function FinalizeBody({
         <Button
           type="button"
           className="min-h-11 rounded-[var(--r-md)] px-4"
-          disabled={fails.length > 0 || (warnings.length > 0 && !accepted) || pending}
+          disabled={fails.length > 0 || pending}
           onClick={() =>
             void submit(() => {
               announce(copy.done);
@@ -142,8 +118,7 @@ function FinalizeBody({
 }
 
 /**
- * Chốt / xác nhận thiết kế. A Fail blocks it; with Warnings the customer must tick that they
- * accept the print risk first (mode B rules). `useFinalize` saves a pending edit first, then
+ * Chốt / xác nhận thiết kế. A Fail blocks it; notes never do. `useFinalize` saves a pending edit first, then
  * submits and confirms in one go (finalize) or answers Sales' request (confirm). It cannot be
  * closed while that runs.
  */

@@ -58,7 +58,7 @@ function sampleDocument(): DesignDocument {
 }
 
 /** 150 text elements in distinct colours and 200 preflight issues: far past the 4000-char budget. */
-function bigDoc(result: PreflightReport["result"] = "Warning"): {
+function bigDoc(result: PreflightReport["result"] = "Fail"): {
   doc: DesignDocument;
   report: PreflightReport;
 } {
@@ -76,7 +76,7 @@ function bigDoc(result: PreflightReport["result"] = "Warning"): {
     result,
     issues: Array.from({ length: 200 }, (_, i) => ({
       ruleId: "CROSSES_SAFE_AREA" as const,
-      level: "warning" as const,
+      level: "fail" as const,
       message: `Phần tử ${i} nằm sát mép vùng in`,
     })),
   };
@@ -147,7 +147,7 @@ describe("spec summary", () => {
     );
     expect(text.length).toBeLessThanOrEqual(4000);
     expect(text).toContain(cup12oz.sku);
-    expect(text).toContain("Preflight: Warning");
+    expect(text).toContain("Preflight: Fail");
   });
 
   const checksum = "ab".repeat(32);
@@ -263,11 +263,11 @@ describe("spec summary", () => {
 
   it("lists template, sku, areas, fonts, colours, preflight and checksum", () => {
     const report: PreflightReport = {
-      result: "Warning",
+      result: "Fail",
       issues: [
         {
-          ruleId: "DPI_LOW",
-          level: "warning",
+          ruleId: "DPI_BELOW_MIN",
+          level: "fail",
           message: "Ảnh i1 chỉ đạt 250 DPI",
           surfaceCode: "FRONT",
           elementId: "i1",
@@ -292,7 +292,7 @@ describe("spec summary", () => {
       "Hông phải: 120 × 280 mm, 0 phần tử",
       "Phông chữ: be-vietnam-pro, lobster",
       "Màu sắc: #0000FF, #00FF00, #112233, #445566, #FF0000, #FFFFFF",
-      "Preflight: Warning",
+      "Preflight: Fail",
       "- Ảnh i1 chỉ đạt 250 DPI",
       `SHA-256: ${"cd".repeat(32)}`,
     ]);

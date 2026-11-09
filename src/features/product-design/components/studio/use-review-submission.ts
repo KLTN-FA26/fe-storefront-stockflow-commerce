@@ -13,6 +13,7 @@ import {
   printDpi,
   runPreflight,
   specText,
+  VARIANT_OK,
   type DesignDocument,
   type PrintPage,
   type SpecSummary,
@@ -139,6 +140,7 @@ export function useReviewSubmission(design: DesignDraft): ReviewSubmission {
           sizer: services.sizer,
           assets: services.assetStatus,
           fontStatus: services.fontStatus,
+          variant: VARIANT_OK,
         });
         if (report.result === "Fail") throw new ExportError(MESSAGES.failing);
         const checksum = await documentChecksum(document);

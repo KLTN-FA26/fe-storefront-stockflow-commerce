@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { runPreflight, type PreflightReport } from "../../engine";
+import { runPreflight, VARIANT_OK, type PreflightReport } from "../../engine";
 import { useEditorState, useStudio } from "./studio-context";
 
 /** How long the document and the load states must stay as they are before the checks run again. */
@@ -18,7 +18,15 @@ export function usePreflight(): PreflightReport {
   const { template, surfaces, sizer, assetStatus, fontStatus } = useStudio();
   const document = useEditorState((state) => state.document);
   const input = useMemo(
-    () => ({ document, template, surfaces, sizer, assets: assetStatus, fontStatus }),
+    () => ({
+      document,
+      template,
+      surfaces,
+      sizer,
+      assets: assetStatus,
+      fontStatus,
+      variant: VARIANT_OK,
+    }),
     [document, template, surfaces, sizer, assetStatus, fontStatus],
   );
 

@@ -198,7 +198,7 @@ describe("preflight panel", () => {
 
     await user.click(screen.getByRole("tab", { name: "Kiểm tra" }));
     const panel = screen.getByRole("region", { name: "Kết quả kiểm tra" });
-    expect(within(panel).getByText("1 lỗi")).toBeInTheDocument();
+    expect(within(panel).getByText("Không đạt")).toBeInTheDocument();
     expect(within(panel).getByRole("heading", { name: "Mặt sau" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Mặt trước" })).toHaveAttribute("aria-selected", "true");
 
@@ -422,11 +422,11 @@ describe("review submission", () => {
 });
 
 describe("workflow actions", () => {
-  it("finalizes with the risk checkbox when warnings exist, then shows the confirmed card", async () => {
+  it("finalizes without any risk checkbox, then shows the confirmed card", async () => {
     const user = userEvent.setup();
     const studio = mockStudio();
     const { post } = fakeDesignBackend(studio);
-    // 600 px over 80 mm: 190 DPI, over the 12oz cup's 150 but under the print file's 300 (DPI_LOW, a warning).
+    // 600 px over 80 mm: 190 DPI, over the 12oz cup's 150: no warning tier any more, so nothing to accept.
     const photo = (assetId: string) =>
       imageEl("photo", {
         assetId,
@@ -444,14 +444,9 @@ describe("workflow actions", () => {
 
     await user.click(screen.getByRole("button", { name: "Chốt thiết kế" }));
     const dialog = await screen.findByRole("dialog", { name: "Chốt thiết kế?" });
-    expect(within(dialog).getByText("Ảnh đạt 190 DPI, bản in có thể hơi mờ.")).toBeInTheDocument();
+    expect(within(dialog).queryByRole("checkbox")).not.toBeInTheDocument();
     const finalize = within(dialog).getByRole("button", { name: "Xác nhận chốt" });
-    expect(finalize).toBeDisabled();
-    await user.click(
-      within(dialog).getByRole("checkbox", {
-        name: "Tôi đã xem các cảnh báo và chấp nhận rủi ro khi in",
-      }),
-    );
+    expect(finalize).toBeEnabled();
     await user.click(finalize);
 
     const card = await screen.findByRole("region", { name: "Bản chốt" });
