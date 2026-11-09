@@ -5,8 +5,8 @@ import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/lib/api/error";
-import { seedMockCatalog } from "@/lib/api/mock-fixtures/catalog";
-import { MOCK_DESIGN_IDS, type MockDesignStudio } from "@/lib/api/mock-fixtures/designs";
+import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/design-seed";
+import type { DesignMockStore } from "@/lib/api/mock-fixtures/design-store";
 import { settle } from "@/test/fake-backend";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
@@ -21,14 +21,13 @@ import {
   type ImageElement,
 } from "../engine";
 import { cup12oz, imageEl, pngBytes } from "../engine/__tests__/fixtures";
-import { fakeDesignBackend, mockStudio } from "./design-backend";
+import { designBackend, draftIn, STUDIO_PRODUCTS } from "./design-backend";
 import { TEST_FONTS } from "./fixtures";
 
 const env = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: env.push, replace: vi.fn() }),
 }));
-vi.mock("@/providers/app-providers", () => ({ useIsMock: () => true }));
 // jsdom cannot draw an SVG; the engine's own test covers what is sent to the browser.
 const raster = vi.hoisted(() => ({ rasterizeSvg: vi.fn() }));
 vi.mock("../engine/assets/svg", async (importOriginal) => ({
@@ -55,27 +54,15 @@ afterEach(() => {
   signOut();
 });
 
-const CUP_SLUG = "ly-giay-2-lop-12oz";
 const MIB = 1024 * 1024;
 
 /** A new 12oz cup draft whose body holds `elements` (bottom first). */
-async function cupDraft(studio: MockDesignStudio, elements: DesignElement[] = []) {
-  const product = seedMockCatalog().find((p) => p.slug === CUP_SLUG)!;
-  const created = settle(
-    await studio.create({
-      productId: product.productId,
-      sku: "CUP-PAPER-12OZ-WHT",
-      templateCode: "CUP12-BODY",
-      name: "Ly thử",
-    }),
-  );
-  const { id } = created.data as { id: string };
+function cupDraft(studio: DesignMockStore, elements: DesignElement[] = []) {
   const document = {
     ...emptyDocument(cup12oz),
     surfaces: { BODY: { background: { kind: "none" as const }, elements } },
   };
-  settle(await studio.putDocument(id, { version: 0, document }));
-  return id;
+  return draftIn(studio, STUDIO_PRODUCTS.cup, document, "Ly thử");
 }
 
 async function openStudio(designId: string) {
@@ -89,7 +76,7 @@ async function openStudio(designId: string) {
       }}
     />,
   );
-  await screen.findByRole("tab", { name: "Lớp" });
+  await screen.findByRole("tab", { name: "Lớp" }, { timeout: 4000 });
   return seen;
 }
 
@@ -134,8 +121,7 @@ function insideSafe(services: { current?: StudioServices }, element: ImageElemen
 describe("tool panel", () => {
   it("shows the options of the active tool beside the rail", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     await openStudio(await cupDraft(studio));
 
     expect(screen.getByText(/để di chuyển, xoay hoặc đổi kích thước/)).toBeInTheDocument();
@@ -151,20 +137,19 @@ describe("tool panel", () => {
 
   it("offers the template's formats and SVG in the file picker", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     await openStudio(await cupDraft(studio));
     await chooseImageTool(user);
 
-    expect(dropzone()).toHaveAttribute("accept", "image/png,image/jpeg,image/webp,.svg");
+    // The print configuration's formats (docs B34: PNG, JPG), and SVG drawn to PNG.
+    expect(dropzone()).toHaveAttribute("accept", "image/png,image/jpeg,.svg");
   });
 });
 
 describe("uploading an image", () => {
   it("refuses a 9000 × 9000 PNG with a message", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    const { post } = fakeDesignBackend(studio);
+    const { store: studio, post } = await designBackend();
     const services = await openStudio(await cupDraft(studio));
     await chooseImageTool(user);
 
@@ -177,8 +162,7 @@ describe("uploading an image", () => {
 
   it("refuses a file type the template does not accept", async () => {
     const user = userEvent.setup({ applyAccept: false });
-    const studio = mockStudio();
-    const { post } = fakeDesignBackend(studio);
+    const { store: studio, post } = await designBackend();
     await openStudio(await cupDraft(studio));
     await chooseImageTool(user);
 
@@ -192,23 +176,21 @@ describe("uploading an image", () => {
 
   it("refuses a file over the template's size limit before reading it", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    const { post } = fakeDesignBackend(studio);
+    const { store: studio, post } = await designBackend();
     await openStudio(await cupDraft(studio));
     await chooseImageTool(user);
 
     const big = png(1200, 800);
-    Object.defineProperty(big, "size", { value: 20 * MIB + 1 }); // maxFileSizeMb is 20 (MiB)
+    Object.defineProperty(big, "size", { value: 50 * MIB + 1 }); // maxFileSizeMb is 50 (MiB, B34)
     await user.upload(dropzone(), big);
 
-    expect(await alert()).toHaveTextContent("Tệp lớn hơn 20 MB.");
+    expect(await alert()).toHaveTextContent("Tệp lớn hơn 50 MB.");
     expect(post).not.toHaveBeenCalled();
   });
 
   it("refuses a file whose header gives no size", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    const { post } = fakeDesignBackend(studio);
+    const { store: studio, post } = await designBackend();
     await openStudio(await cupDraft(studio));
     await chooseImageTool(user);
 
@@ -220,8 +202,7 @@ describe("uploading an image", () => {
 
   it("uploads a PNG and places it centred with a DPI badge", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    const { post } = fakeDesignBackend(studio);
+    const { store: studio, post } = await designBackend();
     const services = await openStudio(await cupDraft(studio));
     await chooseImageTool(user);
 
@@ -259,11 +240,10 @@ describe("uploading an image", () => {
 
   it("stores the same bytes under two names as two images, and a true retry as one", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    const { post } = fakeDesignBackend(studio);
+    const { store: studio, post } = await designBackend();
     const id = await cupDraft(studio);
     const services = await openStudio(id);
-    const storedAssets = () => (settle(studio.listAssets(id)).data as unknown[]).length;
+    const storedAssets = async () => (settle(await studio.listAssets(id)).data as unknown[]).length;
 
     // Picked as logo.png, then pasted as image.png: the same picture under another name.
     await chooseImageTool(user);
@@ -274,7 +254,7 @@ describe("uploading an image", () => {
     await waitFor(() => expect(imagesOf(services)).toHaveLength(2));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(new Set(imagesOf(services).map((el) => el.assetId)).size).toBe(2);
-    expect(storedAssets()).toBe(2);
+    expect(await storedAssets()).toBe(2);
     const keys = post.mock.calls.map(
       ([, , config]) =>
         (config as { headers?: Record<string, string> } | undefined)?.headers?.["Idempotency-Key"],
@@ -285,7 +265,7 @@ describe("uploading an image", () => {
     await chooseImageTool(user);
     await user.upload(dropzone(), png(3000, 1000, "logo.png"));
     await waitFor(() => expect(imagesOf(services)).toHaveLength(3));
-    expect(storedAssets()).toBe(2);
+    expect(await storedAssets()).toBe(2);
     expect(imagesOf(services)[2]!.assetId).toBe(imagesOf(services)[0]!.assetId);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
@@ -293,8 +273,7 @@ describe("uploading an image", () => {
   it("sends a file that declares no type with the type its extension gives", async () => {
     // (the file picker's own `accept` filter would already drop a file that declares no type)
     const user = userEvent.setup({ applyAccept: false });
-    const studio = mockStudio();
-    const { post } = fakeDesignBackend(studio);
+    const { store: studio, post } = await designBackend();
     const services = await openStudio(await cupDraft(studio));
     await chooseImageTool(user);
 
@@ -307,8 +286,7 @@ describe("uploading an image", () => {
 
   it("keeps a tall or square image inside the safe area, not just the safe height", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     const services = await openStudio(await cupDraft(studio));
     await chooseImageTool(user);
 
@@ -322,23 +300,24 @@ describe("uploading an image", () => {
     expect(insideSafe(services, image!)).toBe(true);
   });
 
-  // The mock template's minDpi is 150: under it is blurry, from there fine (no middle band).
-  // 3:1 pictures are placed at 60 % of the safe width, so the DPI follows from the picture's width.
+  // The print configuration's minDpi is 300 (docs B34): under it is blurry, from there fine (no
+  // middle band). 3:1 pictures are placed at 60 % of the safe width, so the DPI follows from the
+  // picture's width: 1500 px is about 280 DPI there, 1800 px about 330.
   it.each([
     [600, "danger"],
-    [1200, "positive"],
+    [1500, "danger"],
+    [1800, "positive"],
     [3000, "positive"],
   ] as const)("reads a %i px wide picture as %s", async (width, tone) => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     const services = await openStudio(await cupDraft(studio));
     await chooseImageTool(user);
 
     await user.upload(dropzone(), png(width, width / 3));
 
     await screen.findByText("Đã thêm ảnh");
-    expect(services.current!.template.minDpi).toBe(150);
+    expect(services.current!.template.minDpi).toBe(300);
     const dpi = Math.round(effectiveDpi(width, imagesOf(services)[0]!.widthMm));
     const badge = screen.getByText(/DPI/);
     expect(badge).toHaveTextContent(tone === "positive" ? `${dpi} DPI ✓` : `${dpi} DPI – sẽ mờ`);
@@ -347,8 +326,7 @@ describe("uploading an image", () => {
 
   it("places an SVG as the PNG it is drawn to, never as SVG", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    const { post } = fakeDesignBackend(studio);
+    const { store: studio, post } = await designBackend();
     raster.rasterizeSvg.mockResolvedValue(new Blob([pngBytes(2000, 1000)], { type: "image/png" }));
     const services = await openStudio(await cupDraft(studio));
     await chooseImageTool(user);
@@ -367,17 +345,16 @@ describe("uploading an image", () => {
 
   it("checks the size of the PNG an SVG is drawn to, and says when it cannot be drawn", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    const { post } = fakeDesignBackend(studio);
+    const { store: studio, post } = await designBackend();
     await openStudio(await cupDraft(studio));
     await chooseImageTool(user);
     const svg = () => new File(["<svg/>"], "logo.svg", { type: "image/svg+xml" });
 
-    const huge = new Uint8Array(20 * MIB + 1);
+    const huge = new Uint8Array(50 * MIB + 1);
     huge.set(pngBytes(2000, 1000));
     raster.rasterizeSvg.mockResolvedValueOnce(new Blob([huge], { type: "image/png" }));
     await user.upload(dropzone(), svg());
-    expect(await alert()).toHaveTextContent("Tệp lớn hơn 20 MB.");
+    expect(await alert()).toHaveTextContent("Tệp lớn hơn 50 MB.");
 
     raster.rasterizeSvg.mockRejectedValueOnce(new Error("The SVG could not be drawn"));
     await user.upload(dropzone(), svg());
@@ -389,8 +366,7 @@ describe("uploading an image", () => {
 
   it("takes a file dropped on the dropzone", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     const services = await openStudio(await cupDraft(studio));
     await chooseImageTool(user);
 
@@ -402,8 +378,7 @@ describe("uploading an image", () => {
 
   it("shows an API failure in words", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    const { post } = fakeDesignBackend(studio);
+    const { store: studio, post } = await designBackend();
     post.mockRejectedValueOnce(new ApiError(413, "PAYLOAD_TOO_LARGE", "Too large"));
     const services = await openStudio(await cupDraft(studio));
     await chooseImageTool(user);
@@ -418,8 +393,7 @@ describe("uploading an image", () => {
 describe("pasting an image", () => {
   it("places an image pasted on the stage", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     const services = await openStudio(await cupDraft(studio));
     await chooseImageTool(user);
 
@@ -431,8 +405,7 @@ describe("pasting an image", () => {
 
   it("leaves a paste elsewhere on the page alone", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    const { post } = fakeDesignBackend(studio);
+    const { store: studio, post } = await designBackend();
     const services = await openStudio(await cupDraft(studio));
     await chooseImageTool(user);
 
@@ -448,9 +421,8 @@ describe("pasting an image", () => {
 describe("images uploaded already", () => {
   it("lists them and places one again at the surface centre", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
-    const forked = settle(studio.fork(MOCK_DESIGN_IDS.approvedCup)).data as { id: string };
+    const { store: studio } = await designBackend();
+    const forked = settle(await studio.revise(MOCK_DESIGN_IDS.approved)).data as { id: string };
     const services = await openStudio(forked.id);
     await chooseImageTool(user);
     const before = imagesOf(services).length;
@@ -476,8 +448,7 @@ describe("image properties", () => {
   const element = (services: { current?: StudioServices }) => imagesOf(services)[0]!;
 
   async function selectLogo(user: UserEvent, elements: DesignElement[]) {
-    const studio = mockStudio();
-    const backend = fakeDesignBackend(studio);
+    const { store: studio, ...backend } = await designBackend();
     const services = await openStudio(await cupDraft(studio, elements));
     await user.click(screen.getByRole("tab", { name: "Lớp" }));
     await user.click(screen.getByRole("option", { name: "Ảnh" }));
@@ -493,16 +464,16 @@ describe("image properties", () => {
 
     const scale = screen.getByLabelText("Tỉ lệ (%)");
     await user.clear(scale);
-    await user.type(scale, "500");
+    await user.type(scale, "300");
     await user.tab();
-    expect(element(services).placement.scale).toBe(5);
-    expect(screen.getByText(/DPI/)).toHaveTextContent("203 DPI ✓");
-    expect(screen.getByText(/DPI/)).toHaveAttribute("data-tone", "positive"); // 203 ≥ 150
+    expect(element(services).placement.scale).toBe(3);
+    expect(screen.getByText(/DPI/)).toHaveTextContent("339 DPI ✓");
+    expect(screen.getByText(/DPI/)).toHaveAttribute("data-tone", "positive"); // 339 ≥ 300
 
     await user.clear(scale);
-    await user.type(scale, "1000");
+    await user.type(scale, "500");
     await user.tab();
-    expect(screen.getByText(/DPI/)).toHaveTextContent("102 DPI – sẽ mờ");
+    expect(screen.getByText(/DPI/)).toHaveTextContent("203 DPI – sẽ mờ");
     expect(screen.getByText(/DPI/)).toHaveAttribute("data-tone", "danger");
   });
 

@@ -27,7 +27,7 @@ function AssetThumb({
   disabled: boolean;
   onPick: (asset: DesignAsset) => void;
 }) {
-  const link = useDownloadLink("asset", designId, asset.assetId, true);
+  const link = useDownloadLink(designId, asset.assetId, true);
   const src = link.data?.url;
   return (
     <button
@@ -61,9 +61,9 @@ function AssetThumb({
  */
 export function ImageToolPanel() {
   const services = useStudio();
-  const { design, template, capabilities, stageRef } = services;
+  const { design, template, stageRef } = services;
   const readOnly = useEditorState((s) => s.readOnly);
-  const assets = useDesignAssets(design.id, capabilities.assets);
+  const assets = useDesignAssets(design.id, true);
   const { pick, busy, error, fail } = useAssetPicker();
   const [dragging, setDragging] = useState(false);
   const inputId = useId();

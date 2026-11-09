@@ -9,7 +9,7 @@ import { LayersPanel } from "./layers-panel";
 import { PropertiesPanel } from "./properties-panel";
 import type { PropertySections } from "./property-sections";
 
-type SideTab = "properties" | "layers" | "check";
+type SideTab = "properties" | "layers" | "check" | "history";
 
 /** A tab panel takes focus (Tab from its tab): its ring is drawn inside, where the panel scrolls. */
 const PANEL =
@@ -19,6 +19,7 @@ const TABS: readonly { value: SideTab; label: string }[] = [
   { value: "properties", label: "Thuộc tính" },
   { value: "layers", label: "Lớp" },
   { value: "check", label: "Kiểm tra" },
+  { value: "history", label: "Lịch sử" },
 ];
 
 /** What the "Kiểm tra" panel says until it shows the preflight report. */
@@ -28,16 +29,19 @@ function CheckPlaceholder() {
 
 /**
  * The tabs under the preview: "Thuộc tính" (the selection's properties, with the type sections
- * the tools add), "Lớp" (the layers list) and "Kiểm tra" (`check`, the preflight report).
+ * the tools add), "Lớp" (the layers list), "Kiểm tra" (`check`, the preflight report) and, when
+ * there is one, "Lịch sử" (`history`, the design's history).
  */
 export function SidePanel({
   sections,
   check,
+  history,
   onEditText,
   className,
 }: {
   sections?: PropertySections;
   check?: ReactNode;
+  history?: ReactNode;
   onEditText?: (id: string) => void;
   className?: string;
 }) {
@@ -60,11 +64,11 @@ export function SidePanel({
           variant="line"
           className="border-border-default w-full justify-start rounded-none border-b px-2 group-data-horizontal/tabs:h-auto"
         >
-          {TABS.map(({ value, label }) => (
+          {TABS.filter(({ value }) => value !== "history" || history).map(({ value, label }) => (
             <TabsTrigger
               key={value}
               value={value}
-              className="min-h-11 flex-none px-4 text-sm group-data-horizontal/tabs:after:bottom-0"
+              className="min-h-11 flex-none px-3 text-sm group-data-horizontal/tabs:after:bottom-0"
             >
               {label}
             </TabsTrigger>
@@ -79,6 +83,11 @@ export function SidePanel({
         <TabsContent value="check" className={cn(PANEL, "p-[var(--card-pad)]")}>
           {check ?? <CheckPlaceholder />}
         </TabsContent>
+        {history ? (
+          <TabsContent value="history" className={cn(PANEL, "p-[var(--card-pad)]")}>
+            {history}
+          </TabsContent>
+        ) : null}
       </Tabs>
     </section>
   );

@@ -4,8 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { STORE_ROUTES } from "@/constants";
-import { seedMockCatalog } from "@/lib/api/mock-fixtures/catalog";
-import type { MockDesignStudio } from "@/lib/api/mock-fixtures/designs";
+import type { DesignMockStore } from "@/lib/api/mock-fixtures/design-store";
 import { settle } from "@/test/fake-backend";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
@@ -13,14 +12,13 @@ import { DesignStudio } from "../components/studio/design-studio";
 import type { StudioServices } from "../components/studio/studio-context";
 import { unsavedDraftKey } from "../components/studio/unsaved-draft";
 import { setBackground } from "../engine";
-import { fakeDesignBackend, mockStudio } from "./design-backend";
+import { designBackend, draftIn, STUDIO_PRODUCTS } from "./design-backend";
 import { TEST_FONTS } from "./fixtures";
 
 const env = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: env.push, replace: vi.fn() }),
 }));
-vi.mock("@/providers/app-providers", () => ({ useIsMock: () => true }));
 
 // The studio is rendered whole and autosave's real 1.5 s wait is waited out.
 vi.setConfig({ testTimeout: 15_000 });
@@ -45,19 +43,9 @@ afterEach(() => {
   signOut();
 });
 
-/** A fresh 12oz cup draft (P1): an empty document on the body. */
-async function draftCup(studio: MockDesignStudio) {
-  const product = seedMockCatalog().find((p) => p.slug === "ly-giay-2-lop-12oz");
-  const { data } = settle(
-    await studio.create({
-      productId: product!.productId,
-      sku: "CUP-PAPER-12OZ-WHT",
-      templateCode: "CUP12-BODY",
-      name: "Ly thử",
-    }),
-  );
-  return (data as { id: string }).id;
-}
+/** A fresh 12oz cup draft: an empty document on the body. */
+const draftCup = (studio: DesignMockStore) =>
+  draftIn(studio, STUDIO_PRODUCTS.cup, undefined, "Ly thử");
 
 /** Renders the studio; resolves once it is laid out (a dialog may hide it), with its services. */
 async function openStudio(designId: string) {
@@ -71,7 +59,7 @@ async function openStudio(designId: string) {
       }}
     />,
   );
-  await waitFor(() => expect(seen.current).toBeDefined());
+  await waitFor(() => expect(seen.current).toBeDefined(), { timeout: 4000 });
   return { ...view, seen };
 }
 
@@ -87,8 +75,7 @@ const SAVED = /^Đã lưu lúc \d{2}:\d{2}$/;
 
 describe("edits that are not stored yet", () => {
   it("keeps them in the browser when the studio is left offline, and offers them back", async () => {
-    const studio = mockStudio();
-    const { put } = fakeDesignBackend(studio);
+    const { store: studio, put } = await designBackend();
     const id = await draftCup(studio);
     const first = await openStudio(id);
 
@@ -107,13 +94,12 @@ describe("edits that are not stored yet", () => {
     await userEvent.click(within(offer).getByRole("button", { name: "Khôi phục bản chưa lưu" }));
     expect(second.seen.current!.editor.store.getState().document).toMatchObject(red);
     expect(await screen.findByText(SAVED, undefined, { timeout: 4000 })).toBeInTheDocument();
-    expect(settle(studio.getDocument(id)).data).toMatchObject({ document: red });
+    expect(settle(await studio.getDocument(id)).data).toMatchObject({ document: red });
     expect(storedDraft(id)).toBeNull();
   });
 
   it("drops the kept edits on Bỏ qua and opens the stored document", async () => {
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     const id = await draftCup(studio);
     const first = await openStudio(id);
     online = false;
@@ -133,8 +119,7 @@ describe("edits that are not stored yet", () => {
   });
 
   it("does not offer edits made on a stored document that has changed since", async () => {
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     const id = await draftCup(studio);
     window.localStorage.setItem(
       unsavedDraftKey(id),
@@ -156,8 +141,7 @@ describe("edits that are not stored yet", () => {
   });
 
   it("forgets the kept edits once autosave has stored them", async () => {
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     const id = await draftCup(studio);
     const { seen } = await openStudio(id);
     online = false;
@@ -175,8 +159,7 @@ describe("edits that are not stored yet", () => {
 
   it("asks before the back link leaves while an edit is unsaved", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     const { seen } = await openStudio(await draftCup(studio));
     const back = screen.getByRole("link", { name: "Thiết kế của tôi" });
 
@@ -199,8 +182,7 @@ describe("edits that are not stored yet", () => {
   });
 
   it("asks the browser to confirm a page leave while an edit is unsaved", async () => {
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     const { seen } = await openStudio(await draftCup(studio));
     paintBody(seen.current!, "#FF0000");
 

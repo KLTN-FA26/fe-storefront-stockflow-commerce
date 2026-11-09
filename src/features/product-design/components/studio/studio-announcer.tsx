@@ -11,12 +11,8 @@ export const STUDIO_ANNOUNCEMENTS = {
   elementRemoved: "Đã xoá phần tử",
   copiedTo: (face: string) => `Đã sao chép sang ${face}`,
   saved: "Đã lưu",
-  reviewRequested: "Đã gửi QC kiểm tra",
-  finalized: "Đã chốt thiết kế",
-  confirmed: "Đã xác nhận thiết kế",
-  snapshotCopied: "Đã sao chép mã bản chốt",
-  snapshotSelected: "Không sao chép được. Mã đã được chọn để bạn sao chép.",
-  preflight: (fails: number, warnings: number) => `Kiểm tra: ${fails} lỗi, ${warnings} cảnh báo`,
+  submitted: "Đã gửi duyệt",
+  revisionCreated: "Đã tạo bản sửa",
 } as const;
 
 type Announcement = { text: string; id: number };

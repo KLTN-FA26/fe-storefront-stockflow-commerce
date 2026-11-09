@@ -13,7 +13,7 @@ import type { DesignDocument, EditorController } from "../../engine";
 import { isDesignConflict } from "../../errors";
 import { useSaveDesignDocument } from "../../mutations";
 import { designDocumentQuery } from "../../queries";
-import type { DesignDocumentRecord, DesignDraft } from "../../types";
+import type { Design, DesignDocumentRecord } from "../../types";
 import type { AutosaveControls } from "./studio-context";
 import { createDraftKeeper, type DraftKeeper } from "./unsaved-draft";
 
@@ -56,7 +56,7 @@ export const ADOPT_RETRY_MS = 2000;
  * into `conflict` instead, so it is never overwritten without a word.
  */
 export function useAutosave(
-  design: DesignDraft,
+  design: Design,
   editor: EditorController,
   {
     stored,

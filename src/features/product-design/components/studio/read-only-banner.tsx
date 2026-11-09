@@ -1,23 +1,25 @@
 "use client";
 
 import { Lock } from "lucide-react";
-
-import { DESIGN_UI_STATE_META, type DesignUiState } from "../../lifecycle";
+import type { ReactNode } from "react";
 
 /**
- * Why the design cannot be edited (spec §6.3) and what happens next. The way forward ("Yêu cầu
- * sửa", "Rút yêu cầu để chỉnh sửa"; for a confirmed design its snapshot id, "Yêu cầu báo giá" and
- * "Tạo phiên bản mới") is in the side column's workflow card, the state's badge in the header.
+ * The line under the header of a design that cannot be edited (PENDING_REVIEW, APPROVED): "Chỉ
+ * xem.", where it stands (`children`) and, when there is one, what the customer can take from it
+ * (`action`). The status badge is in the header.
  */
-export function ReadOnlyBanner({ state }: { state: DesignUiState }) {
+export function ReadOnlyBanner({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
-    <div className="bg-bg-surface border-border-default border-b px-[var(--card-pad)] py-2">
-      <p className="text-ink-secondary flex min-w-0 items-start gap-2 text-sm">
-        <Lock aria-hidden className="mt-0.5 size-4 shrink-0" />
-        <span>
-          <strong className="text-ink-primary">Chỉ xem.</strong> {DESIGN_UI_STATE_META[state].hint}
-        </span>
+    <section
+      aria-label="Trạng thái thiết kế"
+      className="bg-bg-surface border-border-default flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-[var(--card-pad)] py-1.5"
+    >
+      <p className="text-ink-secondary flex min-w-0 flex-1 items-center gap-2 text-sm">
+        <Lock aria-hidden className="size-4 shrink-0" />
+        <strong className="text-ink-primary shrink-0">Chỉ xem.</strong>
+        <span className="min-w-0">{children}</span>
       </p>
-    </div>
+      {action ? <div className="shrink-0">{action}</div> : null}
+    </section>
   );
 }

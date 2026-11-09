@@ -115,7 +115,7 @@ export async function downloadAsset(
   assetId: string,
 ): Promise<Blob> {
   const link = (fresh: boolean) => {
-    const query = downloadLinkQuery("asset", designId, assetId);
+    const query = downloadLinkQuery(designId, assetId);
     return client.fetchQuery(fresh ? { ...query, staleTime: 0 } : query);
   };
   try {

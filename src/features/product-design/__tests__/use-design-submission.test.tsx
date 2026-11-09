@@ -21,7 +21,8 @@ import {
 import { cup12oz, PNG_1x1, sizer, textEl } from "../engine/__tests__/fixtures";
 import { designKeys } from "../queries";
 import type { Design } from "../types";
-import { design as designOf, documentRecordDto } from "./fixtures";
+import { printConfigDtoSchema } from "../schemas";
+import { design as designOf, documentRecordDto, printConfigDto } from "./fixtures";
 
 vi.mock("../api", () => ({
   getDesign: vi.fn(),
@@ -52,9 +53,15 @@ const fakeRenderer = () => ({
 
 /**
  * The hook inside a studio whose services are the subset it reads, cast once at this boundary
- * (`as unknown as`): the old `StudioServices` type still names removed types until Task 9.
+ * (`as unknown as`): the rest of `StudioServices` is not needed here.
  */
-async function setup(opts: { filled?: boolean; autosaveState?: AutosaveState } = {}) {
+async function setup(
+  opts: {
+    filled?: boolean;
+    autosaveState?: AutosaveState;
+    printConfig?: Record<string, unknown>;
+  } = {},
+) {
   const { filled = true, autosaveState = "saved" } = opts;
   const editor = createEditor({ template: cup12oz, document: emptyDocument(cup12oz) });
   if (filled) editor.apply((doc) => addElement(doc, "BODY", label));
@@ -83,6 +90,7 @@ async function setup(opts: { filled?: boolean; autosaveState?: AutosaveState } =
     fontStatus: {},
     autosave,
     exportRenderer: renderer,
+    printConfig: printConfigDtoSchema.parse(printConfigDto(opts.printConfig)),
   } as unknown as StudioServices;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -117,6 +125,62 @@ describe("useDesignSubmission", () => {
     expect(submitDesign).not.toHaveBeenCalled();
     expect(renderer.preview).not.toHaveBeenCalled();
   });
+
+  it("check() saves and runs the preflight only: a Pass answers true and draws nothing", async () => {
+    const { view, renderer, autosave } = await setup();
+
+    let passed: boolean | undefined;
+    await act(async () => {
+      passed = await view.result.current.check();
+    });
+
+    expect(passed).toBe(true);
+    expect(autosave.flush).toHaveBeenCalledTimes(1);
+    expect(view.result.current.step).toBe("idle");
+    expect(view.result.current.issues).toBeNull();
+    expect(renderer.preview).not.toHaveBeenCalled();
+    expect(recordPreflightFailure).not.toHaveBeenCalled();
+    expect(submitDesign).not.toHaveBeenCalled();
+  });
+
+  it("check() records a Fail and sets its issues", async () => {
+    const { view, renderer } = await setup({ filled: false });
+    recordPreflightFailure.mockResolvedValue(
+      {} as Awaited<ReturnType<typeof recordPreflightFailure>>,
+    );
+
+    let passed: boolean | undefined;
+    await act(async () => {
+      passed = await view.result.current.check();
+    });
+
+    expect(passed).toBe(false);
+    expect(view.result.current.step).toBe("error");
+    expect(view.result.current.issues?.map((i) => i.ruleId)).toEqual(["EMPTY_DESIGN"]);
+    expect(recordPreflightFailure).toHaveBeenCalledTimes(1);
+    expect(renderer.preview).not.toHaveBeenCalled();
+    expect(submitDesign).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ hasCartonSpec: false }, "NO_CARTON_SPEC"],
+    [{ variantStatus: "OBSOLETE" }, "VARIANT_UNAVAILABLE"],
+  ])(
+    "checks the variant against the print configuration (R6): %j fails with %s",
+    async (printConfig, ruleId) => {
+      const { view, renderer } = await setup({ printConfig });
+      recordPreflightFailure.mockResolvedValue(
+        {} as Awaited<ReturnType<typeof recordPreflightFailure>>,
+      );
+
+      await act(() => view.result.current.run());
+
+      expect(view.result.current.step).toBe("error");
+      expect(view.result.current.issues?.map((i) => i.ruleId)).toEqual([ruleId]);
+      expect(submitDesign).not.toHaveBeenCalled();
+      expect(renderer.preview).not.toHaveBeenCalled();
+    },
+  );
 
   it("flushes autosave, submits the version read after it with the three files, and holds the pending design", async () => {
     const { view, client, autosave, calls } = await setup();

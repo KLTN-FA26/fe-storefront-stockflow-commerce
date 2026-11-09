@@ -10,7 +10,7 @@ import {
 } from "./api";
 import { isDesignStateChanged } from "./errors";
 import { designKeys } from "./queries";
-import type { Design, RenameDesignInput, SaveDocumentInput } from "./types";
+import type { Design, DesignDocumentRecord, RenameDesignInput, SaveDocumentInput } from "./types";
 
 // What each write re-reads (spec 2026-11-09 §4.4). A write whose answer is the fresh design puts
 // it in the cache instead of refetching it: a refetch racing the next autosave could land with an
@@ -66,13 +66,29 @@ export function useCreateRevision() {
   });
 }
 
-/** Rename moves the version on: the answer becomes the cached design, so the next write sends it. */
+/**
+ * A read of the design under way (a poll, a focus) answers what the server held before this write:
+ * it is called off before the write's answer goes into the cache, so it cannot put it back.
+ */
+const cancelDesignRead = (client: QueryClient, id: string) =>
+  client.cancelQueries({ queryKey: designKeys.detail(id), exact: true });
+
+/**
+ * Rename moves the version on: the answer becomes the cached design, so the next write sends it,
+ * and the cached document's version follows (one version for the design and its document, docs 12
+ * BR-11). The caller hands the new version to autosave.
+ */
 export function useRenameDesign(id: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (input: RenameDesignInput) => renameDesign(id, input),
-    onSuccess: (design) => {
+    onSuccess: async (design) => {
+      await cancelDesignRead(client, id);
       client.setQueryData(designKeys.detail(id), design);
+      client.setQueryData<DesignDocumentRecord>(
+        designKeys.document(id),
+        (record) => record && { ...record, version: design.version },
+      );
       void client.invalidateQueries({ queryKey: designKeys.lists() });
     },
     onError: (error) => reReadWhenStateChanged(client, id, error),
@@ -81,14 +97,15 @@ export function useRenameDesign(id: string) {
 
 /**
  * For the autosaver's `save`. The record becomes the cached document, and its version and time the
- * cached design's. Nothing is awaited: the autosaver must not wait on a refetch to send its next
+ * cached design's. No refetch is awaited: the autosaver must not wait on one to send its next
  * version. A stale version (409 VERSION_CONFLICT) is left to the conflict dialog.
  */
 export function useSaveDesignDocument(id: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (input: SaveDocumentInput) => saveDesignDocument(id, input),
-    onSuccess: (record) => {
+    onSuccess: async (record) => {
+      await cancelDesignRead(client, id);
       client.setQueryData(designKeys.document(id), record);
       client.setQueryData<Design>(
         designKeys.detail(id),

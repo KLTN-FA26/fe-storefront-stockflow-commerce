@@ -1,23 +1,20 @@
 import { act, fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { seedMockCatalog } from "@/lib/api/mock-fixtures/catalog";
-import type { MockDesignStudio } from "@/lib/api/mock-fixtures/designs";
-import { settle } from "@/test/fake-backend";
+import type { DesignMockStore } from "@/lib/api/mock-fixtures/design-store";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { DesignStudio } from "../components/studio/design-studio";
 import type { StudioServices } from "../components/studio/studio-context";
 import { emptyDocument, MAX_ZOOM, type DesignElement, type DrawingElement } from "../engine";
 import { cup12oz, imageEl, textEl } from "../engine/__tests__/fixtures";
-import { fakeDesignBackend, mockStudio } from "./design-backend";
+import { designBackend, draftIn, STUDIO_PRODUCTS } from "./design-backend";
 import { TEST_FONTS } from "./fixtures";
 
 const env = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: env.push, replace: vi.fn() }),
 }));
-vi.mock("@/providers/app-providers", () => ({ useIsMock: () => true }));
 
 // Each test renders the whole studio: well over 5 s in a loaded full run.
 vi.setConfig({ testTimeout: 15_000 });
@@ -76,30 +73,18 @@ function sizeTheStage(width = 375, height = 480) {
   vi.spyOn(Element.prototype, "clientHeight", "get").mockReturnValue(height);
 }
 
-const CUP_SLUG = "ly-giay-2-lop-12oz";
 /** On the 12oz cup body: `u` across the band, half-way down it. */
 const at = (u: number, v = 55) => ({ placement: { u, v, rotationDeg: 0, scale: 1 } });
 const logo = () => imageEl("logo", { ...at(100), widthMm: 30, heightMm: 30 });
 const coffee = () => textEl("text", { content: "Cà phê", ...at(170) });
 
 /** A new 12oz cup draft whose body holds `elements` (bottom first). */
-async function cupDraft(studio: MockDesignStudio, elements: DesignElement[]) {
-  const product = seedMockCatalog().find((p) => p.slug === CUP_SLUG)!;
-  const created = settle(
-    await studio.create({
-      productId: product.productId,
-      sku: "CUP-PAPER-12OZ-WHT",
-      templateCode: "CUP12-BODY",
-      name: "Ly thử",
-    }),
-  );
-  const { id } = created.data as { id: string };
+function cupDraft(studio: DesignMockStore, elements: DesignElement[]) {
   const document = {
     ...emptyDocument(cup12oz),
     surfaces: { BODY: { background: { kind: "none" as const }, elements } },
   };
-  settle(await studio.putDocument(id, { version: 0, document }));
-  return id;
+  return draftIn(studio, STUDIO_PRODUCTS.cup, document, "Ly thử");
 }
 
 type Seen = { current?: StudioServices };
@@ -116,13 +101,12 @@ async function openStudio(designId: string): Promise<Seen> {
       }}
     />,
   );
-  await screen.findByRole("group", { name: "Công cụ" });
+  await screen.findByRole("group", { name: "Công cụ" }, { timeout: 4000 });
   return seen;
 }
 
 async function openCup(elements: DesignElement[] = []) {
-  const studio = mockStudio();
-  fakeDesignBackend(studio);
+  const { store: studio } = await designBackend();
   return openStudio(await cupDraft(studio, elements));
 }
 

@@ -4,8 +4,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
 import { recordPreflightFailure, submitDesign } from "../../api";
-import { documentChecksum, runPreflight, VARIANT_OK, type PreflightIssue } from "../../engine";
-import type { PreflightReport } from "../../engine";
+import { documentChecksum, runPreflight, type PreflightIssue } from "../../engine";
+import type { DesignDocument, PreflightReport } from "../../engine";
 import { isDesignConflict, isDesignStateChanged, preflightIssuesOf } from "../../errors";
 import { invalidateDesign } from "../../mutations";
 import { designDocumentQuery, designKeys } from "../../queries";
@@ -14,6 +14,7 @@ import { ExportError } from "./export-renderer";
 import { buildSubmissionBundle, type BundleStep, type SubmissionBundle } from "./submission-bundle";
 import { useStudio } from "./studio-context";
 import { isStored } from "./use-autosave";
+import { preflightVariant } from "./use-preflight";
 
 export type SubmitStep = "idle" | "checking" | BundleStep | "upload" | "done" | "error";
 
@@ -39,10 +40,14 @@ type State = {
 };
 const IDLE: State = { step: "idle", fraction: 0, issues: null };
 
+/** What a preflight that passed was run on. */
+type Checked = { document: DesignDocument; report: PreflightReport };
+
 /**
  * "Gửi duyệt" (spec §6.4): saves what is pending, runs the preflight on exactly what is stored,
  * records a client-side Fail (no files are made), else draws the bundle, checks the stored
  * document is still the drawn one and submits. A failed upload is retried with the same bundle.
+ * `check()` is the first half alone, for the dialog to confirm before anything is drawn.
  */
 export function useDesignSubmission(design: Design) {
   const services = useStudio();
@@ -55,8 +60,7 @@ export function useDesignSubmission(design: Design) {
   const [state, setState] = useState<State>(IDLE);
 
   /** The stored document, read fresh: it carries the design's version counter and the checksum. */
-  const readStored = () =>
-    client.fetchQuery({ ...designDocumentQuery(design.id), staleTime: 0 });
+  const readStored = () => client.fetchQuery({ ...designDocumentQuery(design.id), staleTime: 0 });
   /**
    * Refuses to go on unless the stored document is still the drawn one (same checksum); answers
    * the version of that very read, so the version sent is the one of the document verified.
@@ -67,8 +71,11 @@ export function useDesignSubmission(design: Design) {
     return stored.version;
   };
 
-  /** Flush, preflight, and (when it passes) draw the bundle. Null when the preflight failed. */
-  async function prepare(): Promise<Work | null> {
+  /**
+   * Flush and run the preflight on what is then stored. A Fail is recorded (docs 12 §5.3
+   * PREFLIGHT_FAILED) and its issues set: null then.
+   */
+  async function inspect(): Promise<Checked | null> {
     setState({ step: "checking", fraction: 0, issues: null });
     await autosave.flush();
     if (!isStored(autosave.latestState())) throw new ExportError(MESSAGES.notSaved);
@@ -80,16 +87,29 @@ export function useDesignSubmission(design: Design) {
       sizer: services.sizer,
       assets: services.assetStatus,
       fontStatus: services.fontStatus,
-      variant: VARIANT_OK, // Task 9 replaces it with the variant's print configuration
+      variant: preflightVariant(services.printConfig),
     });
     if (report.result === "Fail") {
-      await recordPreflightFailure(design.id, {
-        version: (await readStored()).version,
-        issues: report.issues,
-      });
+      // The issues are shown at once; the attempt is recorded after (docs 12 §5.3). A record that
+      // fails does not hide them.
       setState({ step: "error", fraction: 0, issues: report.issues });
+      try {
+        const { version } = await readStored();
+        await recordPreflightFailure(design.id, { version, issues: report.issues });
+      } catch (error) {
+        if (isDesignStateChanged(error)) void invalidateDesign(client, design.id);
+        setState({ step: "error", fraction: 0, error, issues: report.issues });
+      }
       return null;
     }
+    return { document, report };
+  }
+
+  /** Flush, preflight, and (when it passes) draw the bundle. Null when the preflight failed. */
+  async function prepare(): Promise<Work | null> {
+    const checked = await inspect();
+    if (!checked) return null;
+    const { document, report } = checked;
     const checksum = await documentChecksum(document);
     // Saved, yet not what is stored: another tab or device saved since this one loaded it.
     await assertStoredIs(checksum);
@@ -128,18 +148,44 @@ export function useDesignSubmission(design: Design) {
       // Re-reading is best effort: the design is submitted whatever it answers.
       invalidateDesign(client, design.id).catch(() => undefined);
     } catch (error) {
-      const issues = preflightIssuesOf(error);
-      if (error instanceof DocumentChangedError) {
-        // The editor is behind a document saved elsewhere: autosave stops and the conflict
-        // dialog offers the reload. The next run draws anew.
-        work.current = null;
-        autosave.conflict();
-      } else if (issues || isDesignConflict(error) || isDesignStateChanged(error)) {
-        // The server judged otherwise (or the design moved on): what was drawn is stale.
-        work.current = null;
-        void invalidateDesign(client, design.id);
-      }
-      setState({ step: "error", fraction: 0, error, issues });
+      fail(error);
+    } finally {
+      busy.current = false;
+    }
+  }
+
+  function fail(error: unknown) {
+    const issues = preflightIssuesOf(error);
+    if (error instanceof DocumentChangedError) {
+      // The editor is behind a document saved elsewhere: autosave stops and the conflict dialog
+      // offers the reload. The next run draws anew.
+      work.current = null;
+      autosave.conflict();
+    } else if (issues || isDesignConflict(error) || isDesignStateChanged(error)) {
+      // The server judged otherwise (or the design moved on): what was drawn is stale.
+      work.current = null;
+      void invalidateDesign(client, design.id);
+    }
+    setState({ step: "error", fraction: 0, error, issues });
+  }
+
+  /**
+   * Saves what is pending and runs the preflight on what is stored, drawing nothing: a Fail is
+   * recorded and its issues set (step `error`). Answers whether it passed (the step is `idle`
+   * again), so the customer confirms before `run()` draws and sends the files.
+   */
+  async function check(): Promise<boolean> {
+    if (busy.current) return false;
+    busy.current = true;
+    work.current = null;
+    isDone.current = false;
+    try {
+      const passed = (await inspect()) !== null;
+      if (passed) setState(IDLE);
+      return passed;
+    } catch (error) {
+      fail(error);
+      return false;
     } finally {
       busy.current = false;
     }
@@ -156,5 +202,6 @@ export function useDesignSubmission(design: Design) {
       return execute();
     },
     retry: execute,
+    check,
   };
 }

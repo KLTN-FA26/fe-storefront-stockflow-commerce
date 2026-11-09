@@ -17,11 +17,6 @@ export function PreflightProvider({ children }: { children: ReactNode }) {
   return <PreflightContext.Provider value={report}>{children}</PreflightContext.Provider>;
 }
 
-/** The report where there may be no studio around (the workflow-only view has none): `null` there. */
-export function useOptionalPreflightReport(): PreflightReport | null {
-  return useContext(PreflightContext);
-}
-
 /** The latest preflight report of the open design (`usePreflight`'s, debounced 300 ms). */
 export function usePreflightReport(): PreflightReport {
   const report = useContext(PreflightContext);

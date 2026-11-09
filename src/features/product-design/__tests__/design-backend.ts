@@ -10,7 +10,10 @@ import {
   type DesignMockStore,
 } from "@/lib/api/mock-fixtures/design-store";
 
+import { settle } from "@/test/fake-backend";
+
 import { readImageDimensions } from "../engine/assets/image-header";
+import type { DesignDocument } from "../engine/document/schema";
 
 /**
  * The size of an uploaded image as its header says: jsdom has no `createImageBitmap`, which the
@@ -76,4 +79,31 @@ export async function designBackend(
     patch: spyOnPatch(),
     delete: spyOnDelete(),
   };
+}
+
+/** A variant of the mock catalogue that has a print configuration. */
+export type StudioProduct = { productSlug: string; sku: string };
+
+/** The variants the studio tests start drafts of. */
+export const STUDIO_PRODUCTS = {
+  /** The 12oz paper cup: one print area, the body (`CUP12-BODY`). */
+  cup: { productSlug: "ly-giay-2-lop-12oz", sku: "CUP-PAPER-12OZ-WHT" },
+  /** The kraft bag M: four faces (`BAGM-4F`). */
+  bag: { productSlug: "tui-giay-kraft", sku: "BAG-KRAFT-M" },
+} as const satisfies Record<string, StudioProduct>;
+
+/**
+ * A new draft of `product` made in `store` itself (no request, no latency); with `document`, its
+ * stored document becomes that one (the draft is then at version 1). Answers the draft's id.
+ */
+export async function draftIn(
+  store: DesignMockStore,
+  product: StudioProduct,
+  document?: DesignDocument,
+  name = "Thiết kế thử",
+): Promise<string> {
+  const created = settle(await store.create({ ...product, name }));
+  const { id } = created.data as { id: string };
+  if (document) settle(await store.putDocument(id, { version: 0, document }));
+  return id;
 }

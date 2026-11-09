@@ -13,7 +13,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { DESIGN_UI_STATE_META } from "../../lifecycle";
 import type { DesignDocumentRecord } from "../../types";
 import { useStudio } from "./studio-context";
 import { forgetUnsavedDraft, restorableDraft } from "./unsaved-draft";
@@ -24,10 +23,10 @@ import { forgetUnsavedDraft, restorableDraft } from "./unsaved-draft";
  * autosave stores them; "Bỏ qua" drops them and keeps the stored document.
  */
 export function UnsavedDraftDialog({ record }: { record: DesignDocumentRecord }) {
-  const { design, editor, uiState } = useStudio();
+  const { design, editor, readOnly } = useStudio();
   // Read once, when the studio opens on the stored document.
   const [draft, setDraft] = useState(() => restorableDraft(design.id, record));
-  const open = draft !== null && DESIGN_UI_STATE_META[uiState].editable;
+  const open = draft !== null && !readOnly;
 
   const restore = () => {
     if (draft) editor.replaceDocument(draft.document);

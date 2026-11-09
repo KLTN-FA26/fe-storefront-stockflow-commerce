@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleCheck, CircleX, Info, MessageSquareText, RotateCw } from "lucide-react";
+import { CircleCheck, CircleX, Info, RotateCw } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,15 +35,18 @@ function SummaryChip({ report }: { report: PreflightReport }) {
   );
 }
 
-/** The messages of `issues` as a bulleted list: what a workflow dialog says is in the way. */
-export function IssueMessages({ issues }: { issues: readonly PreflightIssue[] }) {
-  return (
-    <ul className="mt-1 list-disc pl-4">
-      {issues.map((issue, i) => (
-        <li key={`${issue.ruleId}-${issue.elementId ?? i}`}>{issue.message}</li>
-      ))}
-    </ul>
-  );
+/**
+ * Shows where an issue is: switches to its surface, selects its element and turns the 3D view to
+ * it. Issues of the whole design (no surface) have nowhere to show.
+ */
+export function useLocateIssue() {
+  const { editor, viewerRef } = useStudio();
+  return ({ surfaceCode, elementId }: PreflightIssue) => {
+    if (!surfaceCode) return;
+    editor.setActiveSurface(surfaceCode);
+    editor.select(elementId ?? null);
+    viewerRef.current?.focusSurface(surfaceCode);
+  };
 }
 
 /** One finding; with `onLocate` it is a button that shows where it is. */
@@ -79,6 +82,7 @@ function IssueRow({ issue, onLocate }: { issue: PreflightIssue; onLocate?: () =>
   );
 }
 
+/** A titled list of issues; with `onLocate`, each issue on a surface is a button that shows it. */
 function IssueGroup({
   title,
   issues,
@@ -96,7 +100,7 @@ function IssueGroup({
           <IssueRow
             key={`${issue.ruleId}-${issue.elementId ?? i}`}
             issue={issue}
-            {...(onLocate ? { onLocate: () => onLocate(issue) } : {})}
+            {...(onLocate && issue.surfaceCode ? { onLocate: () => onLocate(issue) } : {})}
           />
         ))}
       </ul>
@@ -105,30 +109,45 @@ function IssueGroup({
 }
 
 /**
- * The "Kiểm tra" panel: the preflight summary, the notes QC left on the design, and the issues
- * grouped by print area. Clicking an issue selects its element, switches to its surface and turns
- * the 3D view to it. The checks are advisory; QC's review stays the gate.
+ * The failures of a preflight: those of the whole design first, then each print area's under its
+ * name; clicking one on a surface calls `onLocate` with it.
+ */
+export function FailedIssues({
+  issues,
+  onLocate,
+}: {
+  issues: readonly PreflightIssue[];
+  onLocate: (issue: PreflightIssue) => void;
+}) {
+  const { surfaces, template } = useStudio();
+  const nameOf = (code: PrintAreaCode) =>
+    template.printAreas.find((area) => area.code === code)?.name ?? code;
+  const fails = issues.filter((issue) => issue.level === "fail");
+  const general = fails.filter((issue) => !issue.surfaceCode);
+  const groups = surfaces.order
+    .map((code) => ({ code, issues: fails.filter((i) => i.surfaceCode === code) }))
+    .filter((group) => group.issues.length > 0);
+  return (
+    <>
+      {general.length > 0 ? <IssueGroup title="Toàn thiết kế" issues={general} /> : null}
+      {groups.map(({ code, issues: own }) => (
+        <IssueGroup key={code} title={nameOf(code)} issues={own} onLocate={onLocate} />
+      ))}
+    </>
+  );
+}
+
+/**
+ * The "Kiểm tra" panel: the preflight summary (Pass/Fail, spec §7), the failures grouped by print
+ * area and the print notes under "Lưu ý khi in". Clicking an issue selects its element, switches
+ * to its surface and turns the 3D view to it. A Fail blocks "Gửi duyệt"; a note never does.
  */
 export function PreflightPanel() {
   const report = usePreflightReport();
-  const { editor, surfaces, template, design, viewerRef, retryImages } = useStudio();
-  const nameOf = (code: PrintAreaCode) =>
-    template.printAreas.find((area) => area.code === code)?.name ?? code;
-  const notes = design.reviewNotes?.trim();
-  const fails = report.issues.filter((issue) => issue.level === "fail");
+  const { retryImages } = useStudio();
+  const locate = useLocateIssue();
   const printNotes = report.issues.filter((issue) => issue.level === "note");
-  const general = fails.filter((issue) => !issue.surfaceCode);
   const imageFailed = report.issues.some((issue) => issue.ruleId === "ASSET_INVALID");
-  const groups = surfaces.order
-    .map((code) => ({ code, issues: fails.filter((i) => i.surfaceCode === code) }))
-    .filter(({ issues }) => issues.length > 0);
-
-  const locate = ({ surfaceCode, elementId }: PreflightIssue) => {
-    if (!surfaceCode) return;
-    editor.setActiveSurface(surfaceCode);
-    editor.select(elementId ?? null);
-    viewerRef.current?.focusSurface(surfaceCode);
-  };
 
   return (
     <section aria-label="Kết quả kiểm tra" className="flex flex-col gap-4">
@@ -136,24 +155,12 @@ export function PreflightPanel() {
         <h2 className="text-ink-primary text-sm font-semibold">Kiểm tra trước khi in</h2>
         <SummaryChip report={report} />
       </div>
-      {notes ? (
-        <div className="bg-bg-subtle border-border-default rounded-[var(--r-md)] border p-3">
-          <p className="text-ink-secondary mb-1 flex items-center gap-1.5 text-xs font-semibold">
-            <MessageSquareText aria-hidden className="size-4" />
-            Ghi chú kiểm tra
-          </p>
-          <p className="text-ink-primary text-sm whitespace-pre-line">{notes}</p>
-        </div>
-      ) : null}
       {report.issues.length === 0 ? (
         <p className="text-ink-secondary text-sm">
-          Không phát hiện vấn đề nào. QC vẫn sẽ kiểm tra lại trước khi in.
+          Không phát hiện vấn đề nào. Quản lý kinh doanh vẫn duyệt lại trước khi in.
         </p>
       ) : null}
-      {general.length > 0 ? <IssueGroup title="Toàn thiết kế" issues={general} /> : null}
-      {groups.map(({ code, issues }) => (
-        <IssueGroup key={code} title={nameOf(code)} issues={issues} onLocate={locate} />
-      ))}
+      <FailedIssues issues={report.issues} onLocate={locate} />
       {printNotes.length > 0 ? (
         <IssueGroup title="Lưu ý khi in" issues={printNotes} onLocate={locate} />
       ) : null}

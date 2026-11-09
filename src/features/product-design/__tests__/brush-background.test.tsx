@@ -2,9 +2,8 @@ import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { seedMockCatalog } from "@/lib/api/mock-fixtures/catalog";
-import { MOCK_DESIGN_IDS, type MockDesignStudio } from "@/lib/api/mock-fixtures/designs";
-import { settle } from "@/test/fake-backend";
+import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/design-seed";
+import type { DesignMockStore } from "@/lib/api/mock-fixtures/design-store";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { useRecentColors } from "../components/studio/color-field";
@@ -29,7 +28,7 @@ import {
   recordingCtx,
   type RecordingCtx,
 } from "../engine/__tests__/fixtures";
-import { fakeDesignBackend, mockStudio } from "./design-backend";
+import { designBackend, draftIn, STUDIO_PRODUCTS, type StudioProduct } from "./design-backend";
 import { TEST_FONTS } from "./fixtures";
 
 /** The 3D viewers the studio built: jsdom has no WebGL, so the engine's viewer is a fake that keeps its textures. */
@@ -59,7 +58,6 @@ const env = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: env.push, replace: vi.fn() }),
 }));
-vi.mock("@/providers/app-providers", () => ({ useIsMock: () => true }));
 
 // Each test renders the whole studio: well over 5 s in a loaded full run.
 vi.setConfig({ testTimeout: 15_000 });
@@ -116,47 +114,32 @@ async function openStudio(designId: string): Promise<Seen> {
       }}
     />,
   );
-  await screen.findByRole("tab", { name: "Lớp" });
+  await screen.findByRole("tab", { name: "Lớp" }, { timeout: 4000 });
   return seen;
 }
 
 /** A new draft of a seeded product whose document is `document`. */
-async function newDraft(
-  studio: MockDesignStudio,
-  { slug, sku, templateCode }: { slug: string; sku: string; templateCode: string },
-  document: DesignDocument,
-) {
-  const product = seedMockCatalog().find((p) => p.slug === slug)!;
-  const created = settle(
-    await studio.create({ productId: product.productId, sku, templateCode, name: "Thiết kế thử" }),
-  );
-  const { id } = created.data as { id: string };
-  settle(await studio.putDocument(id, { version: 0, document }));
-  return id;
-}
+const newDraft = (studio: DesignMockStore, product: StudioProduct, document: DesignDocument) =>
+  draftIn(studio, product, document);
 
 /** A new 12oz cup draft whose body holds `elements` (bottom first). */
 async function openCup(elements: DesignElement[] = []) {
-  const studio = mockStudio();
-  fakeDesignBackend(studio);
+  const { store: studio } = await designBackend();
   const document = {
     ...emptyDocument(cup12oz),
     surfaces: { BODY: { background: { kind: "none" as const }, elements } },
   };
-  const cup = { slug: "ly-giay-2-lop-12oz", sku: "CUP-PAPER-12OZ-WHT", templateCode: "CUP12-BODY" };
-  return openStudio(await newDraft(studio, cup, document));
+  return openStudio(await newDraft(studio, STUDIO_PRODUCTS.cup, document));
 }
 
 /** A new kraft bag draft with four empty faces. */
 async function openBag() {
-  const studio = mockStudio();
-  fakeDesignBackend(studio);
-  const bag = { slug: "tui-giay-kraft", sku: "BAG-KRAFT-M", templateCode: "BAGM-4F" };
-  return openStudio(await newDraft(studio, bag, emptyDocument(bagM)));
+  const { store: studio } = await designBackend();
+  return openStudio(await newDraft(studio, STUDIO_PRODUCTS.bag, emptyDocument(bagM)));
 }
 
 async function openDesign(designId: string) {
-  fakeDesignBackend(mockStudio());
+  await designBackend();
   return openStudio(designId);
 }
 
@@ -492,8 +475,9 @@ describe("the brush", () => {
 
   it("draws nothing while the design is read-only", async () => {
     const user = userEvent.setup();
-    const seen = await openDesign(MOCK_DESIGN_IDS.approvedCup);
-    expect(screen.getByRole("button", { name: "Vẽ (B)" })).toBeDisabled();
+    const seen = await openDesign(MOCK_DESIGN_IDS.approved);
+    // Read-only: the tool rail is not there at all.
+    expect(screen.queryByRole("button", { name: "Vẽ (B)" })).not.toBeInTheDocument();
     act(() => editorOf(seen).setTool("brush"));
 
     await drag(user, seen, [
@@ -943,9 +927,11 @@ describe("the background", () => {
   });
 
   it("cannot be changed while the design is read-only", async () => {
-    const seen = await openDesign(MOCK_DESIGN_IDS.approvedCup);
+    const seen = await openDesign(MOCK_DESIGN_IDS.approved);
     act(() => editorOf(seen).setTool("background"));
 
-    expect(radio("Màu")).toBeDisabled();
+    // Read-only: neither the tool rail nor the tool's options are there.
+    expect(screen.queryByRole("button", { name: "Nền (G)" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: "Màu" })).not.toBeInTheDocument();
   });
 });

@@ -4,7 +4,6 @@ import { createContext, useContext, type ReactNode, type RefObject } from "react
 import { useStore } from "zustand";
 
 import type { AutosaveState } from "../../autosave";
-import type { DesignCapabilities } from "../../capabilities";
 import type {
   CustomizationTemplate,
   DesignDocument,
@@ -19,8 +18,7 @@ import type {
   SurfaceSet,
   TextMeasurer,
 } from "../../engine";
-import type { DesignUiState } from "../../lifecycle";
-import type { DesignAsset, DesignDraft } from "../../types";
+import type { Design, DesignAsset, DesignStatus, PrintConfig } from "../../types";
 import type { ExportRenderer } from "./export-renderer";
 
 export type FontLoadState = "loading" | "ready" | "error";
@@ -78,11 +76,11 @@ export function createLivePreview(repaint: RepaintChannel): LivePreview {
 }
 
 /**
- * What the workflow steps need from autosave: save what is pending now; adopt a newer version the
- * caller knows leaves the stored document as it was (a review request it checked); start over
- * after a conflict reload with the reloaded record's version and checksum; declare a conflict
- * found elsewhere (R69); and the save state right now (`flush` also settles on a failure: this
- * says whether the document was stored).
+ * What the header, the submission and the conflict dialog need from autosave: save what is pending
+ * now ("Lưu", Ctrl+S, before a submit); adopt a newer version another write of this tab left (a
+ * rename, a submit); start over after a conflict reload with the reloaded record's version and
+ * checksum; declare a conflict found elsewhere (R69); and the save state right now (`flush` also
+ * settles on a failure: this says whether the document was stored).
  */
 export type AutosaveControls = {
   flush(): Promise<void>;
@@ -95,9 +93,13 @@ export type AutosaveControls = {
 /** The 3D view while one is shown (`Viewer3D` sets it): the preview export and the preflight panel use it. */
 export type ViewerRef = { current: ProductViewer | null };
 
-/** Everything the studio's panels share, built once the design, document and template are loaded. */
+/**
+ * Everything the studio's panels share, built once the design, its document, its images and its
+ * variant's print configuration are loaded.
+ */
 export type StudioServices = {
   editor: EditorController;
+  /** The print configuration's template (`printConfig.template`). */
   template: CustomizationTemplate;
   surfaces: SurfaceSet;
   sizer: ElementSizer;
@@ -106,9 +108,13 @@ export type StudioServices = {
   /** Decoded images; the editor view and the 3D textures use the `proxy` variant. */
   images: ImageCache;
   assets: ReadonlyMap<string, DesignAsset>;
-  design: DesignDraft;
-  capabilities: DesignCapabilities;
-  uiState: DesignUiState;
+  design: Design;
+  /** `design.status`: the studio follows it (spec §6.4). */
+  status: DesignStatus;
+  /** Nothing can be changed (`!DESIGN_STATUS_META[status].editable`): tools hidden, no save. */
+  readOnly: boolean;
+  /** The variant's print configuration: the template, and what preflight checks of the variant. */
+  printConfig: PrintConfig;
   /** Says `message` once in the studio's polite live region. */
   announce(message: string): void;
   /** Load state of the document's images by asset id: preflight's `assets` (ASSET_INVALID). */

@@ -1,10 +1,9 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { seedMockCatalog } from "@/lib/api/mock-fixtures/catalog";
-import { MOCK_DESIGN_IDS, type MockDesignStudio } from "@/lib/api/mock-fixtures/designs";
-import { settle } from "@/test/fake-backend";
+import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/design-seed";
+import type { DesignMockStore } from "@/lib/api/mock-fixtures/design-store";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { DesignStudio } from "../components/studio/design-studio";
@@ -17,14 +16,13 @@ import {
   type PrintAreaCode,
 } from "../engine";
 import { cup12oz, imageEl, textEl } from "../engine/__tests__/fixtures";
-import { fakeDesignBackend, mockStudio } from "./design-backend";
+import { designBackend, draftIn, STUDIO_PRODUCTS } from "./design-backend";
 import { TEST_FONTS } from "./fixtures";
 
 const env = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: env.push, replace: vi.fn() }),
 }));
-vi.mock("@/providers/app-providers", () => ({ useIsMock: () => true }));
 
 // Each test renders the whole studio and drives it with userEvent: over 5 s in a loaded full run.
 vi.setConfig({ testTimeout: 15_000 });
@@ -45,8 +43,6 @@ afterEach(() => {
   signOut();
 });
 
-const CUP_SLUG = "ly-giay-2-lop-12oz";
-
 /** On the 12oz cup body: `u` across the band, half-way down it. */
 const at = (u: number, v = 55) => ({ placement: { u, v, rotationDeg: 0, scale: 1 } });
 const logo = (overrides: Partial<Parameters<typeof imageEl>[1]> = {}) =>
@@ -55,23 +51,12 @@ const coffee = (overrides: Partial<Parameters<typeof textEl>[1]> = {}) =>
   textEl("text", { content: "Cà phê", ...at(170), ...overrides });
 
 /** A new 12oz cup draft whose body holds `elements` (bottom first). */
-async function cupDraft(studio: MockDesignStudio, elements: DesignElement[]) {
-  const product = seedMockCatalog().find((p) => p.slug === CUP_SLUG)!;
-  const created = settle(
-    await studio.create({
-      productId: product.productId,
-      sku: "CUP-PAPER-12OZ-WHT",
-      templateCode: "CUP12-BODY",
-      name: "Ly thử",
-    }),
-  );
-  const { id } = created.data as { id: string };
+function cupDraft(studio: DesignMockStore, elements: DesignElement[]) {
   const document = {
     ...emptyDocument(cup12oz),
     surfaces: { BODY: { background: { kind: "none" as const }, elements } },
   };
-  settle(await studio.putDocument(id, { version: 0, document }));
-  return id;
+  return draftIn(studio, STUDIO_PRODUCTS.cup, document, "Ly thử");
 }
 
 /** Renders the studio of `designId`; resolves once it is laid out, with its latest services. */
@@ -86,7 +71,7 @@ async function openStudio(designId: string) {
       }}
     />,
   );
-  await screen.findByRole("tab", { name: "Lớp" });
+  await screen.findByRole("tab", { name: "Lớp" }, { timeout: 4000 });
   return seen;
 }
 
@@ -111,8 +96,7 @@ const numberIn = (label: string) =>
 describe("selection, layers and properties", () => {
   it("selects from the layers list and deletes with the keyboard", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     await openStudio(await cupDraft(studio, [logo(), coffee()]));
     await showTab(user, "Lớp");
 
@@ -128,8 +112,7 @@ describe("selection, layers and properties", () => {
 
   it("undoes a deletion with Ctrl+Z and redoes it with Ctrl+Shift+Z", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     await openStudio(await cupDraft(studio, [logo(), coffee()]));
     await showTab(user, "Lớp");
 
@@ -145,8 +128,7 @@ describe("selection, layers and properties", () => {
 
   it("nudges with arrows but never past the surface edge", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     const services = await openStudio(await cupDraft(studio, [logo(at(8))]));
     await showTab(user, "Lớp");
     await user.click(option("Ảnh"));
@@ -171,8 +153,7 @@ describe("selection, layers and properties", () => {
 
   it("edits rotation and opacity from the properties panel, one undo step per field", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     const services = await openStudio(await cupDraft(studio, [logo(), coffee()]));
     await showTab(user, "Lớp");
     await user.click(option(/Chữ: Cà phê/));
@@ -198,8 +179,7 @@ describe("selection, layers and properties", () => {
 
   it("centres, duplicates and restacks the selection", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     const services = await openStudio(await cupDraft(studio, [logo(), coffee()]));
     const { surfaces } = services.current!;
     const [centreU, centreV] = surfaceSnapTargets(surfaces.byCode.BODY!, []);
@@ -232,8 +212,7 @@ describe("selection, layers and properties", () => {
 
   it("hides and locks a layer; a locked element is neither nudged nor deleted", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     const services = await openStudio(await cupDraft(studio, [logo(), coffee()]));
     await showTab(user, "Lớp");
     const row = () => within(screen.getByRole("group", { name: "Chữ: Cà phê" }));
@@ -258,8 +237,7 @@ describe("selection, layers and properties", () => {
 
   it("switches tools from the rail and with tool keys on the stage", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     await openStudio(await cupDraft(studio, []));
 
     expect(screen.getByRole("button", { name: "Chọn (V)" })).toHaveAttribute(
@@ -285,8 +263,8 @@ describe("selection, layers and properties", () => {
 
   it("copies a bag face to another face, keeping each element's place across the width", async () => {
     const user = userEvent.setup();
-    fakeDesignBackend(mockStudio());
-    const services = await openStudio(MOCK_DESIGN_IDS.draftBag);
+    await designBackend();
+    const services = await openStudio(MOCK_DESIGN_IDS.draft);
     // The seeded front holds "Tiệm Bánh Hoa" centred at u = 130; add a logo near its left edge.
     act(() =>
       services.current!.editor.apply((doc) =>
@@ -315,14 +293,15 @@ describe("selection, layers and properties", () => {
 });
 
 describe("read-only designs", () => {
-  it("disables editing tools when read-only", async () => {
+  it("has no editing tools, and its layers and properties cannot change it", async () => {
     const user = userEvent.setup();
-    fakeDesignBackend(mockStudio());
-    await openStudio(MOCK_DESIGN_IDS.approvedCup);
+    await designBackend();
+    const services = await openStudio(MOCK_DESIGN_IDS.approved);
 
-    expect(screen.getByRole("button", { name: "Chữ (T)" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Chọn (V)" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Tạo phiên bản mới" })).toBeInTheDocument();
+    // Read-only: the tool rail and the tool options are not there at all.
+    expect(screen.queryByRole("group", { name: "Công cụ" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Chữ (T)" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tạo bản sửa" })).toBeInTheDocument();
 
     await showTab(user, "Lớp");
     await user.click(option("Chữ: Nhà Mình"));
@@ -334,41 +313,10 @@ describe("read-only designs", () => {
 
     act(() => stage().focus());
     await user.keyboard("t");
-    expect(screen.getByRole("button", { name: "Chữ (T)" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
+    expect(services.current!.editor.store.getState().tool).toBe("select");
     await showTab(user, "Thuộc tính");
     expect(screen.getByLabelText("Góc xoay (°)")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Nhân bản" })).toBeDisabled();
-  });
-
-  it("withdraws a pending confirmation to edit again", async () => {
-    const user = userEvent.setup();
-    const studio = mockStudio();
-    const { post } = fakeDesignBackend(studio);
-    const id = await cupDraft(studio, [coffee()]);
-    const preview = new File([new Uint8Array(8).fill(7)], "preview.png", { type: "image/png" });
-    settle(await studio.uploadArtifact(id, "CUSTOMER_PREVIEW", preview, "preview-key-1"));
-    settle(studio.completeReview(id, true, "OK"));
-    const { version } = settle(studio.get(id)).data as { version: number };
-    settle(studio.submit(id, { version }));
-    await openStudio(id);
-
-    expect(screen.getByRole("button", { name: "Chữ (T)" })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "Rút yêu cầu để chỉnh sửa" }));
-    const dialog = await screen.findByRole("dialog");
-    await user.type(within(dialog).getByLabelText(/Lý do/), "Muốn đổi màu chữ");
-    await user.click(within(dialog).getByRole("button", { name: "Rút yêu cầu" }));
-
-    await waitFor(() => expect(screen.getByRole("button", { name: "Chữ (T)" })).toBeEnabled());
-    expect(post).toHaveBeenCalledWith(`/designs/${id}/confirmation-withdrawals`, {
-      version: version + 1,
-      reason: "Muốn đổi màu chữ",
-    });
-    expect(
-      screen.queryByRole("button", { name: "Rút yêu cầu để chỉnh sửa" }),
-    ).not.toBeInTheDocument();
   });
 });
 
@@ -440,8 +388,7 @@ describe("on the stage", () => {
 
   it("drags an element, snapping to the surface centre, as one undo step", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     const services = await openStudio(await cupDraft(studio, [logo(at(100, 30))]));
     const { surface, toScreen, targetAt } = overlayOf(services);
     const centreU = surfaceSnapTargets(surface, [])[0]!.u!;
@@ -467,8 +414,7 @@ describe("on the stage", () => {
 
   it("rotates with the rotate handle, snapping to 15° with Shift", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     const services = await openStudio(await cupDraft(studio, [logo()]));
     act(() => services.current!.editor.select("logo"));
     const { toScreen, handleAt, targetAt } = overlayOf(services);
@@ -495,8 +441,7 @@ describe("on the stage", () => {
 
   it("scales from a corner keeping the ratio", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     const services = await openStudio(await cupDraft(studio, [logo()]));
     act(() => services.current!.editor.select("logo"));
     const { toScreen, handleAt, targetAt } = overlayOf(services);
@@ -523,8 +468,7 @@ describe("on the stage", () => {
 
   it("offers no rotation for an element wrapped around the cup", async () => {
     const user = userEvent.setup();
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     const services = await openStudio(await cupDraft(studio, [coffee({ wrap: true })]));
     act(() => services.current!.editor.select("text"));
     const { handles } = overlayOf(services);
@@ -539,8 +483,7 @@ describe("on the stage", () => {
   });
 
   it("outlines a locked element without handles", async () => {
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     const services = await openStudio(await cupDraft(studio, [logo({ locked: true })]));
     act(() => services.current!.editor.select("logo"));
     const { svg, handles } = overlayOf(services);
@@ -565,8 +508,7 @@ describe("on a small touch stage", () => {
 
   /** A small 20 × 8 mm image on the cup body, selected. */
   async function smallSelected() {
-    const studio = mockStudio();
-    fakeDesignBackend(studio);
+    const { store: studio } = await designBackend();
     const small = logo({ widthMm: 20, heightMm: 8 });
     const services = await openStudio(await cupDraft(studio, [small]));
     act(() => services.current!.editor.select("logo"));

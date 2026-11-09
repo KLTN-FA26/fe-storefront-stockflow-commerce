@@ -2,12 +2,12 @@ import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/designs";
+import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/design-seed";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { DesignStudio } from "../components/studio/design-studio";
 import { COLOR_DISCLAIMER } from "../components/studio/viewer-host";
-import { fakeDesignBackend, mockStudio } from "./design-backend";
+import { designBackend } from "./design-backend";
 import { TEST_FONTS } from "./fixtures";
 
 /** The viewers the studio built: jsdom has no WebGL, so the engine's viewer is replaced by a fake. */
@@ -51,7 +51,6 @@ vi.mock("../engine", async (importOriginal) => {
   return { ...engine, isWebGLAvailable: () => true, ProductViewer: FakeViewer };
 });
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
-vi.mock("@/providers/app-providers", () => ({ useIsMock: () => true }));
 
 const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "requestFullscreen");
 const requestFullscreen = vi.fn(async () => undefined);
@@ -75,9 +74,9 @@ afterEach(() => {
 });
 
 async function openBag() {
-  fakeDesignBackend(mockStudio());
-  renderWithProviders(<DesignStudio designId={MOCK_DESIGN_IDS.draftBag} fonts={TEST_FONTS} />);
-  return screen.findByRole("img", { name: /Mô hình 3D của sản phẩm/ });
+  await designBackend();
+  renderWithProviders(<DesignStudio designId={MOCK_DESIGN_IDS.draft} fonts={TEST_FONTS} />);
+  return screen.findByRole("img", { name: /Mô hình 3D của sản phẩm/ }, { timeout: 4000 });
 }
 
 describe("ViewerHost with WebGL", () => {

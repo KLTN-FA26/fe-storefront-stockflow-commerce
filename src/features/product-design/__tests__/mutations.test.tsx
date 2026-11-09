@@ -15,7 +15,7 @@ import {
   useSaveDesignDocument,
   useUploadAsset,
 } from "../mutations";
-import { designKeys } from "../queries";
+import { designKeys, designQuery } from "../queries";
 import type { Design } from "../types";
 import {
   approvedDto,
@@ -101,6 +101,22 @@ describe("useRenameDesign (spec §4.4: detail, lists)", () => {
     expect(invalidated(invalidate)).toEqual([{ queryKey: designKeys.lists() }]);
   });
 
+  it("keeps the cached document's version in step: the rename moved the shared version on", async () => {
+    vi.spyOn(api, "patch").mockResolvedValueOnce({ data: designDto({ name: "Mới", version: 4 }) });
+    const { client, wrapper } = setup();
+    client.setQueryData(designKeys.detail(id), design());
+    client.setQueryData(designKeys.document(id), documentRecordDto({ version: 3 }));
+    const { result } = renderHook(() => useRenameDesign(id), { wrapper });
+
+    result.current.mutate({ name: "Mới", version: 3 });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(client.getQueryData(designKeys.document(id))).toMatchObject({
+      version: 4,
+      checksum: "d".repeat(64),
+    });
+  });
+
   it("re-reads the design when it moved to another status meanwhile (409 INVALID_STATE)", async () => {
     vi.spyOn(api, "patch").mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "x"));
     const { invalidate, wrapper } = setup();
@@ -160,6 +176,49 @@ describe("useSaveDesignDocument (spec §4.4: detail version, lists updatedAt)", 
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(invalidate).not.toHaveBeenCalled();
+  });
+});
+
+describe("a read of the design under way cannot put an older version back", () => {
+  /** The design read again (a poll, a focus), answered at `version` only after 50 ms. */
+  function readUnderWay(client: QueryClient, version: number) {
+    vi.spyOn(api, "get").mockImplementationOnce(
+      () =>
+        new Promise((resolve) => setTimeout(() => resolve({ data: designDto({ version }) }), 50)),
+    );
+    void client.fetchQuery({ ...designQuery(id), staleTime: 0 }).catch(() => undefined);
+  }
+  const landed = () => new Promise((resolve) => setTimeout(resolve, 100));
+
+  it("after a rename", async () => {
+    vi.spyOn(api, "patch").mockResolvedValueOnce({ data: designDto({ name: "Mới", version: 4 }) });
+    const { client, wrapper } = setup();
+    client.setQueryData(designKeys.detail(id), design());
+    const { result } = renderHook(() => useRenameDesign(id), { wrapper });
+    readUnderWay(client, 3);
+
+    result.current.mutate({ name: "Mới", version: 3 });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await landed();
+    expect(client.getQueryData<Design>(designKeys.detail(id))).toMatchObject({
+      name: "Mới",
+      version: 4,
+    });
+  });
+
+  it("after a save", async () => {
+    vi.spyOn(api, "put").mockResolvedValueOnce({ data: documentRecordDto({ version: 4 }) });
+    const { client, wrapper } = setup();
+    client.setQueryData(designKeys.detail(id), design());
+    const { result } = renderHook(() => useSaveDesignDocument(id), { wrapper });
+    readUnderWay(client, 3);
+
+    result.current.mutate({ version: 3, document: cupDocument() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await landed();
+    expect(client.getQueryData<Design>(designKeys.detail(id))).toMatchObject({ version: 4 });
   });
 });
 
