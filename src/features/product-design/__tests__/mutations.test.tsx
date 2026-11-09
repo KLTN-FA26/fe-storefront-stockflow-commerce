@@ -222,6 +222,47 @@ describe("a read of the design under way cannot put an older version back", () =
   });
 });
 
+describe("a write that finds the design gone (404: deleted in another tab)", () => {
+  const gone = () => new ApiError(404, "NOT_FOUND", "no such design");
+  const reRead = [
+    { queryKey: designKeys.detail(id), exact: true },
+    { queryKey: designKeys.lists() },
+  ];
+
+  it("re-reads the design after a save", async () => {
+    vi.spyOn(api, "put").mockRejectedValueOnce(gone());
+    const { invalidate, wrapper } = setup();
+    const { result } = renderHook(() => useSaveDesignDocument(id), { wrapper });
+
+    result.current.mutate({ version: 3, document: cupDocument() });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(invalidated(invalidate)).toEqual(reRead);
+  });
+
+  it("re-reads the design after a rename", async () => {
+    vi.spyOn(api, "patch").mockRejectedValueOnce(gone());
+    const { invalidate, wrapper } = setup();
+    const { result } = renderHook(() => useRenameDesign(id), { wrapper });
+
+    result.current.mutate({ name: "Mới", version: 3 });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(invalidated(invalidate)).toEqual(reRead);
+  });
+
+  it("re-reads the design after an upload", async () => {
+    vi.spyOn(api, "post").mockRejectedValueOnce(gone());
+    const { invalidate, wrapper } = setup();
+    const { result } = renderHook(() => useUploadAsset(id), { wrapper });
+
+    result.current.mutate({ file: new Blob(["x"]), name: "a.png", idempotencyKey: "k" });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(invalidated(invalidate)).toEqual(reRead);
+  });
+});
+
 describe("useUploadAsset (spec §4.4: assets)", () => {
   it("uploads the image with its key and re-reads the design's images", async () => {
     const post = vi.spyOn(api, "post").mockResolvedValueOnce({ data: assetDto });

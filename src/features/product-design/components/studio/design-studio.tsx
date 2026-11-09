@@ -47,7 +47,9 @@ export function DesignStudio(props: DesignStudioProps) {
  * Loads the design, its document, its images and its variant's print configuration (by the
  * design's product slug and SKU), then opens the studio, whatever the status: it follows the
  * status itself (spec §6.4). A design that is not the caller's, or was deleted (ARCHIVED), is not
- * found (docs 12 BR-03, BR-16); so is one whose document is missing.
+ * found (docs 12 BR-03, BR-16); so is one whose document is missing. A design deleted while it is
+ * open (another tab) answers its next read with a 404: that wins over the design still cached, so
+ * the studio closes on "Không tìm thấy thiết kế" (its unsaved edit stays in this browser).
  */
 function LoadedDesignStudio({
   designId,
@@ -64,7 +66,9 @@ function LoadedDesignStudio({
   const printConfig = usePrintConfig(product, sku, design.data !== undefined);
   const config = printConfig.data;
 
-  if (design.data?.status === "ARCHIVED") return <StudioNotFound />;
+  const gone =
+    isNotFound(design.error) || isUnreadableAddress(design.error) || isNotFound(document.error);
+  if (gone || design.data?.status === "ARCHIVED") return <StudioNotFound />;
   if (
     design.data &&
     document.data &&
@@ -87,9 +91,6 @@ function LoadedDesignStudio({
     );
   }
 
-  if (isNotFound(design.error) || isUnreadableAddress(design.error) || isNotFound(document.error)) {
-    return <StudioNotFound />;
-  }
   const queries = [design, document, assets, printConfig];
   const failure = queries.find((query) => query.error)?.error;
   if (failure) {

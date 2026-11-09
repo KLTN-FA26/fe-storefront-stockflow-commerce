@@ -6,7 +6,12 @@ import { useRef, useState } from "react";
 import { recordPreflightFailure, submitDesign } from "../../api";
 import { documentChecksum, runPreflight, type PreflightIssue } from "../../engine";
 import type { DesignDocument, PreflightReport } from "../../engine";
-import { isDesignConflict, isDesignStateChanged, preflightIssuesOf } from "../../errors";
+import {
+  isDesignConflict,
+  isDesignGone,
+  isDesignStateChanged,
+  preflightIssuesOf,
+} from "../../errors";
 import { invalidateDesign } from "../../mutations";
 import { designDocumentQuery, designKeys } from "../../queries";
 import type { Design } from "../../types";
@@ -97,7 +102,9 @@ export function useDesignSubmission(design: Design) {
         const { version } = await readStored();
         await recordPreflightFailure(design.id, { version, issues: report.issues });
       } catch (error) {
-        if (isDesignStateChanged(error)) void invalidateDesign(client, design.id);
+        if (isDesignStateChanged(error) || isDesignGone(error)) {
+          void invalidateDesign(client, design.id);
+        }
         setState({ step: "error", fraction: 0, error, issues: report.issues });
       }
       return null;
@@ -161,8 +168,13 @@ export function useDesignSubmission(design: Design) {
       // offers the reload. The next run draws anew.
       work.current = null;
       autosave.conflict();
-    } else if (issues || isDesignConflict(error) || isDesignStateChanged(error)) {
-      // The server judged otherwise (or the design moved on): what was drawn is stale.
+    } else if (
+      issues ||
+      isDesignConflict(error) ||
+      isDesignStateChanged(error) ||
+      isDesignGone(error)
+    ) {
+      // The server judged otherwise (or the design moved on, or is gone): what was drawn is stale.
       work.current = null;
       void invalidateDesign(client, design.id);
     }

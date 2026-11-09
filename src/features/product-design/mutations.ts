@@ -8,7 +8,7 @@ import {
   saveDesignDocument,
   uploadDesignAsset,
 } from "./api";
-import { isDesignStateChanged } from "./errors";
+import { isDesignGone, isDesignStateChanged } from "./errors";
 import { designKeys } from "./queries";
 import type { Design, DesignDocumentRecord, RenameDesignInput, SaveDocumentInput } from "./types";
 
@@ -42,11 +42,12 @@ const reReadDrafts = (client: QueryClient) =>
   ]);
 
 /**
- * A write refused with 409 INVALID_STATE: the design moved on (another tab submitted it, the
- * reviewer answered). Re-read it, so the studio follows its new status (spec §9).
+ * A write refused with 409 INVALID_STATE (the design moved on: another tab submitted it, the
+ * reviewer answered) or 404 (another tab deleted it). Re-read it, so the studio follows its new
+ * status, or says it is gone (spec §9).
  */
 function reReadWhenStateChanged(client: QueryClient, id: string, error: unknown) {
-  if (!isDesignStateChanged(error)) return;
+  if (!isDesignStateChanged(error) && !isDesignGone(error)) return;
   void client.invalidateQueries({ queryKey: designKeys.detail(id), exact: true });
   void client.invalidateQueries({ queryKey: designKeys.lists() });
 }

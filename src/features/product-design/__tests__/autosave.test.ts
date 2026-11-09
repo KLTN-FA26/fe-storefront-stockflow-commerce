@@ -535,6 +535,70 @@ describe("setVersion", () => {
   });
 });
 
+describe("a design that can no longer be saved", () => {
+  it.each([
+    ["left DRAFT (409 INVALID_STATE)", new ApiError(409, "INVALID_STATE", "moved on")],
+    ["is gone (404)", new ApiError(404, "NOT_FOUND", "no such design")],
+  ])("sends nothing more once a save is refused because the design %s", async (_, refusal) => {
+    const save = vi.fn().mockRejectedValueOnce(refusal);
+    const { saver, last } = setup({ save });
+    saver.schedule(d1);
+    await saver.flush();
+    expect(last()).toMatchObject({ state: "error", error: refusal });
+
+    // Neither "Thử lại", a flush (tab hidden, studio left), the network coming back nor a later
+    // change sends anything.
+    saver.retry();
+    await saver.flush();
+    window.dispatchEvent(new Event("online"));
+    saver.schedule(d2);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it("lock(true) drops what is pending and sends nothing, silently, until lock(false)", async () => {
+    const save = vi
+      .fn()
+      .mockRejectedValueOnce(offline())
+      .mockResolvedValue({ version: 9, savedAt: T2 });
+    const { saver, states } = setup({ save });
+    saver.schedule(d1);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS); // offline: waiting for the backoff
+    expect(states()).toEqual(["pending", "saving", "offline"]);
+
+    saver.lock(true);
+    saver.schedule(d2);
+    saver.retry();
+    await saver.flush();
+    window.dispatchEvent(new Event("online"));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(states()).toEqual(["pending", "saving", "offline"]); // the caller says what is shown
+
+    saver.lock(false);
+    saver.schedule(d3);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenLastCalledWith(d3, 3);
+    expect(states().at(-1)).toBe("saved");
+  });
+
+  it("saves again after lock(false) once a refused save locked it", async () => {
+    const save = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "moved on"))
+      .mockResolvedValue({ version: 9, savedAt: T2 });
+    const { saver } = setup({ save });
+    saver.schedule(d1);
+    await saver.flush();
+    saver.lock(true); // the studio follows the new status
+    saver.lock(false); // and the design came back as a draft
+    saver.schedule(d2);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(save).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("dispose", () => {
   it("cancels the pending save and every listener", async () => {
     const save = vi.fn().mockRejectedValue(offline());

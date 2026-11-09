@@ -29,14 +29,7 @@ export const isUnsaved = (state: AutosaveState) => UNSAVED.has(state);
  */
 export const isStored = (state: AutosaveState) => !UNSAVED.has(state) && state !== "conflict";
 
-export type AutosaveStatus = AutosaveChange &
-  AutosaveControls & {
-    retry(): void;
-    /** Saves the edits `holds` kept back (the customer accepted what saving them does). */
-    releaseHeld(): void;
-    /** Forgets that edits were held back (they were undone). */
-    discardHeld(): void;
-  };
+export type AutosaveStatus = AutosaveChange & AutosaveControls & { retry(): void };
 
 /** Wait before the stored document is read again after a failed read (R69). */
 export const ADOPT_RETRY_MS = 2000;
@@ -54,6 +47,10 @@ export const ADOPT_RETRY_MS = 2000;
  * with a 409 asks P3 the same question and, for a non-document write (QC answered between two
  * polls), is sent once more with the record's version. A document saved elsewhere puts autosave
  * into `conflict` instead, so it is never overwritten without a word.
+ *
+ * A read-only design (`readOnly`: it is not a DRAFT) is never saved. When the design leaves DRAFT
+ * while it is open (another tab submitted it, a save was refused), what was not stored stays in
+ * this browser (the offline draft), nothing more is sent, and the editor shows the stored document.
  */
 export function useAutosave(
   design: Design,
@@ -61,12 +58,12 @@ export function useAutosave(
   {
     stored,
     onSaved,
-    holds,
+    readOnly,
   }: {
     stored: Pick<DesignDocumentRecord, "version" | "checksum">;
     onSaved?: () => void;
-    /** While true, an edit is held back instead of saved (`releaseHeld` saves it). */
-    holds?: () => boolean;
+    /** The design cannot be saved (`!DESIGN_STATUS_META[status].editable`). */
+    readOnly: boolean;
   },
 ): AutosaveStatus {
   const client = useQueryClient();
@@ -75,8 +72,6 @@ export function useAutosave(
   const [change, setChange] = useState<AutosaveChange>({ state: "idle", version: stored.version });
   const saverRef = useRef<Autosaver | null>(null);
   const keeperRef = useRef<DraftKeeper | null>(null);
-  /** An edit was held back by `holds` and not saved yet. */
-  const heldRef = useRef(false);
   const latest = useRef<AutosaveState>("idle");
   /** The newest version known to leave the stored document as this tab last loaded or saved it. */
   const knownRef = useRef(stored.version);
@@ -107,7 +102,7 @@ export function useAutosave(
       return send(read.record.version);
     }
   });
-  const isHolding = useEffectEvent(() => holds?.() ?? false);
+  const isReadOnly = useEffectEvent(() => readOnly);
   const report = useEffectEvent((next: AutosaveChange) => {
     latest.current = next.state;
     setChange(next);
@@ -136,10 +131,7 @@ export function useAutosave(
     saverRef.current = saver;
     keeperRef.current = keeper;
     const offEdit = editor.onDocumentChange((document) => {
-      if (isHolding()) {
-        heldRef.current = true;
-        return;
-      }
+      if (isReadOnly()) return; // the stored document shown again, or nothing that can be saved
       saver.schedule(document);
       keeper.schedule();
     });
@@ -162,6 +154,37 @@ export function useAutosave(
       });
     };
   }, [editor, designId]);
+
+  /** Shows the stored document: what the design is now, once it cannot be edited any more. */
+  const showStored = useEffectEvent(async () => {
+    let record: DesignDocumentRecord;
+    try {
+      ({ record } = await readStored());
+    } catch {
+      return; // nothing is saved anyway; the edit stays on screen until the next visit
+    }
+    if (!isReadOnly()) return; // editable again meanwhile: the editor keeps what it holds
+    editor.replaceDocument(record.document);
+    knownRef.current = Math.max(knownRef.current, record.version);
+    storedRef.current = record.checksum;
+    saverRef.current?.setVersion(record.version);
+  });
+  const followReadOnly = useEffectEvent((locked: boolean) => {
+    const saver = saverRef.current;
+    if (!saver) return;
+    saver.lock(locked);
+    if (!locked || latest.current === "idle" || latest.current === "saved") return;
+    // What was not stored stays in this browser (the offline draft) and is shown no more.
+    if (UNSAVED.has(latest.current)) keeperRef.current?.keepNow();
+    latest.current = "idle";
+    setChange((now) => ({
+      state: "idle",
+      version: now.version,
+      ...(now.savedAt ? { savedAt: now.savedAt } : {}),
+    }));
+    void showStored();
+  });
+  useEffect(() => followReadOnly(readOnly), [readOnly, editor, designId]);
 
   // R69: whose write moved the version on? Only a non-document one is adopted, and only the
   // version P3 answered with (a newer one may hold a document write P3 did not see).
@@ -227,15 +250,6 @@ export function useAutosave(
     conflict: () => saverRef.current?.conflict(),
     latestState: () => latest.current,
     retry: () => saverRef.current?.retry(),
-    releaseHeld: () => {
-      if (!heldRef.current) return;
-      heldRef.current = false;
-      saverRef.current?.schedule(editor.store.getState().document);
-      keeperRef.current?.schedule();
-    },
-    discardHeld: () => {
-      heldRef.current = false;
-    },
   }));
   return { ...change, ...controls };
 }

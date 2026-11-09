@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { describeApiError, hasErrorCode } from "@/lib/api/describe-error";
+import { ApiError } from "@/lib/api/error";
 
 import type { PreflightIssue } from "./engine/preflight/types";
 import { preflightIssueSchema } from "./schemas";
@@ -28,6 +29,9 @@ export const isDesignConflict = (error: unknown) => hasErrorCode(error, "VERSION
 
 /** The design moved to another status meanwhile, e.g. in another tab (409): re-read it. */
 export const isDesignStateChanged = (error: unknown) => hasErrorCode(error, "INVALID_STATE");
+
+/** The design is not there any more (404 to a write): deleted in another tab. Re-read it. */
+export const isDesignGone = (error: unknown) => error instanceof ApiError && error.status === 404;
 
 const issuesSchema = z.object({ issues: z.array(preflightIssueSchema) });
 

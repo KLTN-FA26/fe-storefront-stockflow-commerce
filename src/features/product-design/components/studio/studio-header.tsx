@@ -55,15 +55,17 @@ export function StudioHeader({
 
   return (
     <header className="bg-bg-surface border-border-default flex h-14 shrink-0 items-center gap-1 border-b px-2 sm:gap-2 sm:px-3">
-      <StudioBackLink unsaved={isUnsaved(autosave.state)} />
+      <StudioBackLink unsaved={canSave && isUnsaved(autosave.state)} />
       <span aria-hidden className="bg-border-default hidden h-6 w-px shrink-0 sm:block" />
       <DesignNameField editable={actions.includes("rename")} />
-      <SaveState
-        state={autosave.state}
-        savedAt={autosave.savedAt}
-        error={autosave.error}
-        onRetry={autosave.retry}
-      />
+      {canSave ? (
+        <SaveState
+          state={autosave.state}
+          savedAt={autosave.savedAt}
+          error={autosave.error}
+          onRetry={autosave.retry}
+        />
+      ) : null}
       <div className="ml-auto flex shrink-0 items-center gap-1">
         {canSave ? (
           <Button

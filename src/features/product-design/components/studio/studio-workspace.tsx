@@ -117,7 +117,7 @@ export function StudioWorkspace(props: StudioWorkspaceProps) {
   const autosave = useAutosave(design, editor, {
     stored: props.record,
     onSaved: () => announce(STUDIO_ANNOUNCEMENTS.saved),
-    holds: () => readOnly, // never saved while read-only (the editor takes no edit then either)
+    readOnly, // never saved; a design that leaves DRAFT shows what is stored
   });
   useStatusFollow(design);
   const { flush, setVersion, resume, conflict, latestState } = autosave;

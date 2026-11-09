@@ -44,12 +44,12 @@ afterEach(() => {
   signOut();
 });
 
-type Seen = { current?: StudioServices; client: QueryClient };
+type Seen = { current?: StudioServices; client: QueryClient; unmount: () => void };
 
 /** Renders the studio of `designId`; resolves once it is laid out, with its latest services. */
 async function openStudio(designId: string): Promise<Seen> {
   const seen: { current?: StudioServices } = {};
-  const { client } = renderWithProviders(
+  const { client, unmount } = renderWithProviders(
     <DesignStudio
       designId={designId}
       fonts={TEST_FONTS}
@@ -59,7 +59,7 @@ async function openStudio(designId: string): Promise<Seen> {
     />,
   );
   await waitFor(() => expect(seen.current).toBeDefined(), { timeout: 4000 });
-  return Object.assign(seen, { client });
+  return Object.assign(seen, { client, unmount });
 }
 
 /** A cup draft whose body holds the text "Cà phê" (version 1): one that passes the preflight. */
@@ -115,6 +115,25 @@ const storedDraft = (id: string) => {
 };
 
 const SAVED = /^Đã lưu lúc \d{2}:\d{2}$/;
+const RED = { surfaces: { BODY: { background: { kind: "color", color: "#FF0000" } } } };
+
+/** Every way an unsaved edit would otherwise be sent again: the tab hidden, the network back. */
+async function nudgeAutosave() {
+  vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+  act(() => {
+    document.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(new Event("online"));
+  });
+  await act(() => new Promise((resolve) => setTimeout(resolve, 500)));
+}
+
+/** Whether leaving the page would ask first (jsdom has no BeforeUnloadEvent). */
+function asksBeforeLeaving() {
+  const leave = new Event("beforeunload", { cancelable: true }) as BeforeUnloadEvent;
+  Object.defineProperty(leave, "returnValue", { value: undefined, writable: true });
+  window.dispatchEvent(leave);
+  return leave.defaultPrevented;
+}
 const tools = () => screen.queryByRole("group", { name: "Công cụ" });
 const toolOptions = () => screen.queryByRole("region", { name: "Tùy chọn công cụ" });
 
@@ -312,9 +331,12 @@ describe("saving and renaming in the header", () => {
 });
 
 describe("a design that moves on elsewhere", () => {
-  it("re-reads a design whose save is refused with 409 INVALID_STATE, turns read-only and keeps the edit in the browser (Review Focus 3)", async () => {
+  it("re-reads a design whose save is refused with 409 INVALID_STATE, turns read-only on the stored document, sends nothing more and keeps the edit in the browser (Review Focus 3)", async () => {
     const { store, put } = await designBackend();
     const id = await cupWithText(store);
+    const { document: stored } = settle(await store.getDocument(id)).data as {
+      document: DesignDocument;
+    };
     const seen = await openStudio(id);
     expect(tools()).toBeInTheDocument();
 
@@ -332,11 +354,43 @@ describe("a design that moves on elsewhere", () => {
     expect(tools()).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Gửi duyệt" })).not.toBeInTheDocument();
     expect(seen.current!.readOnly).toBe(true);
+    // The studio shows what was submitted, not the refused edit, and offers no save.
+    await waitFor(() => expect(seen.current!.editor.store.getState().document).toEqual(stored));
+    expect(screen.queryByRole("button", { name: "Lưu lỗi – Thử lại" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     // B's unsaved edit is not lost: this browser keeps it.
-    expect(storedDraft(id)).toMatchObject({
-      document: { surfaces: { BODY: { background: { kind: "color", color: "#FF0000" } } } },
-    });
+    expect(storedDraft(id)).toMatchObject({ document: RED });
     expect(await designIn(store, id)).toMatchObject({ status: "PENDING_REVIEW" });
+
+    // Nothing sends it again, and nothing asks before leaving a design that cannot be saved.
+    await nudgeAutosave();
+    expect(asksBeforeLeaving()).toBe(false);
+    seen.unmount();
+    await act(() => new Promise((resolve) => setTimeout(resolve, 500)));
+    expect(put).toHaveBeenCalledTimes(1);
+    expect(storedDraft(id)).toMatchObject({ document: RED });
+  });
+
+  it("follows a design deleted in another tab: the next save finds it gone, the studio says so and sends nothing more", async () => {
+    const { store, put } = await designBackend();
+    const id = await cupWithText(store);
+    const seen = await openStudio(id);
+
+    // Tab A deletes the draft while this tab (B) edits.
+    settle(await store.remove(id, { version: 1 }));
+    paintBody(seen.current!, "#FF0000");
+
+    expect(
+      await screen.findByText("Không tìm thấy thiết kế", undefined, { timeout: 5000 }),
+    ).toBeInTheDocument();
+    expect(put).toHaveBeenCalledTimes(1);
+    await expect(put.mock.results[0]!.value).rejects.toMatchObject({ status: 404 });
+    expect(tools()).not.toBeInTheDocument();
+    await nudgeAutosave();
+    expect(asksBeforeLeaving()).toBe(false);
+    expect(put).toHaveBeenCalledTimes(1);
+    // B's unsaved edit stays in this browser.
+    expect(storedDraft(id)).toMatchObject({ document: RED });
   });
 
   it("still opens the conflict dialog for a save refused with 409 VERSION_CONFLICT, and reloads", async () => {

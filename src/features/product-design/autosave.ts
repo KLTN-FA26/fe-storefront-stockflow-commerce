@@ -1,7 +1,7 @@
 import { ApiError } from "@/lib/api/error";
 
 import type { DesignDocument } from "./engine/document/schema";
-import { isDesignConflict } from "./errors";
+import { isDesignConflict, isDesignGone, isDesignStateChanged } from "./errors";
 
 export type AutosaveState =
   "idle" | "pending" | "saving" | "saved" | "error" | "conflict" | "offline";
@@ -49,6 +49,12 @@ export type Autosaver = {
    * `resume`.
    */
   conflict(error?: unknown): void;
+  /**
+   * While locked the design cannot be saved (it is no longer a DRAFT): what is pending is dropped,
+   * and nothing is sent — no flush, retry, backoff or `online` — until it is unlocked. Locking
+   * emits nothing (the caller says what the studio shows) and leaves the saver `idle`.
+   */
+  lock(locked: boolean): void;
   dispose(): void;
 };
 
@@ -83,12 +89,15 @@ export function createAutosaver(options: AutosaveOptions): Autosaver {
   let backoff: ReturnType<typeof setTimeout> | null = null;
   let attempt = 0;
   let disposed = false;
+  let locked = false;
+  /** A save was refused because the design left DRAFT or is gone: nothing more is sent. */
+  let refused = false;
 
   const emit = (next: AutosaveState, failure?: { error: unknown }) => {
     state = next;
     onChange({ state, version, ...(savedAt ? { savedAt } : {}), ...failure });
   };
-  const stopped = () => disposed || state === "conflict";
+  const stopped = () => disposed || locked || refused || state === "conflict";
   const clearDebounce = () => {
     if (debounce) clearTimeout(debounce);
     debounce = null;
@@ -115,6 +124,14 @@ export function createAutosaver(options: AutosaveOptions): Autosaver {
       clearBackoff();
       pending = null;
       emit("conflict", { error });
+    } else if (isDesignStateChanged(error) || isDesignGone(error)) {
+      // The design left DRAFT or was deleted (another tab): it cannot be saved any more. What is
+      // pending is not sent again; the caller keeps it in the browser.
+      refused = true;
+      clearDebounce();
+      clearBackoff();
+      pending = null;
+      emit("error", { error });
     } else if (isNetworkFailure(error) || !isOnline()) {
       goOffline(error);
     } else {
@@ -212,6 +229,18 @@ export function createAutosaver(options: AutosaveOptions): Autosaver {
     emit("conflict", error === undefined ? undefined : { error });
   }
 
+  function lock(next: boolean) {
+    if (disposed) return;
+    locked = next;
+    refused = false;
+    if (!next) return;
+    clearDebounce();
+    clearBackoff();
+    pending = null;
+    attempt = 0;
+    state = "idle"; // a conflict too: the caller shows the stored document while it is locked
+  }
+
   const handleOnline = () => {
     if (state !== "offline" || stopped()) return;
     attempt = 0;
@@ -227,5 +256,5 @@ export function createAutosaver(options: AutosaveOptions): Autosaver {
     if (typeof window !== "undefined") window.removeEventListener("online", handleOnline);
   }
 
-  return { schedule, flush, retry, setVersion, resume, conflict, dispose };
+  return { schedule, flush, retry, setVersion, resume, conflict, lock, dispose };
 }
