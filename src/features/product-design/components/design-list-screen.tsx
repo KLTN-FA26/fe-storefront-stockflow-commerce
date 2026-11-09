@@ -11,6 +11,7 @@ import { PageShell } from "@/components/storefront/layout";
 import { ListPagination } from "@/components/storefront/list-pagination";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useSignedIn } from "@/lib/auth/use-signed-in";
 import { cn } from "@/lib/cn";
 
 import { describeDesignError } from "../errors";
@@ -26,6 +27,7 @@ import {
   NoDesignsInTab,
   NoDesignsYet,
 } from "./design-list-states";
+import { LauncherSignIn } from "./launcher-states";
 import { NewDesignDialog, type DesignableProduct } from "./new-design-dialog";
 
 /** Twelve divides the one-, two- and three-column grids evenly. */
@@ -51,7 +53,27 @@ const urlState = {
   page: parseAsInteger.withDefault(1),
 };
 
-export function DesignListScreen({ products }: { products: DesignableProduct[] }) {
+type DesignListScreenProps = { products: DesignableProduct[] };
+
+/**
+ * `/design` (spec §6.3): signed-in customers only (ruling R18). The design mock never answers 401,
+ * so a visitor gets the launcher's sign-in prompt, which brings them back here, and nothing is read.
+ */
+export function DesignListScreen(props: DesignListScreenProps) {
+  const signedIn = useSignedIn();
+  if (signedIn) return <SignedInDesignList {...props} />;
+  return (
+    <PageShell breadcrumbs={CRUMBS} title="Thiết kế của tôi">
+      {signedIn === undefined ? (
+        <DesignListSkeleton />
+      ) : (
+        <LauncherSignIn from={STORE_ROUTES.design.list} />
+      )}
+    </PageShell>
+  );
+}
+
+function SignedInDesignList({ products }: DesignListScreenProps) {
   const router = useRouter();
   const [url, setUrl] = useQueryStates(urlState, { history: "push" });
   const [creating, setCreating] = useState(false);

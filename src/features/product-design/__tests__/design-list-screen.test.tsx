@@ -3,8 +3,9 @@ import userEvent from "@testing-library/user-event";
 import type { OnUrlUpdateFunction } from "nuqs/adapters/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error";
-import { renderWithProviders } from "@/test/render";
+import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { DesignListScreen } from "../components/design-list-screen";
 import { designBackend } from "./design-backend";
@@ -14,9 +15,13 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: env.push }) }));
 
 beforeEach(async () => {
   env.push.mockReset();
+  signIn();
   await designBackend();
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  signOut();
+});
 
 const LIST = { name: "Danh sách thiết kế" } as const;
 
@@ -34,6 +39,22 @@ const render = (searchParams = "", onUrlUpdate?: OnUrlUpdateFunction) =>
   });
 
 describe("DesignListScreen", () => {
+  // Ruling R18: the design mock never answers 401, so the list itself asks for a session.
+  it("asks a signed-out visitor to sign in, brings them back, and reads nothing", async () => {
+    signOut();
+    const get = vi.spyOn(api, "get"); // the client the backend of `beforeEach` serves
+    render();
+
+    expect(await screen.findByText("Đăng nhập để bắt đầu thiết kế")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Đăng nhập" })).toHaveAttribute(
+      "href",
+      `/login?next=${encodeURIComponent("/design")}`,
+    );
+    expect(screen.queryByRole("button", { name: /Thiết kế mới/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/bản nháp$/)).not.toBeInTheDocument();
+    expect(get).not.toHaveBeenCalled();
+  });
+
   it("shows the draft count and a card per listed status, never an archived design", async () => {
     render();
 

@@ -6,13 +6,17 @@ import { useCatalogPage } from "@/features/catalog";
 import { CATALOG_PAGE_SIZE_MAX } from "@/features/catalog/schemas";
 import { DesignListScreen } from "@/features/product-design/components/design-list-screen";
 import type { DesignableProduct } from "@/features/product-design/components/new-design-dialog";
+import { useSignedIn } from "@/lib/auth/use-signed-in";
 
 /**
  * `/design` knows the catalogue, the design feature does not: this maps the catalogue's product
  * list (customizable products with their SKUs) to what the "Thiết kế mới" dialog takes.
  */
 export function DesignListWithCatalog() {
-  const { data } = useCatalogPage({ page: 1, size: CATALOG_PAGE_SIZE_MAX });
+  // The catalogue serves signed-in callers only (kltn-docs 13 BR-02): a visitor gets the list's
+  // sign-in prompt, and no catalogue call is made for them.
+  const signedIn = useSignedIn();
+  const { data } = useCatalogPage({ page: 1, size: CATALOG_PAGE_SIZE_MAX }, signedIn === true);
   const products = useMemo<DesignableProduct[]>(
     () =>
       (data?.items ?? [])

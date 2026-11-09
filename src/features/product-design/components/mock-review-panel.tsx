@@ -7,6 +7,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useSignedIn } from "@/lib/auth/use-signed-in";
 import { DESIGN_API_MOCKED } from "@/lib/config";
 import { useIsMock } from "@/providers/app-providers";
 
@@ -86,13 +87,15 @@ function ResetData() {
 /**
  * A floating stand-in for the Sales Manager on the mock (spec 2026-11-09 §6.5): in the studio it
  * acts on the open design, on /design on the designs waiting for review, on /design/new it only
- * resets. Bottom-left and compact, so it stays clear of the studio's controls.
+ * resets. Bottom-left and compact, so it stays clear of the studio's controls. Like the design
+ * screens it acts for the signed-in customer only: a visitor neither sees it nor makes it read.
  */
 export function MockReviewPanel({ designId }: { designId?: string }) {
   const isMock = useIsMock();
+  const signedIn = useSignedIn();
   const pathname = usePathname();
   const params = useParams<{ id?: string }>();
-  const shown = isMock || DESIGN_API_MOCKED;
+  const shown = (isMock || DESIGN_API_MOCKED) && signedIn === true;
   const storage = useQuery({
     queryKey: ["design-mock", "storage"],
     queryFn: ({ signal }) => getMockStorage(signal),

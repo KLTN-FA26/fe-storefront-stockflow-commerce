@@ -2,13 +2,16 @@
 
 import type { ReactNode } from "react";
 
+import { STORE_ROUTES } from "@/constants";
 import { ApiError } from "@/lib/api/error";
+import { useSignedIn } from "@/lib/auth/use-signed-in";
 import { beId } from "@/lib/validation/primitives";
 
 import type { FontRegistry } from "../../engine";
 import { describeDesignError } from "../../errors";
 import { useDesign, useDesignAssets, useDesignDocument, usePrintConfig } from "../../queries";
 import type { Design } from "../../types";
+import { LauncherFrame, LauncherSignIn } from "../launcher-states";
 import type { ExportRenderer } from "./export-renderer";
 import type { StudioServices } from "./studio-context";
 import { StudioSkeleton } from "./studio-skeleton";
@@ -37,8 +40,21 @@ const isDesignId = (id: string) => DESIGN_ID.safeParse(id).success;
 /** A design's variant that lost its print configuration cannot be opened (catalog BR-14). */
 const NO_PRINT_CONFIG = "Quy cách này chưa nhận thiết kế.";
 
-/** `/design/[id]`: a link whose id is no design id says so without asking the BE (R1-02). */
+/**
+ * `/design/[id]`: signed-in customers only (ruling R18) — a visitor gets the launcher's sign-in
+ * prompt, which brings them back here, and nothing is read. A link whose id is no design id says
+ * so without asking the BE (R1-02).
+ */
 export function DesignStudio(props: DesignStudioProps) {
+  const signedIn = useSignedIn();
+  if (signedIn === undefined) return <StudioSkeleton />;
+  if (!signedIn) {
+    return (
+      <LauncherFrame>
+        <LauncherSignIn from={STORE_ROUTES.design.detail(encodeURIComponent(props.designId))} />
+      </LauncherFrame>
+    );
+  }
   if (!isDesignId(props.designId)) return <StudioNotFound />;
   return <LoadedDesignStudio {...props} />;
 }

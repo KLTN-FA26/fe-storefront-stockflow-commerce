@@ -15,6 +15,7 @@ import type { StudioServices } from "../components/studio/studio-context";
 import { addElement, removeElement, runPreflight, setBackground, VARIANT_OK } from "../engine";
 import { imageEl } from "../engine/__tests__/fixtures";
 import { designKeys } from "../queries";
+import { templateOf } from "../selectors";
 import { designBackend, draftIn, STUDIO_PRODUCTS } from "./design-backend";
 import { TEST_FONTS } from "./fixtures";
 
@@ -130,7 +131,8 @@ describe("DesignStudio", () => {
       variantStatus: "ACTIVE",
       hasCartonSpec: true,
     });
-    expect(seen.current!.template).toBe(seen.current!.printConfig.template);
+    // The template is the print configuration's, with the file rules' limits (ruling R20).
+    expect(seen.current!.template).toEqual(templateOf(seen.current!.printConfig));
     expect(seen.current!.status).toBe("DRAFT");
     expect(seen.current!.readOnly).toBe(false);
     expect(get.mock.calls.map(([url]) => url)).toContain(
@@ -175,6 +177,24 @@ describe("DesignStudio", () => {
     expect(await screen.findByText("Không tìm thấy thiết kế")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Thử lại" })).not.toBeInTheDocument();
     expect(get).not.toHaveBeenCalled();
+  });
+
+  // Ruling R18: the design mock never answers 401, so the studio itself asks for a session.
+  it("asks a signed-out visitor to sign in, brings them back, and reads nothing", async () => {
+    signOut();
+    const { get, put, post } = await designBackend();
+    openStudio(MOCK_DESIGN_IDS.draft);
+
+    expect(await screen.findByText("Đăng nhập để bắt đầu thiết kế")).toBeInTheDocument();
+    const next = encodeURIComponent(`/design/${MOCK_DESIGN_IDS.draft}`);
+    expect(screen.getByRole("link", { name: "Đăng nhập" })).toHaveAttribute(
+      "href",
+      `/login?next=${next}`,
+    );
+    expect(screen.queryByRole("tab", { name: "Thân ly" })).not.toBeInTheDocument();
+    expect(get).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
   });
 
   it("reads an address the BE refuses (400) as no design, not as an outage", async () => {

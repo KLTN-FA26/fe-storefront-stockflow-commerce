@@ -248,4 +248,13 @@ describe("MockReviewPanel visibility", () => {
 
     expect(screen.queryByRole("button", OPEN)).not.toBeInTheDocument();
   });
+
+  it("renders nothing and reads nothing for a signed-out visitor (R18)", async () => {
+    signOut();
+    const { get } = await designBackend();
+    renderWithProviders(<MockReviewPanel />);
+
+    expect(screen.queryByRole("button", OPEN)).not.toBeInTheDocument();
+    expect(get).not.toHaveBeenCalled();
+  });
 });
