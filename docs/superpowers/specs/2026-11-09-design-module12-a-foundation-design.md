@@ -71,12 +71,12 @@ renders one design without the studio open, so E's batch submit can call it per 
 
 ### 3.1 States (replaces the six derived UI states of `lifecycle.ts`)
 
-| Status           | Label (`StatusBadge domain="design"`) | Tone       | Studio    | Customer actions                             |
-| ---------------- | ------------------------------------- | ---------- | --------- | -------------------------------------------- |
-| `DRAFT`          | "Bản nháp"                            | `neutral`  | Editable  | `edit`, `rename`, `save`, `submit`, `delete` |
-| `PENDING_REVIEW` | "Chờ duyệt"                           | `info`     | Read-only | —                                            |
-| `APPROVED`       | "Đã duyệt"                            | `positive` | Read-only | `createRevision` (D adds `requestQuote`)     |
-| `ARCHIVED`       | — (never listed)                      | `muted`    | Not found | —                                            |
+| Status           | Label (`DesignStatusBadge`; the repo has no shared `StatusBadge`) | Tone       | Studio    | Customer actions                             |
+| ---------------- | ----------------------------------------------------------------- | ---------- | --------- | -------------------------------------------- |
+| `DRAFT`          | "Bản nháp"                                                        | `neutral`  | Editable  | `edit`, `rename`, `save`, `submit`, `delete` |
+| `PENDING_REVIEW` | "Chờ duyệt"                                                       | `info`     | Read-only | —                                            |
+| `APPROVED`       | "Đã duyệt"                                                        | `positive` | Read-only | `createRevision` (D adds `requestQuote`)     |
+| `ARCHIVED`       | — (never listed)                                                  | `muted`    | Not found | —                                            |
 
 A `DRAFT` with a latest return shows "Bị trả lại" as a secondary badge (tone `warning`) and the reason.
 
@@ -153,7 +153,8 @@ type DesignEventDto = {
 };
 ```
 
-Inputs: `CreateDesignInput { sku, name }`, `RenameDesignInput { name, version }`,
+Inputs: `CreateDesignInput { productSlug, sku, name }` (the server checks the SKU belongs to the
+product), `RenameDesignInput { name, version }`,
 `SaveDocumentInput { document, version }`, `SubmitDesignInput { version, preflight, files }`,
 `DeleteDesignInput { version }`, `ReturnDesignInput { reason }` (simulation). Name and reason limits
 are zod refinements citing docs 12 §3.
@@ -163,24 +164,24 @@ drawing elements, plus the background (§10 records drawing and background as ex
 
 ### 4.2 Endpoints
 
-| Method and path                          | Purpose                                                                                                                                       | Errors                                                                         |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `GET /designs?status=&page=&size=`       | The caller's designs, newest updated first; `ARCHIVED` never listed                                                                           | —                                                                              |
-| `GET /designs/draft-count`               | `{ drafts, limit: 50 }`                                                                                                                       | —                                                                              |
-| `POST /designs`                          | Create a `DRAFT` from a variant (empty document of its template)                                                                              | `422 PRINT_CONFIG_MISSING`, `422 VARIANT_UNAVAILABLE`, `409 DRAFT_LIMIT`       |
-| `GET /designs/{id}`                      | One design                                                                                                                                    | `404` (not the caller's, or `ARCHIVED`)                                        |
-| `PATCH /designs/{id}`                    | Rename                                                                                                                                        | `409 INVALID_STATE` (not `DRAFT`)                                              |
-| `GET /designs/{id}/history`              | Events, oldest first                                                                                                                          | —                                                                              |
-| `GET /designs/{id}/document`             | `{ document, version }`                                                                                                                       | —                                                                              |
-| `PUT /designs/{id}/document`             | Save; returns the new version                                                                                                                 | `409 INVALID_STATE`, `409 VERSION_CONFLICT`                                    |
-| `GET` / `POST /designs/{id}/assets`      | List / upload an image (multipart)                                                                                                            | `422 FILE_REJECTED` (format, size, scan), `409 INVALID_STATE`                  |
-| `GET /designs/{id}/assets/{assetId}/url` | Short-lived link                                                                                                                              | —                                                                              |
-| `POST /designs/{id}/submissions`         | Multipart: `version`, `preflight` (JSON), `PRINT_READY`, `CUSTOMER_PREVIEW`, `TECHNICAL_SPEC`; re-checks preflight items the server can check | `422 PREFLIGHT_FAILED { issues }`, `409 INVALID_STATE`, `409 VERSION_CONFLICT` |
-| `DELETE /designs/{id}`                   | Body `{ version }`; `DRAFT` → `ARCHIVED`                                                                                                      | `409 INVALID_STATE`, `409 VERSION_CONFLICT`                                    |
-| `POST /designs/{id}/revisions`           | New `DRAFT` from the `APPROVED` design's snapshot (content and images copied)                                                                 | `409 INVALID_STATE`, `409 DRAFT_LIMIT`                                         |
-| `POST /designs/{id}/preflight-failures`  | Body `{ version, issues }`; records `PREFLIGHT_FAILED` for a submit the browser's preflight refused; no state change                          | `409 INVALID_STATE`                                                            |
-| `GET /designs/{id}/files`                | The bundle of the latest submission (role, name, size, sha256, url)                                                                           | —                                                                              |
-| `GET /variants/{sku}/print-config`       | The variant's print configuration                                                                                                             | `404` (none)                                                                   |
+| Method and path                                            | Purpose                                                                                                                                       | Errors                                                                         |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `GET /designs?status=&page=&size=`                         | The caller's designs, newest updated first; `ARCHIVED` never listed                                                                           | —                                                                              |
+| `GET /designs/draft-count`                                 | `{ drafts, limit: 50 }`                                                                                                                       | —                                                                              |
+| `POST /designs`                                            | Create a `DRAFT` from a variant (empty document of its template)                                                                              | `422 PRINT_CONFIG_MISSING`, `422 VARIANT_UNAVAILABLE`, `409 DRAFT_LIMIT`       |
+| `GET /designs/{id}`                                        | One design                                                                                                                                    | `404` (not the caller's, or `ARCHIVED`)                                        |
+| `PATCH /designs/{id}`                                      | Rename                                                                                                                                        | `409 INVALID_STATE` (not `DRAFT`)                                              |
+| `GET /designs/{id}/history`                                | Events, oldest first                                                                                                                          | —                                                                              |
+| `GET /designs/{id}/document`                               | `{ document, version }`                                                                                                                       | —                                                                              |
+| `PUT /designs/{id}/document`                               | Save; returns the new version                                                                                                                 | `409 INVALID_STATE`, `409 VERSION_CONFLICT`                                    |
+| `GET` / `POST /designs/{id}/assets`                        | List / upload an image (multipart)                                                                                                            | `422 FILE_REJECTED` (format, size, scan), `409 INVALID_STATE`                  |
+| `GET /designs/{id}/assets/{assetId}/url`                   | Short-lived link                                                                                                                              | —                                                                              |
+| `POST /designs/{id}/submissions`                           | Multipart: `version`, `preflight` (JSON), `PRINT_READY`, `CUSTOMER_PREVIEW`, `TECHNICAL_SPEC`; re-checks preflight items the server can check | `422 PREFLIGHT_FAILED { issues }`, `409 INVALID_STATE`, `409 VERSION_CONFLICT` |
+| `DELETE /designs/{id}`                                     | Body `{ version }`; `DRAFT` → `ARCHIVED`                                                                                                      | `409 INVALID_STATE`, `409 VERSION_CONFLICT`                                    |
+| `POST /designs/{id}/revisions`                             | New `DRAFT` from the `APPROVED` design's snapshot (content and images copied)                                                                 | `409 INVALID_STATE`, `409 DRAFT_LIMIT`                                         |
+| `POST /designs/{id}/preflight-failures`                    | Body `{ version, issues }`; records `PREFLIGHT_FAILED` for a submit the browser's preflight refused; no state change                          | `409 INVALID_STATE`                                                            |
+| `GET /designs/{id}/files`                                  | The bundle of the latest submission (role, name, size, sha256, url)                                                                           | —                                                                              |
+| `GET /catalog/products/{slug}/variants/{sku}/print-config` | The variant's print configuration                                                                                                             | `404` (none)                                                                   |
 
 Server-side preflight re-check on submit (mock now, BE later): the design is `DRAFT`, the version
 matches, the variant is `ACTIVE`, the product is usable, `hasCartonSpec`, at least one element,
@@ -196,7 +197,7 @@ calls them.
 ### 4.4 Query keys and invalidation
 
 `designKeys` factory: `all`, `lists()`, `list(params)`, `detail(id)`, `history(id)`, `document(id)`,
-`assets(id)`, `files(id)`, `draftCount()`, and `printConfigKeys.detail(sku)`.
+`assets(id)`, `files(id)`, `draftCount()`, and `printConfigKeys.detail(slug, sku)`.
 
 | Mutation                  | Invalidates                                                         |
 | ------------------------- | ------------------------------------------------------------------- |
@@ -211,19 +212,21 @@ calls them.
 ## 5. Mock and switch
 
 - **Switch.** `src/lib/config.ts` gains `DESIGN_API_MOCKED = true` (a constant, not an env var).
-  `src/lib/api/client.ts` sends a request to the mock adapter when either `IS_MOCK` is true or
-  `DESIGN_API_MOCKED` is true and the path starts with `/designs`, `/variants/` + `/print-config`
-  or `/__mock/`. Removing the constant hands design to the BE; no screen changes.
+  `AppProviders` already calls `activateMockAdapter()` when `IS_MOCK`; otherwise, with
+  `DESIGN_API_MOCKED`, it calls a new `activateDesignMockAdapter()` that registers only the design
+  routes and sends a request to the mock when its path is a design path (`/designs…`,
+  `/catalog/products/{slug}/variants/{sku}/print-config`, `/__mock/…`), every other request to
+  axios' own adapter. Removing the constant hands design to the BE; no screen changes.
 - **Store.** `mock-fixtures/designs.ts` is rewritten for this contract. It keeps the seeded designs
   idea (one design per status) and moves its state behind a `DesignMockStorage` interface with two
   implementations: `MemoryStorage` (tests, SSR, blocked IndexedDB) and `IndexedDbStorage` (designs,
   documents, history as JSON; assets and bundle files as Blobs). Writes are awaited before a
   response; `__mock/reset` clears it and reseeds.
 - **Print configurations.** The mock owns a print configuration per known SKU (today's
-  `design-templates.ts`, reshaped to `PrintConfigDto`). For a SKU it does not know — the real
-  catalog's SKUs when `USE_MOCK=false` — it answers a default configuration by product type (title
-  contains "túi" → the default kraft bag, otherwise the default PET cup), flagged
-  `ASSUMPTION (mock only)`. A SKU listed in the mock as "no print config" answers 404 so the
+  `design-templates.ts`, reshaped to `PrintConfigDto`). For a product it does not know — the real
+  catalog's when `USE_MOCK=false` — it answers a default configuration by the product slug (slug
+  contains "tui" or "bag" → the default kraft bag, otherwise the default PET cup) and uses the slug
+  as the product title, flagged `ASSUMPTION (mock only)`. A SKU listed in the mock as "no print config" answers 404 so the
   no-button path is demoable.
 - Only `mock-adapter.ts` imports mock modules, as today.
 
@@ -232,14 +235,16 @@ calls them.
 ### 6.1 Product page entry (catalog §4.4, BR-14)
 
 - `product-detail-screen.tsx` takes a `renderDesignEntry?: (sku) => ReactNode` prop; the product
-  page passes the design feature's `<DesignEntry sku />`, so catalog never imports design.
+  page passes the design feature's `<DesignEntry productSlug sku />`, so catalog never imports
+  design.
 - `<DesignEntry>` reads the print configuration of the selected variant: present and usable →
-  button **"Thiết kế"** to `/design/new?sku=…`; absent → the line "Quy cách này chưa nhận thiết kế"
+  button **"Thiết kế"** to `/design/new?product=…&sku=…` (today's `STORE_ROUTES.design.newFor`);
+  absent → the line "Quy cách này chưa nhận thiết kế"
   with **"Chat với Sale"**.
 - The catalog's "Liên hệ Sale báo giá" button (PR #31) becomes **"Chat với Sale"** (catalog BR-11: a
   variant is never quoted directly).
 
-### 6.2 Launcher `/design/new?sku=…` (inside the desktop-only gate)
+### 6.2 Launcher `/design/new?product=…&sku=…` (inside the desktop-only gate)
 
 Checks in order, each failing one with its own state screen:
 
