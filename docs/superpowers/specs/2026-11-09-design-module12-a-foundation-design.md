@@ -191,8 +191,8 @@ SHA-256 match what the client sent.
 ### 4.3 Mock-only routes (simulation panel)
 
 `POST /__mock/designs/{id}/approve`, `POST /__mock/designs/{id}/return { reason }`,
-`POST /__mock/reset`. They exist only in the mock route table; nothing outside the simulation panel
-calls them.
+`POST /__mock/reset`, `GET /__mock/storage` (ruling R15). They exist only in the mock route table;
+nothing outside the simulation panel calls them.
 
 ### 4.4 Query keys and invalidation
 
@@ -208,6 +208,109 @@ calls them.
 | submit                    | `detail(id)`, `history(id)`, `files(id)`, `lists()`, `draftCount()` |
 | delete                    | `lists()`, `draftCount()`; removes `detail(id)`                     |
 | simulate approve / return | `detail(id)`, `history(id)`, `lists()`, `draftCount()`              |
+
+### 4.5 Wire details
+
+What the FE and the mock rely on beyond §4.1–§4.2 (ruling R19); the BE implements the same. Paths
+are under `/api/v1`. Nullable fields are sent as `null`, never left out.
+
+**Envelopes.** Success: `{ success: true, data, timestamp }`. Failure: `{ success: false, errorCode,
+message, fieldErrors?: [{ field, message }], details?, correlationId, timestamp }`. The screens key
+on `errorCode`, never on `message`.
+
+**Order of checks on a write.** Not found (`404`, also for `ARCHIVED` and other customers'
+designs) → malformed input (`422 VALIDATION_FAILED`) → `409 INVALID_STATE` → `409
+VERSION_CONFLICT` → the write's own checks. `INVALID_STATE` comes before `VERSION_CONFLICT` so a
+tab that missed a submit learns that the status changed, not only that its version is stale.
+
+**Malformed input.** A missing or wrong field (`version` not a whole number ≥ 0, a blank or
+over-long name or reason, a document that does not parse or is not for the design's template,
+unreadable `preflight` or `issues`) answers `422 VALIDATION_FAILED` with one `fieldErrors` entry
+naming the field. _Open alignment point:_ the BE's `ErrorCode.VALIDATION_FAILED` answers `400`
+today; the FE reads the code, so either works, but the docs should pick one.
+
+**Versions.** One `version` for the design and its document (docs 12 BR-11), `0` on a new design.
+
+| Write                                                  | Version           |
+| ------------------------------------------------------ | ----------------- |
+| save document, rename, submit, delete, approve, return | + 1               |
+| upload image, `preflight-failures`                     | unchanged         |
+| create, revision                                       | new design at `0` |
+
+**Document record** (`GET` / `PUT /designs/{id}/document`). `{ designId, version, document,
+checksum, updatedAt }`. `PUT` takes `{ version, document }`, stores the document as sent and
+answers the new record. `checksum` is the lower-case hex SHA-256 of the document's RFC 8785
+canonical JSON (keys sorted by UTF-16 code units, no whitespace, ECMAScript number and string
+forms), byte-identical to the browser's `documentChecksum` (`engine/export/checksum.ts`). The
+browser depends on it: before submitting it re-reads the record and refuses to send unless the
+stored checksum is the one of the document it drew (a mismatch means another tab saved; the
+conflict dialog opens), and autosave adopts a newer version only while the checksum is unchanged.
+A document over `1,000,000` bytes (UTF-8 of its JSON) answers `413 PAYLOAD_TOO_LARGE`; the browser
+refuses it before sending too.
+
+**Rename** (`PATCH /designs/{id}` `{ name, version }`). Name trimmed, 1–200 characters. Answers the
+design with `version + 1`.
+
+**List** (`GET /designs`). The page envelope `{ items, page, size, totalElements, totalPages,
+hasNext, hasPrevious }` with a **0-based** `page` (the FE shows it 1-based); `size` 1–200, default
+20; `status` one of §3.1. A bad `page`, `size` or `status` answers `400 UNSUPPORTED_PARAMETER`.
+
+**Images.** `POST /designs/{id}/assets` is multipart with one `file` part and an `Idempotency-Key`
+header (the browser's key is the SHA-256 hex of the bytes, name and type, so a true retry reuses
+it). The same key with the same file answers the first upload again (`201`); the same key with
+another file answers `422 IDEMPOTENCY_KEY_REUSED`. A type outside `fileRules.formats`, a size over
+`fileRules.maxFileSizeMb` × 1,048,576 bytes, an unreadable image or no `file` part answer `422
+FILE_REJECTED` and nothing is stored; a design not in `DRAFT` answers `409 INVALID_STATE`. The
+asset DTO is `{ assetId, designId, originalName, contentType, widthPx, heightPx, sizeBytes,
+checksum, storedAt }` (`checksum`: SHA-256 hex of the bytes); `GET …/assets` lists them newest
+first. `GET …/assets/{assetId}/url` answers `{ url, expiresAt }` (ISO instant; the mock gives 5
+minutes, the FE refreshes a link 30 s before it expires), `404` when the image or its bytes are
+gone.
+
+**File rules.** `PrintConfigDto.fileRules` is the source of truth (ruling R20): the studio's
+template takes `minDpi`, `allowedFileFormats` (= `formats`, lower-case MIME types) and
+`maxFileSizeMb` from it (`templateOf`), whatever the template itself says. A variant takes designs
+when `variantStatus` is `ACTIVE` and `product.status` is `APPROVED` or `PUBLISHED`, upper case as
+sent. `GET …/print-config` answers `404 NOT_FOUND` when the variant has none.
+
+**Submission** (`POST /designs/{id}/submissions`, multipart). Parts: `version` (text);
+`preflight` (JSON text `{ result: "Pass" | "Fail", issues }`); `checksums` (JSON text,
+`{ CUSTOMER_PREVIEW, PRINT_READY, TECHNICAL_SPEC }` → lower-case SHA-256 hex of each file's bytes);
+one file part per role, named by the role (`CUSTOMER_PREVIEW` `preview.png` `image/png`,
+`PRINT_READY` `print-ready.pdf` and `TECHNICAL_SPEC` `technical-spec.pdf`, `application/pdf`).
+After the checks above: a `Fail` preflight, or a failing server re-check (§4.2), answers `422
+PREFLIGHT_FAILED` and is recorded as a `PREFLIGHT_FAILED` event; a missing part or a checksum that
+does not match the bytes received answers `422 FILE_REJECTED`. Success answers the design
+(`PENDING_REVIEW`, `version + 1`, `submittedAt`); its `previewUrl` is the new `CUSTOMER_PREVIEW`.
+`GET /designs/{id}/files` then lists `[{ role, name, sizeBytes, sha256, url }]` in role order
+(`[]` before a submission).
+
+**`422 PREFLIGHT_FAILED`.** `details.issues` lists the issues in the engine's `PreflightIssue`
+shape: `{ ruleId, level: "fail" | "note", message, surfaceCode?, elementId? }`, the last two left
+out (not `null`) for an issue of the whole design. The FE reads any non-empty `ruleId`, so a rule
+the server adds still shows its message.
+
+**`POST /designs/{id}/preflight-failures`** `{ version, issues }` (at least one issue, each with a
+`message`). Answers `201` with the event `{ type: "PREFLIGHT_FAILED", at, version, note }`, `note`
+the issues' messages joined by `"; "`; the design is unchanged.
+
+**`DELETE /designs/{id}`** `{ version }`. Answers `200` with the design, `status: "ARCHIVED"` and
+`version + 1`; from then on it is not found, not listed and not counted.
+
+**Create and revision** answer `201` with the new design (`version` `0`; a revision carries
+`sourceSnapshotId` and the source's document and images). History events are
+`{ type, at, version, note }`: `note` is the reason for `RETURNED`, the failed checks' messages for
+`PREFLIGHT_FAILED`, the snapshot id for `DERIVED_FROM_SNAPSHOT`, `SKU … · snapshot … · checksum …`
+for `APPROVED`, otherwise `null`.
+
+**`/__mock/*`** (mock only). `approve` answers `200` with the design (`APPROVED`, `approval {
+snapshotId, skuCode, bundleChecksum }`, `approvedAt`, `version + 1`), `409 INVALID_STATE` unless
+`PENDING_REVIEW` with a complete bundle; `bundleChecksum` is the SHA-256 hex of the lines
+`ROLE:sha256\n` in role order then `DESIGN_DOCUMENT:{document checksum}\n`. `return { reason }`
+answers `200` with the design (`DRAFT`, `lastReturn`, `version + 1`), `422 VALIDATION_FAILED` for
+a blank or over-2,000-character reason, `409 INVALID_STATE` unless `PENDING_REVIEW`. `reset`
+answers `200` with `data: null`; `storage` answers `{ persistent }`. A mock that cannot answer
+says `500 DESIGN_MOCK_FAILED`, one that never started `503 DESIGN_MOCK_UNAVAILABLE`.
 
 ## 5. Mock and switch
 
@@ -229,6 +332,13 @@ calls them.
   as the product title, flagged `ASSUMPTION (mock only)`. A SKU listed in the mock as "no print config" answers 404 so the
   no-button path is demoable.
 - Only `mock-adapter.ts` imports mock modules, as today.
+- **Secure context.** The design mock needs a secure context (`https://`, or `localhost`): it
+  computes checksums with `crypto.subtle`, makes ids with `crypto.randomUUID`, and keeps two tabs
+  from interleaving with Web Locks. Over plain `http` on a LAN address (a phone opening
+  `http://192.168.x.x:3000`) all three are missing: design requests answer
+  `500 DESIGN_MOCK_FAILED` while the rest of the app keeps working.
+- **No random failures.** The design-only mock adds latency but never the full mock's random
+  `500 MOCK_RANDOM_ERROR` (ruling R17): Module 12 ships on it, and its writes are not retried.
 
 ## 6. Screens
 
