@@ -202,8 +202,27 @@ describe("useDeleteDesign (spec §4.4: lists, draftCount; removes detail)", () =
     ]);
   });
 
-  it("re-reads the lists and the count when the delete is refused, and keeps the cache", async () => {
+  it("re-reads the design too when the draft was submitted meanwhile (409 INVALID_STATE)", async () => {
     vi.spyOn(api, "delete").mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "x"));
+    const { client, invalidate, wrapper } = setup();
+    client.setQueryData(designKeys.detail(id), design());
+    const { result } = renderHook(() => useDeleteDesign(), { wrapper });
+
+    result.current.mutate({ id, version: 3 });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(client.getQueryData(designKeys.detail(id))).toBeDefined();
+    expect(invalidated(invalidate)).toEqual(
+      expect.arrayContaining([
+        { queryKey: designKeys.detail(id), exact: true },
+        { queryKey: designKeys.lists() },
+        { queryKey: designKeys.draftCount() },
+      ]),
+    );
+  });
+
+  it("re-reads the lists and the count when the delete is refused, and keeps the cache", async () => {
+    vi.spyOn(api, "delete").mockRejectedValueOnce(new ApiError(500, "INTERNAL_ERROR", "x"));
     const { client, invalidate, wrapper } = setup();
     client.setQueryData(designKeys.detail(id), design());
     const { result } = renderHook(() => useDeleteDesign(), { wrapper });

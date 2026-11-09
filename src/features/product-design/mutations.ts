@@ -123,6 +123,8 @@ export function useDeleteDesign() {
   return useMutation({
     mutationFn: ({ id, version }: DeleteDesignTarget) => deleteDesign(id, { version }),
     onSuccess: (_design, { id }) => client.removeQueries({ queryKey: designKeys.detail(id) }),
+    // A draft submitted in another tab answers 409 INVALID_STATE: its status moved on, re-read it.
+    onError: (error, { id }) => reReadWhenStateChanged(client, id, error),
     onSettled: () => reReadDrafts(client),
   });
 }

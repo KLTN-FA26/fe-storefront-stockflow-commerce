@@ -1,8 +1,9 @@
 import { Suspense } from "react";
 
 import { PageShell } from "@/components/storefront/layout";
-import { DesignListScreen } from "@/features/product-design/components/design-list-screen";
 import { DesignListSkeleton } from "@/features/product-design/components/design-list-states";
+
+import { DesignListWithCatalog } from "./designable-products";
 
 import type { Metadata } from "next";
 
@@ -18,7 +19,7 @@ export default function DesignListPage() {
         </PageShell>
       }
     >
-      <DesignListScreen />
+      <DesignListWithCatalog />
     </Suspense>
   );
 }

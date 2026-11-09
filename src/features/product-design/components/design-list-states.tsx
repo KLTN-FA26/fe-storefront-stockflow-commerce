@@ -66,11 +66,11 @@ export function DesignLoadError({
   );
 }
 
-/** While a customer cannot start a design (P1 not shipped), Sales designs for them. */
+/** Used by the launcher states (Task 8 retires them). */
 export const SALES_DESIGNS_FOR_YOU =
   "Sales của StockFlow lên thiết kế theo yêu cầu của bạn. Nhắn Sales sản phẩm và logo bạn muốn in; bản thiết kế sẽ hiện trong “Thiết kế của tôi” để bạn xem và xác nhận.";
 
-/** "Nhắn Sales" (the Sales chat) and a way back, for the states that send a design request to Sales. */
+/** "Nhắn Sales" and a way back; kept for the launcher states until Task 8 reworks them. */
 export function AskSalesActions({ back }: { back: { href: string; label: string } }) {
   return (
     <div className="flex flex-wrap justify-center gap-3">
@@ -87,26 +87,12 @@ export function AskSalesActions({ back }: { back: { href: string; label: string 
   );
 }
 
-/**
- * The customer has no design yet: with `selfService` they start one from a product; without it
- * (the BE has no P1) Sales designs for them, so the way in is the Sales chat.
- */
-export function NoDesignsYet({ selfService }: { selfService: boolean }) {
-  if (!selfService) {
-    return (
-      <EmptyState
-        title="Bạn chưa có thiết kế nào"
-        description={SALES_DESIGNS_FOR_YOU}
-        action={
-          <AskSalesActions back={{ href: STORE_ROUTES.catalog.list, label: "Xem sản phẩm" }} />
-        }
-      />
-    );
-  }
+/** The customer has no design yet: a way to a product they can print on. */
+export function NoDesignsYet() {
   return (
     <EmptyState
       title="Bạn chưa có thiết kế nào"
-      description="Chọn một sản phẩm in được và bấm “Bắt đầu thiết kế” để tạo bản thiết kế đầu tiên."
+      description="Chọn một sản phẩm in được và bấm “Thiết kế” để tạo bản thiết kế đầu tiên."
       action={
         <Button asChild className="min-h-11 rounded-[var(--r-md)] px-5">
           <Link href={STORE_ROUTES.catalog.list}>Xem sản phẩm</Link>
@@ -129,7 +115,7 @@ export function NoDesignsInTab({ onShowAll }: { onShowAll: () => void }) {
           className="min-h-11 rounded-[var(--r-md)] px-5"
           onClick={onShowAll}
         >
-          Xem tất cả thiết kế
+          Xem tất cả
         </Button>
       }
     />
