@@ -1,3 +1,5 @@
+> Superseded for lifecycle, data contract and workflow screens by `2026-11-09-design-module12-a-foundation-design.md`.
+
 # Design Studio 3D — product design engine for cups and kraft bags (Module 12)
 
 - Date: 2026-10-25
