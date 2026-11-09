@@ -1,68 +1,48 @@
 /**
- * Mock routes for the design studio: the BE design workflow (`/designs/**`, `DesignWorkflowController`
- * and `DesignController`) and the endpoints proposed in spec 2026-10-25 §7.2 (P1–P6,
- * `docs/superpowers/specs/2026-10-25-design-api-be-proposal.md`), served by the in-memory store of
- * `mock-fixtures/designs.ts`. Responses use the real ApiResponse envelope; the mock adapter rejects
- * error statuses so the client interceptor turns them into ApiError. Every path is distinct (a
- * `:param` never spans a `/`), so the order below only groups the routes by what they serve.
+ * Mock routes of Module 12 (spec 2026-11-09 §4.2, §4.3): the docs' design API, served by the store
+ * of `mock-fixtures/design-store.ts`, and the reviewer simulation under `/__mock`. Responses use
+ * the ApiResponse envelope; the mock adapter turns error statuses into ApiError.
+ * The first matching pattern wins, so `/designs/draft-count` is registered before `/designs/:id`.
  */
 
 import type { AxiosRequestConfig } from "axios";
 
 import { registerMockRoute } from "./mock-adapter";
-import { MOCK_CUSTOMER_ID } from "./mock-customer-addresses";
-import { invalid } from "./mock-fixtures/design-model";
 import {
-  createMockDesignStudio,
-  type MockDesignStudio,
+  BUNDLE_ROLES,
+  fileRejected,
+  type BundleRole,
   type MockResult,
-} from "./mock-fixtures/designs";
-
-/**
- * The mock customer's identity user for designs. A UUID, as the BE's `ownerUserId` is (the profile's
- * own `userId` in `mock-routes.ts` is not one); it differs from every id the seeded designs use.
- */
-export const MOCK_DESIGN_USER_ID = "7d51f000-0000-4000-8000-0000000000d1";
-
-/** Mock-only: how long the stand-in QC reviewer takes after a technical review request. */
-export const MOCK_QC_DELAY_MS = 2000;
-const MOCK_QC_NOTES = "Mock QC: đạt kỹ thuật";
-/** BE `DesignController#upload`: `@RequestParam(defaultValue = "CUSTOMER_PREVIEW") role`. */
-const DEFAULT_ARTIFACT_ROLE = "CUSTOMER_PREVIEW";
-
-export interface DesignMockRouteOptions {
-  /** Runs `run` once after `delayMs`; defaults to `setTimeout`, which fake timers replace in tests. */
-  schedule?: (run: () => void, delayMs: number) => void;
-}
+} from "./mock-fixtures/design-rows";
+import { openDesignStorage } from "./mock-fixtures/design-storage";
+import { createDesignMockStore, type DesignMockStore } from "./mock-fixtures/design-store";
+import type { DesignSubmission } from "./mock-fixtures/design-store-files";
 
 const respond = (result: MockResult) => ({ status: result.status, data: result.data, headers: {} });
 
-function pathParams(config: AxiosRequestConfig): Record<string, string> {
-  return (
-    (config as AxiosRequestConfig & { _mockParams?: Record<string, string> })._mockParams ?? {}
-  );
-}
-
-const param = (config: AxiosRequestConfig, name: string) =>
-  decodeURIComponent(pathParams(config)[name] ?? "");
+const param = (config: AxiosRequestConfig, name: string) => {
+  const params = (config as AxiosRequestConfig & { _mockParams?: Record<string, string> })
+    ._mockParams;
+  return decodeURIComponent(params?.[name] ?? "");
+};
 
 function queryParams(config: AxiosRequestConfig): Record<string, unknown> {
   const raw: unknown = config.params;
   return raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
 }
 
-function bodyOf(config: AxiosRequestConfig): Record<string, unknown> | undefined {
-  const raw: unknown = typeof config.data === "string" ? safeParse(config.data) : config.data;
-  return raw && typeof raw === "object" ? (raw as Record<string, unknown>) : undefined;
-}
-
-const safeParse = (text: string): unknown => {
+const parseJson = (text: string | undefined): unknown => {
+  if (text === undefined) return undefined;
   try {
     return JSON.parse(text);
   } catch {
     return undefined;
   }
 };
+
+/** A JSON body: axios hands the adapter the serialised string. */
+const bodyOf = (config: AxiosRequestConfig): unknown =>
+  typeof config.data === "string" ? parseJson(config.data) : config.data;
 
 /** A request header by name, ignoring case: axios hands the adapter an `AxiosHeaders`, tests a plain object. */
 function headerOf(config: AxiosRequestConfig, name: string): string | undefined {
@@ -73,135 +53,125 @@ function headerOf(config: AxiosRequestConfig, name: string): string | undefined 
   return typeof found === "string" ? found : undefined;
 }
 
-/** The `file` part of a multipart body, or `undefined` when the body is not multipart or has none. */
-function filePart(config: AxiosRequestConfig): Blob | undefined {
-  const form = config.data as FormData | string | undefined;
-  const part = typeof form === "object" && typeof form.get === "function" ? form.get("file") : null;
-  return part instanceof Blob ? part : undefined;
+/** A multipart body (duck-typed: the FormData may come from another realm in tests). */
+function formOf(config: AxiosRequestConfig): FormData | undefined {
+  const data: unknown = config.data;
+  return typeof data === "object" && data !== null && typeof (data as FormData).get === "function"
+    ? (data as FormData)
+    : undefined;
 }
 
-const fileMissing = () =>
-  invalid([{ field: "file", message: "the file part is required", code: "NotNull" }]);
-
-const draftVersion = (result: MockResult): number | undefined => {
-  const version = (result.data as { data?: { version?: unknown } } | undefined)?.data?.version;
-  return typeof version === "number" ? version : undefined;
+const blobPart = (form: FormData | undefined, name: string) => {
+  const part = form?.get(name);
+  return part instanceof Blob ? part : undefined;
 };
 
-/** The studio of the mock customer, over the seeded catalogue; `registerAllMockRoutes` passes its own. */
-const defaultStudio = () =>
-  createMockDesignStudio({ userId: MOCK_DESIGN_USER_ID, customerId: MOCK_CUSTOMER_ID });
+const textPart = (form: FormData | undefined, name: string) => {
+  const part = form?.get(name);
+  return typeof part === "string" ? part : undefined;
+};
 
-export function registerDesignMockRoutes(
-  studio: MockDesignStudio = defaultStudio(),
-  {
-    schedule = (run, delayMs) => {
-      setTimeout(run, delayMs);
-    },
-  }: DesignMockRouteOptions = {},
-): void {
+/** The multipart parts of a submission: `version`, `preflight`, `checksums` and one file per role. */
+function submissionOf(config: AxiosRequestConfig): DesignSubmission {
+  const form = formOf(config);
+  const version = textPart(form, "version");
+  const files: Partial<Record<BundleRole, Blob>> = {};
+  for (const role of BUNDLE_ROLES) {
+    const file = blobPart(form, role);
+    if (file) files[role] = file;
+  }
+  return {
+    version: version === undefined || version.trim() === "" ? undefined : Number(version),
+    preflight: parseJson(textPart(form, "preflight")),
+    checksums: parseJson(textPart(form, "checksums")),
+    files,
+  };
+}
+
+export function registerDesignMockRoutes(store: DesignMockStore): void {
+  const id = (config: AxiosRequestConfig) => param(config, "id");
+
   /* ── Designs ── */
 
-  // P1: the customer starts a design (the BE's own POST /designs is staff-only).
-  registerMockRoute("POST", "/designs/mine", async (config) =>
-    respond(await studio.create(bodyOf(config))),
+  registerMockRoute("GET", "/designs", async (config) =>
+    respond(await store.list(queryParams(config))),
   );
-  registerMockRoute("GET", "/designs", (config) => respond(studio.list(queryParams(config))));
-  registerMockRoute("GET", "/designs/:id", (config) => respond(studio.get(param(config, "id"))));
-  registerMockRoute("GET", "/designs/:id/history", (config) =>
-    respond(studio.history(param(config, "id"), queryParams(config))),
+  registerMockRoute("GET", "/designs/draft-count", async () => respond(await store.draftCount()));
+  registerMockRoute("POST", "/designs", async (config) =>
+    respond(await store.create(bodyOf(config))),
   );
-  registerMockRoute("GET", "/designs/:id/snapshot", (config) =>
-    respond(studio.snapshot(param(config, "id"))),
+  registerMockRoute("GET", "/designs/:id", async (config) => respond(await store.get(id(config))));
+  registerMockRoute("PATCH", "/designs/:id", async (config) =>
+    respond(await store.rename(id(config), bodyOf(config))),
+  );
+  registerMockRoute("DELETE", "/designs/:id", async (config) =>
+    respond(await store.remove(id(config), bodyOf(config))),
+  );
+  registerMockRoute("GET", "/designs/:id/history", async (config) =>
+    respond(await store.history(id(config))),
   );
 
-  // P3: the design document, at the draft's version.
-  registerMockRoute("GET", "/designs/:id/document", (config) =>
-    respond(studio.getDocument(param(config, "id"))),
+  registerMockRoute("GET", "/designs/:id/document", async (config) =>
+    respond(await store.getDocument(id(config))),
   );
   registerMockRoute("PUT", "/designs/:id/document", async (config) =>
-    respond(await studio.putDocument(param(config, "id"), bodyOf(config))),
+    respond(await store.putDocument(id(config), bodyOf(config))),
   );
 
-  // P4: customer images (multipart `file`, `Idempotency-Key`).
-  registerMockRoute("GET", "/designs/:id/assets", (config) =>
-    respond(studio.listAssets(param(config, "id"))),
+  /* ── Images ── */
+
+  registerMockRoute("GET", "/designs/:id/assets", async (config) =>
+    respond(await store.listAssets(id(config))),
   );
   registerMockRoute("POST", "/designs/:id/assets", async (config) => {
-    const file = filePart(config);
-    if (!file) return respond(fileMissing());
+    const file = blobPart(formOf(config), "file");
+    if (!file) return respond(fileRejected("The file part is required"));
     return respond(
-      await studio.uploadAsset(param(config, "id"), file, headerOf(config, "Idempotency-Key")),
+      await store.uploadAsset(id(config), file, undefined, headerOf(config, "Idempotency-Key")),
     );
   });
-  registerMockRoute("GET", "/designs/:id/assets/:assetId/download-url", (config) =>
-    respond(studio.assetLink(param(config, "id"), param(config, "assetId"))),
+  registerMockRoute("GET", "/designs/:id/assets/:assetId/url", async (config) =>
+    respond(await store.assetLink(id(config), param(config, "assetId"))),
   );
 
-  // Artifacts: the role rides in `?role=`.
-  registerMockRoute("GET", "/designs/:id/artifacts", (config) =>
-    respond(studio.listArtifacts(param(config, "id"))),
-  );
-  registerMockRoute("POST", "/designs/:id/artifacts", async (config) => {
-    const file = filePart(config);
-    if (!file) return respond(fileMissing());
-    const role = String(queryParams(config).role ?? DEFAULT_ARTIFACT_ROLE);
-    return respond(
-      await studio.uploadArtifact(
-        param(config, "id"),
-        role,
-        file,
-        headerOf(config, "Idempotency-Key"),
-      ),
-    );
-  });
-  registerMockRoute("GET", "/designs/:id/artifacts/:artifactId/download-url", (config) =>
-    respond(studio.artifactLink(param(config, "id"), param(config, "artifactId"))),
-  );
+  /* ── Submitting and after ── */
 
-  /* ── Workflow ── */
-
-  registerMockRoute("PUT", "/designs/:id/specification", (config) =>
-    respond(studio.revise(param(config, "id"), bodyOf(config))),
+  registerMockRoute("POST", "/designs/:id/submissions", async (config) =>
+    respond(await store.submit(id(config), submissionOf(config))),
   );
-
-  // P5: the customer is done and QC should look.
-  registerMockRoute("POST", "/designs/:id/technical-review-requests", (config) => {
-    const id = param(config, "id");
-    const result = studio.requestReview(id, bodyOf(config));
-    const requested = draftVersion(result);
-    if (result.status < 300 && requested !== undefined) {
-      // MOCK-ONLY: the QC reviewer is not part of the storefront, so the mock passes the review
-      // after 2 s and a demo can go end to end. Any change since the request (edit, upload) has
-      // voided it, as on the BE, so the answer is then dropped instead of passing what QC never saw.
-      schedule(() => {
-        if (draftVersion(studio.get(id)) === requested) {
-          studio.completeReview(id, true, MOCK_QC_NOTES);
-        }
-      }, MOCK_QC_DELAY_MS);
-    }
-    return respond(result);
-  });
-  registerMockRoute("POST", "/designs/:id/confirmation-requests", (config) =>
-    respond(studio.submit(param(config, "id"), bodyOf(config))),
+  registerMockRoute("POST", "/designs/:id/preflight-failures", async (config) =>
+    respond(await store.recordPreflightFailure(id(config), bodyOf(config))),
   );
-  registerMockRoute("POST", "/designs/:id/change-requests", (config) =>
-    respond(studio.requestChanges(param(config, "id"), bodyOf(config))),
+  registerMockRoute("GET", "/designs/:id/files", async (config) =>
+    respond(await store.files(id(config))),
   );
-  registerMockRoute("POST", "/designs/:id/confirmation-withdrawals", (config) =>
-    respond(studio.withdraw(param(config, "id"), bodyOf(config))),
-  );
-  registerMockRoute("POST", "/designs/:id/confirmations", async (config) =>
-    respond(await studio.confirm(param(config, "id"), bodyOf(config))),
-  );
-  registerMockRoute("POST", "/designs/:id/revisions", (config) =>
-    respond(studio.fork(param(config, "id"))),
+  registerMockRoute("POST", "/designs/:id/revisions", async (config) =>
+    respond(await store.revise(id(config))),
   );
 
   /* ── Catalogue ── */
 
-  // P2: the templates of a product (a longer path than the catalogue's own `/catalog/products/:slug`).
-  registerMockRoute("GET", "/catalog/products/:slug/customization", (config) =>
-    respond(studio.customization(param(config, "slug"))),
+  registerMockRoute("GET", "/catalog/products/:slug/variants/:sku/print-config", async (config) =>
+    respond(await store.printConfig(param(config, "slug"), param(config, "sku"))),
   );
+
+  /* ── Reviewer simulation (mock only, spec §4.3) ── */
+
+  registerMockRoute("POST", "/__mock/designs/:id/approve", async (config) =>
+    respond(await store.simulateApprove(id(config))),
+  );
+  registerMockRoute("POST", "/__mock/designs/:id/return", async (config) =>
+    respond(await store.simulateReturn(id(config), bodyOf(config))),
+  );
+  registerMockRoute("POST", "/__mock/reset", async () => respond(await store.reset()));
+}
+
+/**
+ * Opens the design mock's storage (IndexedDB, memory when the browser refuses it), creates the
+ * store and registers its routes: the one set-up path for the full mock and the design-only one.
+ */
+export async function setUpDesignMock(): Promise<DesignMockStore> {
+  const store = await createDesignMockStore({ storage: await openDesignStorage() });
+  registerDesignMockRoutes(store);
+  return store;
 }
