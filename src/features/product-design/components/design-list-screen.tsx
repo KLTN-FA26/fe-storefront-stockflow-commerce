@@ -28,7 +28,7 @@ import {
   NoDesignsYet,
 } from "./design-list-states";
 import { LauncherSignIn } from "./launcher-states";
-import { NewDesignDialog, type DesignableProduct } from "./new-design-dialog";
+import { NewDesignDialog, type DesignableCatalogue } from "./new-design-dialog";
 
 /** Twelve divides the one-, two- and three-column grids evenly. */
 export const DESIGN_PAGE_SIZE = 12;
@@ -53,7 +53,8 @@ const urlState = {
   page: parseAsInteger.withDefault(1),
 };
 
-type DesignListScreenProps = { products: DesignableProduct[] };
+/** The catalogue's printable products, for "Thiết kế mới": the page reads them. */
+type DesignListScreenProps = { catalogue: DesignableCatalogue };
 
 /**
  * `/design` (spec §6.3): signed-in customers only (ruling R18). The design mock never answers 401,
@@ -73,7 +74,7 @@ export function DesignListScreen(props: DesignListScreenProps) {
   );
 }
 
-function SignedInDesignList({ products }: DesignListScreenProps) {
+function SignedInDesignList({ catalogue }: DesignListScreenProps) {
   const router = useRouter();
   const [url, setUrl] = useQueryStates(urlState, { history: "push" });
   const [creating, setCreating] = useState(false);
@@ -213,7 +214,7 @@ function SignedInDesignList({ products }: DesignListScreenProps) {
         </TabsContent>
       </Tabs>
       <DeleteDesignDialog design={deleting} onClose={() => setDeleting(null)} />
-      <NewDesignDialog products={products} open={creating} onOpenChange={setCreating} />
+      <NewDesignDialog catalogue={catalogue} open={creating} onOpenChange={setCreating} />
     </PageShell>
   );
 }

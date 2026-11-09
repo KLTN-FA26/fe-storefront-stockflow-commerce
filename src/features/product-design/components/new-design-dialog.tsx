@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { STORE_ROUTES } from "@/constants";
-import { Alert } from "@/components/shared";
+import { Alert, Skeleton } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,28 +16,39 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/cn";
 
 import { describeDesignError } from "../errors";
 import { usePrintConfig } from "../queries";
+import { isPrintConfigUsable } from "../selectors";
+import { RetryButton } from "./design-list-states";
+import { VariantChoice } from "./variant-choice";
 
-/** What the page gives the dialog: the printable products and their variants (from the catalogue). */
+/** A printable product of the catalogue and the SKUs of its variants. */
 export type DesignableProduct = {
   slug: string;
   title: string;
-  variants: { sku: string; label: string }[];
+  skus: string[];
 };
+
+/** What the page gives the dialog: the catalogue's printable products, once they are loaded. */
+export type DesignableCatalogue =
+  | { status: "loading" }
+  | { status: "error"; error: unknown; onRetry: () => void; retrying: boolean }
+  | { status: "ready"; products: DesignableProduct[] };
 
 const normalize = (text: string) => text.toLocaleLowerCase("vi").trim();
 
-/** "Thiết kế mới": product (searched), then variant; the launcher opens for a variant that takes designs. */
+/**
+ * "Thiết kế mới" (spec §6.3): product (searched, from the catalogue once it is loaded), then one of
+ * its variants that has a usable print configuration; the launcher opens for it.
+ */
 export function NewDesignDialog({
-  products,
+  catalogue,
   open,
   onOpenChange,
 }: {
-  products: DesignableProduct[];
+  catalogue: DesignableCatalogue;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -45,12 +56,12 @@ export function NewDesignDialog({
   const [query, setQuery] = useState("");
   const [slug, setSlug] = useState<string | null>(null);
   const [sku, setSku] = useState<string | null>(null);
+  const products = catalogue.status === "ready" ? catalogue.products : [];
   const product = products.find((p) => p.slug === slug) ?? null;
   const shown = products.filter((p) => normalize(p.title).includes(normalize(query)));
+  // The variant list read this configuration already: the cache answers it.
   const config = usePrintConfig(slug ?? "", sku ?? "", Boolean(slug && sku));
-  const checking = Boolean(sku) && config.isPending;
-  const accepted = config.data != null && config.data.variantStatus === "ACTIVE";
-  const refused = Boolean(sku) && !checking && !config.error && !accepted;
+  const accepted = config.data != null && isPrintConfigUsable(config.data);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -73,7 +84,26 @@ export function NewDesignDialog({
             onChange={(event) => setQuery(event.target.value)}
             className="min-h-11 rounded-[var(--r-md)]"
           />
-          <ul aria-label="Sản phẩm in được" className="max-h-48 space-y-1 overflow-y-auto">
+          {catalogue.status === "loading" ? (
+            <div role="status" aria-label="Đang tải danh sách sản phẩm" className="space-y-1">
+              {[0, 1, 2].map((i) => (
+                <Skeleton key={i} className="h-11 w-full rounded-[var(--r-md)]" />
+              ))}
+            </div>
+          ) : null}
+          {catalogue.status === "error" ? (
+            <div className="space-y-2">
+              <Alert tone="danger" title="Không tải được danh sách sản phẩm">
+                {describeDesignError(catalogue.error)}
+              </Alert>
+              <RetryButton onRetry={catalogue.onRetry} retrying={catalogue.retrying} />
+            </div>
+          ) : null}
+          <ul
+            aria-label="Sản phẩm in được"
+            hidden={catalogue.status !== "ready"}
+            className="max-h-48 space-y-1 overflow-y-auto"
+          >
             {shown.map((p) => (
               <li key={p.slug}>
                 <button
@@ -94,7 +124,7 @@ export function NewDesignDialog({
                 </button>
               </li>
             ))}
-            {shown.length === 0 ? (
+            {catalogue.status === "ready" && shown.length === 0 ? (
               <li className="text-ink-tertiary px-1 py-2 text-sm">
                 Không tìm thấy sản phẩm phù hợp.
               </li>
@@ -103,24 +133,14 @@ export function NewDesignDialog({
         </div>
 
         {product ? (
-          <fieldset className="space-y-2">
-            <legend className="text-ink-primary text-sm font-medium">Quy cách</legend>
-            <RadioGroup value={sku ?? ""} onValueChange={setSku} aria-label="Quy cách">
-              {product.variants.map((variant) => (
-                <Label
-                  key={variant.sku}
-                  className="border-border-default hover:bg-bg-subtle min-h-11 cursor-pointer gap-3 rounded-[var(--r-md)] border px-3 text-sm"
-                >
-                  <RadioGroupItem value={variant.sku} aria-label={variant.label} />
-                  {variant.label}
-                </Label>
-              ))}
-            </RadioGroup>
-          </fieldset>
+          <VariantChoice
+            key={product.slug}
+            productSlug={product.slug}
+            skus={product.skus}
+            value={sku}
+            onChange={setSku}
+          />
         ) : null}
-
-        {refused ? <Alert tone="warning">Quy cách này chưa nhận thiết kế.</Alert> : null}
-        {config.error ? <Alert tone="danger">{describeDesignError(config.error)}</Alert> : null}
 
         <DialogFooter className="gap-2">
           <Button

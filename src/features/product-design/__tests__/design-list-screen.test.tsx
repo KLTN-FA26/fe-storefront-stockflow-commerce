@@ -33,7 +33,7 @@ async function cardOf(name: string) {
 }
 
 const render = (searchParams = "", onUrlUpdate?: OnUrlUpdateFunction) =>
-  renderWithProviders(<DesignListScreen products={[]} />, {
+  renderWithProviders(<DesignListScreen catalogue={{ status: "ready", products: [] }} />, {
     searchParams,
     ...(onUrlUpdate ? { onUrlUpdate } : {}),
   });

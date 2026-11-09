@@ -1,4 +1,10 @@
-import { keepPreviousData, queryOptions, skipToken, useQuery } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  queryOptions,
+  skipToken,
+  useQueries,
+  useQuery,
+} from "@tanstack/react-query";
 
 import { ApiError } from "@/lib/api/error";
 import { QUERY_TIMES } from "@/lib/api/query-client";
@@ -149,16 +155,25 @@ function noneWhenNotFound(error: unknown): null {
   throw error;
 }
 
-/** The variant's print configuration, or `null` when it has none (catalog BR-14: no "Thiết kế"). */
-export function usePrintConfig(productSlug: string, sku: string, enabled: boolean) {
-  return useQuery({
+/** The query of a variant's print configuration: `null` when it has none (a 404). */
+export function printConfigQuery(productSlug: string, sku: string) {
+  return queryOptions({
     queryKey: printConfigKeys.detail(productSlug, sku),
     queryFn: ({ signal }): Promise<PrintConfig | null> =>
       getPrintConfig(productSlug, sku, signal).catch(noneWhenNotFound),
-    enabled,
     retry: retryTransient,
     ...QUERY_TIMES.detail,
   });
+}
+
+/** The variant's print configuration, or `null` when it has none (catalog BR-14: no "Thiết kế"). */
+export function usePrintConfig(productSlug: string, sku: string, enabled: boolean) {
+  return useQuery({ ...printConfigQuery(productSlug, sku), enabled });
+}
+
+/** The print configurations of a product's variants, one query each, in the order of `skus`. */
+export function usePrintConfigs(productSlug: string, skus: readonly string[]) {
+  return useQueries({ queries: skus.map((sku) => printConfigQuery(productSlug, sku)) });
 }
 
 /** A link is replaced this long before it expires, so an image never starts loading on a dead one. */
