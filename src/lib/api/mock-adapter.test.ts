@@ -52,6 +52,14 @@ describe("mock adapter settles like a real HTTP adapter", () => {
     expect(error).toMatchObject({ status: 500, code: "MOCK_RANDOM_ERROR" });
   });
 
+  it("keeps the random server error for design requests in the full mock", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.01);
+
+    const error = await api.get("/designs/draft-count").catch((err: unknown) => err);
+
+    expect(error).toMatchObject({ status: 500, code: "MOCK_RANDOM_ERROR" });
+  });
+
   it("rejects an unmatched route with 404", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
 
@@ -100,5 +108,16 @@ describe("activateDesignMockAdapter", () => {
 
     await api.get("/designs/draft-count").catch(() => undefined);
     expect(previous).toHaveBeenCalledTimes(1);
+  });
+
+  // Ruling R17: Module 12 ships on the design-only mock, and its writes are not retried.
+  it("never fails a design request at random, whatever Math.random says", async () => {
+    // Below the full mock's 5% threshold: the full mock would answer 500 MOCK_RANDOM_ERROR here.
+    vi.spyOn(Math, "random").mockReturnValue(0.01);
+
+    const response = await api.get("/designs/draft-count");
+
+    expect(response.status).toBe(200);
+    expect(response.data).toMatchObject({ limit: 50 });
   });
 });

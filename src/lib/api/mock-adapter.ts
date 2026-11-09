@@ -1,13 +1,12 @@
 /**
- * Mock adapter for axios.
+ * Mock adapter for axios, in one of two modes chosen by `AppProviders` (no env var is read here):
  *
- * When `USE_MOCK=true` (server-only flag, see `src/lib/config.ts`) this
- * adapter intercepts every request and resolves it against `mock-data.ts` —
- * simulating server-side pagination, filtering, sorting, latency, and
- * occasional errors.
- *
- * `activateMockAdapter()` is only called (from `AppProviders`) when the
- * server-derived `isMock` flag is true — no env var is read here.
+ *  - `activateMockAdapter()`, when `USE_MOCK=true` (server-only flag, see `src/lib/config.ts`):
+ *    every request resolves against the mock route table — simulating server-side pagination,
+ *    filtering, sorting, latency, and an occasional random 500 (`MOCK_RANDOM_ERROR`).
+ *  - `activateDesignMockAdapter()`, otherwise while `DESIGN_API_MOCKED`: only the design API
+ *    (spec 2026-11-09 §5) is served by the mock, with latency but never a random 500; every other
+ *    request reaches the BE.
  *
  * **Only this file may import mock-data.ts** — enforced by CI grep.
  */
@@ -92,7 +91,9 @@ function settle(config: AxiosRequestConfig, res: MockResponse): MockResponse {
   if (res.status >= 200 && res.status < 300) return res;
   const body = res.data as { message?: unknown } | null | undefined;
   const message =
-    typeof body?.message === "string" ? body.message : `Request failed with status code ${res.status}`;
+    typeof body?.message === "string"
+      ? body.message
+      : `Request failed with status code ${res.status}`;
   const internal = config as InternalAxiosRequestConfig;
   throw new AxiosError(
     message,
@@ -114,7 +115,18 @@ function settle(config: AxiosRequestConfig, res: MockResponse): MockResponse {
  */
 let routesReady: Promise<void> | undefined;
 
-async function mockAdapter(config: AxiosRequestConfig): Promise<MockResponse> {
+type MockAdapterOptions = {
+  /**
+   * A 5% chance of a 500 `MOCK_RANDOM_ERROR` before the handler runs (resilience testing in the
+   * full mock). Off for the design-only mock: Module 12 ships on it, and mutations do not retry.
+   */
+  randomErrors: boolean;
+};
+
+async function mockAdapter(
+  config: AxiosRequestConfig,
+  { randomErrors }: MockAdapterOptions = { randomErrors: true },
+): Promise<MockResponse> {
   if (routesReady) await routesReady;
 
   const url = config.url ?? "/";
@@ -130,7 +142,7 @@ async function mockAdapter(config: AxiosRequestConfig): Promise<MockResponse> {
   await delay();
 
   // 5% random server error for resilience testing
-  if (Math.random() < 0.05) {
+  if (randomErrors && Math.random() < 0.05) {
     return settle(config, {
       status: 500,
       data: {
@@ -179,7 +191,9 @@ let designMockActive = false;
 
 /**
  * Serves only the design API from the mock; every other request keeps the adapter that was in
- * place. Calling it again is a no-op (React StrictMode runs the provider's initializer twice).
+ * place. Design requests get the mock's latency but never its random 500: this is how Module 12
+ * runs in a real build (ruling R17). Calling it again is a no-op (React StrictMode runs the
+ * provider's initializer twice).
  */
 export function activateDesignMockAdapter(): void {
   if (designMockActive) return;
@@ -193,7 +207,7 @@ export function activateDesignMockAdapter(): void {
   const realAdapter = axios.getAdapter(api.defaults.adapter ?? axios.defaults.adapter);
   const routed: AxiosAdapter = (config) =>
     isDesignMockPath(config.url)
-      ? (mockAdapter(config) as ReturnType<AxiosAdapter>)
+      ? (mockAdapter(config, { randomErrors: false }) as ReturnType<AxiosAdapter>)
       : realAdapter(config);
   api.defaults.adapter = routed;
   console.info("[mock-adapter] Activated for the design API only — other calls reach the BE");
