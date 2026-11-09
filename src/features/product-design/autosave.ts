@@ -33,9 +33,9 @@ export type Autosaver = {
   /** The user's "Thử lại" after an error, or an immediate attempt while offline. */
   retry(): void;
   /**
-   * Adopts a newer version of the design that another write produced (artifact upload,
-   * `PUT /specification`, a review request all bump the shared version): the next save sends it.
-   * A version that is not newer than the one held is ignored.
+   * Adopts a newer version of the design that another write produced (a rename, a submission, a
+   * review's return all bump the shared version, docs 12 BR-11): the next save sends it. A version
+   * that is not newer than the one held is ignored.
    */
   setVersion(version: number): void;
   /**

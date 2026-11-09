@@ -25,7 +25,7 @@ export const isUnsaved = (state: AutosaveState) => UNSAVED.has(state);
 
 /**
  * Whether the stored document is the editor's in `state`: nothing waits to be saved and no save
- * failed or lost to a newer version. A workflow step checks it after `flush()`.
+ * failed or lost to a newer version. The submission ("Gửi duyệt") checks it after `flush()`.
  */
 export const isStored = (state: AutosaveState) => !UNSAVED.has(state) && state !== "conflict";
 
@@ -43,10 +43,11 @@ export const ADOPT_RETRY_MS = 2000;
  * starts from `stored`, the document record the editor was loaded from (not the design, which may
  * have been read after another device saved). A newer version read with the design is adopted
  * only when the stored document (P3) still has the checksum of the one this tab last loaded or
- * saved: the version moved for an artifact, the specification or a workflow step. A save refused
- * with a 409 asks P3 the same question and, for a non-document write (QC answered between two
- * polls), is sent once more with the record's version. A document saved elsewhere puts autosave
- * into `conflict` instead, so it is never overwritten without a word.
+ * saved: the version moved for a write that left the document alone — a rename, or a review that
+ * returned the design (docs 12 BR-11: one version for the design and its document). A save
+ * refused with a 409 asks P3 the same question and, for such a write (a rename in another tab, a
+ * return answered between two polls), is sent once more with the record's version. A document
+ * saved elsewhere puts autosave into `conflict` instead, so it is never overwritten without a word.
  *
  * A read-only design (`readOnly`: it is not a DRAFT) is never saved. When the design leaves DRAFT
  * while it is open (another tab submitted it, a save was refused), what was not stored stays in

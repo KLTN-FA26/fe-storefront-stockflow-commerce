@@ -17,7 +17,7 @@ export function templateOf(
   return { ...config.template, minDpi, allowedFileFormats: [...formats], maxFileSizeMb };
 }
 
-/** A product status that still takes designs, as the print configuration sends it (docs 12 BR-01). */
+/** A product status that still takes designs, as the print configuration sends it (BR-01). */
 const USABLE_PRODUCT_STATUSES: ReadonlySet<string> = new Set(["APPROVED", "PUBLISHED"]);
 
 /**
