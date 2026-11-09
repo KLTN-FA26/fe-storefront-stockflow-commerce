@@ -34,7 +34,10 @@ export function LauncherNoPrintConfig({
   unavailable = false,
   backHref,
 }: {
-  /** The variant has a print configuration but is no longer ACTIVE (BLOCKED, OBSOLETE). */
+  /**
+   * The variant has a print configuration but takes no designs: it is no longer ACTIVE (BLOCKED,
+   * OBSOLETE), or its product is not APPROVED or PUBLISHED.
+   */
   unavailable?: boolean;
   backHref: string;
 }) {

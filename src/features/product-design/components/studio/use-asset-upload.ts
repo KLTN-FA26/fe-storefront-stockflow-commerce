@@ -20,7 +20,8 @@ const BYTES_PER_MB = 1024 * 1024;
 const SVG_TYPE = "image/svg+xml";
 
 export const UPLOAD_MESSAGES = {
-  unsupported: "Định dạng không được hỗ trợ. Hỗ trợ: PNG, JPG, WebP, SVG.",
+  unsupported: (formats: readonly string[]) =>
+    `Định dạng không được hỗ trợ. Hỗ trợ: ${formats.join(", ")}.`,
   tooLarge: (maxMb: number) => `Tệp lớn hơn ${maxMb} MB.`,
   tooManyPixels: "Ảnh vượt 40 megapixel.",
   unreadable: "Không đọc được kích thước ảnh.",
@@ -53,6 +54,27 @@ function declaredType(file: File): string {
 /** The `accept` of a file input: the template's formats and SVG, which is rasterised before it is sent. */
 export const acceptedFormats = (template: Pick<CustomizationTemplate, "allowedFileFormats">) =>
   [...template.allowedFileFormats, ".svg"].join(",");
+
+/** What a customer calls each format; any other MIME type reads as its subtype in capitals. */
+const FORMAT_NAMES: Record<string, string> = {
+  "image/png": "PNG",
+  "image/jpeg": "JPG",
+  "image/webp": "WebP",
+  [SVG_TYPE]: "SVG",
+};
+
+/**
+ * The formats a customer may pick, by name: the template's (its file rules', `templateOf`), then
+ * SVG, which is always taken because it is drawn to a PNG before it is sent.
+ */
+export function acceptedFormatNames(
+  template: Pick<CustomizationTemplate, "allowedFileFormats">,
+): string[] {
+  const names = template.allowedFileFormats.map(
+    (type) => FORMAT_NAMES[type] ?? type.replace(/^image\//, "").toUpperCase(),
+  );
+  return [...new Set([...names, FORMAT_NAMES[SVG_TYPE]!])];
+}
 
 /** The first of `files` (a drop or a paste may carry several; one image is placed at a time). */
 export const firstFile = (files: FileList | null | undefined): File | undefined => files?.[0];
@@ -113,7 +135,7 @@ export function useAssetUpload() {
       const type = declaredType(file);
       const isSvg = type === SVG_TYPE;
       if (!isSvg && !template.allowedFileFormats.includes(type)) {
-        throw new AssetRefusedError(UPLOAD_MESSAGES.unsupported);
+        throw new AssetRefusedError(UPLOAD_MESSAGES.unsupported(acceptedFormatNames(template)));
       }
       const maxBytes = template.maxFileSizeMb * BYTES_PER_MB;
       const tooLarge = new AssetRefusedError(UPLOAD_MESSAGES.tooLarge(template.maxFileSizeMb));

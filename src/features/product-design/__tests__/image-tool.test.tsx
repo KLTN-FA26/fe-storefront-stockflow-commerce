@@ -5,6 +5,7 @@ import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/lib/api/error";
+import { printConfigFor } from "@/lib/api/mock-fixtures/design-print-configs";
 import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/design-seed";
 import type { DesignMockStore } from "@/lib/api/mock-fixtures/design-store";
 import { settle } from "@/test/fake-backend";
@@ -143,6 +144,23 @@ describe("tool panel", () => {
 
     // The print configuration's formats (docs B34: PNG, JPG), and SVG drawn to PNG.
     expect(dropzone()).toHaveAttribute("accept", "image/png,image/jpeg,.svg");
+    expect(dropzone()).toHaveAccessibleDescription(/^PNG, JPG hoặc SVG, tối đa 50 MB\./);
+  });
+
+  it("takes the formats and the size limit from the file rules, not the template (R20)", async () => {
+    const user = userEvent.setup();
+    const { store: studio } = await designBackend({
+      printConfigFor: (slug, sku) => {
+        const config = printConfigFor(slug, sku);
+        const fileRules = { minDpi: 300, formats: ["image/png"], maxFileSizeMb: 5 };
+        return config && { ...config, fileRules };
+      },
+    });
+    await openStudio(await cupDraft(studio));
+    await chooseImageTool(user);
+
+    expect(dropzone()).toHaveAttribute("accept", "image/png,.svg");
+    expect(dropzone()).toHaveAccessibleDescription(/^PNG hoặc SVG, tối đa 5 MB\./);
   });
 });
 
@@ -168,9 +186,8 @@ describe("uploading an image", () => {
 
     await user.upload(dropzone(), new File(["GIF89a"], "anim.gif", { type: "image/gif" }));
 
-    expect(await alert()).toHaveTextContent(
-      "Định dạng không được hỗ trợ. Hỗ trợ: PNG, JPG, WebP, SVG.",
-    );
+    // The cup's file rules take PNG and JPG; an SVG is drawn to a PNG first, so it is taken too.
+    expect(await alert()).toHaveTextContent("Định dạng không được hỗ trợ. Hỗ trợ: PNG, JPG, SVG.");
     expect(post).not.toHaveBeenCalled();
   });
 

@@ -12,8 +12,18 @@ import { useDesignAssets, useDownloadLink } from "../../queries";
 import type { DesignAsset } from "../../types";
 import { placeImage } from "./image-actions";
 import { useEditorState, useStudio } from "./studio-context";
-import { acceptedFormats, firstFile, UPLOAD_MESSAGES, useAssetPicker } from "./use-asset-upload";
+import {
+  acceptedFormatNames,
+  acceptedFormats,
+  firstFile,
+  UPLOAD_MESSAGES,
+  useAssetPicker,
+} from "./use-asset-upload";
 import { usePasteImage } from "./use-paste-image";
+
+/** "PNG, JPG hoặc SVG": the names in order, the last one after "hoặc". */
+const formatList = (names: readonly string[]) =>
+  names.length > 1 ? `${names.slice(0, -1).join(", ")} hoặc ${names.at(-1)}` : names.join("");
 
 /** One stored image as a button that places it on the active surface. */
 function AssetThumb({
@@ -121,8 +131,8 @@ export function ImageToolPanel() {
           Kéo thả hoặc chọn ảnh
         </label>
         <p id={hintId} className="text-ink-tertiary text-xs">
-          PNG, JPG, WebP hoặc SVG, tối đa {template.maxFileSizeMb} MB. Có thể dán ảnh (Ctrl+V) khi
-          đang chọn khung vẽ.
+          {formatList(acceptedFormatNames(template))}, tối đa {template.maxFileSizeMb} MB. Có thể
+          dán ảnh (Ctrl+V) khi đang chọn khung vẽ.
         </p>
       </div>
       {busy ? (

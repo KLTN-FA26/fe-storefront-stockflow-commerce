@@ -2,9 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import { formatDateTime } from "@/lib/format";
 
-import { designEventDtoSchema } from "../schemas";
-import { defaultDesignName, designCardView, eventView } from "../selectors";
-import { approvedDto, design, eventDto, returnedDto } from "./fixtures";
+import { designEventDtoSchema, printConfigDtoSchema } from "../schemas";
+import {
+  defaultDesignName,
+  designCardView,
+  eventView,
+  isPrintConfigUsable,
+  templateOf,
+} from "../selectors";
+import { approvedDto, design, eventDto, printConfigDto, returnedDto } from "./fixtures";
 
 const event = (overrides: Record<string, unknown>) =>
   designEventDtoSchema.parse(eventDto(overrides));
@@ -80,5 +86,59 @@ describe("eventView (spec §3.3)", () => {
     expect(eventView(event({ type: "APPROVED", note: approval })).note).toBeNull();
     expect(eventView(event({ type: "DERIVED_FROM_SNAPSHOT", note: "snap" })).note).toBeNull();
     expect(eventView(event({ type: "RETURNED", note: "  " })).note).toBeNull();
+  });
+});
+
+const printConfig = (overrides: Record<string, unknown> = {}) =>
+  printConfigDtoSchema.parse(printConfigDto(overrides));
+
+describe("templateOf", () => {
+  it("takes the file limits from fileRules, not from the template (ruling R20)", () => {
+    const config = printConfig({
+      template: {
+        ...printConfigDto().template,
+        minDpi: 150,
+        allowedFileFormats: ["image/png", "image/jpeg", "image/webp"],
+        maxFileSizeMb: 100,
+      },
+      fileRules: { minDpi: 240, formats: ["image/png"], maxFileSizeMb: 20 },
+    });
+
+    expect(templateOf(config)).toMatchObject({
+      minDpi: 240,
+      allowedFileFormats: ["image/png"],
+      maxFileSizeMb: 20,
+    });
+  });
+
+  it("keeps the rest of the template as it is, and leaves the print configuration untouched", () => {
+    const config = printConfig();
+    const template = templateOf(config);
+
+    expect(template).toEqual({
+      ...config.template,
+      minDpi: 300,
+      allowedFileFormats: ["image/png", "image/jpeg"],
+      maxFileSizeMb: 50,
+    });
+    expect(template.allowedFileFormats).not.toBe(config.fileRules.formats);
+    expect(config.template.minDpi).toBe(printConfigDto().template.minDpi);
+  });
+});
+
+describe("isPrintConfigUsable", () => {
+  it.each(["APPROVED", "PUBLISHED"])("takes designs for an ACTIVE variant of a %s product", (s) => {
+    expect(
+      isPrintConfigUsable(printConfig({ product: { ...printConfigDto().product, status: s } })),
+    ).toBe(true);
+  });
+
+  it.each(["DRAFT", "ARCHIVED", "published"])("refuses a product that is %s", (status) => {
+    const product = { ...printConfigDto().product, status };
+    expect(isPrintConfigUsable(printConfig({ product }))).toBe(false);
+  });
+
+  it.each(["BLOCKED", "OBSOLETE"])("refuses a %s variant", (variantStatus) => {
+    expect(isPrintConfigUsable(printConfig({ variantStatus }))).toBe(false);
   });
 });

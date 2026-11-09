@@ -109,6 +109,21 @@ describe("usePreflight", () => {
     expect(report().issues.map((issue) => issue.ruleId)).toEqual(["VARIANT_UNAVAILABLE"]);
   });
 
+  it("fails an ACTIVE variant whose product is neither APPROVED nor PUBLISHED, as the server does", () => {
+    const { report, place, provide, elapse } = setup();
+    place();
+    elapse(300);
+
+    const product = { ...printConfigDto().product, status: "ARCHIVED" };
+    provide({ printConfig: printConfigOf({ product }) });
+    elapse(300);
+    expect(report().issues.map((issue) => issue.ruleId)).toEqual(["VARIANT_UNAVAILABLE"]);
+
+    provide({ printConfig: printConfigOf({ product: { ...product, status: "APPROVED" } }) });
+    elapse(300);
+    expect(report().result).toBe("Pass");
+  });
+
   it("recomputes when an image proves unusable", () => {
     const { editor, report, provide, elapse } = setup();
     const photo = {

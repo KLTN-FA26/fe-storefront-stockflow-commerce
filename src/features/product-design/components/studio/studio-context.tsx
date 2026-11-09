@@ -99,7 +99,7 @@ export type ViewerRef = { current: ProductViewer | null };
  */
 export type StudioServices = {
   editor: EditorController;
-  /** The print configuration's template (`printConfig.template`). */
+  /** The print configuration's template, file limits from its `fileRules` (`templateOf`). */
   template: CustomizationTemplate;
   surfaces: SurfaceSet;
   sizer: ElementSizer;

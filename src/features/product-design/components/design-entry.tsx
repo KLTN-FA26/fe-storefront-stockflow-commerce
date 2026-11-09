@@ -8,10 +8,12 @@ import { Button } from "@/components/ui/button";
 import { STORE_ROUTES } from "@/constants";
 
 import { usePrintConfig } from "../queries";
+import { isPrintConfigUsable } from "../selectors";
 
 /**
  * The design button of the product page for the chosen variant (catalog §4.4, BR-14): "Thiết kế"
- * when the variant has an ACTIVE print configuration; otherwise the reason and the way to Sales.
+ * when the variant has a usable print configuration (an ACTIVE variant of an APPROVED or PUBLISHED
+ * product); otherwise the reason and the way to Sales.
  */
 export function DesignEntry({ productSlug, sku }: { productSlug: string; sku: string }) {
   const config = usePrintConfig(productSlug, sku, true);
@@ -31,7 +33,7 @@ export function DesignEntry({ productSlug, sku }: { productSlug: string; sku: st
       </Button>
     );
   }
-  if (config.data?.variantStatus === "ACTIVE") {
+  if (config.data && isPrintConfigUsable(config.data)) {
     return (
       <Button asChild variant="secondary" className="min-h-11 rounded-[var(--r-md)]">
         <Link href={STORE_ROUTES.design.newFor(productSlug, sku)}>

@@ -9,7 +9,7 @@ import { useSignedIn } from "@/lib/auth/use-signed-in";
 import { describeDesignError } from "../errors";
 import { useCreateDesign } from "../mutations";
 import { useDraftCount, usePrintConfig } from "../queries";
-import { defaultDesignName } from "../selectors";
+import { defaultDesignName, isPrintConfigUsable } from "../selectors";
 import type { Design } from "../types";
 import {
   LauncherDraftLimit,
@@ -22,14 +22,15 @@ import {
 
 /**
  * `/design/new?product=&sku=` (spec 2026-11-09 §6.2), checked in order: signed in; (the desktop
- * gate sits in the layout, so a phone never gets here); the variant has an ACTIVE print
- * configuration; fewer than 50 drafts; then create the draft and open its studio.
+ * gate sits in the layout, so a phone never gets here); the variant has a usable print
+ * configuration (`isPrintConfigUsable`); fewer than 50 drafts; then create the draft and open its
+ * studio.
  */
 export function NewDesignScreen({ product, sku }: { product: string; sku: string }) {
   const { replace } = useRouter();
   const signedIn = useSignedIn();
   const config = usePrintConfig(product, sku, signedIn === true);
-  const printable = config.data?.variantStatus === "ACTIVE" ? config.data : null;
+  const printable = config.data && isPrintConfigUsable(config.data) ? config.data : null;
   const count = useDraftCount(printable !== null);
   const create = useCreateDesign();
   // The in-flight create of this visit, by link: a re-run effect (StrictMode) reuses it.

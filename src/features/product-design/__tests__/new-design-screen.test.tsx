@@ -4,7 +4,7 @@ import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/lib/api/error";
-import { MOCK_BLOCKED_SKU } from "@/lib/api/mock-fixtures/design-print-configs";
+import { MOCK_BLOCKED_SKU, printConfigFor } from "@/lib/api/mock-fixtures/design-print-configs";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { NewDesignScreen } from "../components/new-design-screen";
@@ -97,6 +97,21 @@ describe("NewDesignScreen", () => {
 
     expect(await screen.findByText(/không còn nhận thiết kế/, undefined, WAIT)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Chat với Sale" })).toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("says a variant of a product that takes no designs any more is unavailable", async () => {
+    const { post } = await designBackend({
+      printConfigFor: (slug, sku) => {
+        const config = printConfigFor(slug, sku);
+        return config && { ...config, product: { ...config.product, status: "ARCHIVED" } };
+      },
+    });
+    renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
+
+    expect(
+      await screen.findByText("Quy cách này hiện không còn nhận thiết kế.", undefined, WAIT),
+    ).toBeInTheDocument();
     expect(post).not.toHaveBeenCalled();
   });
 

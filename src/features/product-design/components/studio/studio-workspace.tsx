@@ -14,6 +14,7 @@ import {
   type FontRegistry,
 } from "../../engine";
 import { DESIGN_STATUS_META } from "../../lifecycle";
+import { templateOf } from "../../selectors";
 import type { Design, DesignAsset, DesignDocumentRecord, PrintConfig } from "../../types";
 import { CanvasStage } from "./canvas-stage";
 import { ConflictDialog } from "./conflict-dialog";
@@ -65,7 +66,7 @@ export type StudioWorkspaceProps = {
   design: Design;
   /** The stored document the editor opens with; autosave starts from its version. */
   record: DesignDocumentRecord;
-  /** The variant's print configuration: its template is the studio's. */
+  /** The variant's print configuration: its template, with the limits of its file rules, is the studio's. */
   printConfig: PrintConfig;
   assets: readonly DesignAsset[];
   fonts: FontRegistry;
@@ -81,7 +82,8 @@ export type StudioWorkspaceProps = {
  */
 export function StudioWorkspace(props: StudioWorkspaceProps) {
   const { design, printConfig, fonts, productPhoto } = props;
-  const { template } = printConfig;
+  // The file rules decide the upload limits, the DPI floor and the formats (ruling R20).
+  const template = useMemo(() => templateOf(printConfig), [printConfig]);
   const { status } = design;
   const readOnly = !DESIGN_STATUS_META[status].editable;
   const editor = useEditor({ template, document: props.record.document, readOnly });

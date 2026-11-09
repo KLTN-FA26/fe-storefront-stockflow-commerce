@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { runPreflight, type PreflightReport, type PreflightVariant } from "../../engine";
+import { isPrintConfigUsable } from "../../selectors";
 import type { PrintConfig } from "../../types";
 import { useEditorState, useStudio } from "./studio-context";
 
@@ -10,13 +11,14 @@ import { useEditorState, useStudio } from "./studio-context";
 export const PREFLIGHT_DEBOUNCE_MS = 300;
 
 /**
- * What the preflight checks of the variant (ruling R6): it takes designs while `ACTIVE`, and a
- * submit needs its carton spec (docs 12 BR-05, B25). The server checks both again on submit.
+ * What the preflight checks of the variant (ruling R6): it takes designs while `ACTIVE` and its
+ * product is usable (`isPrintConfigUsable`), and a submit needs its carton spec (docs 12 BR-05,
+ * B25). The server checks both again on submit.
  */
 export const preflightVariant = (
-  config: Pick<PrintConfig, "variantStatus" | "hasCartonSpec">,
+  config: Pick<PrintConfig, "variantStatus" | "product" | "hasCartonSpec">,
 ): PreflightVariant => ({
-  usable: config.variantStatus === "ACTIVE",
+  usable: isPrintConfigUsable(config),
   hasCartonSpec: config.hasCartonSpec,
 });
 
@@ -30,7 +32,7 @@ export const preflightVariant = (
 export function usePreflight(): PreflightReport {
   const { template, surfaces, sizer, assetStatus, fontStatus, printConfig } = useStudio();
   const document = useEditorState((state) => state.document);
-  const { variantStatus, hasCartonSpec } = printConfig;
+  const { usable, hasCartonSpec } = preflightVariant(printConfig);
   const input = useMemo(
     () => ({
       document,
@@ -39,9 +41,9 @@ export function usePreflight(): PreflightReport {
       sizer,
       assets: assetStatus,
       fontStatus,
-      variant: preflightVariant({ variantStatus, hasCartonSpec }),
+      variant: { usable, hasCartonSpec },
     }),
-    [document, template, surfaces, sizer, assetStatus, fontStatus, variantStatus, hasCartonSpec],
+    [document, template, surfaces, sizer, assetStatus, fontStatus, usable, hasCartonSpec],
   );
 
   // The input the report is of: the first one at once, each later one after the wait.

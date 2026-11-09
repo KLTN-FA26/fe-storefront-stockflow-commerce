@@ -1,7 +1,31 @@
 import { formatDateTime } from "@/lib/format";
 
+import type { CustomizationTemplate } from "./engine/template/schema";
 import { isReturned } from "./lifecycle";
-import type { Design, DesignEvent, DesignEventType, DesignStatus } from "./types";
+import type { Design, DesignEvent, DesignEventType, DesignStatus, PrintConfig } from "./types";
+
+/**
+ * The template the studio works with: the print configuration's own, with its file limits taken
+ * from `fileRules`, the source of truth the server checks uploads and submissions against (ruling
+ * R20; spec §7 names `fileRules.minDpi`). Every screen that takes a template from a print
+ * configuration takes it from here.
+ */
+export function templateOf(
+  config: Pick<PrintConfig, "template" | "fileRules">,
+): CustomizationTemplate {
+  const { minDpi, formats, maxFileSizeMb } = config.fileRules;
+  return { ...config.template, minDpi, allowedFileFormats: [...formats], maxFileSizeMb };
+}
+
+/** A product status that still takes designs, as the print configuration sends it (docs 12 BR-01). */
+const USABLE_PRODUCT_STATUSES: ReadonlySet<string> = new Set(["APPROVED", "PUBLISHED"]);
+
+/**
+ * Whether a variant takes designs: it is ACTIVE and its product is usable (docs 12 BR-01, catalog
+ * BR-14). The server answers 422 VARIANT_UNAVAILABLE to a create, and fails the submit, otherwise.
+ */
+export const isPrintConfigUsable = (config: Pick<PrintConfig, "variantStatus" | "product">) =>
+  config.variantStatus === "ACTIVE" && USABLE_PRODUCT_STATUSES.has(config.product.status);
 
 const readableDateTime = (iso: string | null | undefined) =>
   iso && !Number.isNaN(Date.parse(iso)) ? formatDateTime(iso) : null;

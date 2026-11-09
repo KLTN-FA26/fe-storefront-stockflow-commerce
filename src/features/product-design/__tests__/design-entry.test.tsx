@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { MOCK_BLOCKED_SKU } from "@/lib/api/mock-fixtures/design-print-configs";
+import { MOCK_BLOCKED_SKU, printConfigFor } from "@/lib/api/mock-fixtures/design-print-configs";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { DesignEntry } from "../components/design-entry";
@@ -37,6 +37,19 @@ describe("DesignEntry", () => {
 
   it("does the same for a variant that is no longer ACTIVE", async () => {
     renderWithProviders(<DesignEntry productSlug="ly-giay-kraft-16oz" sku={MOCK_BLOCKED_SKU} />);
+
+    expect(await screen.findByText("Quy cách này chưa nhận thiết kế")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Thiết kế" })).not.toBeInTheDocument();
+  });
+
+  it("does the same for an ACTIVE variant of a product that is not APPROVED or PUBLISHED", async () => {
+    await designBackend({
+      printConfigFor: (slug, sku) => {
+        const config = printConfigFor(slug, sku);
+        return config && { ...config, product: { ...config.product, status: "DRAFT" } };
+      },
+    });
+    renderWithProviders(<DesignEntry productSlug="ly-giay-2-lop-12oz" sku="CUP-PAPER-12OZ-WHT" />);
 
     expect(await screen.findByText("Quy cách này chưa nhận thiết kế")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Thiết kế" })).not.toBeInTheDocument();
