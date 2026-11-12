@@ -157,11 +157,11 @@ export const VEHICLE_MILESTONE_LABEL: Record<VehicleMilestone["milestone"], stri
 
 /** Outcome of one shipment on a vehicle, in the customer's wording. */
 export const VEHICLE_SHIPMENT_STATUS_LABEL: Record<VehicleShipment["status"], string> = {
-  READY_TO_DISPATCH: "Chờ bàn giao vận chuyển",
-  HANDED_OVER: "Đã bàn giao vận chuyển",
+  READY_TO_DISPATCH: "Chưa giao",
+  HANDED_OVER: "Đang giao",
   DELIVERED: "Đã giao",
-  DELIVERY_FAILED: "Giao không thành công",
-  RETURNED: "Đã hoàn về kho",
+  DELIVERY_FAILED: "Giao thất bại",
+  RETURNED: "Đã trả",
   CANCELLED: "Đã huỷ",
   UNKNOWN: "Đang cập nhật",
 };

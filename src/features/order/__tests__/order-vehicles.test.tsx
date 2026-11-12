@@ -63,7 +63,7 @@ describe("OrderVehiclesCard", () => {
     expect(screen.getByText("51C-123.45")).toBeInTheDocument();
     expect(screen.getAllByText("Đã lấy hàng").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Đang giao").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Đã bàn giao vận chuyển").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Đang giao").length).toBeGreaterThan(0);
   });
 
   it("says 'Đang cập nhật' for a missing waybill or plate", async () => {
