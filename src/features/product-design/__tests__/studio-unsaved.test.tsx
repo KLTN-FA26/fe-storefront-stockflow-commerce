@@ -95,6 +95,7 @@ describe("edits that are not stored yet", () => {
     online = true;
     const second = await openStudio(id);
     const offer = await screen.findByRole("dialog", { name: "Có thay đổi chưa được lưu" });
+    expect(within(offer).getByText(/^Lần trước bạn rời trang khi thay đổi/)).toBeInTheDocument();
     await userEvent.click(within(offer).getByRole("button", { name: "Khôi phục bản chưa lưu" }));
     expect(second.seen.current!.editor.store.getState().document).toMatchObject(red);
     expect(await screen.findByText(SAVED, undefined, { timeout: 4000 })).toBeInTheDocument();

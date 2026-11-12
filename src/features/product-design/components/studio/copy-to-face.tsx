@@ -10,8 +10,10 @@ import {
   PopoverDescription,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { cn } from "@/lib/cn";
 
 import type { PrintAreaCode } from "../../engine";
+import { BAR_HIT } from "./bar-controls";
 import { copyFace } from "./element-actions";
 import { STUDIO_ANNOUNCEMENTS } from "./studio-announcer";
 import { useEditorState, useStudio } from "./studio-context";
@@ -21,7 +23,7 @@ import { useEditorState, useStudio } from "./studio-context";
  * the face picked from the list; every copied element is kept on that face (undo brings the old
  * face back). Nothing for a template with a single print area.
  */
-export function CopyToFace() {
+export function CopyToFace({ compact = false }: { compact?: boolean }) {
   const services = useStudio();
   const { surfaces, template, announce } = services;
   const active = useEditorState((s) => s.activeSurface);
@@ -47,11 +49,16 @@ export function CopyToFace() {
         <Button
           type="button"
           variant="outline"
-          className="min-h-11 w-full rounded-[var(--r-md)]"
+          className={
+            compact
+              ? cn("size-9 shrink-0 rounded-[var(--r-md)]", BAR_HIT)
+              : "min-h-11 w-full rounded-[var(--r-md)]"
+          }
+          aria-label={compact ? "Sao chép sang mặt khác" : undefined}
           disabled={readOnly || empty}
         >
-          <Copy aria-hidden className="mr-1.5 size-4" />
-          Sao chép sang mặt khác
+          <Copy aria-hidden className={compact ? "size-4" : "mr-1.5 size-4"} />
+          {compact ? null : "Sao chép sang mặt khác"}
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="bg-bg-surface rounded-[var(--r-lg)]">

@@ -1,8 +1,10 @@
 import type { Ctx2D, RenderEnv } from "./execute";
-import { recallLayer, rememberLayer } from "./layer-cache";
+import { keptLayers, recallLayer, rememberLayer } from "./layer-cache";
 import type { DrawOp } from "./ops";
 
 type PatternOp = Extract<DrawOp, { op: "pattern" }>;
+/** What a motif tile needs of the env: its resolution, its layers and where they are kept. */
+type TileEnv = Pick<RenderEnv, "pxPerMm" | "createLayer" | "layerCache" | "transientResolution">;
 
 /**
  * Smallest pitch drawn. A pattern is made of one motif per pitch over the whole surface, so a
@@ -131,17 +133,18 @@ function motifTile(
   pitch: number,
   [tw, th]: [number, number],
   [w, h]: [number, number],
-  env: Pick<RenderEnv, "pxPerMm" | "createLayer" | "layerCache">,
+  env: TileEnv,
 ): CanvasImageSource {
+  const cache = keptLayers(env);
   const key = `pattern:${op.patternId}:${op.colors[1]}:${pitch}@${env.pxPerMm}`;
-  const cached = env.layerCache === undefined ? undefined : recallLayer(env.layerCache, key);
+  const cached = cache === undefined ? undefined : recallLayer(cache, key);
   if (cached !== undefined) return cached;
   const tile = env.createLayer(w, h);
   tile.ctx.scale(w / tw, h / th);
   tile.ctx.fillStyle = op.colors[1];
   tile.ctx.strokeStyle = op.colors[1];
   MOTIFS[op.patternId](tile.ctx, Math.max(tw, th) + pitch, pitch);
-  if (env.layerCache !== undefined) rememberLayer(env.layerCache, key, tile.source);
+  if (cache !== undefined) rememberLayer(cache, key, tile.source);
   return tile.source;
 }
 
@@ -157,7 +160,7 @@ function tiledFill(
   op: PatternOp,
   reach: number,
   pitch: number,
-  env: Pick<RenderEnv, "pxPerMm" | "createLayer" | "layerCache"> | undefined,
+  env: TileEnv | undefined,
 ): boolean {
   if (env === undefined || !canPattern(ctx) || !(env.pxPerMm > 0)) return false;
   const [across, down] = PERIOD[op.patternId];
@@ -191,11 +194,7 @@ const MOTIFS: Record<PatternOp["patternId"], Motif> = {
  * With an `env` (its resolution and layers) and a context that makes patterns, the motif is drawn
  * once and repeated by the canvas; otherwise motif by motif.
  */
-export function drawPattern(
-  ctx: Ctx2D,
-  op: PatternOp,
-  env?: Pick<RenderEnv, "pxPerMm" | "createLayer" | "layerCache">,
-): void {
+export function drawPattern(ctx: Ctx2D, op: PatternOp, env?: TileEnv): void {
   const { bounds, patternId, colors, rotationDeg } = op;
   const pitch = Number.isFinite(op.scale) ? Math.max(op.scale, MIN_PITCH_MM) : MIN_PITCH_MM;
   const { x, y, width, height } = bounds;

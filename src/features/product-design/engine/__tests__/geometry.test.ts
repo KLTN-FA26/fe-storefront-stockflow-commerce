@@ -11,6 +11,7 @@ import {
   translate,
 } from "../geometry/affine";
 import { boundsOf, pointInPolygon } from "../geometry/polygon";
+import { sectorBounds } from "../geometry/sector";
 import { simplifyRdp } from "../geometry/simplify";
 import { effectiveDpi, mmToPt, mmToPx, ptToMm, pxToMm } from "../geometry/units";
 
@@ -126,4 +127,47 @@ describe("geometry primitives", () => {
     const zigzag = Array.from({ length: 50_000 }, (_, i): [number, number] => [i, i % 2]);
     expect(simplifyRdp(zigzag, 5)).toEqual([zigzag[0], zigzag[49_999]]);
   });
+});
+
+describe("sectorBounds", () => {
+  /** Points of the annular sector, densely: 20 001 angles across it, on five radii between its two. */
+  const denseBox = (
+    centre: { x: number; y: number },
+    [r0, r1]: readonly [number, number],
+    from: number,
+    to: number,
+  ) => {
+    const points = [];
+    for (let i = 0; i <= 20_000; i++) {
+      const phi = from + ((to - from) * i) / 20_000;
+      for (let j = 0; j <= 4; j++) {
+        const r = r0 + ((r1 - r0) * j) / 4;
+        points.push({ x: centre.x + r * Math.sin(phi), y: centre.y - r * Math.cos(phi) });
+      }
+    }
+    return boundsOf(points);
+  };
+
+  it.each([
+    { name: "across the top", centre: { x: 10, y: 300 }, radii: [150, 260], from: -0.6, to: 0.7 },
+    { name: "between two axes", centre: { x: 0, y: 0 }, radii: [50, 120], from: 0.2, to: 1.2 },
+    { name: "across three axes", centre: { x: -5, y: 8 }, radii: [80, 100], from: -2.5, to: 2.9 },
+    { name: "across the bottom", centre: { x: 3, y: -4 }, radii: [30, 40], from: 1, to: 4 },
+    { name: "given backwards", centre: { x: 0, y: 200 }, radii: [100, 60], from: 0.9, to: -0.4 },
+    { name: "almost a ring", centre: { x: 1, y: 2 }, radii: [20, 25], from: -3.1, to: 3.1 },
+  ] as const)(
+    "is the box of a dense sampling of the sector ($name)",
+    ({ centre, radii, from, to }) => {
+      const exact = sectorBounds(centre, radii, from, to);
+      const dense = denseBox(centre, radii, from, to);
+      for (const side of ["x", "y", "width", "height"] as const) {
+        expect(exact[side]).toBeCloseTo(dense[side], 4);
+      }
+      // Never smaller: every sampled point lies inside it.
+      expect(exact.x).toBeLessThanOrEqual(dense.x + 1e-9);
+      expect(exact.y).toBeLessThanOrEqual(dense.y + 1e-9);
+      expect(exact.x + exact.width).toBeGreaterThanOrEqual(dense.x + dense.width - 1e-9);
+      expect(exact.y + exact.height).toBeGreaterThanOrEqual(dense.y + dense.height - 1e-9);
+    },
+  );
 });

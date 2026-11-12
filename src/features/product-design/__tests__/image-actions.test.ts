@@ -1,13 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  fitPlacement,
-  placeImage,
-  replacementPatch,
-  safeBox,
-  svgRasterWidthPx,
-} from "../components/studio/image-actions";
 import { SCALE_RANGE } from "../components/studio/element-actions";
+import { placeImage, replacementPatch, svgRasterWidthPx } from "../components/studio/image-actions";
+import { fitPlacement, safeBox } from "../components/studio/safe-fit";
 import {
   alongEdges,
   createEditor,
@@ -165,8 +160,8 @@ describe("replacementPatch", () => {
 });
 
 describe("placeImage", () => {
-  // The cup's safe area is a sector: a frame as tall as its centre line pokes its top corners past
-  // the outer arc (and a wide one its bottom corners past the inner one).
+  // The cup's safe area is a sector. A new image there is bent along the body, so its outline
+  // follows the arcs; it must still end up wholly inside.
   it.each([
     ["1:1", 1000, 1000],
     ["4:3", 1200, 900],
@@ -189,8 +184,9 @@ describe("placeImage", () => {
       [1500, 1000],
       [500, 1000],
     ] as const) {
+      // Bent along the body, the frame follows the sector, so it may reach the full safe height...
       const { element, outline } = placed(cup12oz, asset(widthPx, heightPx));
-      expect(element.heightMm).toBeLessThan(height); // shrunk past the safe height...
+      expect(element.heightMm).toBeLessThanOrEqual(height + 1e-9);
       expect(outline(1.02).some((point) => !cupBody.contains(point, "safe"))).toBe(true); // ...and no further
     }
     const wide = placed(cup12oz, asset(3000, 1000)).element; // fits as it is: the 60 % rule
@@ -203,6 +199,11 @@ describe("placeImage", () => {
     expect(tall.widthMm).toBeCloseTo(135, 6);
     const wide = placed(bagM, asset(3000, 1000)).element;
     expect(wide.widthMm).toBeCloseTo(150, 6); // 60 % of the 250 mm safe width
+  });
+
+  it("bends a new image along the cup body and keeps it rigid on a flat face", () => {
+    expect(placed(cup12oz, asset(1000, 1000)).element.wrap).toBe(true);
+    expect(placed(bagM, asset(1000, 1000)).element.wrap).toBeUndefined();
   });
 
   it("selects the image, hands over to the select tool and says so", () => {

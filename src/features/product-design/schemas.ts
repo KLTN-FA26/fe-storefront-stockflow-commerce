@@ -22,10 +22,14 @@ const sizeBytes = z.number().int().nonnegative();
 const version = z.number().int().nonnegative();
 const code = z.string().min(1);
 
+/** docs 12 §3: a design's name has 1–200 characters, a review's return reason 1–2,000. */
+const NAME_MAX = 200;
+const REASON_MAX = 2000;
+
 /** GET /designs/{id} and every write that answers the design. */
 export const designDtoSchema = z.object({
   id: beId(),
-  name: z.string().min(1),
+  name: z.string().min(1).max(NAME_MAX),
   status: designStatusSchema,
   product: z.object({ slug: code, title: z.string().min(1) }),
   variant: z.object({ sku: code, label: z.string().min(1) }),
@@ -33,7 +37,9 @@ export const designDtoSchema = z.object({
   version,
   projectId: beId().nullable(), // part E; always null in part A
   sourceSnapshotId: beId().nullable(),
-  lastReturn: z.object({ reason: z.string().min(1), returnedAt: instant }).nullable(),
+  lastReturn: z
+    .object({ reason: z.string().min(1).max(REASON_MAX), returnedAt: instant })
+    .nullable(),
   /** The latest CUSTOMER_PREVIEW, for cards. */
   previewUrl: z.string().min(1).nullable(),
   createdAt: instant,
@@ -171,7 +177,7 @@ const designName = z
   .string()
   .trim()
   .min(1, "Hãy đặt tên cho thiết kế")
-  .max(200, "Tên tối đa 200 ký tự");
+  .max(NAME_MAX, "Tên tối đa 200 ký tự");
 
 /** POST /designs: a design starts from a variant (docs 12 §4.1, BR-01, BR-02). */
 export const createDesignInputSchema = z.object({
@@ -185,5 +191,5 @@ export const renameDesignInputSchema = z.object({ name: designName });
 
 /** docs 12 BR-06: a return needs a reason of 1–2,000 characters. */
 export const returnReasonInputSchema = z.object({
-  reason: z.string().trim().min(1, "Hãy nhập lý do").max(2000, "Lý do tối đa 2000 ký tự"),
+  reason: z.string().trim().min(1, "Hãy nhập lý do").max(REASON_MAX, "Lý do tối đa 2000 ký tự"),
 });

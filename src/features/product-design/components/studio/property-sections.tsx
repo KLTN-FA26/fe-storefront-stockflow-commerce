@@ -10,7 +10,7 @@ import type {
   TextElement,
 } from "../../engine";
 
-/** What a type-specific section of the Properties panel is given. */
+/** What a type-specific section of the context bar is given. */
 export type PropertySectionProps<T extends DesignElement> = {
   element: T;
   code: PrintAreaCode;
@@ -18,7 +18,7 @@ export type PropertySectionProps<T extends DesignElement> = {
 };
 
 /**
- * The Properties panel's extension point: the section each element type adds under the common
+ * The context bar's extension point: the section each element type adds before the common
  * fields (the image, text and brush tools fill these in).
  */
 export type PropertySections = {

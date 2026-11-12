@@ -3,9 +3,9 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
-import { recordPreflightFailure, submitDesign } from "../../api";
-import { documentChecksum, runPreflight } from "../../engine";
-import type { DesignDocument, PreflightReport } from "../../engine";
+import { submitDesign } from "../../api";
+import { documentChecksum } from "../../engine";
+import type { PreflightReport } from "../../engine";
 import {
   isDesignConflict,
   isDesignGone,
@@ -14,29 +14,25 @@ import {
   preflightIssuesOf,
 } from "../../errors";
 import { invalidateDesign } from "../../mutations";
-import { designDocumentQuery, designKeys } from "../../queries";
+import { designKeys } from "../../queries";
 import type { Design, ReportedPreflightIssue } from "../../types";
-import { ExportError } from "./export-renderer";
 import { buildSubmissionBundle, type BundleStep, type SubmissionBundle } from "./submission-bundle";
+import {
+  assertStoredIs,
+  DocumentChangedError,
+  DocumentEditedError,
+  preflightStored,
+  recordFailure,
+  type Checked,
+  type Drawn,
+  type SubmissionContext,
+} from "./submission-checks";
 import { useStudio } from "./studio-context";
-import { isStored } from "./use-autosave";
-import { preflightVariant } from "./use-preflight";
 
 export type SubmitStep = "idle" | "checking" | BundleStep | "upload" | "done" | "error";
 
-const MESSAGES = {
-  notSaved: "Thiết kế chưa lưu được nên chưa thể gửi duyệt. Hãy lưu lại rồi thử lại.",
-  changed: "Thiết kế vừa thay đổi ở nơi khác. Hãy kiểm tra lại rồi gửi lại.",
-} as const;
-
-/**
- * The stored document is no longer the one the files were made from (another tab or device saved
- * it): nothing more is sent, autosave goes into conflict and the next run exports anew.
- */
-export class DocumentChangedError extends ExportError {}
-
 /** What a run has made, kept so a retry resumes at the upload without drawing again. */
-type Work = { bundle: SubmissionBundle; report: PreflightReport; checksum: string };
+type Work = Drawn & { bundle: SubmissionBundle; report: PreflightReport };
 
 type State = {
   step: SubmitStep;
@@ -47,9 +43,6 @@ type State = {
 };
 const IDLE: State = { step: "idle", fraction: 0, issues: null };
 
-/** What a preflight that passed was run on. */
-type Checked = { document: DesignDocument; report: PreflightReport };
-
 /**
  * "Gửi duyệt" (spec §6.4): saves what is pending, runs the preflight on exactly what is stored,
  * records a client-side Fail (no files are made), else draws the bundle, checks the stored
@@ -58,25 +51,14 @@ type Checked = { document: DesignDocument; report: PreflightReport };
  */
 export function useDesignSubmission(design: Design) {
   const services = useStudio();
-  const { editor, template, surfaces, autosave, exportRenderer: renderer } = services;
+  const { template, surfaces, autosave, exportRenderer: renderer } = services;
   const client = useQueryClient();
+  const ctx: SubmissionContext = { services, client, design };
   const work = useRef<Work | null>(null);
   const busy = useRef(false);
   /** The attempt succeeded: `retry()` resumes a failed attempt only, so it must not submit again. */
   const isDone = useRef(false);
   const [state, setState] = useState<State>(IDLE);
-
-  /** The stored document, read fresh: it carries the design's version counter and the checksum. */
-  const readStored = () => client.fetchQuery({ ...designDocumentQuery(design.id), staleTime: 0 });
-  /**
-   * Refuses to go on unless the stored document is still the drawn one (same checksum); answers
-   * the version of that very read, so the version sent is the one of the document verified.
-   */
-  const assertStoredIs = async (checksum: string) => {
-    const stored = await readStored();
-    if (stored.checksum !== checksum) throw new DocumentChangedError(MESSAGES.changed);
-    return stored.version;
-  };
 
   /**
    * Flush and run the preflight on what is then stored. A Fail is recorded (docs 12 §5.3
@@ -84,36 +66,15 @@ export function useDesignSubmission(design: Design) {
    */
   async function inspect(): Promise<Checked | null> {
     setState({ step: "checking", fraction: 0, issues: null });
-    await autosave.flush();
-    if (!isStored(autosave.latestState())) throw new ExportError(MESSAGES.notSaved);
-    const document = editor.store.getState().document;
-    const report = runPreflight({
-      document,
-      template,
-      surfaces,
-      sizer: services.sizer,
-      assets: services.assetStatus,
-      fontStatus: services.fontStatus,
-      variant: preflightVariant(services.printConfig),
-    });
-    if (report.result === "Fail") {
-      // The issues are shown at once; the attempt is recorded after (docs 12 §5.3). A record that
-      // fails does not hide them.
-      setState({ step: "error", fraction: 0, issues: report.issues });
-      try {
-        const { version } = await readStored();
-        await recordPreflightFailure(design.id, { version, issues: report.issues });
-        // "Lịch sử" lists the attempt it just recorded.
-        void client.invalidateQueries({ queryKey: designKeys.history(design.id) });
-      } catch (error) {
-        if (isDesignStateChanged(error) || isDesignGone(error)) {
-          void invalidateDesign(client, design.id);
-        }
-        setState({ step: "error", fraction: 0, error, issues: report.issues });
-      }
-      return null;
-    }
-    return { document, report };
+    const checked = await preflightStored(ctx);
+    if (checked.report.result === "Pass") return checked;
+    // The issues are shown at once; the attempt is recorded after (docs 12 §5.3). A record that
+    // fails does not hide them.
+    const { issues } = checked.report;
+    setState({ step: "error", fraction: 0, issues });
+    const error = await recordFailure(ctx, issues);
+    if (error !== undefined) setState({ step: "error", fraction: 0, error, issues });
+    return null;
   }
 
   /** Flush, preflight, and (when it passes) draw the bundle. Null when the preflight failed. */
@@ -121,20 +82,21 @@ export function useDesignSubmission(design: Design) {
     const checked = await inspect();
     if (!checked) return null;
     const { document, report } = checked;
-    const checksum = await documentChecksum(document);
-    // Saved, yet not what is stored: another tab or device saved since this one loaded it.
-    await assertStoredIs(checksum);
+    const drawn = { document, checksum: await documentChecksum(document) };
+    // Saved, yet not what is stored (another tab or device saved since this one loaded it), or
+    // already edited again: nothing is drawn.
+    await assertStoredIs(ctx, drawn);
     const bundle = await buildSubmissionBundle({
       name: design.name,
       document,
       template,
       surfaces,
       report,
-      checksum,
+      checksum: drawn.checksum,
       renderer,
       onStep: (step, fraction) => setState({ step, fraction, issues: null }),
     });
-    return { bundle, report, checksum };
+    return { ...drawn, bundle, report };
   }
 
   async function execute() {
@@ -145,12 +107,15 @@ export function useDesignSubmission(design: Design) {
       const w = work.current;
       if (!w) return; // the preflight failed: `prepare` set the issues
       setState({ step: "upload", fraction: 0, issues: null });
-      const version = await assertStoredIs(w.checksum);
+      const version = await assertStoredIs(ctx, w);
       const submitted = await submitDesign(design.id, {
         version,
         preflight: w.report,
         files: w.bundle,
       });
+      // Announced to the status follow: the re-read below covers the move, so it does not read the
+      // same queries a second time.
+      services.ownStatusMove(submitted.status);
       client.setQueryData(designKeys.detail(design.id), submitted);
       autosave.setVersion(submitted.version); // the next save sends the version the submit left
       work.current = null;
@@ -172,6 +137,9 @@ export function useDesignSubmission(design: Design) {
       // offers the reload. The next run draws anew.
       work.current = null;
       autosave.conflict();
+    } else if (error instanceof DocumentEditedError) {
+      // This tab changed the design meanwhile: no conflict, sending again draws the latest.
+      work.current = null;
     } else if (
       isPreflightRefusal(error) ||
       isDesignConflict(error) ||

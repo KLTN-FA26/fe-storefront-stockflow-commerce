@@ -13,6 +13,7 @@ import { useEditorState, useStudio } from "./studio-context";
 import { TextEditOverlay } from "./text-edit-overlay";
 import { useStagePinch } from "./use-stage-pinch";
 import { useStudioShortcuts } from "./use-studio-shortcuts";
+import { useAssetDrop } from "./use-asset-drop";
 import { useElementSize, useSurfacePaint } from "./use-surface-paint";
 
 /** Room left around the dieline at "Vừa khung", in CSS px (the stage's `p-6`). */
@@ -60,6 +61,8 @@ export function CanvasStage() {
     : 0;
   useSurfacePaint(canvasRef, active, "editor", pxPerMm);
 
+  const drop = useAssetDrop({ canvasRef, active, bounds, cssPxPerMm });
+
   const name = template.printAreas.find((area) => area.code === active)?.name ?? active;
   const percent = Math.round(zoom * 100);
 
@@ -72,6 +75,7 @@ export function CanvasStage() {
         aria-label={`Khung vẽ ${name}`}
         aria-describedby={hintId}
         className="bg-bg-subtle focus-visible:ring-accent relative min-h-0 flex-1 touch-none overflow-auto outline-none [overflow-anchor:none] focus-visible:ring-2 focus-visible:ring-inset lg:min-h-80"
+        {...drop}
         {...pinch}
       >
         <div className="flex min-h-full w-max min-w-full p-6">

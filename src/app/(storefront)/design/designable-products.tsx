@@ -1,45 +1,83 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { useCatalogPage } from "@/features/catalog";
-import { CATALOG_PAGE_SIZE_MAX } from "@/features/catalog/schemas";
-import { DesignListScreen } from "@/features/product-design/components/design-list-screen";
-import type {
-  DesignableCatalogue,
-  DesignableProduct,
-} from "@/features/product-design/components/new-design-dialog";
+import {
+  DesignListScreen,
+  type DesignableCatalogue,
+  type DesignableProduct,
+} from "@/features/product-design";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 
+import {
+  designableOf,
+  designableSearchText,
+  useDesignableCataloguePages,
+} from "./designable-catalogue";
+
 /**
- * `/design` knows the catalogue, the design feature does not: this maps the catalogue's product
- * list (customizable products with their SKUs) to what the "Thiết kế mới" dialog takes, and says
- * while it loads or when it failed, so the dialog does not read either as "no product".
+ * `/design` knows the catalogue, the design feature does not: this reads it for the "Thiết kế mới"
+ * dialog while it is open, searched (server-side) by what the dialog asks, a page at a time, and
+ * maps it to the dialog's products. The catalogue cannot be asked for customizable products only,
+ * so they are picked from each page; a page with none of them reads on to the next, until one has
+ * or the catalogue ends.
  */
 export function DesignListWithCatalog() {
   // The catalogue serves signed-in callers only (kltn-docs 13 BR-02): a visitor gets the list's
   // sign-in prompt, and no catalogue call is made for them.
   const signedIn = useSignedIn();
-  const { data, error, isFetching, refetch } = useCatalogPage(
-    { page: 1, size: CATALOG_PAGE_SIZE_MAX },
-    signedIn === true,
-  );
-  const products = useMemo<DesignableProduct[]>(
-    () =>
-      (data?.items ?? [])
-        // A kind the catalogue does not send reads as customizable: the print config decides later.
-        .filter((card) => card.kind === undefined || card.kind === "CUSTOMIZABLE")
-        .flatMap((card) =>
-          card.skus && card.skus.length > 0
-            ? [{ slug: card.slug, title: card.title, skus: card.skus.map(({ sku }) => sku) }]
-            : [],
-        ),
-    [data],
-  );
+  // The dialog's text while it is open; null while it is closed, and nothing is read then.
+  const [search, setSearch] = useState<string | null>(null);
+  const reading = signedIn === true && search !== null;
+  const pages = useDesignableCataloguePages(designableSearchText(search ?? ""), reading);
+  const { data, error, isFetching, isFetchNextPageError, isPlaceholderData, refetch } = pages;
+  const { hasNextPage, fetchNextPage, isFetchingNextPage } = pages;
+
+  const products = useMemo(() => {
+    const bySlug = new Map<string, DesignableProduct>();
+    // A product that moved between two reads of the pages is listed once.
+    for (const page of data?.pages ?? []) {
+      for (const product of designableOf(page.items)) bySlug.set(product.slug, product);
+    }
+    return [...bySlug.values()];
+  }, [data]);
+
+  const pageCount = data?.pages.length ?? 0;
+  const lastPage = data?.pages.at(-1);
+  const lastPageEmpty = lastPage !== undefined && designableOf(lastPage.items).length === 0;
+  // The pages shown while a new text loads are the previous text's: nothing is read on from them.
+  const current = !isPlaceholderData;
+  const readOn =
+    reading && current && lastPageEmpty && hasNextPage && !isFetching && !isFetchNextPageError;
+  // Run again for each page read: a fast answer can land before a render shows the fetch, so
+  // `readOn` may stay true from one empty page to the next.
+  useEffect(() => {
+    if (readOn) void fetchNextPage();
+  }, [readOn, pageCount, fetchNextPage]);
+
   const catalogue: DesignableCatalogue = data
-    ? { status: "ready", products }
+    ? {
+        status: "ready",
+        products,
+        stale: isPlaceholderData,
+        more:
+          current && hasNextPage
+            ? {
+                onLoad: () => void fetchNextPage(),
+                loading: isFetchingNextPage || readOn,
+                error: isFetchNextPageError ? error : null,
+              }
+            : null,
+        onSearch: setSearch,
+      }
     : error
-      ? { status: "error", error, onRetry: () => void refetch(), retrying: isFetching }
-      : { status: "loading" };
+      ? {
+          status: "error",
+          error,
+          onRetry: () => void refetch(),
+          retrying: isFetching,
+          onSearch: setSearch,
+        }
+      : { status: "loading", onSearch: setSearch };
   return <DesignListScreen catalogue={catalogue} />;
 }

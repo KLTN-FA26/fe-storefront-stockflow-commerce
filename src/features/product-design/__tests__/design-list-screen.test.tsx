@@ -5,9 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error";
+import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/design-seed";
+import { settle } from "@/test/fake-backend";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { DesignListScreen } from "../components/design-list-screen";
+import type { DesignableCatalogue } from "../components/new-design-dialog";
 import { designBackend } from "./design-backend";
 
 const env = vi.hoisted(() => ({ push: vi.fn() }));
@@ -24,16 +27,30 @@ afterEach(() => {
 });
 
 const LIST = { name: "Danh sách thiết kế" } as const;
+/**
+ * The first read of the list: the design mock answers each request after ~0.2 s, and on a loaded
+ * parallel run that went past `findBy`'s default 1 s.
+ */
+const FIRST_READ = { timeout: 3000 } as const;
 
 /** The card of a design, found by its name. */
 async function cardOf(name: string) {
-  const list = await screen.findByRole("list", LIST);
+  const list = await screen.findByRole("list", LIST, FIRST_READ);
   const heading = await within(list).findByRole("heading", { name });
   return within(heading.closest("li") as HTMLElement);
 }
 
+/** The catalogue as "Thiết kế mới" gets it: these tests do not open the dialog. */
+const catalogue: DesignableCatalogue = {
+  status: "ready",
+  products: [],
+  stale: false,
+  more: null,
+  onSearch: () => undefined,
+};
+
 const render = (searchParams = "", onUrlUpdate?: OnUrlUpdateFunction) =>
-  renderWithProviders(<DesignListScreen catalogue={{ status: "ready", products: [] }} />, {
+  renderWithProviders(<DesignListScreen catalogue={catalogue} />, {
     searchParams,
     ...(onUrlUpdate ? { onUrlUpdate } : {}),
   });
@@ -142,10 +159,106 @@ describe("DesignListScreen", () => {
     expect(screen.getByRole("dialog", { name: "Xoá bản nháp này?" })).toBeInTheDocument();
   });
 
+  it("after a 409 it disables 'Xoá', re-reads the list and offers 'Đóng' (L3)", async () => {
+    const backend = await designBackend();
+    render();
+    const card = await cardOf("Túi kraft tiệm bánh Hoa");
+    await userEvent.click(card.getByRole("button", { name: /Xoá/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Xoá bản nháp này?" });
+    const listReads = () => backend.get.mock.calls.filter(([url]) => url === "/designs").length;
+    const readsBefore = listReads();
+
+    backend.delete.mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "x"));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Xoá bản nháp" }));
+
+    expect(
+      await within(dialog).findByText("Thiết kế đã chuyển trạng thái, hãy tải lại."),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Xoá bản nháp" })).toBeDisabled();
+    expect(within(dialog).queryByRole("button", { name: "Giữ lại" })).not.toBeInTheDocument();
+    await waitFor(() => expect(listReads()).toBeGreaterThan(readsBefore));
+
+    await userEvent.click(within(dialog).getByRole("button", { name: "Đóng" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(backend.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables every 'Tạo bản sửa' while one revision is being created (L4)", async () => {
+    const backend = await designBackend();
+    // A second approved design: the reviewer approves the one waiting for review.
+    settle(await backend.store.simulateApprove(MOCK_DESIGN_IDS.pending));
+    // The first revision is never answered: it stays pending for the rest of the test.
+    backend.post.mockImplementationOnce(() => new Promise(() => undefined));
+    render();
+    const first = await cardOf("Ly cà phê Nhà Mình 12oz");
+    const second = await cardOf("Ly trà sữa Mây 500ml");
+
+    await userEvent.click(first.getByRole("button", { name: /Tạo bản sửa/ }));
+
+    expect(first.getByRole("button", { name: /Tạo bản sửa/ })).toBeDisabled();
+    expect(first.getByText("Đang tạo...")).toBeInTheDocument();
+    expect(second.getByRole("button", { name: /Tạo bản sửa/ })).toBeDisabled();
+    expect(second.queryByText("Đang tạo...")).not.toBeInTheDocument();
+  });
+
+  describe("a revision that fails (L4)", () => {
+    const failRevision = async () => {
+      const backend = await designBackend();
+      backend.post.mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "x"));
+      render();
+      const card = await cardOf("Ly cà phê Nhà Mình 12oz");
+      await userEvent.click(card.getByRole("button", { name: /Tạo bản sửa/ }));
+      expect(
+        await screen.findByText("Thiết kế đã chuyển trạng thái, hãy tải lại."),
+      ).toBeInTheDocument();
+    };
+
+    it("says why, and the customer can dismiss it", async () => {
+      await failRevision();
+      await userEvent.click(screen.getByRole("button", { name: "Đóng thông báo" }));
+      expect(
+        screen.queryByText("Thiết kế đã chuyển trạng thái, hãy tải lại."),
+      ).not.toBeInTheDocument();
+    });
+
+    it("clears the message on the next action", async () => {
+      await failRevision();
+      await userEvent.click(screen.getByRole("tab", { name: "Bản nháp" }));
+      expect(
+        screen.queryByText("Thiết kế đã chuyển trạng thái, hãy tải lại."),
+      ).not.toBeInTheDocument();
+    });
+
+    it("lets the customer try again: 'Tạo bản sửa' is on again", async () => {
+      await failRevision();
+      const card = await cardOf("Ly cà phê Nhà Mình 12oz");
+      expect(card.getByRole("button", { name: /Tạo bản sửa/ })).toBeEnabled();
+    });
+  });
+
+  it("keeps every 'Tạo bản sửa' off once the revision is made, until its studio opens", async () => {
+    const backend = await designBackend();
+    settle(await backend.store.simulateApprove(MOCK_DESIGN_IDS.pending));
+    render();
+    const first = await cardOf("Ly cà phê Nhà Mình 12oz");
+    const second = await cardOf("Ly trà sữa Mây 500ml");
+
+    await userEvent.click(first.getByRole("button", { name: /Tạo bản sửa/ }));
+    // The navigation is asked for; the test router never takes the list away.
+    await waitFor(() => expect(env.push).toHaveBeenCalledTimes(1));
+    // The list re-reads after the revision: wait for the new draft's card, then look again.
+    await waitFor(() => expect(screen.getByText("3/50 bản nháp")).toBeInTheDocument());
+
+    expect(first.getByRole("button", { name: /Tạo bản sửa/ })).toBeDisabled();
+    expect(second.getByRole("button", { name: /Tạo bản sửa/ })).toBeDisabled();
+  });
+
   it("puts the tab in the URL and resets the page when it changes", async () => {
     const onUrlUpdate = vi.fn();
     render("?page=2", onUrlUpdate);
-    await screen.findByRole("list", LIST).catch(() => undefined);
+    // Page 2 is past the end: the list comes back to page 1 and shows its cards.
+    const list = await screen.findByRole("list", LIST);
+    expect(await within(list).findAllByRole("listitem")).toHaveLength(4);
 
     await userEvent.click(await screen.findByRole("tab", { name: "Chờ duyệt" }));
 

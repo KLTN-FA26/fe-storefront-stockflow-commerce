@@ -1,16 +1,14 @@
 "use client";
 
 import { Upload } from "lucide-react";
-import Image from "next/image";
 import { useId, useState, type DragEvent } from "react";
 
-import { Alert, Skeleton } from "@/components/shared";
+import { Alert } from "@/components/shared";
 import { cn } from "@/lib/cn";
-import { isRemoteImage } from "@/lib/remote-image";
 
-import { useDesignAssets, useDownloadLink } from "../../queries";
 import type { DesignAsset } from "../../types";
 import { placeImage } from "./image-actions";
+import { ImageLibrary } from "./image-library";
 import { useEditorState, useStudio } from "./studio-context";
 import {
   acceptedFormatNames,
@@ -25,55 +23,16 @@ import { usePasteImage } from "./use-paste-image";
 const formatList = (names: readonly string[]) =>
   names.length > 1 ? `${names.slice(0, -1).join(", ")} hoặc ${names.at(-1)}` : names.join("");
 
-/** One stored image as a button that places it on the active surface. */
-function AssetThumb({
-  asset,
-  designId,
-  disabled,
-  onPick,
-}: {
-  asset: DesignAsset;
-  designId: string;
-  disabled: boolean;
-  onPick: (asset: DesignAsset) => void;
-}) {
-  const link = useDownloadLink(designId, asset.assetId, true);
-  const src = link.data?.url;
-  return (
-    <button
-      type="button"
-      aria-label={`Thêm ảnh ${asset.originalName}`}
-      title={asset.originalName}
-      disabled={disabled}
-      onClick={() => onPick(asset)}
-      className="bg-bg-subtle border-border-default hover:border-border-strong focus-visible:ring-accent relative aspect-square min-h-11 overflow-hidden rounded-[var(--r-md)] border outline-none focus-visible:ring-2 disabled:opacity-50"
-    >
-      {src ? (
-        <Image
-          src={src}
-          alt=""
-          fill
-          unoptimized={isRemoteImage(src)}
-          sizes="7rem"
-          className="object-contain p-1.5"
-        />
-      ) : (
-        <Skeleton className="absolute inset-0 rounded-none" />
-      )}
-    </button>
-  );
-}
-
 /**
  * The Image/Logo tool's options: a dropzone ("Kéo thả hoặc chọn ảnh") that also takes a paste on
- * the stage, and the images already uploaded to this design. A picked, dropped or pasted file is
- * stored and placed on the active surface; picking an uploaded image places it again.
+ * the stage while it is open (closed, `ImagePaste` does), and the images already uploaded to this
+ * design ("Ảnh của bạn", `ImageLibrary`). A picked, dropped or pasted file is stored and placed on
+ * the active surface; picking an uploaded image places it again.
  */
 export function ImageToolPanel() {
   const services = useStudio();
   const { design, template, stageRef } = services;
   const readOnly = useEditorState((s) => s.readOnly);
-  const assets = useDesignAssets(design.id, true);
   const { pick, busy, error, fail } = useAssetPicker();
   const [dragging, setDragging] = useState(false);
   const inputId = useId();
@@ -99,6 +58,8 @@ export function ImageToolPanel() {
     <div className="flex flex-col gap-4">
       <div
         onDragOver={(event) => {
+          // Files only: a tile of the library is placed on the stage, not uploaded again here.
+          if (!Array.from(event.dataTransfer.types).includes("Files")) return;
           event.preventDefault();
           setDragging(true);
         }}
@@ -145,24 +106,7 @@ export function ImageToolPanel() {
           <Alert tone="danger">{error}</Alert>
         </div>
       ) : null}
-      <section aria-label="Ảnh đã tải lên" className="flex flex-col gap-2">
-        <h3 className="text-ink-primary text-sm font-semibold">Ảnh đã tải lên</h3>
-        {assets.data?.length ? (
-          <div className="grid grid-cols-2 gap-2">
-            {assets.data.map((asset) => (
-              <AssetThumb
-                key={asset.assetId}
-                asset={asset}
-                designId={design.id}
-                disabled={readOnly || busy}
-                onPick={place}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="text-ink-tertiary text-sm">Chưa có ảnh nào được tải lên.</p>
-        )}
-      </section>
+      <ImageLibrary designId={design.id} disabled={readOnly || busy} onPick={place} />
     </div>
   );
 }

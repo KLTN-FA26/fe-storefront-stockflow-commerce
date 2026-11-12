@@ -29,9 +29,12 @@ const CLICK_SLOP_PX = 5;
 export function Viewer3D({
   onUnavailable,
   fullscreenTarget,
+  compact = false,
 }: {
   onUnavailable: () => void;
   fullscreenTarget: RefObject<HTMLElement | null>;
+  /** In the corner card: no title bar, the controls float over the model's top-left corner. */
+  compact?: boolean;
 }) {
   const { editor, surfaces, template, sizer, viewerRef: studioViewerRef } = useStudio();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -109,20 +112,22 @@ export function Viewer3D({
     editor.select(content ? hitTest(content, surface, sizer, point) : null);
   };
 
+  const toolbar = (
+    <ViewerToolbar
+      autoRotate={autoRotate}
+      onAutoRotate={(on) => {
+        setAutoRotate(on);
+        viewerRef.current?.setAutoRotate(on);
+      }}
+      onResetView={() => viewerRef.current?.resetView()}
+      fullscreen={fullscreen}
+      onFullscreen={toggleFullscreen}
+    />
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ViewerTitle>
-        <ViewerToolbar
-          autoRotate={autoRotate}
-          onAutoRotate={(on) => {
-            setAutoRotate(on);
-            viewerRef.current?.setAutoRotate(on);
-          }}
-          onResetView={() => viewerRef.current?.resetView()}
-          fullscreen={fullscreen}
-          onFullscreen={toggleFullscreen}
-        />
-      </ViewerTitle>
+      {!compact && <ViewerTitle>{toolbar}</ViewerTitle>}
       <div className="relative min-h-0 flex-1">
         <canvas
           ref={canvasRef}
@@ -132,6 +137,11 @@ export function Viewer3D({
           onPointerDown={onPointerDown}
           onClick={onClick}
         />
+        {compact && (
+          <div className="bg-bg-surface border-border-default absolute top-2 left-2 rounded-[var(--r-md)] border shadow-[var(--sh-sm)]">
+            {toolbar}
+          </div>
+        )}
       </div>
     </div>
   );

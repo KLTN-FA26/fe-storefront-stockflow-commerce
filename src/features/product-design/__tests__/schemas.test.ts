@@ -62,6 +62,17 @@ describe("a design (spec §4.1 DesignDto)", () => {
     refuses(designDtoSchema, designDto({ version: -1 }));
   });
 
+  it("holds a name of 1–200 characters and a return reason of 1–2000 (docs 12 §3)", () => {
+    expect(designDtoSchema.parse(designDto({ name: "a".repeat(200) })).name).toHaveLength(200);
+    refuses(designDtoSchema, designDto({ name: "a".repeat(201) }));
+    const returnOf = (reason: string) => ({ reason, returnedAt: "2026-11-03T09:00:00Z" });
+    expect(
+      designDtoSchema.parse(returnedDto({ lastReturn: returnOf("r".repeat(2000)) })).lastReturn
+        ?.reason,
+    ).toHaveLength(2000);
+    refuses(designDtoSchema, returnedDto({ lastReturn: returnOf("r".repeat(2001)) }));
+  });
+
   it("needs every nullable field present: null is allowed, absent is a contract break", () => {
     expect(designDtoSchema.parse(designDto({ projectId: null })).projectId).toBeNull();
     const { projectId: _projectId, ...withoutProject } = designDto();

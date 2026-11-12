@@ -1,5 +1,17 @@
+import type { RenderEnv } from "./execute";
+
 /** Rasters `RenderEnv.layerCache` keeps; the least recently used one goes first. */
 export const MAX_CACHED_LAYERS = 64;
+
+/**
+ * Where a paint keeps what it rasterises at its resolution: `env.layerCache`, except mid-zoom
+ * (`RenderEnv.transientResolution`), when nothing made at this resolution would be drawn again.
+ */
+export function keptLayers(
+  env: Pick<RenderEnv, "layerCache" | "transientResolution">,
+): Map<string, CanvasImageSource> | undefined {
+  return env.transientResolution === true ? undefined : env.layerCache;
+}
 
 /** A cache read that counts as a use: the entry moves to the back of the `Map`'s insertion order. */
 export function recallLayer(
@@ -26,6 +38,24 @@ export function rememberLayer(
     if (cache.size <= MAX_CACHED_LAYERS) break;
     cache.delete(oldest);
   }
+}
+
+/** What each signed layer was made from: it is reused only while that is unchanged. */
+const signatures = new WeakMap<CanvasImageSource, string>();
+
+/** What `layer` was made from, as `rememberSigned` kept it. */
+export const signatureOf = (layer: CanvasImageSource): string | undefined => signatures.get(layer);
+
+/** Keeps `layer`, made from `signature`, as the one entry under `key`, replacing what was there. */
+export function rememberSigned(
+  cache: Map<string, CanvasImageSource> | undefined,
+  key: string,
+  signature: string,
+  layer: CanvasImageSource,
+): void {
+  if (cache === undefined) return;
+  signatures.set(layer, signature);
+  rememberLayer(cache, key, layer);
 }
 
 /**

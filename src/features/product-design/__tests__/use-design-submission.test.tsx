@@ -9,6 +9,7 @@ import * as api from "../api";
 import type { AutosaveState } from "../autosave";
 import type { ExportRenderer } from "../components/studio/export-renderer";
 import { StudioProvider, type StudioServices } from "../components/studio/studio-context";
+import { DocumentChangedError, DocumentEditedError } from "../components/studio/submission-checks";
 import { useDesignSubmission } from "../components/studio/use-design-submission";
 import {
   addElement,
@@ -30,6 +31,15 @@ vi.mock("../api", () => ({
   submitDesign: vi.fn(),
   recordPreflightFailure: vi.fn(),
 }));
+// These tests prove the submission's steps, not the PDFs: the bundle builder still runs every step,
+// but the two PDFs are stand-in bytes. Loading pdf-lib cold and building them inside the first
+// submitting test went past its 5 s under a loaded full run (and its unfinished run then broke the
+// tests after it). The real PDFs are built by `submission-bundle.test.ts` and the engine's tests.
+vi.mock("../engine", async (importOriginal) => {
+  const engine = await importOriginal<typeof import("../engine")>();
+  const pdf = async () => new TextEncoder().encode("%PDF-1.7 stand-in");
+  return { ...engine, buildPrintPdf: pdf, buildSheetPdf: pdf };
+});
 const getDesign = vi.mocked(api.getDesign);
 const getDesignDocument = vi.mocked(api.getDesignDocument);
 const submitDesign = vi.mocked(api.submitDesign);
@@ -79,6 +89,8 @@ async function setup(
     resume: vi.fn(),
     conflict: vi.fn(),
     latestState: vi.fn((): AutosaveState => autosaveState),
+    // This tab last loaded or saved the document it holds.
+    storedChecksum: vi.fn(() => checksum),
   };
   const renderer = fakeRenderer();
   const services = {
@@ -91,6 +103,7 @@ async function setup(
     autosave,
     exportRenderer: renderer,
     printConfig: printConfigDtoSchema.parse(printConfigDto(opts.printConfig)),
+    ownStatusMove: vi.fn(),
   } as unknown as StudioServices;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -99,8 +112,18 @@ async function setup(
     </QueryClientProvider>
   );
   const view = renderHook(() => useDesignSubmission(draft), { wrapper });
-  return { view, client, autosave, renderer, calls };
+  return { view, client, autosave, renderer, calls, editor, services };
 }
+
+/** This tab's editor changes the design: a second text on the body. */
+const editIn = (editor: ReturnType<typeof createEditor>) =>
+  editor.apply((doc) =>
+    addElement(
+      doc,
+      "BODY",
+      textEl("t2", { content: "Trà", placement: { u: 120, v: 55, rotationDeg: 0, scale: 1 } }),
+    ),
+  );
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -197,9 +220,16 @@ describe("useDesignSubmission", () => {
 
   it("flushes autosave, submits the version read after it with the three files, and holds the pending design", async () => {
     const { view, client, autosave, calls } = await setup();
+    // Before the flush the edit is not stored yet: the record is one version behind the editor.
+    const flushed = await getDesignDocument(draft.id);
+    getDesignDocument.mockResolvedValue({ ...flushed, version: 2, checksum: "0".repeat(64) });
+    autosave.flush.mockImplementation(async () => {
+      calls.push("flush");
+      getDesignDocument.mockResolvedValue({ ...flushed, version: 4 }); // the flush stored it
+    });
     submitDesign.mockImplementation(async () => {
       calls.push("submit");
-      return pending;
+      return designOf({ status: "PENDING_REVIEW", version: 5 });
     });
 
     await act(() => view.result.current.run());
@@ -209,7 +239,7 @@ describe("useDesignSubmission", () => {
     expect(calls).toEqual(["flush", "submit"]);
     const [id, input] = submitDesign.mock.calls[0]!;
     expect(id).toBe(draft.id);
-    expect(input.version).toBe(3);
+    expect(input.version).toBe(4); // read after the flush, not the 2 it found before
     expect(input.preflight.result).toBe("Pass");
     expect(Object.keys(input.files).toSorted()).toEqual([
       "CUSTOMER_PREVIEW",
@@ -217,8 +247,111 @@ describe("useDesignSubmission", () => {
       "TECHNICAL_SPEC",
     ]);
     expect(recordPreflightFailure).not.toHaveBeenCalled();
-    expect(autosave.setVersion).toHaveBeenCalledWith(4);
+    expect(autosave.setVersion).toHaveBeenCalledWith(5);
     expect(client.getQueryData<Design>(designKeys.detail(draft.id))?.status).toBe("PENDING_REVIEW");
+  });
+
+  it("stops before sending, with no conflict, when this tab's editor changed the design and stored it meanwhile; sending again draws the new one", async () => {
+    const { view, autosave, renderer, editor } = await setup();
+    const drawn = await getDesignDocument(draft.id);
+    renderer.printSurface.mockImplementationOnce(async () => {
+      // While the files are drawn this tab edits, and its autosave stores the edit: the stored
+      // checksum is the one this tab saved, which is what makes it an edit and not a conflict.
+      editIn(editor);
+      const checksum = await documentChecksum(editor.store.getState().document);
+      getDesignDocument.mockResolvedValue({ ...drawn, version: 4, checksum });
+      autosave.storedChecksum.mockReturnValue(checksum);
+      return [{ png: PNG_1x1, heightPx: 1 }];
+    });
+
+    await act(() => view.result.current.run());
+
+    expect(view.result.current.step).toBe("error");
+    expect(view.result.current.error).toBeInstanceOf(DocumentEditedError);
+    expect(autosave.conflict).not.toHaveBeenCalled();
+    expect(submitDesign).not.toHaveBeenCalled();
+
+    submitDesign.mockResolvedValue(designOf({ status: "PENDING_REVIEW", version: 5 }));
+    await act(() => view.result.current.retry());
+
+    expect(view.result.current.step).toBe("done");
+    expect(renderer.preview).toHaveBeenCalledTimes(2);
+    expect(submitDesign.mock.calls[0]![1].version).toBe(4);
+  });
+
+  it("stops before sending, with no conflict, on an edit of this tab's editor still waiting to be saved", async () => {
+    const { view, autosave, renderer, editor } = await setup();
+    renderer.printSurface.mockImplementationOnce(async () => {
+      editIn(editor); // the stored document is still the drawn one
+      return [{ png: PNG_1x1, heightPx: 1 }];
+    });
+
+    await act(() => view.result.current.run());
+
+    expect(view.result.current.step).toBe("error");
+    expect(view.result.current.error).toBeInstanceOf(DocumentEditedError);
+    expect(autosave.conflict).not.toHaveBeenCalled();
+    expect(submitDesign).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["this tab stored", true, DocumentEditedError, 0],
+    ["another tab stored", false, DocumentChangedError, 1],
+  ])(
+    "with the drawn document back in the editor (an edit, then its undo), a document %s meanwhile is told apart",
+    async (_, ours, expected, conflicts) => {
+      const { view, autosave, renderer, editor } = await setup();
+      const drawn = await getDesignDocument(draft.id);
+      renderer.printSurface.mockImplementationOnce(async () => {
+        editIn(editor);
+        const edited = await documentChecksum(editor.store.getState().document);
+        editor.undo(); // the editor holds the very document drawn again
+        const checksum = ours ? edited : "f".repeat(64);
+        getDesignDocument.mockResolvedValue({ ...drawn, version: 4, checksum });
+        if (ours) autosave.storedChecksum.mockReturnValue(edited);
+        return [{ png: PNG_1x1, heightPx: 1 }];
+      });
+
+      await act(() => view.result.current.run());
+
+      expect(view.result.current.error).toBeInstanceOf(expected);
+      expect(autosave.conflict).toHaveBeenCalledTimes(conflicts);
+      expect(submitDesign).not.toHaveBeenCalled();
+    },
+  );
+
+  it("lets a save made elsewhere win over this tab's own edit in the same submission: the conflict, not Gửi lại", async () => {
+    const { view, autosave, renderer, editor } = await setup();
+    const drawn = await getDesignDocument(draft.id);
+    renderer.printSurface.mockImplementationOnce(async () => {
+      editIn(editor); // this tab edits, not saved yet…
+      // …and another tab saves: a checksum neither drawn nor this tab's.
+      getDesignDocument.mockResolvedValue({ ...drawn, version: 4, checksum: "f".repeat(64) });
+      return [{ png: PNG_1x1, heightPx: 1 }];
+    });
+
+    await act(() => view.result.current.run());
+
+    expect(view.result.current.error).toBeInstanceOf(DocumentChangedError);
+    expect(autosave.conflict).toHaveBeenCalledTimes(1);
+    expect(submitDesign).not.toHaveBeenCalled();
+  });
+
+  it("asks to send again when this tab's own save of the edit is still under way: the unknown checksum may be its own", async () => {
+    const { view, autosave, renderer, editor } = await setup();
+    const drawn = await getDesignDocument(draft.id);
+    renderer.printSurface.mockImplementationOnce(async () => {
+      editIn(editor);
+      autosave.latestState.mockReturnValue("saving"); // stored, not answered yet
+      getDesignDocument.mockResolvedValue({ ...drawn, version: 4, checksum: "f".repeat(64) });
+      return [{ png: PNG_1x1, heightPx: 1 }];
+    });
+
+    await act(() => view.result.current.run());
+
+    expect(view.result.current.error).toBeInstanceOf(DocumentEditedError);
+    expect(autosave.conflict).not.toHaveBeenCalled();
+    expect(submitDesign).not.toHaveBeenCalled();
   });
 
   it("refuses to go on when autosave did not store the document", async () => {

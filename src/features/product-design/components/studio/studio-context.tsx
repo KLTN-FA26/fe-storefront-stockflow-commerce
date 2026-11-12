@@ -79,8 +79,9 @@ export function createLivePreview(repaint: RepaintChannel): LivePreview {
  * What the header, the submission and the conflict dialog need from autosave: save what is pending
  * now ("Lưu", Ctrl+S, before a submit); adopt a newer version another write of this tab left (a
  * rename, a submit); start over after a conflict reload with the reloaded record's version and
- * checksum; declare a conflict found elsewhere (R69); and the save state right now (`flush` also
- * settles on a failure: this says whether the document was stored).
+ * checksum; declare a conflict found elsewhere (R69); the save state right now (`flush` also
+ * settles on a failure: this says whether the document was stored); and the checksum of the
+ * document this tab last loaded or saved (a stored one that differs was saved elsewhere).
  */
 export type AutosaveControls = {
   flush(): Promise<void>;
@@ -88,6 +89,7 @@ export type AutosaveControls = {
   resume(version: number, checksum: string): void;
   conflict(): void;
   latestState(): AutosaveState;
+  storedChecksum(): string;
 };
 
 /** The 3D view while one is shown (`Viewer3D` sets it): the preview export and the preflight panel use it. */
@@ -115,8 +117,8 @@ export type StudioServices = {
   readOnly: boolean;
   /** The variant's print configuration: the template, and what preflight checks of the variant. */
   printConfig: PrintConfig;
-  /** Says `message` once in the studio's polite live region. */
-  announce(message: string): void;
+  /** Says `message` once in the studio's polite live region; `urgent` (an error) assertively. */
+  announce(message: string, options?: { urgent?: boolean }): void;
   /** Load state of the document's images by asset id: preflight's `assets` (ASSET_INVALID). */
   assetStatus: Readonly<Record<string, PreflightAsset>>;
   /** Tries the images that failed to load once more ("Tải lại ảnh"). */
@@ -128,6 +130,11 @@ export type StudioServices = {
   repaint: RepaintChannel;
   livePreview: LivePreview;
   autosave: AutosaveControls;
+  /**
+   * The design is about to move to `status` by a write of this tab that re-reads what goes with
+   * the move (a submission): the status follow does not read it all again.
+   */
+  ownStatusMove(status: DesignStatus): void;
   /** The stage's container (set by `CanvasStage`): where the keyboard shortcuts and paste are heard. */
   stageRef: RefObject<HTMLDivElement | null>;
   viewerRef: ViewerRef;

@@ -13,7 +13,10 @@ import {
 import { settle } from "@/test/fake-backend";
 
 import { readImageDimensions } from "../engine/assets/image-header";
+import { emptyDocument } from "../engine/document/factory";
 import type { DesignDocument } from "../engine/document/schema";
+import { sha256Hex } from "../engine/export/checksum";
+import { cup12oz, PNG_1x1, textEl } from "../engine/__tests__/fixtures";
 
 /**
  * The size of an uploaded image as its header says: jsdom has no `createImageBitmap`, which the
@@ -106,4 +109,48 @@ export async function draftIn(
   const { id } = created.data as { id: string };
   if (document) settle(await store.putDocument(id, { version: 0, document }));
   return id;
+}
+
+/** A cup draft whose body holds the text "Cà phê" (version 1): one that passes the preflight. */
+export function cupWithText(store: DesignMockStore): Promise<string> {
+  const document: DesignDocument = emptyDocument(cup12oz);
+  document.surfaces.BODY = {
+    background: { kind: "none" },
+    elements: [
+      textEl("text", {
+        content: "Cà phê",
+        placement: { u: 170, v: 55, rotationDeg: 0, scale: 1 },
+      }),
+    ],
+  };
+  return draftIn(store, STUDIO_PRODUCTS.cup, document);
+}
+
+/**
+ * Another tab submits the design: a complete bundle with matching checksums, written in the store
+ * itself, so the studio's next read of the design agrees with what a test puts in its cache.
+ */
+export async function submitElsewhere(store: DesignMockStore, id: string): Promise<void> {
+  const { version } = settle(await store.get(id)).data as { version: number };
+  const files = {
+    CUSTOMER_PREVIEW: new File([PNG_1x1.slice()], "preview.png", { type: "image/png" }),
+    PRINT_READY: new File([new Uint8Array([1, 2])], "print-ready.pdf", {
+      type: "application/pdf",
+    }),
+    TECHNICAL_SPEC: new File([new Uint8Array([3, 4])], "technical-spec.pdf", {
+      type: "application/pdf",
+    }),
+  };
+  const checksums: Record<string, string> = {};
+  for (const [role, file] of Object.entries(files)) {
+    checksums[role] = await sha256Hex(new Uint8Array(await file.arrayBuffer()));
+  }
+  settle(
+    await store.submit(id, {
+      version,
+      preflight: { result: "Pass", issues: [] },
+      checksums,
+      files,
+    }),
+  );
 }

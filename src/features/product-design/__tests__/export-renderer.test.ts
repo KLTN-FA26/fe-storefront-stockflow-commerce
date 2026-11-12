@@ -18,26 +18,33 @@ import {
 } from "../engine";
 import {
   bagM,
+  cup12oz,
   fakeMeasure,
   FONTS,
   imageEl,
   PNG_1x1,
   recordingCtx,
   sizer,
+  type RecordingCtx,
 } from "../engine/__tests__/fixtures";
 
 /** Every decoded full-resolution image, in decode order, with its `close`. */
 let decoded: { close: ReturnType<typeof vi.fn> }[];
 /** The size of every canvas when it was encoded. */
 let encoded: { width: number; height: number }[];
+/** Every 2D context handed out, in order. */
+let contexts: RecordingCtx[];
 
 beforeEach(() => {
   decoded = [];
   encoded = [];
+  contexts = [];
   // jsdom has no 2D context, no `toBlob` and no decoder: fakes that do what a browser would.
-  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
-    () => recordingCtx().ctx as unknown as CanvasRenderingContext2D,
-  );
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => {
+    const rec = recordingCtx();
+    contexts.push(rec);
+    return rec.ctx as unknown as CanvasRenderingContext2D;
+  });
   vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation(function (
     this: HTMLCanvasElement,
     done: BlobCallback,
@@ -77,13 +84,17 @@ function bagDesign(): DesignDocument {
   return doc;
 }
 
-function renderer(doc: DesignDocument, offscreenViewer?: () => PreviewViewer | null) {
+function renderer(
+  doc: DesignDocument,
+  offscreenViewer?: () => PreviewViewer | null,
+  template = bagM,
+) {
   const repaint = createRepaintChannel();
   return createCanvasExportRenderer({
     ...(offscreenViewer ? { offscreenViewer } : {}),
-    editor: createEditor({ template: bagM, document: doc }),
-    template: bagM,
-    surfaces: createSurfaces(bagM),
+    editor: createEditor({ template, document: doc }),
+    template,
+    surfaces: createSurfaces(template),
     sizer,
     fonts: FONTS,
     measure: fakeMeasure,
@@ -103,10 +114,10 @@ describe("the print surfaces", () => {
     const bands = await renderer(doc).printSurface("FRONT", doc, 16);
 
     expect(bands.map(({ heightPx }) => heightPx)).toEqual([2288, 2288]);
-    expect(bands.map(({ overlapPx }) => overlapPx)).toEqual([1, 0]);
-    // The top band also draws the bottom band's first row, which that band covers again (N5).
+    // Each band holds its own rows only: no row is drawn twice in the PDF.
+    expect(bands.every((band) => !("overlapPx" in band))).toBe(true);
     expect(encoded).toEqual([
-      { width: 4256, height: 2289 },
+      { width: 4256, height: 2288 },
       { width: 4256, height: 2288 },
     ]);
     expect(encoded.every(({ width, height }) => width * height <= MAX_BAND_PIXELS)).toBe(true);
@@ -129,6 +140,25 @@ describe("the print surfaces", () => {
     await print.printSurface("BACK", doc, 4);
     expect(decoded).toHaveLength(2);
     expect(decoded[1]!.close).toHaveBeenCalled();
+  });
+
+  it("lays a wrapped image of the cup on the page's own pixel grid, not turned", async () => {
+    const doc = emptyDocument(cup12oz);
+    const placement = { u: 140, v: 60, rotationDeg: 0, scale: 1 };
+    doc.surfaces.BODY = {
+      background: { kind: "none" },
+      elements: [imageEl("w", { assetId: "a1", wrap: true, placement })],
+    };
+    await renderer(doc, undefined, cup12oz).printSurface("BODY", doc, 4);
+
+    // The page is the canvas cleared before the paint; the remap's layers are the others.
+    const page = contexts.find((rec) => rec.calls.some(([m]) => m === "clearRect"))!;
+    expect(page.calls.some(([m]) => m === "rotate" || m === "transform")).toBe(false);
+    const draws = page.calls.filter(([m]) => m === "drawImage");
+    expect(draws).toHaveLength(1);
+    for (const mm of draws[0]!.slice(2) as number[]) {
+      expect(Math.abs(mm * 4 - Math.round(mm * 4))).toBeLessThan(1e-9);
+    }
   });
 });
 

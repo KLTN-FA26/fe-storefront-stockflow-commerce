@@ -82,10 +82,10 @@ describe("DesignStudio", () => {
     const { store } = await designBackend();
     openStudio(await draftCup(store));
 
-    expect(await screen.findByRole("tab", { name: "Thân ly" }, OPENED)).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
+    // A cup has one print area: the context bar names it, there is nothing to switch.
+    const bar = await screen.findByRole("region", { name: "Thuộc tính phần tử" }, OPENED);
+    expect(within(bar).getByText("Thân ly")).toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup", { name: "Mặt in" })).not.toBeInTheDocument();
     expect(screen.getByText("Preview 3D không khả dụng")).toBeInTheDocument();
     expect(
       screen.getByText("Màu sắc hiển thị có thể sai lệch so với thành phẩm in thật"),
@@ -106,9 +106,9 @@ describe("DesignStudio", () => {
     await designBackend();
     openStudio(MOCK_DESIGN_IDS.draft);
 
-    const faces = await screen.findByRole("tablist", { name: "Mặt in" }, OPENED);
-    const tabs = within(faces).getAllByRole("tab");
-    expect(tabs.map((tab) => tab.textContent)).toEqual([
+    const faces = await screen.findByRole("radiogroup", { name: "Mặt in" }, OPENED);
+    const radios = within(faces).getAllByRole("radio");
+    expect(radios.map((face) => face.textContent)).toEqual([
       "Mặt trước",
       "Mặt sau",
       "Hông trái",
@@ -116,8 +116,8 @@ describe("DesignStudio", () => {
     ]);
     expect(screen.getByRole("img", { name: "Bản thiết kế Mặt trước, 1 phần tử" })).toBeVisible();
 
-    await userEvent.click(screen.getByRole("tab", { name: "Mặt sau" }));
-    expect(screen.getByRole("tab", { name: "Mặt sau" })).toHaveAttribute("aria-selected", "true");
+    await userEvent.click(screen.getByRole("radio", { name: "Mặt sau" }));
+    expect(screen.getByRole("radio", { name: "Mặt sau" })).toBeChecked();
     expect(screen.getByRole("img", { name: "Bản thiết kế Mặt sau, 0 phần tử" })).toBeVisible();
   });
 
@@ -154,7 +154,7 @@ describe("DesignStudio", () => {
       await screen.findByText("Quy cách này chưa nhận thiết kế.", undefined, OPENED),
     ).toBeInTheDocument();
     expect(screen.getByText("Không mở được trình thiết kế")).toBeInTheDocument();
-    expect(screen.queryByRole("tablist", { name: "Mặt in" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Công cụ" })).not.toBeInTheDocument();
   });
 
   it("says so when the design does not exist", async () => {
@@ -191,7 +191,7 @@ describe("DesignStudio", () => {
       "href",
       `/login?next=${next}`,
     );
-    expect(screen.queryByRole("tab", { name: "Thân ly" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Công cụ" })).not.toBeInTheDocument();
     expect(get).not.toHaveBeenCalled();
     expect(put).not.toHaveBeenCalled();
     expect(post).not.toHaveBeenCalled();
@@ -212,7 +212,7 @@ describe("DesignStudio", () => {
     const { store, put } = await designBackend();
     const id = await draftCup(store);
     const services = openStudio(id);
-    await screen.findByRole("tab", { name: "Thân ly" }, OPENED);
+    await screen.findByRole("group", { name: "Công cụ" }, OPENED);
 
     expect(screen.queryByText(SAVED)).not.toBeInTheDocument();
     paintBody(services.current!, "#FF0000");
@@ -236,7 +236,7 @@ describe("DesignStudio", () => {
     const { store, put } = await designBackend();
     put.mockRejectedValueOnce(new ApiError(500, "INTERNAL_ERROR", "Database unavailable"));
     const services = openStudio(await draftCup(store));
-    await screen.findByRole("tab", { name: "Thân ly" }, OPENED);
+    await screen.findByRole("group", { name: "Công cụ" }, OPENED);
 
     paintBody(services.current!, "#00FF00");
     const retry = await screen.findByRole(
@@ -254,7 +254,7 @@ describe("DesignStudio", () => {
     const { store, put } = await designBackend();
     const id = await draftCup(store);
     const services = openStudio(id);
-    await screen.findByRole("tab", { name: "Thân ly" }, OPENED);
+    await screen.findByRole("group", { name: "Công cụ" }, OPENED);
 
     paintBody(services.current!, "#00FF00");
     expect(await screen.findByText(SAVED, undefined, { timeout: 4000 })).toBeInTheDocument();
@@ -374,7 +374,7 @@ describe("DesignStudio", () => {
 
     it("on Tải lại ảnh in the check panel", async () => {
       const { serve, status } = await failedLogo();
-      await userEvent.click(screen.getByRole("tab", { name: "Kiểm tra" }));
+      await userEvent.click(screen.getByRole("button", { name: "Kiểm tra" }));
       serve();
       await userEvent.click(await screen.findByRole("button", { name: "Tải lại ảnh" }));
       await waitFor(() => expect(status()).toBe("ready"), OPENED);

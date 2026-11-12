@@ -78,7 +78,14 @@ const blank = (): SurfaceContent => ({ background: { kind: "none" }, elements: [
 
 function cupDocument(sku: string, body: SurfaceContent): DesignDocument {
   const { template } = MOCK_PRINT_CONFIGS[sku]!;
-  return { schemaVersion: 1, templateCode: template.code, sku, surfaces: { BODY: body } };
+  // Texts and images on the cup bend along its body, as the studio places them.
+  const elements = body.elements.map((el) => (el.type === "drawing" ? el : { ...el, wrap: true }));
+  return {
+    schemaVersion: 1,
+    templateCode: template.code,
+    sku,
+    surfaces: { BODY: { ...body, elements } },
+  };
 }
 
 const bagDocument = (): DesignDocument => ({

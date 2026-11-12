@@ -214,13 +214,32 @@ const CTX_METHODS = new Set([
   "clearRect",
   "translate",
   "scale",
+  "getImageData",
+  "putImageData",
+  "createImageData",
 ]);
+
+/** What a method answers besides being recorded; pixel reads answer a fresh canvas's pixels. */
+type MethodResults = Record<string, (...args: unknown[]) => unknown>;
+
+const blankPixels = (width: unknown, height: unknown) => ({
+  data: new Uint8ClampedArray(Number(width) * Number(height) * 4),
+  width: Number(width),
+  height: Number(height),
+});
+
+const DEFAULT_RESULTS: MethodResults = {
+  getImageData: (_sx, _sy, sw, sh) => blankPixels(sw, sh),
+  createImageData: (sw, sh) => blankPixels(sw, sh),
+};
 
 type RecordingOptions = {
   /** Whether the fake supports `letterSpacing` (`"letterSpacing" in ctx`), like Chrome and Safari 17+. */
   letterSpacing?: boolean;
   /** Width `measureText` reports for a string (default 0). */
   glyphWidth?: (text: string) => number;
+  /** What some methods do besides being recorded (a fake with real pixels); their result is returned. */
+  methods?: MethodResults;
 };
 
 export function recordingCtx(opts: RecordingOptions = {}): RecordingCtx {
@@ -247,6 +266,7 @@ export function recordingCtx(opts: RecordingOptions = {}): RecordingCtx {
       return (...args: unknown[]) => {
         calls.push([prop, ...args]);
         log.push([prop, ...args]);
+        return (opts.methods?.[prop] ?? DEFAULT_RESULTS[prop])?.(...args);
       };
     },
     set(_target, prop, value) {

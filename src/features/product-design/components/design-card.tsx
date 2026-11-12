@@ -43,10 +43,18 @@ type DesignCardProps = {
   onRevise: (design: Design) => void;
   /** A revision of this design is being created. */
   revising?: boolean;
+  /** A revision (of this design or another) is being created: "Tạo bản sửa" waits for it. */
+  reviseDisabled?: boolean;
 };
 
 /** One design: preview, status, what it is for, when it changed, and what its status allows. */
-export function DesignCard({ design, onDelete, onRevise, revising = false }: DesignCardProps) {
+export function DesignCard({
+  design,
+  onDelete,
+  onRevise,
+  revising = false,
+  reviseDisabled = revising,
+}: DesignCardProps) {
   const { title, subtitle, updatedLabel, status, returnReason, previewUrl } =
     designCardView(design);
   const actions = allowedActions(design);
@@ -86,7 +94,7 @@ export function DesignCard({ design, onDelete, onRevise, revising = false }: Des
             <Button
               type="button"
               className={ACTION_CLASS}
-              disabled={revising}
+              disabled={reviseDisabled}
               aria-label={`Tạo bản sửa ${title}`}
               onClick={() => onRevise(design)}
             >

@@ -141,20 +141,21 @@ export function createCanvasExportRenderer(deps: RendererDeps): ExportRenderer {
         image: (assetId: string) => cache.get(assetId, "full"),
         createLayer,
         layerCache: layers,
+        // Wrapped images on the page's own pixel grid: each original is rasterised once at the
+        // source resolution (capped at its own, so a finer photo is scaled down first), then that
+        // raster is remapped once.
+        exactWarp: true,
       };
       const { width, height } = surfacePx(surface.flatBounds, pxPerMm);
       try {
         const bands: PrintBand[] = [];
-        for (const { y0Px, heightPx, overlapPx } of printBands(width, height)) {
+        for (const { y0Px, heightPx } of printBands(width, height)) {
           const canvas = document.createElement("canvas");
           if (!canvas.getContext("2d")) throw new ExportError(MESSAGES.canvas);
-          // The band's own rows and the overlap the next band repeats (no hairline between them).
-          renderSurface(canvas, ops, env, surface.flatBounds, {
-            y0Px,
-            heightPx: heightPx + overlapPx,
-          });
+          // The band's own rows only: no row is painted twice in the PDF (`BandRows`).
+          renderSurface(canvas, ops, env, surface.flatBounds, { y0Px, heightPx });
           try {
-            bands.push({ png: await pngOf(canvas), heightPx, overlapPx });
+            bands.push({ png: await pngOf(canvas), heightPx });
           } finally {
             // Up to 16 MP per band: hand the bitmap back now rather than at the next collection.
             canvas.width = 0;

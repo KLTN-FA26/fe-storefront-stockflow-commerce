@@ -2,8 +2,6 @@
 
 import type { ReactNode } from "react";
 
-import { cn } from "@/lib/cn";
-
 import type { ToolId } from "../../engine";
 import { BackgroundToolPanel } from "./background-tool-panel";
 import { BrushToolPanel } from "./brush-tool-panel";
@@ -32,18 +30,10 @@ function options(tool: ToolId): ReactNode {
   }
 }
 
-/** The options of the active tool, beside the tool rail; they scroll when the column is short. */
-export function ToolPanel({ className }: { className?: string }) {
-  const tool = useEditorState((s) => s.tool);
-  return (
-    <section
-      aria-label="Tùy chọn công cụ"
-      className={cn(
-        "bg-bg-surface border-border-default flex min-h-0 flex-col overflow-y-auto rounded-[var(--r-lg)] border p-[var(--card-pad)] shadow-[var(--sh-sm)]",
-        className,
-      )}
-    >
-      {options(tool)}
-    </section>
-  );
+/**
+ * The options of the active tool, the content of the panel's "tool" item; they follow the tool
+ * when a shortcut changes it while the panel is open.
+ */
+export function ToolOptions() {
+  return options(useEditorState((s) => s.tool));
 }

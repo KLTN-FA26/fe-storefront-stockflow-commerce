@@ -10,7 +10,8 @@ import {
   type PrintAreaCode,
   type TextElement,
 } from "../../engine";
-import { largestScaleInSafe, safeBox } from "./image-actions";
+import { bendOnSurface } from "./image-actions";
+import { largestScaleInSafe, safeBox } from "./safe-fit";
 import { STUDIO_ANNOUNCEMENTS } from "./studio-announcer";
 import type { StudioServices } from "./studio-context";
 
@@ -112,6 +113,7 @@ export function placeText(
     italic: false,
     letterSpacingEm: 0,
     lineHeight: 1.2,
+    ...bendOnSurface(surface),
   };
   // A text's box grows in step with its size, so the scale that fits is the factor to shrink by.
   const shrink = largestScaleInSafe(

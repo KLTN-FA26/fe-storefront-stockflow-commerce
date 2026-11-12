@@ -29,8 +29,10 @@ function pulledIn(outline: PointMm[]): PointMm[] {
  * Where an element sits on its surface. `OUTSIDE_PRINT_AREA` when any of it passes the bleed. For
  * text and images (never a drawing): otherwise `CROSSES_SAFE_AREA` when any of it is outside the
  * safe line (between safe line and trim, or in the bleed, where it is cut off), and `ON_SEAM` when
- * any of it is on the cup's glue flap (which may also cross the safe line). "Any of it" is read
- * off `containmentPoints`: on the cup the middle of an edge counts too.
+ * any of it is on the cup's glue flap. `CROSSES_SAFE_AREA` is not reported for an element that
+ * already got `OUTSIDE_PRINT_AREA` (it would say the same thing twice); `ON_SEAM` may still be
+ * reported with either. "Any of it" is read off `containmentPoints`: on the cup the middle of an
+ * edge counts too.
  */
 export function areaIssues(scope: SurfaceScope, el: DesignElement): PreflightIssue[] {
   const { input, surface, code } = scope;

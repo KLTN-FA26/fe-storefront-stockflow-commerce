@@ -11,11 +11,27 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { describeDesignError } from "../errors";
+import {
+  describeDesignError,
+  isDesignConflict,
+  isDesignGone,
+  isDesignStateChanged,
+} from "../errors";
 import { useDeleteDesign } from "../mutations";
 import type { Design } from "../types";
 
-/** Confirms the deletion of a DRAFT (docs 12 BR-16); stays open and says why when it is refused. */
+/**
+ * The design the dialog holds is out of date: it moved on (409 INVALID_STATE, e.g. submitted in
+ * another tab), changed (409 VERSION_CONFLICT) or is gone (404). Deleting it again cannot work;
+ * the list re-reads (the mutation does), and the card shows what the customer can do now.
+ */
+const isStale = (error: unknown) =>
+  isDesignStateChanged(error) || isDesignConflict(error) || isDesignGone(error);
+
+/**
+ * Confirms the deletion of a DRAFT (docs 12 BR-16); stays open and says why when it is refused.
+ * Refused because the draft is out of date, "Xoá" stays off and "Đóng" closes the dialog.
+ */
 export function DeleteDesignDialog({
   design,
   onClose,
@@ -25,6 +41,7 @@ export function DeleteDesignDialog({
   onClose: () => void;
 }) {
   const remove = useDeleteDesign();
+  const stale = isStale(remove.error);
   const close = () => {
     remove.reset();
     onClose();
@@ -48,13 +65,13 @@ export function DeleteDesignDialog({
             className="min-h-11 rounded-[var(--r-md)] px-4"
             onClick={close}
           >
-            Giữ lại
+            {stale ? "Đóng" : "Giữ lại"}
           </Button>
           <Button
             type="button"
             variant="destructive"
             className="min-h-11 rounded-[var(--r-md)] px-4"
-            disabled={remove.isPending || !design}
+            disabled={remove.isPending || !design || stale}
             onClick={() => {
               if (!design) return;
               remove.mutate({ id: design.id, version: design.version }, { onSuccess: close });

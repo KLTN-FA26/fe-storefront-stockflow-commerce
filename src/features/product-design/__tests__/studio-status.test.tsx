@@ -3,6 +3,7 @@ import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "@/lib/api/error";
 import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/design-seed";
 import type { DesignMockStore } from "@/lib/api/mock-fixtures/design-store";
 import { formatDateTime } from "@/lib/format";
@@ -12,11 +13,17 @@ import { renderWithProviders, signIn, signOut } from "@/test/render";
 import { DesignStudio } from "../components/studio/design-studio";
 import type { StudioServices } from "../components/studio/studio-context";
 import { unsavedDraftKey } from "../components/studio/unsaved-draft";
-import { emptyDocument, setBackground, sha256Hex, type DesignDocument } from "../engine";
-import { cup12oz, PNG_1x1, textEl } from "../engine/__tests__/fixtures";
+import { emptyDocument, setBackground, type DesignDocument } from "../engine";
+import { cup12oz } from "../engine/__tests__/fixtures";
 import { designKeys } from "../queries";
 import type { Design } from "../types";
-import { designBackend, draftIn, STUDIO_PRODUCTS } from "./design-backend";
+import {
+  cupWithText,
+  designBackend,
+  draftIn,
+  STUDIO_PRODUCTS,
+  submitElsewhere,
+} from "./design-backend";
 import { TEST_FONTS } from "./fixtures";
 
 const env = vi.hoisted(() => ({ push: vi.fn() }));
@@ -62,49 +69,8 @@ async function openStudio(designId: string): Promise<Seen> {
   return Object.assign(seen, { client, unmount });
 }
 
-/** A cup draft whose body holds the text "Cà phê" (version 1): one that passes the preflight. */
-function cupWithText(store: DesignMockStore) {
-  const document: DesignDocument = emptyDocument(cup12oz);
-  document.surfaces.BODY = {
-    background: { kind: "none" },
-    elements: [
-      textEl("text", {
-        content: "Cà phê",
-        placement: { u: 170, v: 55, rotationDeg: 0, scale: 1 },
-      }),
-    ],
-  };
-  return draftIn(store, STUDIO_PRODUCTS.cup, document);
-}
-
 const designIn = async (store: DesignMockStore, id: string) =>
   settle(await store.get(id)).data as Design;
-
-/** Another tab submits the design: a complete bundle with matching checksums. */
-async function submitElsewhere(store: DesignMockStore, id: string) {
-  const { version } = await designIn(store, id);
-  const files = {
-    CUSTOMER_PREVIEW: new File([PNG_1x1.slice()], "preview.png", { type: "image/png" }),
-    PRINT_READY: new File([new Uint8Array([1, 2])], "print-ready.pdf", {
-      type: "application/pdf",
-    }),
-    TECHNICAL_SPEC: new File([new Uint8Array([3, 4])], "technical-spec.pdf", {
-      type: "application/pdf",
-    }),
-  };
-  const checksums: Record<string, string> = {};
-  for (const [role, file] of Object.entries(files)) {
-    checksums[role] = await sha256Hex(new Uint8Array(await file.arrayBuffer()));
-  }
-  settle(
-    await store.submit(id, {
-      version,
-      preflight: { result: "Pass", issues: [] },
-      checksums,
-      files,
-    }),
-  );
-}
 
 const paintBody = (services: StudioServices, color: `#${string}`) =>
   act(() => services.editor.apply((doc) => setBackground(doc, "BODY", { kind: "color", color })));
@@ -134,8 +100,10 @@ function asksBeforeLeaving() {
   window.dispatchEvent(leave);
   return leave.defaultPrevented;
 }
-const tools = () => screen.queryByRole("group", { name: "Công cụ" });
+/** The editing tools of the rail (a read-only design keeps only its lists). */
+const tools = () => screen.queryByRole("button", { name: "Chữ (T)" });
 const toolOptions = () => screen.queryByRole("region", { name: "Tùy chọn công cụ" });
+const contextBar = () => screen.queryByRole("region", { name: "Thuộc tính phần tử" });
 
 describe("the studio per status", () => {
   it("edits a draft: the tool rail, Lưu and Gửi duyệt", async () => {
@@ -143,7 +111,9 @@ describe("the studio per status", () => {
     await openStudio(MOCK_DESIGN_IDS.draft);
 
     expect(tools()).toBeInTheDocument();
-    expect(toolOptions()).toBeInTheDocument();
+    expect(contextBar()).toBeInTheDocument();
+    // The panel opens from the rail; it is closed until then.
+    expect(toolOptions()).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Lưu" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Gửi duyệt" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Đổi tên thiết kế" })).toBeInTheDocument();
@@ -167,6 +137,17 @@ describe("the studio per status", () => {
     expect(screen.getByRole("button", { name: "Gửi duyệt" })).toBeInTheDocument();
   });
 
+  it("lets the keyboard reach a returned draft's reason, which scrolls when it is long", async () => {
+    await designBackend();
+    await openStudio(MOCK_DESIGN_IDS.returned);
+
+    const strip = screen.getByRole("region", { name: "Trạng thái thiết kế" });
+    expect(strip).toHaveAttribute("tabindex", "0");
+    act(() => strip.focus());
+    expect(strip).toHaveFocus();
+    expect(strip).toHaveClass("focus-visible:ring-3");
+  });
+
   it("only shows a design waiting for review: no tools, the waiting banner, still viewable", async () => {
     const user = userEvent.setup();
     const { store, put } = await designBackend();
@@ -181,12 +162,13 @@ describe("the studio per status", () => {
     expect(screen.getByText("Chờ duyệt")).toBeInTheDocument();
     expect(tools()).not.toBeInTheDocument();
     expect(toolOptions()).not.toBeInTheDocument();
+    expect(contextBar()).not.toBeInTheDocument();
     for (const name of ["Lưu", "Gửi duyệt", "Tạo bản sửa", "Đổi tên thiết kế"]) {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
     }
 
     // Viewing still works: the layers select, the stage zooms; nothing changes the design.
-    await user.click(screen.getByRole("tab", { name: "Lớp" }));
+    await user.click(screen.getByRole("button", { name: "Lớp" }));
     await user.click(screen.getByRole("option", { name: "Chữ: Trà sữa Mây" }));
     expect(seen.current!.editor.store.getState().selectedId).toBe("el-may-1");
     await user.click(screen.getByRole("button", { name: "Phóng to" }));
@@ -198,6 +180,50 @@ describe("the studio per status", () => {
     expect(put).not.toHaveBeenCalled();
   });
 
+  it("lists the three files a submitted design was sent with, each to download", async () => {
+    const user = userEvent.setup();
+    await designBackend();
+    await openStudio(MOCK_DESIGN_IDS.pending);
+
+    await user.click(await screen.findByRole("button", { name: "File đã gửi" }));
+
+    for (const [label, name] of [
+      [/Ảnh xem trước/, "preview.png"],
+      [/File in \(PDF\)/, "print-ready.pdf"],
+      [/Đặc tả kỹ thuật \(PDF\)/, "technical-spec.pdf"],
+    ] as const) {
+      const link = await screen.findByRole("link", { name: label });
+      expect(link).toHaveAttribute("download", name);
+      expect(link.getAttribute("href")).toBeTruthy();
+      // A signed link on another origin ignores `download`: it opens beside the studio.
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    }
+  });
+
+  it("reads the files again each time File đã gửi opens, so their short-lived links are fresh", async () => {
+    const user = userEvent.setup();
+    const { get } = await designBackend();
+    const id = MOCK_DESIGN_IDS.pending;
+    await openStudio(id);
+    const trigger = await screen.findByRole("button", { name: "File đã gửi" });
+    const reads = () => get.mock.calls.filter(([url]) => url === `/designs/${id}/files`).length;
+    const before = reads();
+
+    await user.click(trigger);
+    await waitFor(() => expect(reads()).toBe(before + 1));
+    await user.keyboard("{Escape}");
+    await user.click(trigger);
+    await waitFor(() => expect(reads()).toBe(before + 2));
+  });
+
+  it("offers no files on a draft that was never sent", async () => {
+    await designBackend();
+    await openStudio(MOCK_DESIGN_IDS.draft);
+
+    expect(screen.queryByRole("button", { name: "File đã gửi" })).not.toBeInTheDocument();
+  });
+
   it("only shows an approved design: when it was approved, its preview, and Tạo bản sửa", async () => {
     const { store } = await designBackend();
     const approved = await designIn(store, MOCK_DESIGN_IDS.approved);
@@ -207,7 +233,8 @@ describe("the studio per status", () => {
       screen.getByText(`Đã duyệt lúc ${formatDateTime(approved.approvedAt!)}`),
     ).toBeInTheDocument();
     expect(screen.getByText("Đã duyệt")).toBeInTheDocument();
-    expect(await screen.findByRole("link", { name: "Tải ảnh xem trước" })).toHaveAttribute(
+    await userEvent.setup().click(await screen.findByRole("button", { name: "File đã gửi" }));
+    expect(await screen.findByRole("link", { name: /Ảnh xem trước/ })).toHaveAttribute(
       "href",
       "/logo.png",
     );
@@ -371,6 +398,59 @@ describe("a design that moves on elsewhere", () => {
     expect(storedDraft(id)).toMatchObject({ document: RED });
   });
 
+  it("on Lưu lỗi – Thử lại after a refusal, reads the design again: a draft still, the edit is saved", async () => {
+    const user = userEvent.setup();
+    const { store, get, put } = await designBackend();
+    const id = await cupWithText(store);
+    const seen = await openStudio(id);
+    // The save is refused as if the design had left DRAFT; read again, it is a draft still.
+    put.mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "Design is not a draft"));
+    paintBody(seen.current!, "#FF0000");
+    const retry = await screen.findByRole(
+      "button",
+      { name: "Lưu lỗi – Thử lại" },
+      { timeout: 5000 },
+    );
+    // The refusal's own re-read (still a draft) has landed.
+    await waitFor(() => expect(seen.client.isFetching()).toBe(0));
+    const designReads = () => get.mock.calls.filter(([url]) => url === `/designs/${id}`).length;
+    const before = designReads();
+
+    await user.click(retry);
+
+    expect(await screen.findByText(SAVED, undefined, { timeout: 4000 })).toBeInTheDocument();
+    expect(designReads()).toBeGreaterThan(before);
+    expect(put).toHaveBeenCalledTimes(2);
+    expect(settle(await store.getDocument(id)).data).toMatchObject({ document: RED });
+    expect(tools()).toBeInTheDocument();
+  });
+
+  it("on Lưu lỗi – Thử lại after a refusal, follows a design that did leave DRAFT: read-only, nothing sent", async () => {
+    const user = userEvent.setup();
+    const { store, put } = await designBackend();
+    const id = await cupWithText(store);
+    const seen = await openStudio(id);
+    put.mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "Design is not a draft"));
+    paintBody(seen.current!, "#FF0000");
+    const retry = await screen.findByRole(
+      "button",
+      { name: "Lưu lỗi – Thử lại" },
+      { timeout: 5000 },
+    );
+    await submitElsewhere(store, id); // by now it really is waiting for review
+
+    await user.click(retry);
+
+    expect(
+      await screen.findByText(/^Đang chờ Quản lý kinh doanh duyệt — gửi lúc /, undefined, {
+        timeout: 4000,
+      }),
+    ).toBeInTheDocument();
+    expect(tools()).not.toBeInTheDocument();
+    expect(put).toHaveBeenCalledTimes(1);
+    expect(storedDraft(id)).toMatchObject({ document: RED });
+  });
+
   it("follows a design deleted in another tab: the next save finds it gone, the studio says so and sends nothing more", async () => {
     const { store, put } = await designBackend();
     const id = await cupWithText(store);
@@ -423,6 +503,39 @@ describe("a design that moves on elsewhere", () => {
     paintBody(seen.current!, "#0000FF");
     expect(await screen.findByText(SAVED, undefined, { timeout: 4000 })).toBeInTheDocument();
     expect(put.mock.lastCall?.[1]).toMatchObject({ version: 2 });
+  });
+
+  it("offers the edit this browser kept while the design was read-only again once it comes back as a draft", async () => {
+    const user = userEvent.setup();
+    const { store } = await designBackend();
+    const id = await cupWithText(store);
+    const seen = await openStudio(id);
+    // Tab A submits while this tab (B) edits: B's edit is refused and kept in the browser.
+    await submitElsewhere(store, id);
+    paintBody(seen.current!, "#FF0000");
+    await screen.findByText(/^Đang chờ Quản lý kinh doanh duyệt — gửi lúc /, undefined, {
+      timeout: 5000,
+    });
+    await waitFor(() => expect(storedDraft(id)).toMatchObject({ document: RED }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    // The review returns it, and the studio is editable again.
+    settle(await store.simulateReturn(id, { reason: "Logo quá nhỏ" }));
+    await act(() => seen.client.refetchQueries({ queryKey: designKeys.detail(id), exact: true }));
+
+    const offer = await screen.findByRole(
+      "dialog",
+      { name: "Có thay đổi chưa được lưu" },
+      { timeout: 4000 },
+    );
+    // The customer never left: the offer says why the edit was kept instead.
+    expect(within(offer).getByText(/^Thiết kế đã trở lại để chỉnh sửa\./)).toBeInTheDocument();
+    expect(within(offer).queryByText(/rời trang/)).not.toBeInTheDocument();
+    await user.click(within(offer).getByRole("button", { name: "Khôi phục bản chưa lưu" }));
+    expect(seen.current!.editor.store.getState().document).toMatchObject(RED);
+    expect(await screen.findByText(SAVED, undefined, { timeout: 5000 })).toBeInTheDocument();
+    expect(settle(await store.getDocument(id)).data).toMatchObject({ document: RED });
+    expect(storedDraft(id)).toBeNull();
   });
 
   it("follows a review answered while the studio is open: the returned draft is editable again, and what goes with its status is re-read", async () => {

@@ -63,14 +63,9 @@ async function offscreenPreview(deps: PreviewDeps, size: number) {
       const texture = document.createElement("canvas");
       textures.push(texture);
       const { width, height } = surface.flatBounds;
-      paintSurface(
-        texture,
-        deps,
-        code,
-        "texture",
-        IDLE_TEXTURE_PX / Math.max(width, height),
+      paintSurface(texture, deps, code, "texture", IDLE_TEXTURE_PX / Math.max(width, height), {
         underlay,
-      );
+      });
       viewer.setSurfaceTexture(code, texture);
     }
     viewer.resetView();

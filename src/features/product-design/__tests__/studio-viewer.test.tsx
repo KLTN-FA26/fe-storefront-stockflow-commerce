@@ -7,7 +7,8 @@ import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { DesignStudio } from "../components/studio/design-studio";
 import { COLOR_DISCLAIMER } from "../components/studio/viewer-host";
-import { designBackend } from "./design-backend";
+import { designKeys } from "../queries";
+import { cupWithText, designBackend, submitElsewhere } from "./design-backend";
 import { TEST_FONTS } from "./fixtures";
 
 /** The viewers the studio built: jsdom has no WebGL, so the engine's viewer is replaced by a fake. */
@@ -52,6 +53,10 @@ vi.mock("../engine", async (importOriginal) => {
 });
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
 
+// Each test renders the whole studio over the design mock (~0.2 s a request).
+vi.setConfig({ testTimeout: 20_000 });
+const OPENED = { timeout: 4000 };
+
 const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "requestFullscreen");
 const requestFullscreen = vi.fn(async () => undefined);
 
@@ -76,7 +81,7 @@ afterEach(() => {
 async function openBag() {
   await designBackend();
   renderWithProviders(<DesignStudio designId={MOCK_DESIGN_IDS.draft} fonts={TEST_FONTS} />);
-  return screen.findByRole("img", { name: /Mô hình 3D của sản phẩm/ }, { timeout: 4000 });
+  return screen.findByRole("img", { name: /Mô hình 3D của sản phẩm/ }, OPENED);
 }
 
 describe("ViewerHost with WebGL", () => {
@@ -91,12 +96,29 @@ describe("ViewerHost with WebGL", () => {
     expect(shown).toContainElement(screen.getByText(COLOR_DISCLAIMER));
   });
 
-  it("turns the camera to the face chosen in the tabs", async () => {
+  it("turns the camera to the face chosen in the Mặt in group", async () => {
     await openBag();
 
-    await userEvent.click(screen.getByRole("tab", { name: "Hông trái" }));
+    await userEvent.click(screen.getByRole("radio", { name: "Hông trái" }));
 
     expect(built.at(-1)?.focusSurface).toHaveBeenCalledWith("LEFT");
+  });
+
+  it("keeps the viewer it built when the design turns read-only: no new WebGL context", async () => {
+    const { store } = await designBackend();
+    const id = await cupWithText(store);
+    const { client } = renderWithProviders(<DesignStudio designId={id} fonts={TEST_FONTS} />);
+    await screen.findByRole("img", { name: /Mô hình 3D của sản phẩm/ }, OPENED);
+    const count = built.length;
+    const viewer = built.at(-1)!;
+
+    // Another tab submits it; the studio reads it again, as its status poll would.
+    await submitElsewhere(store, id);
+    await act(() => client.invalidateQueries({ queryKey: designKeys.detail(id) }));
+    await screen.findByRole("group", { name: "Bảng" }, OPENED);
+
+    expect(built).toHaveLength(count);
+    expect(viewer.dispose).not.toHaveBeenCalled();
   });
 
   it("falls back to the flat preview when the WebGL context is lost for good", async () => {

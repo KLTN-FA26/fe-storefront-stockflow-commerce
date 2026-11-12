@@ -14,9 +14,9 @@ import { renderWithProviders, signIn, signOut } from "@/test/render";
 import { DesignStudio } from "../components/studio/design-studio";
 import type { StudioServices } from "../components/studio/studio-context";
 import {
-  effectiveDpi,
   elementOutline,
   emptyDocument,
+  placedDpi,
   surfaceSnapTargets,
   type DesignElement,
   type ImageElement,
@@ -77,7 +77,7 @@ async function openStudio(designId: string) {
       }}
     />,
   );
-  await screen.findByRole("tab", { name: "Lớp" }, { timeout: 4000 });
+  await screen.findByRole("group", { name: /^Khung vẽ/ }, { timeout: 4000 });
   return seen;
 }
 
@@ -120,16 +120,17 @@ function insideSafe(services: { current?: StudioServices }, element: ImageElemen
 }
 
 describe("tool panel", () => {
-  it("shows the options of the active tool beside the rail", async () => {
+  it("opens the options of the active tool from the rail", async () => {
     const user = userEvent.setup();
     const { store: studio } = await designBackend();
     await openStudio(await cupDraft(studio));
 
-    expect(screen.getByText(/để di chuyển, xoay hoặc đổi kích thước/)).toBeInTheDocument();
+    // The panel is closed until a rail item opens it; it follows the tool while it is open.
+    expect(screen.queryByRole("region", { name: "Tùy chọn công cụ" })).not.toBeInTheDocument();
     await chooseImageTool(user);
     expect(dropzone()).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Ảnh đã tải lên" })).toBeInTheDocument();
-    expect(screen.getByText("Chưa có ảnh nào được tải lên.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ảnh của bạn" })).toBeInTheDocument();
+    expect(screen.getByText("Chưa có ảnh nào. Tải ảnh lên để bắt đầu.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Chữ (T)" }));
     expect(screen.queryByLabelText("Kéo thả hoặc chọn ảnh")).not.toBeInTheDocument();
@@ -237,8 +238,8 @@ describe("uploading an image", () => {
     const state = services.current!.editor.store.getState();
     expect(state).toMatchObject({ selectedId: image!.id, tool: "select" });
 
-    // The badge reads what the image reaches where it sits.
-    const dpi = Math.round(effectiveDpi(3000, image!.widthMm));
+    // The badge reads what the image reaches where it sits (bent around the cup: stretch included).
+    const dpi = Math.round(placedDpi(image!, services.current!.surfaces.byCode.BODY!));
     expect(screen.getByText(/DPI/)).toHaveTextContent(`${dpi} DPI ✓`);
     expect(screen.getByText(/DPI/)).toHaveAttribute("data-tone", "positive");
 
@@ -249,7 +250,9 @@ describe("uploading an image", () => {
       .digest("hex");
     expect(post).toHaveBeenCalledTimes(1);
     expect(post.mock.calls[0]![2]).toMatchObject({ headers: { "Idempotency-Key": key } });
-    expect((post.mock.calls[0]![1] as FormData).get("file")).toMatchObject({ name: "logo.png" });
+    expect((post.mock.calls[0]![1] as FormData).get("file")).toMatchObject({
+      name: "logo.png",
+    });
 
     act(() => services.current!.editor.undo());
     expect(imagesOf(services)).toEqual([]);
@@ -312,14 +315,17 @@ describe("uploading an image", () => {
     await screen.findByText("Đã thêm ảnh");
     const [image] = imagesOf(services);
     const safe = safeArea(services);
-    expect(image!.heightMm).toBeLessThan(safe.height); // a full-height box pokes out at its top corners
+    // Bent along the cup body, the frame follows the sector: it may reach the safe height, never more.
+    expect(image!.wrap).toBe(true);
+    expect(image!.heightMm).toBeLessThanOrEqual(safe.height + 1e-9);
     expect(image!.placement.scale).toBe(1);
     expect(insideSafe(services, image!)).toBe(true);
   });
 
   // The print configuration's minDpi is 300 (docs B34): under it is blurry, from there fine (no
   // middle band). 3:1 pictures are placed at 60 % of the safe width, so the DPI follows from the
-  // picture's width: 1500 px is about 280 DPI there, 1800 px about 330.
+  // picture's width: 1500 px is about 280 DPI there, 1800 px about 330 (before the bend's stretch, which
+  // takes about 8 % off: 1800 px still reads 307).
   it.each([
     [600, "danger"],
     [1500, "danger"],
@@ -335,7 +341,9 @@ describe("uploading an image", () => {
 
     await screen.findByText("Đã thêm ảnh");
     expect(services.current!.template.minDpi).toBe(300);
-    const dpi = Math.round(effectiveDpi(width, imagesOf(services)[0]!.widthMm));
+    const dpi = Math.round(
+      placedDpi(imagesOf(services)[0]!, services.current!.surfaces.byCode.BODY!),
+    );
     const badge = screen.getByText(/DPI/);
     expect(badge).toHaveTextContent(tone === "positive" ? `${dpi} DPI ✓` : `${dpi} DPI – sẽ mờ`);
     expect(badge).toHaveAttribute("data-tone", tone);
@@ -408,16 +416,49 @@ describe("uploading an image", () => {
 });
 
 describe("pasting an image", () => {
+  const ADDED = { timeout: 4000 };
+
   it("places an image pasted on the stage", async () => {
     const user = userEvent.setup();
-    const { store: studio } = await designBackend();
+    const { store: studio, post } = await designBackend();
     const services = await openStudio(await cupDraft(studio));
     await chooseImageTool(user);
 
     fireEvent.paste(stage(), { clipboardData: { files: [png(3000, 2000, "image.png")] } });
 
-    await screen.findByText("Đã thêm ảnh");
+    await screen.findByText("Đã thêm ảnh", undefined, ADDED);
     expect(imagesOf(services)).toHaveLength(1);
+    expect(post).toHaveBeenCalledTimes(1); // heard once, though the panel is open
+  });
+
+  it("places an image pasted on the stage with the image tool picked by its key, the panel closed", async () => {
+    const user = userEvent.setup();
+    const { store: studio } = await designBackend();
+    const services = await openStudio(await cupDraft(studio));
+    act(() => stage().focus());
+    await user.keyboard("u");
+    expect(services.current!.editor.store.getState().tool).toBe("image");
+    expect(screen.queryByRole("region", { name: "Tùy chọn công cụ" })).not.toBeInTheDocument();
+
+    fireEvent.paste(stage(), { clipboardData: { files: [png(3000, 2000, "image.png")] } });
+
+    await screen.findByText("Đã thêm ảnh", undefined, ADDED);
+    expect(imagesOf(services)).toHaveLength(1);
+  });
+
+  it("says in the live region why a paste was refused while the panel is closed", async () => {
+    const user = userEvent.setup();
+    const { store: studio } = await designBackend();
+    const services = await openStudio(await cupDraft(studio));
+    await chooseImageTool(user);
+    await user.click(screen.getByRole("button", { name: "Đóng bảng" }));
+
+    const gif = new File([new Uint8Array([1])], "anh.gif", { type: "image/gif" });
+    fireEvent.paste(stage(), { clipboardData: { files: [gif] } });
+
+    const status = await screen.findByText(/^Định dạng không được hỗ trợ/, undefined, ADDED);
+    expect(status.closest("[aria-live]")).toBeInTheDocument();
+    expect(imagesOf(services)).toEqual([]);
   });
 
   it("leaves a paste elsewhere on the page alone", async () => {
@@ -467,11 +508,14 @@ describe("image properties", () => {
   async function selectLogo(user: UserEvent, elements: DesignElement[]) {
     const { store: studio, ...backend } = await designBackend();
     const services = await openStudio(await cupDraft(studio, elements));
-    await user.click(screen.getByRole("tab", { name: "Lớp" }));
+    await user.click(screen.getByRole("button", { name: "Lớp" }));
     await user.click(screen.getByRole("option", { name: "Ảnh" }));
-    await user.click(screen.getByRole("tab", { name: "Thuộc tính" }));
     return { services, ...backend };
   }
+
+  /** The "Vị trí" popover of the context bar, which holds X, Y, rotation and scale. */
+  const openPosition = (user: UserEvent) =>
+    user.click(screen.getByRole("button", { name: "Vị trí" }));
 
   it("shows the DPI where the image sits and follows its size", async () => {
     const user = userEvent.setup();
@@ -479,6 +523,7 @@ describe("image properties", () => {
     // 1200 px over 30 mm is 1016 DPI.
     expect(screen.getByText(/DPI/)).toHaveTextContent("1016 DPI ✓");
 
+    await openPosition(user);
     const scale = screen.getByLabelText("Tỉ lệ (%)");
     await user.clear(scale);
     await user.type(scale, "300");
@@ -492,6 +537,20 @@ describe("image properties", () => {
     await user.tab();
     expect(screen.getByText(/DPI/)).toHaveTextContent("203 DPI – sẽ mờ");
     expect(screen.getByText(/DPI/)).toHaveAttribute("data-tone", "danger");
+  });
+
+  it("counts the stretch of the outer edge once the logo is bent, as preflight does", async () => {
+    const user = userEvent.setup();
+    const { services } = await selectLogo(user, [logo({ widthMm: 60, heightMm: 40 })]);
+    const flat = placedDpi(element(services));
+    expect(screen.getByText(/DPI/)).toHaveTextContent(`${Math.round(flat)} DPI`);
+
+    await user.click(screen.getByRole("switch", { name: "Uốn theo thân ly" }));
+
+    const surface = services.current!.surfaces.byCode.BODY!;
+    const bent = placedDpi(element(services), surface);
+    expect(bent).toBeLessThan(flat);
+    expect(screen.getByText(/DPI/)).toHaveTextContent(`${Math.round(bent)} DPI`);
   });
 
   it("flips horizontally and vertically, one undo step each", async () => {
@@ -537,10 +596,13 @@ describe("image properties", () => {
     expect(element(services).wrap).toBe(true);
     expect(wrap).toBeChecked();
     expect(element(services).placement.rotationDeg).toBe(20); // kept, ignored while wrapped
+    await openPosition(user);
     expect(screen.getByLabelText("Góc xoay (°)")).toBeDisabled();
+    await user.keyboard("{Escape}");
 
     await user.click(wrap);
     expect(element(services).wrap).toBeUndefined();
+    await openPosition(user);
     expect(screen.getByLabelText("Góc xoay (°)")).toBeEnabled();
   });
 

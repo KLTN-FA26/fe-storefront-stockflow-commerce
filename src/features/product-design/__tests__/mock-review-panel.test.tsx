@@ -10,7 +10,7 @@ import { renderWithProviders, signIn, signOut } from "@/test/render";
 import { MockReviewPanel } from "../components/mock-review-panel";
 import { DesignStudio } from "../components/studio/design-studio";
 import type { Design } from "../types";
-import { designBackend } from "./design-backend";
+import { designBackend, draftIn, STUDIO_PRODUCTS } from "./design-backend";
 import { TEST_FONTS } from "./fixtures";
 
 const env = vi.hoisted(() => ({
@@ -62,7 +62,7 @@ function renderStudio(designId: string) {
   return renderWithProviders(
     <>
       <DesignStudio designId={designId} fonts={TEST_FONTS} />
-      <MockReviewPanel />
+      <MockReviewPanel placement="studio" />
     </>,
   );
 }
@@ -160,6 +160,36 @@ describe("MockReviewPanel in the studio", () => {
   });
 });
 
+describe("where the trigger floats", () => {
+  const trigger = async () => (await screen.findByRole("button", OPEN)).parentElement!;
+
+  it("in the studio on a draft: left of the 3D card, so neither bottom corner is covered", async () => {
+    const { store } = await designBackend();
+    renderStudio(await draftIn(store, STUDIO_PRODUCTS.cup));
+    await screen.findByRole("group", { name: "Công cụ" }, { timeout: 4000 });
+
+    // The card is 300 px wide, 12 px in from the stage area's right edge (itself 12 px in): the
+    // trigger's right edge is 352 px in, 28 px left of the card and of its pill.
+    expect(await trigger()).toHaveClass("fixed", "bottom-4", "right-88");
+    expect(await trigger()).not.toHaveClass("left-4");
+  });
+
+  it("in the studio on a read-only design: the bottom-right corner, where no card is", async () => {
+    await designBackend();
+    renderStudio(MOCK_DESIGN_IDS.approved);
+    await screen.findByRole("group", { name: "Bảng" }, { timeout: 4000 });
+
+    expect(await trigger()).toHaveClass("fixed", "bottom-4", "right-4");
+  });
+
+  it("on the design list: the bottom-left corner", async () => {
+    await designBackend();
+    renderWithProviders(<MockReviewPanel />);
+
+    expect(await trigger()).toHaveClass("fixed", "bottom-4", "left-4");
+  });
+});
+
 describe("MockReviewPanel on the design list", () => {
   it("lists the designs waiting for review, and Duyệt approves one", async () => {
     const user = userEvent.setup();
@@ -224,7 +254,7 @@ describe("MockReviewPanel reset and storage", () => {
     await user.click(within(panel).getByRole("button", { name: "Xoá dữ liệu mock" }));
     await user.click(await within(panel).findByRole("button", { name: "Huỷ" }));
 
-    expect(post).not.toHaveBeenCalledWith("/__mock/reset");
+    expect(post.mock.calls.some(([url]) => url === "/__mock/reset")).toBe(false);
     expect(within(panel).getByRole("button", { name: "Xoá dữ liệu mock" })).toBeInTheDocument();
   });
 

@@ -11,8 +11,9 @@ import {
 } from "../../autosave";
 import type { DesignDocument, EditorController } from "../../engine";
 import { isDesignConflict } from "../../errors";
+import { DESIGN_STATUS_META } from "../../lifecycle";
 import { useSaveDesignDocument } from "../../mutations";
-import { designDocumentQuery } from "../../queries";
+import { designDocumentQuery, designQuery } from "../../queries";
 import type { Design, DesignDocumentRecord } from "../../types";
 import type { AutosaveControls } from "./studio-context";
 import { createDraftKeeper, type DraftKeeper } from "./unsaved-draft";
@@ -52,6 +53,8 @@ export const ADOPT_RETRY_MS = 2000;
  * A read-only design (`readOnly`: it is not a DRAFT) is never saved. When the design leaves DRAFT
  * while it is open (another tab submitted it, a save was refused), what was not stored stays in
  * this browser (the offline draft), nothing more is sent, and the editor shows the stored document.
+ * A refusal while the design read since still says DRAFT is asked again on "Thử lại": still a
+ * DRAFT, saving goes on.
  */
 export function useAutosave(
   design: Design,
@@ -103,6 +106,14 @@ export function useAutosave(
       return send(read.record.version);
     }
   });
+  /**
+   * "Thử lại" after a refusal: the design read again; the editor's document when it is a DRAFT
+   * still (the refusal raced a status that came back), else `null` and the studio follows it.
+   */
+  const recheck = useEffectEvent(async () => {
+    const fresh = await client.fetchQuery({ ...designQuery(designId), staleTime: 0 });
+    return DESIGN_STATUS_META[fresh.status].editable ? editor.store.getState().document : null;
+  });
   const isReadOnly = useEffectEvent(() => readOnly);
   const report = useEffectEvent((next: AutosaveChange) => {
     latest.current = next.state;
@@ -123,6 +134,7 @@ export function useAutosave(
     };
     const saver = createAutosaver({
       save: (document, version) => save(document, version),
+      recheck: () => recheck(),
       initialVersion: knownRef.current,
       onChange: (next) => {
         if (next.state === "saved" || next.state === "idle") keeper.forget();
@@ -250,6 +262,7 @@ export function useAutosave(
     },
     conflict: () => saverRef.current?.conflict(),
     latestState: () => latest.current,
+    storedChecksum: () => storedRef.current,
     retry: () => saverRef.current?.retry(),
   }));
   return { ...change, ...controls };

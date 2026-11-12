@@ -24,6 +24,13 @@ export {
   submitDesign,
   uploadDesignAsset,
 } from "./api";
+export { DesignEntry } from "./components/design-entry";
+export { DesignListScreen } from "./components/design-list-screen";
+export type {
+  DesignableCatalogue,
+  DesignableProduct,
+  MoreProducts,
+} from "./components/new-design-dialog";
 export {
   describeDesignError,
   isDesignConflict,

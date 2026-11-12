@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { emptyDocument } from "../document/factory";
 import type { DesignDocument } from "../document/schema";
 import { canonicalJson, documentChecksum } from "../export/checksum";
-import { BAND_OVERLAP_PX, MAX_BAND_PIXELS, printBands } from "../export/print-bands";
+import { MAX_BAND_PIXELS, printBands } from "../export/print-bands";
 import { buildPrintPdf, buildSheetPdf, type PrintPage } from "../export/print-pdf";
 import { drawSpecSheet } from "../export/spec-sheet";
 import { buildSpecSummary, specText } from "../export/summary";
@@ -660,7 +660,7 @@ describe("print PDF", () => {
       expect(cutOperators(pageContent(banded))).toEqual(cutOperators(pageContent(whole)));
     });
 
-    it("draws a band's overlap row into the next band's share, under it (no hairline, N5)", async () => {
+    it("draws every band over its own share only, so translucent ink at a join keeps its opacity", async () => {
       const pdf = await PDFDocument.load(
         await buildPrintPdf([
           {
@@ -668,7 +668,7 @@ describe("print PDF", () => {
             widthMm: 100,
             heightMm: 100,
             bands: [
-              { png: PNG_1x1, heightPx: 2, overlapPx: 1 },
+              { png: PNG_1x1, heightPx: 2 },
               { png: PNG_1x1, heightPx: 2 },
             ],
             cutPath: rectPath,
@@ -677,10 +677,10 @@ describe("print PDF", () => {
       );
       const [w, h] = [mmToPt(100), mmToPt(100)];
       const [top, bottom] = imagePlacements(pageContent(pdf));
-      // The top band is 3 rows tall from the top edge: its own 2 and the next band's first row.
-      expectArgs(top!, [0, h / 4, w, (3 * h) / 4]);
-      // The bottom band keeps its share and is drawn after, over the repeated row.
+      // Edge to edge: a row painted by two bands would blend a 50 % ink twice, into 75 %.
+      expectArgs(top!, [0, h / 2, w, h / 2]);
       expectArgs(bottom!, [0, 0, w, h / 2]);
+      expect(top![1]).toBeCloseTo(bottom![1]! + bottom![3]!, 9);
     });
 
     it("gives each band its share of the page by its rows", async () => {
@@ -707,22 +707,20 @@ describe("print PDF", () => {
 });
 
 describe("printBands", () => {
-  it("draws a page within the limit as one band, with no overlap", () => {
-    expect(printBands(3000, 4000)).toEqual([{ y0Px: 0, heightPx: 4000, overlapPx: 0 }]);
+  it("draws a page within the limit as one band", () => {
+    expect(printBands(3000, 4000)).toEqual([{ y0Px: 0, heightPx: 4000 }]);
   });
 
-  it("splits a page over 16 MP into even bands that overlap the next by one row", () => {
+  it("splits a page over 16 MP into even bands, edge to edge, no row drawn twice", () => {
     const bands = printBands(3300, 5244); // 17.3 MP
     expect(bands).toEqual([
-      { y0Px: 0, heightPx: 2622, overlapPx: BAND_OVERLAP_PX },
-      { y0Px: 2622, heightPx: 2622, overlapPx: 0 },
+      { y0Px: 0, heightPx: 2622 },
+      { y0Px: 2622, heightPx: 2622 },
     ]);
-    expect(
-      bands.every(({ heightPx, overlapPx }) => 3300 * (heightPx + overlapPx) <= MAX_BAND_PIXELS),
-    ).toBe(true);
+    expect(bands.every(({ heightPx }) => 3300 * heightPx <= MAX_BAND_PIXELS)).toBe(true);
   });
 
-  it("covers every row once, whatever the size, each canvas within the limit", () => {
+  it("covers every row exactly once, whatever the size, each canvas within the limit", () => {
     for (const [width, height] of [
       [4000, 4001],
       [8192, 8192],
@@ -731,11 +729,11 @@ describe("printBands", () => {
     ] as const) {
       const bands = printBands(width, height);
       let next = 0;
-      for (const [i, { y0Px, heightPx, overlapPx }] of bands.entries()) {
-        expect(y0Px).toBe(next);
-        expect(width * (heightPx + overlapPx)).toBeLessThanOrEqual(MAX_BAND_PIXELS);
-        expect(overlapPx).toBe(i < bands.length - 1 ? BAND_OVERLAP_PX : 0);
-        next += heightPx;
+      for (const band of bands) {
+        expect(Object.keys(band).toSorted()).toEqual(["heightPx", "y0Px"]);
+        expect(band.y0Px).toBe(next);
+        expect(width * band.heightPx).toBeLessThanOrEqual(MAX_BAND_PIXELS);
+        next += band.heightPx;
       }
       expect(next).toBe(height);
     }

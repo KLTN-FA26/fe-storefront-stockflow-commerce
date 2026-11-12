@@ -6,22 +6,17 @@
 export const MAX_BAND_PIXELS = 16_000_000;
 
 /**
- * Rows a band draws past its own share, repeated by the band below it (N5): stacked edge to edge,
- * two images can leave a hairline where a viewer or a RIP rounds their edges; the next band is drawn
- * over the repeated row, so nothing shows between them.
+ * Rows `[y0Px, y0Px + heightPx)` of a page raster: one band, drawn on its own canvas. Bands meet
+ * edge to edge and no row belongs to two of them. A repeated row would be painted twice in the PDF,
+ * and the raster is transparent wherever there is no ink (no white under kraft), so a translucent
+ * ink crossing the join would print darker there (50 % → 75 %). The joins fall on whole raster rows,
+ * so a RIP at the raster's DPI or a multiple of it meets them exactly.
  */
-export const BAND_OVERLAP_PX = 1;
+export type BandRows = { y0Px: number; heightPx: number };
 
 /**
- * Rows `[y0Px, y0Px + heightPx)` of a page raster, and `overlapPx` rows after them that the next
- * band covers again (none for the last band). The band's canvas holds `heightPx + overlapPx` rows.
- */
-export type BandRows = { y0Px: number; heightPx: number; overlapPx: number };
-
-/**
- * The bands a `widthPx × heightPx` raster is drawn in, top to bottom: as few as keep each canvas,
- * overlap included, within `maxPixels`, of one height but the last. A raster within the limit is
- * one band.
+ * The bands a `widthPx × heightPx` raster is drawn in, top to bottom: as few as keep each canvas
+ * within `maxPixels`, of one height but the last. A raster within the limit is one band.
  */
 export function printBands(
   widthPx: number,
@@ -30,13 +25,12 @@ export function printBands(
 ): BandRows[] {
   const height = Math.max(1, Math.ceil(heightPx));
   const width = Math.max(1, Math.ceil(widthPx));
-  if (width * height <= maxPixels) return [{ y0Px: 0, heightPx: height, overlapPx: 0 }];
-  const rowsPerBand = Math.max(1, Math.floor(maxPixels / width) - BAND_OVERLAP_PX);
+  if (width * height <= maxPixels) return [{ y0Px: 0, heightPx: height }];
+  const rowsPerBand = Math.max(1, Math.floor(maxPixels / width));
   const count = Math.ceil(height / rowsPerBand);
   const bandHeight = Math.ceil(height / count);
   return Array.from({ length: count }, (_, i) => ({
     y0Px: i * bandHeight,
     heightPx: Math.min(bandHeight, height - i * bandHeight),
-    overlapPx: i < count - 1 ? BAND_OVERLAP_PX : 0,
   }));
 }

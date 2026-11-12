@@ -23,6 +23,13 @@ export type AutosaveOptions = {
   delayMs?: number;
   isOnline?: () => boolean;
   onChange: (change: AutosaveChange) => void;
+  /**
+   * "Thử lại" after a refusal (409 INVALID_STATE or 404: the design left DRAFT or is gone, so the
+   * server said): the caller reads the design again and answers the document to save when it is
+   * still a DRAFT, `null` when it is not (it then follows the new status). Without it, or when it
+   * fails, the refusal stands.
+   */
+  recheck?: () => Promise<DesignDocument | null>;
 };
 
 export type Autosaver = {
@@ -30,7 +37,10 @@ export type Autosaver = {
   schedule(doc: DesignDocument): void;
   /** Saves what is pending now (route leave, `visibilitychange`); settles when it is stored or failed. */
   flush(): Promise<void>;
-  /** The user's "Thử lại" after an error, or an immediate attempt while offline. */
+  /**
+   * The user's "Thử lại" after an error, or an immediate attempt while offline. After a refusal
+   * it asks `recheck` whether the design can still be saved.
+   */
   retry(): void;
   /**
    * Adopts a newer version of the design that another write produced (a rename, a submission, a
@@ -78,7 +88,13 @@ const isNetworkFailure = (error: unknown) => error instanceof ApiError && error.
  * quiet period like any other (an oversize refusal clears once the design is simpler).
  */
 export function createAutosaver(options: AutosaveOptions): Autosaver {
-  const { save, onChange, delayMs = AUTOSAVE_DELAY_MS, isOnline = defaultIsOnline } = options;
+  const {
+    save,
+    onChange,
+    recheck,
+    delayMs = AUTOSAVE_DELAY_MS,
+    isOnline = defaultIsOnline,
+  } = options;
 
   let version = options.initialVersion;
   let savedAt: string | undefined;
@@ -92,6 +108,8 @@ export function createAutosaver(options: AutosaveOptions): Autosaver {
   let locked = false;
   /** A save was refused because the design left DRAFT or is gone: nothing more is sent. */
   let refused = false;
+  /** `recheck` is asked and not answered yet: a second "Thử lại" waits for it. */
+  let rechecking = false;
 
   const emit = (next: AutosaveState, failure?: { error: unknown }) => {
     state = next;
@@ -201,10 +219,29 @@ export function createAutosaver(options: AutosaveOptions): Autosaver {
   }
 
   function retry() {
+    if (refused && recheck && !disposed && !locked) return void reopen(recheck);
     if (stopped()) return;
     attempt = 0;
     clearDebounce();
     void startDrain();
+  }
+
+  /** After a refusal: when the design turns out to be a DRAFT still, its document is saved at once. */
+  async function reopen(check: () => Promise<DesignDocument | null>) {
+    if (rechecking) return;
+    rechecking = true;
+    let doc: DesignDocument | null;
+    try {
+      doc = await check();
+    } catch {
+      doc = null; // cannot tell: the refusal stands until the next "Thử lại"
+    } finally {
+      rechecking = false;
+    }
+    if (!doc || !refused || disposed || locked) return;
+    refused = false;
+    pending = doc;
+    retry();
   }
 
   function setVersion(next: number) {

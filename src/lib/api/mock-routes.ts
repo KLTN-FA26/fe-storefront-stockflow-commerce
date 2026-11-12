@@ -11,7 +11,6 @@ import { MOCK_DATA, registerMockRoute, paginate } from "./mock-adapter";
 import { registerAuthMockRoutes } from "./mock-auth";
 import { registerCatalogMockRoutes } from "./mock-catalog";
 import { MOCK_CUSTOMER_ID, registerCustomerAddressMockRoutes } from "./mock-customer-addresses";
-import { setUpDesignMock } from "./mock-design";
 import { createMockCatalog, seedMockCatalog } from "./mock-fixtures/catalog";
 import {
   createMockAddressBook,
@@ -648,9 +647,7 @@ export function registerAllMockRoutes(): void {
     return { status: 200, data: { message: "Logged out" }, headers: {} };
   });
 
-  // Module 12 — design (spec 2026-11-09 §4–§5, see mock-design.ts), last: the docs' design API over
-  // a store that persists to IndexedDB (memory when the browser refuses it); its print
-  // configurations cover the CUSTOMIZABLE SKUs of the same catalogue. Only design requests wait for
-  // its store, and its failures answer design requests only (logged), never the other routes.
-  void setUpDesignMock();
+  // Module 12 — design (spec 2026-11-09 §4–§5) is not set up here: `mock-adapter.ts` loads it
+  // (`mock-design.ts`, with the design engine) on the first design request, so no other route
+  // waits for it.
 }

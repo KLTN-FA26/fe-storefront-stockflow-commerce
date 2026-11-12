@@ -18,13 +18,13 @@ import { STUDIO_ANNOUNCEMENTS } from "./studio-announcer";
 import type { StudioServices } from "./studio-context";
 
 /**
- * The edits the stage, the keyboard, the Layers list and the Properties panel share. Each one
+ * The edits the stage, the keyboard, the Layers list and the context bar share. Each one
  * reads the editor's state when it runs and is one undo step unless it is given a `gestureId`.
  */
 
 type Services = Pick<StudioServices, "editor" | "surfaces" | "announce">;
 
-/** The placement scale an element may take, from a handle or the Properties panel. */
+/** The placement scale an element may take, from a handle or the context bar. */
 export const SCALE_RANGE = { min: 0.05, max: 20 } as const;
 
 /** Degrees in (−180, 180]. */

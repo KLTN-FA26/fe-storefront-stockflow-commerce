@@ -583,6 +583,52 @@ describe("a design that can no longer be saved", () => {
     expect(states().at(-1)).toBe("saved");
   });
 
+  it("on retry() after a refusal, asks recheck(): still a draft, its document is saved at once and saving goes on", async () => {
+    const save = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "moved on"))
+      .mockResolvedValue({ version: 9, savedAt: T2 });
+    const recheck = vi.fn(async (): Promise<DesignDocument | null> => d2);
+    const { saver, last } = setup({ save, recheck });
+    saver.schedule(d1);
+    await saver.flush();
+    expect(last()).toMatchObject({ state: "error" });
+
+    saver.retry();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(recheck).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenLastCalledWith(d2, 3);
+    expect(last()).toMatchObject({ state: "saved", version: 9 });
+    saver.schedule(d3);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(save).toHaveBeenLastCalledWith(d3, 9);
+  });
+
+  it("stays refused when recheck() finds the design is no longer a draft, or cannot tell", async () => {
+    const refusal = new ApiError(409, "INVALID_STATE", "moved on");
+    const save = vi.fn().mockRejectedValue(refusal);
+    const recheck = vi
+      .fn<() => Promise<DesignDocument | null>>()
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new ApiError(0, "NETWORK_ERROR", "no network"));
+    const { saver, last } = setup({ save, recheck });
+    saver.schedule(d1);
+    await saver.flush();
+
+    saver.retry();
+    await vi.advanceTimersByTimeAsync(0);
+    saver.retry();
+    await vi.advanceTimersByTimeAsync(0);
+    saver.schedule(d2);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(recheck).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(last()).toMatchObject({ state: "error", error: refusal });
+  });
+
   it("saves again after lock(false) once a refused save locked it", async () => {
     const save = vi
       .fn()

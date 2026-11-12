@@ -1,7 +1,7 @@
 /**
  * What the design mock keeps and answers with (spec 2026-11-09 §4.1): the rows of its snapshot,
- * the DTOs built from them, and the ApiResponse envelope. The store is `design-store.ts`, its
- * images and submitted files `design-store-files.ts`, the seeded rows `design-seed.ts`.
+ * the DTOs built from them, and the ApiResponse envelope. The store is `design-store.ts` and its
+ * parts `design-store-*.ts`, the seeded rows `design-seed.ts`.
  * Nullable DTO fields are sent as `null`, never left out.
  */
 
@@ -92,7 +92,7 @@ export type EventRow = {
   note: string | null;
 };
 
-/** One file of the latest submission; its bytes are the blob under `file/{designId}/{role}`. */
+/** One file of the latest submission; its bytes are the blob under `fileBlobKey(row)`. */
 export type FileRow = {
   designId: string;
   role: BundleRole;
@@ -101,6 +101,8 @@ export type FileRow = {
   sizeBytes: number;
   sha256: string;
   storedAt: string;
+  /** The blob's key, `file/{designId}/v{version}/{role}`; seeded rows have none. */
+  key?: string;
   /** Seeded rows only: a static link instead of a blob. */
   url?: string;
 };
@@ -126,7 +128,13 @@ export const customerSkuCode = (sku: string, seq: number) =>
   `${sku.toUpperCase().replace(/[^A-Z0-9-]/g, "-")}-KH${MOCK_CUSTOMER_NO}-${String(seq).padStart(3, "0")}`;
 
 export const assetKey = (assetId: string) => `asset/${assetId}`;
-export const fileKey = (designId: string, role: BundleRole) => `file/${designId}/${role}`;
+/**
+ * A submitted file's blob: under the version the submission gives the design, so a resubmission
+ * never writes over the bytes the rows still list; without one, the seed's `file/{designId}/{role}`.
+ */
+export const fileKey = (designId: string, role: BundleRole, version?: number) =>
+  version === undefined ? `file/${designId}/${role}` : `file/${designId}/v${version}/${role}`;
+export const fileBlobKey = (file: FileRow) => file.key ?? fileKey(file.designId, file.role);
 
 /**
  * The approval's bundle checksum: SHA-256 of the submitted files (`ROLE:sha256` lines in role
@@ -208,6 +216,12 @@ export function fail(
     },
   };
 }
+
+/** The answer with its envelope's `timestamp` read from the store's clock instead of the system's. */
+export const stampedAt = (result: MockResult, at: string): MockResult => ({
+  status: result.status,
+  data: { ...asRecord(result.data), timestamp: at },
+});
 
 export const notFound = () => fail(404, "NOT_FOUND", "Design not found");
 export const invalidState = () =>

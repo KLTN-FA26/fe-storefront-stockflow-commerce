@@ -1,10 +1,10 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { sha256Hex } from "@/features/product-design/engine/export/checksum";
 
 import { api } from "./client";
 import { ApiError } from "./error";
-import { activateMockAdapter } from "./mock-adapter";
+import { __resetMockAdapterForTests, activateMockAdapter } from "./mock-adapter";
 import { registerDesignMockRoutes } from "./mock-design";
 import { MOCK_SKU_WITHOUT_PRINT_CONFIG } from "./mock-fixtures/design-print-configs";
 import type {
@@ -24,7 +24,6 @@ import { createDesignMockStore } from "./mock-fixtures/design-store";
 
 const uuid = (n: number) => `5e5e0000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
 const CUP12 = { productSlug: "ly-giay-2-lop-12oz", sku: "CUP-PAPER-12OZ-WHT" };
-const originalAdapter = api.defaults.adapter;
 
 interface Page<T> {
   items: T[];
@@ -44,21 +43,21 @@ async function codeOf(request: Promise<unknown>) {
   return { status: (error as ApiError).status, code: (error as ApiError).code };
 }
 
-let ids = 0;
-
-beforeAll(async () => {
+// Each test starts from a page that just activated the full mock: its own route table and stores.
+beforeEach(async () => {
   vi.spyOn(console, "info").mockImplementation(() => {});
+  // The probe's "no handler", and the design mock keeping its data in memory (no IndexedDB here).
+  vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.spyOn(Math, "random").mockReturnValue(0.06); // no simulated 5% error, shortest latency
   activateMockAdapter();
   // The adapter looks a route up only after `registerAllMockRoutes()` ran: an unknown path settles
   // once it has, so routes registered later replace the default ones and are not overwritten.
-  vi.spyOn(console, "warn").mockImplementationOnce(() => {});
   await api.get("/routes-ready-probe").catch(() => undefined);
 });
 
-afterAll(() => {
+afterEach(() => {
+  __resetMockAdapterForTests();
   vi.restoreAllMocks();
-  if (originalAdapter) api.defaults.adapter = originalAdapter;
 });
 
 it("the app's route table serves the design mock (seeded, memory storage in tests)", async () => {
@@ -67,7 +66,9 @@ it("the app's route table serves the design mock (seeded, memory storage in test
 });
 
 describe("design mock routes", () => {
-  beforeAll(async () => {
+  // A fresh seeded store behind the design routes for every test.
+  beforeEach(async () => {
+    let ids = 0;
     const store = await createDesignMockStore({
       storage: createMemoryStorage(),
       newId: () => uuid(0x1000 + ids++),
@@ -156,6 +157,26 @@ describe("design mock routes", () => {
       status: 422,
       code: "FILE_REJECTED",
     });
+  });
+
+  it("POST /designs/:id/assets takes a file part of another realm (duck-typed, not `instanceof Blob`)", async () => {
+    const id = MOCK_DESIGN_IDS.draft;
+    const bytes = new Uint8Array(64).fill(7);
+    const foreign = {
+      name: "logo.png",
+      type: "image/png",
+      size: bytes.length,
+      arrayBuffer: async () => bytes.buffer,
+    };
+    const form = { get: (name: string) => (name === "file" ? foreign : null) };
+
+    // Handed to the adapter as is, like a FormData axios does not know.
+    const uploaded = await api.post<DesignAssetDto>(`/designs/${id}/assets`, form, {
+      transformRequest: [(body: unknown) => body],
+    });
+
+    expect(uploaded.status).toBe(201);
+    expect(uploaded.data).toMatchObject({ designId: id, originalName: "logo.png", sizeBytes: 64 });
   });
 
   it("POST /designs/:id/preflight-failures, then POST /designs/:id/submissions (multipart parts) and GET files", async () => {

@@ -35,6 +35,15 @@ describe("DesignEntry", () => {
     expect(screen.queryByRole("link", { name: "Thiết kế" })).not.toBeInTheDocument();
   });
 
+  it("says only why where the page already offers the Sales chat (L7)", async () => {
+    renderWithProviders(
+      <DesignEntry productSlug="tui-giay-kraft" sku="BAG-KRAFT-L" withSalesChat={false} />,
+    );
+
+    expect(await screen.findByText("Quy cách này chưa nhận thiết kế")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Chat với Sale" })).not.toBeInTheDocument();
+  });
+
   it("does the same for a variant that is no longer ACTIVE", async () => {
     renderWithProviders(<DesignEntry productSlug="ly-giay-kraft-16oz" sku={MOCK_BLOCKED_SKU} />);
 

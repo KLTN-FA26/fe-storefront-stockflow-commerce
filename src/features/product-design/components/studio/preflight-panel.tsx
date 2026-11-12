@@ -145,8 +145,9 @@ export function FailedIssues({
  * The "Kiểm tra" panel: the preflight summary (Pass/Fail, spec §7), the failures grouped by print
  * area and the print notes under "Lưu ý khi in". Clicking an issue selects its element, switches
  * to its surface and turns the 3D view to it. A Fail blocks "Gửi duyệt"; a note never does.
+ * `heading={false}` leaves out its own title when the container already carries it.
  */
-export function PreflightPanel() {
+export function PreflightPanel({ heading = true }: { heading?: boolean } = {}) {
   const report = usePreflightReport();
   const { retryImages } = useStudio();
   const locate = useLocateIssue();
@@ -156,7 +157,9 @@ export function PreflightPanel() {
   return (
     <section aria-label="Kết quả kiểm tra" className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-ink-primary text-sm font-semibold">Kiểm tra trước khi in</h2>
+        {heading ? (
+          <h2 className="text-ink-primary text-sm font-semibold">Kiểm tra trước khi in</h2>
+        ) : null}
         <SummaryChip report={report} />
       </div>
       {report.issues.length === 0 ? (

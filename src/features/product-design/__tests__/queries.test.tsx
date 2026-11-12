@@ -9,6 +9,7 @@ import { ApiError } from "@/lib/api/error";
 import {
   DESIGN_POLL_MS,
   designKeys,
+  downloadLinkQuery,
   downloadLinkStaleTime,
   printConfigKeys,
   useDesign,
@@ -294,5 +295,29 @@ describe("useDownloadLink (images)", () => {
     expect(get).not.toHaveBeenCalled();
     expect(off.result.current.fetchStatus).toBe("idle");
     expect(noId.result.current.fetchStatus).toBe("idle");
+  });
+
+  it("keeps a link fresh until 30 s before it expires, then reads a new one", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-01T08:00:00Z"));
+    try {
+      const get = vi.spyOn(api, "get").mockResolvedValue({
+        data: { url: "https://files.example.vn/p.png?sig=1", expiresAt: "2026-11-01T08:05:00Z" },
+      });
+      const { client } = setup();
+      // Read the way the images read theirs: through React Query, which asks the stale time.
+      const read = () => client.fetchQuery(downloadLinkQuery(id, ids.asset));
+
+      await read();
+      vi.setSystemTime(new Date("2026-11-01T08:04:29Z"));
+      await read();
+      expect(get).toHaveBeenCalledTimes(1);
+
+      vi.setSystemTime(new Date("2026-11-01T08:04:31Z"));
+      await read();
+      expect(get).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

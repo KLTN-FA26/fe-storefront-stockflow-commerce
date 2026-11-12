@@ -18,7 +18,7 @@ import {
 } from "./mock-fixtures/design-rows";
 import { openDesignStorage } from "./mock-fixtures/design-storage";
 import { createDesignMockStore, type DesignMockStore } from "./mock-fixtures/design-store";
-import type { DesignSubmission } from "./mock-fixtures/design-store-files";
+import type { DesignSubmission } from "./mock-fixtures/design-store-submission";
 
 const respond = (result: MockResult) => ({ status: result.status, data: result.data, headers: {} });
 
@@ -63,9 +63,20 @@ function formOf(config: AxiosRequestConfig): FormData | undefined {
     : undefined;
 }
 
+/** A Blob, duck-typed like `formOf`: one from another realm is not `instanceof Blob` here. */
+function isBlobLike(value: unknown): value is Blob {
+  if (typeof value !== "object" || value === null) return false;
+  const blob = value as Partial<Record<keyof Blob, unknown>>;
+  return (
+    typeof blob.arrayBuffer === "function" &&
+    typeof blob.size === "number" &&
+    typeof blob.type === "string"
+  );
+}
+
 const blobPart = (form: FormData | undefined, name: string) => {
-  const part = form?.get(name);
-  return part instanceof Blob ? part : undefined;
+  const part: unknown = form?.get(name);
+  return isBlobLike(part) ? part : undefined;
 };
 
 const textPart = (form: FormData | undefined, name: string) => {
@@ -90,13 +101,38 @@ function submissionOf(config: AxiosRequestConfig): DesignSubmission {
   };
 }
 
-/** 503: the design mock never started (logged once by `setUpDesignMock`). */
+/**
+ * 503: the design mock never started (logged once by `setUpDesignMock`), or is still starting
+ * after `START_TIMEOUT_MS` (logged by `started`).
+ */
 const unavailable = () =>
   fail(503, "DESIGN_MOCK_UNAVAILABLE", "The design mock did not start; see the browser console");
 
+/** How long a design request waits for the store to start, e.g. an IndexedDB open that hangs. */
+const START_TIMEOUT_MS = 10_000;
+
+/** The store once it started; null when it failed to, or did not within `START_TIMEOUT_MS`. */
+async function started(ready: Promise<DesignMockStore>): Promise<DesignMockStore | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<null>((resolve) => {
+    timer = setTimeout(() => {
+      console.warn(
+        `[mock-design] The design mock has not started after ${START_TIMEOUT_MS / 1000} s; this request answers 503.`,
+      );
+      resolve(null);
+    }, START_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([ready.catch(() => null), late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Registers the design routes over `store`. A pending store is waited for by each design request
- * only, so the rest of the mock never waits on it; a store that failed to start answers 503.
+ * only, so the rest of the mock never waits on it; a store that failed to start, or has not after
+ * 10 s, answers 503.
  */
 export function registerDesignMockRoutes(store: DesignMockStore | Promise<DesignMockStore>): void {
   const ready = Promise.resolve(store);
@@ -108,8 +144,8 @@ export function registerDesignMockRoutes(store: DesignMockStore | Promise<Design
     run: (store: DesignMockStore, config: AxiosRequestConfig) => Promise<MockResult>,
   ) =>
     registerMockRoute(method, pattern, async (config) => {
-      const started = await ready.catch(() => null);
-      return respond(started ? await run(started, config) : unavailable());
+      const store = await started(ready);
+      return respond(store ? await run(store, config) : unavailable());
     });
   const id = (config: AxiosRequestConfig) => param(config, "id");
 

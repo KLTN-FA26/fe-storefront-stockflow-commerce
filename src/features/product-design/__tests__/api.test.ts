@@ -23,6 +23,7 @@ import {
   submitDesign,
   uploadDesignAsset,
 } from "../api";
+import { plainBytes } from "../api-submission";
 import { pngBytes, textEl } from "../engine/__tests__/fixtures";
 import { sha256Hex } from "../engine/export/checksum";
 import { preflightIssuesOf } from "../errors";
@@ -262,6 +263,49 @@ describe("submitting", () => {
       ["PRINT_READY", "print-ready.pdf", sha.PRINT_READY],
       ["TECHNICAL_SPEC", "technical-spec.pdf", sha.TECHNICAL_SPEC],
     ]);
+  });
+
+  it("hashes and sends a file's own bytes, copying only a view over shared memory", () => {
+    const bytes = new TextEncoder().encode("%PDF print");
+    const own = new Uint8Array(new ArrayBuffer(bytes.length));
+    own.set(bytes);
+    expect(plainBytes(own)).toBe(own);
+
+    const shared = new Uint8Array(new SharedArrayBuffer(bytes.length));
+    shared.set(bytes);
+    const copy = plainBytes(shared);
+    expect(copy).not.toBe(shared);
+    expect(copy.buffer).toBeInstanceOf(ArrayBuffer);
+    expect([...copy]).toEqual([...bytes]);
+  });
+
+  it("submits each file from its own bytes: the array hashed is the array the part is built from", async () => {
+    const files = bundle();
+    const bytes = new TextEncoder().encode("%PDF print");
+    const print = new Uint8Array(new ArrayBuffer(bytes.length));
+    print.set(bytes);
+    files.PRINT_READY.bytes = print;
+    const digest = vi.spyOn(globalThis.crypto.subtle, "digest");
+    const wrapped: unknown[] = [];
+    const RealBlob = globalThis.Blob;
+    vi.stubGlobal(
+      "Blob",
+      class extends RealBlob {
+        constructor(parts?: BlobPart[], options?: BlobPropertyBag) {
+          super(parts, options);
+          wrapped.push(...(parts ?? []));
+        }
+      },
+    );
+    try {
+      await submitDesign(draft, { version: 2, preflight: { result: "Pass", issues: [] }, files });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    // A copy of a 50 MB print file (`slice()`) would be another array in both places.
+    expect(digest.mock.calls.some(([, data]) => data === print)).toBe(true);
+    expect(wrapped).toContain(print);
   });
 
   it("lets a server-side preflight Fail through with its issues", async () => {

@@ -2,6 +2,7 @@ import {
   BackSide,
   BufferGeometry,
   Color,
+  type DirectionalLight,
   DoubleSide,
   FrontSide,
   Material,
@@ -10,6 +11,7 @@ import {
   MeshPhysicalMaterial,
   MeshStandardMaterial,
   NeutralToneMapping,
+  type Object3D,
   PlaneGeometry,
   PMREMGenerator,
   SRGBColorSpace,
@@ -536,7 +538,11 @@ describe("ProductViewer", () => {
       const frames = stubFrames();
       const { viewer, renderer, canvas } = setup();
       const scene = viewer["scene"];
-      const lights = () => scene.children.filter((child) => "isLight" in child);
+      const lights = () => {
+        const found: Object3D[] = [];
+        scene.traverse((child) => "isLight" in child && found.push(child));
+        return found;
+      };
       const before = lights();
       expect(before).toHaveLength(2);
 
@@ -591,6 +597,55 @@ describe("ProductViewer", () => {
     viewer.resetView();
     expect(position.z - target.z).toBeCloseTo(front, 6);
     expect(Math.abs(position.x - target.x)).toBeLessThan(1e-6);
+  });
+
+  describe("light that follows the viewer", () => {
+    it("turns the environment to the camera's azimuth after each controls change", () => {
+      const { viewer } = setup();
+      viewer.setModel(cup12oz, createSurfaces(cup12oz));
+      const scene = viewer["scene"];
+      const controls = viewer["controls"];
+      expect(scene.environmentRotation.y).toBeCloseTo(0);
+
+      viewer.focusSurface("RIGHT");
+      expect(scene.environmentRotation.y).toBeCloseTo(Math.PI / 2);
+
+      // A change event alone (the camera moved by the controls) also turns it.
+      controls.object.position.set(-1, 0, 0).add(controls.target);
+      controls.dispatchEvent({ type: "change" });
+      expect(scene.environmentRotation.y).toBeCloseTo(-Math.PI / 2);
+
+      viewer.resetView();
+      expect(scene.environmentRotation.y).toBeCloseTo(0);
+    });
+
+    it("renders after a controls change", () => {
+      const frames = stubFrames();
+      const { viewer, renderer } = setup();
+      viewer.setModel(cup12oz, createSurfaces(cup12oz));
+      frames.flush();
+      renderer.render.mockClear();
+      viewer["controls"].dispatchEvent({ type: "change" });
+      frames.flush();
+      expect(renderer.render).toHaveBeenCalledTimes(1);
+    });
+
+    it("hangs the key light on the camera, which is in the scene, when there is no environment", () => {
+      const { viewer } = setup({ environment: false });
+      const camera = viewer["camera"];
+      expect(camera.parent).toBe(viewer["scene"]);
+      const key = camera.children.find((child) => "isDirectionalLight" in child);
+      expect(key).toBeDefined();
+      expect((key as DirectionalLight).target.parent).toBe(camera);
+    });
+
+    it("takes the key light and the camera out of the scene on dispose", () => {
+      const { viewer } = setup({ environment: false });
+      const camera = viewer["camera"];
+      viewer["lighting"].dispose();
+      expect(camera.children).toHaveLength(0);
+      expect(camera.parent).toBeNull();
+    });
   });
 
   it("limits the orbit as specified", () => {

@@ -14,6 +14,7 @@ import {
   showsHandles,
   snapGuide,
 } from "./selection-frame";
+import { flatPointAt } from "./stage-point";
 import { hasCoarsePointer } from "./stage-resolution";
 import { useEditorState, useStudio } from "./studio-context";
 import { useTextEditing } from "./text-editing";
@@ -70,13 +71,8 @@ export function InteractionOverlay({
   const svgRef = useRef<SVGSVGElement>(null);
   const { start: editText } = useTextEditing();
   const r = hitRadius();
-  const toFlat = (clientX: number, clientY: number): PointMm => {
-    const box = svgRef.current?.getBoundingClientRect();
-    return {
-      x: bounds.x + (clientX - (box?.left ?? 0)) / k,
-      y: bounds.y + (clientY - (box?.top ?? 0)) / k,
-    };
-  };
+  const toFlat = (clientX: number, clientY: number): PointMm =>
+    flatPointAt(svgRef.current?.getBoundingClientRect(), bounds, k, clientX, clientY);
   const {
     guides,
     end: endDrag,

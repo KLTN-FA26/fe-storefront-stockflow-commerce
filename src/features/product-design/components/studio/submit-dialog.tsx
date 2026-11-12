@@ -3,51 +3,22 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useEffectEvent, useState } from "react";
 
-import { Alert } from "@/components/shared";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { describeDesignError } from "../../errors";
-import type { ReportedPreflightIssue } from "../../types";
-import { ExportError } from "./export-renderer";
-import { FailedIssues, useLocateIssue } from "./preflight-panel";
+import { useLocateIssue } from "./preflight-panel";
 import { STUDIO_ANNOUNCEMENTS } from "./studio-announcer";
 import { useStudio } from "./studio-context";
 import { ConfirmBody, useConfirmPreview } from "./submit-confirm";
+import { FailBody, StalledAlert, SubmitFooter } from "./submit-dialog-parts";
 import { isWorkStep, SubmitSteps, type WorkStep } from "./submit-steps";
-import { DocumentChangedError, useDesignSubmission } from "./use-design-submission";
-
-const describeSubmissionError = (error: unknown) =>
-  error instanceof ExportError ? error.message : describeDesignError(error);
-
-/** Fail: what is in the way; an issue on a surface selects its element (and closes the dialog). */
-function FailBody({
-  issues,
-  onLocate,
-}: {
-  issues: readonly ReportedPreflightIssue[];
-  onLocate: (issue: ReportedPreflightIssue) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-3">
-      <Alert tone="danger" title="Thiết kế chưa đạt kiểm tra tự động.">
-        Sửa các lỗi dưới đây rồi gửi lại. Bấm vào một lỗi để chọn phần tử cần sửa.
-      </Alert>
-      <div className="flex max-h-64 flex-col gap-3 overflow-y-auto">
-        <FailedIssues issues={issues} onLocate={onLocate} />
-      </div>
-    </div>
-  );
-}
-
-const FOOTER_BUTTON = "min-h-11 rounded-[var(--r-md)] px-4";
+import { DocumentChangedError } from "./submission-checks";
+import { useDesignSubmission } from "./use-design-submission";
 
 /**
  * The dialog's body, mounted while it is open so each opening is a new attempt: first it saves
@@ -131,50 +102,18 @@ function SubmitBody({
         </p>
       )}
 
-      {stalled ? (
-        <div role="alert">
-          <Alert tone="danger" title="Chưa gửi được.">
-            {describeSubmissionError(error)}
-          </Alert>
-        </div>
-      ) : null}
+      {stalled ? <StalledAlert error={error} /> : null}
 
-      <DialogFooter className="border-border-default bg-bg-subtle">
-        <Button
-          type="button"
-          variant="outline"
-          className={FOOTER_BUTTON}
-          disabled={running}
-          onClick={onClose}
-        >
-          {confirming ? "Huỷ" : "Đóng"}
-        </Button>
-        {confirming ? (
-          <Button
-            type="button"
-            className={FOOTER_BUTTON}
-            disabled={preview === undefined}
-            onClick={() => void submission.run()}
-          >
-            Gửi duyệt
-          </Button>
-        ) : null}
-        {stalled ? (
-          <Button
-            type="button"
-            className={FOOTER_BUTTON}
-            onClick={() => (passed ? void submission.retry() : check())}
-          >
-            Thử lại
-          </Button>
-        ) : null}
-        {running ? (
-          <Button type="button" className={FOOTER_BUTTON} disabled>
-            <Loader2 aria-hidden className="mr-1.5 size-4 animate-spin" />
-            Đang gửi…
-          </Button>
-        ) : null}
-      </DialogFooter>
+      <SubmitFooter
+        step={step}
+        error={error}
+        confirming={confirming}
+        stalled={stalled}
+        canConfirm={preview !== undefined}
+        onClose={onClose}
+        onConfirm={() => void submission.run()}
+        onRetry={() => (passed ? void submission.retry() : check())}
+      />
     </>
   );
 }

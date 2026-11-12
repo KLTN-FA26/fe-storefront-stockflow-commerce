@@ -6,6 +6,7 @@ import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/design-seed";
 import type { DesignMockStore } from "@/lib/api/mock-fixtures/design-store";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
+import { applyBackground, applyBackgroundToAll } from "../components/studio/background-actions";
 import { useRecentColors } from "../components/studio/color-field";
 import { DesignStudio } from "../components/studio/design-studio";
 import type { StudioServices } from "../components/studio/studio-context";
@@ -114,7 +115,7 @@ async function openStudio(designId: string): Promise<Seen> {
       }}
     />,
   );
-  await screen.findByRole("tab", { name: "Lớp" }, { timeout: 4000 });
+  await screen.findByRole("group", { name: /^Khung vẽ/ }, { timeout: 4000 });
   return seen;
 }
 
@@ -184,8 +185,8 @@ const nextFrame = () =>
 
 const pickTool = (user: UserEvent, name: string) =>
   user.click(screen.getByRole("button", { name }));
-const showTab = (user: UserEvent, name: "Thuộc tính" | "Lớp") =>
-  user.click(screen.getByRole("tab", { name }));
+/** Opens the layers panel from the rail (it toggles: not while it is open). */
+const showLayers = (user: UserEvent) => user.click(screen.getByRole("button", { name: "Lớp" }));
 const slider = (name: string) => screen.getByRole("slider", { name });
 const undoButton = () => screen.getByRole("button", { name: "Hoàn tác (Ctrl+Z)" });
 const undo = (user: UserEvent) => user.click(undoButton());
@@ -248,7 +249,7 @@ describe("the brush", () => {
     expect(screen.getByText("Đã thêm lớp nét vẽ")).toBeInTheDocument();
 
     // The press focused the stage, so Ctrl+Z works straight away: the layer and its stroke go together.
-    await showTab(user, "Lớp");
+    await showLayers(user);
     expect(screen.getByRole("option", { name: "Nét vẽ 1" })).toBeInTheDocument();
     focusStage();
     await user.keyboard("{Control>}z{/Control}");
@@ -312,7 +313,7 @@ describe("the brush", () => {
     ]);
 
     expect(drawingsOf(seen).map((d) => d.name)).toEqual(["Nét vẽ 1", "Nét vẽ 2"]);
-    await showTab(user, "Lớp");
+    await showLayers(user);
     expect(screen.getByRole("option", { name: "Nét vẽ 2" })).toBeInTheDocument();
   });
 
@@ -770,8 +771,7 @@ describe("the tool panels", () => {
     expect(screen.queryByText(/chưa có nét vẽ nào để tẩy/)).not.toBeInTheDocument();
   });
 
-  it("list a drawing's strokes under its properties", async () => {
-    const user = userEvent.setup();
+  it("list a drawing's strokes in the context bar", async () => {
     const seen = await openCup([
       ink("d", 100, {
         strokes: [
@@ -781,10 +781,9 @@ describe("the tool panels", () => {
       }),
     ]);
 
+    // The stroke count is in the context bar, no panel needed.
     act(() => editorOf(seen).select("d"));
-    await showTab(user, "Thuộc tính");
 
-    expect(screen.getByRole("heading", { name: "Nét vẽ" })).toBeInTheDocument();
     expect(screen.getByText("1 nét vẽ, 1 lần tẩy")).toBeInTheDocument();
   });
 });
@@ -813,10 +812,10 @@ describe("the background", () => {
       colors: ["#2563EB", expect.any(String)],
     });
 
-    await user.click(screen.getByRole("tab", { name: "Mặt sau" }));
+    await user.click(screen.getByRole("radio", { name: "Mặt sau" }));
     expect(radio("Không nền")).toBeChecked();
     expect(backgroundOf(seen, "BACK")).toEqual({ kind: "none" });
-    await user.click(screen.getByRole("tab", { name: "Mặt trước" }));
+    await user.click(screen.getByRole("radio", { name: "Mặt trước" }));
     expect(radio("Hoạ tiết")).toBeChecked();
 
     await user.click(radio("Không nền"));
@@ -905,7 +904,7 @@ describe("the background", () => {
       ["RIGHT", "Hông phải"],
     ] as const) {
       expect(backgroundOf(seen, code)).toEqual(front);
-      await user.click(screen.getByRole("tab", { name: tab }));
+      await user.click(screen.getByRole("radio", { name: tab }));
       expect(radio("Hoạ tiết")).toBeChecked();
       expect(radio("Chấm bi")).toBeChecked();
     }
@@ -933,5 +932,18 @@ describe("the background", () => {
     // Read-only: neither the tool rail nor the tool's options are there.
     expect(screen.queryByRole("button", { name: "Nền (G)" })).not.toBeInTheDocument();
     expect(screen.queryByRole("radio", { name: "Màu" })).not.toBeInTheDocument();
+
+    // Nor does the panel's own action paint it, on one face or on all.
+    const code = stateOf(seen).activeSurface;
+    const before = backgroundOf(seen, code);
+    const red = { kind: "color", color: "#DC2626" } as const;
+    act(() => applyBackground(editorOf(seen), code, red));
+    act(() => applyBackgroundToAll(editorOf(seen), red));
+    expect(backgroundOf(seen, code)).toEqual(before);
+    expect(stateOf(seen).canUndo).toBe(false);
+    // The same action paints once the design can be edited.
+    act(() => editorOf(seen).setReadOnly(false));
+    act(() => applyBackground(editorOf(seen), code, red));
+    expect(backgroundOf(seen, code)).toEqual(red);
   });
 });

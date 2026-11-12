@@ -3,8 +3,8 @@
  *
  * The design store (Task 3) serialises everything into one `DesignMockSnapshot` keyed by
  * collection, and keeps binary uploads as blobs under keys like `asset/{id}` and
- * `file/{designId}/{role}`. Two implementations sit behind one interface: IndexedDB in the
- * browser (database `stockflow-design-mock`, stores `state` and `blobs`) and a memory one for
+ * `file/{designId}/v{version}/{role}`. Two implementations sit behind one interface: IndexedDB in
+ * the browser (database `stockflow-design-mock`, stores `state` and `blobs`) and a memory one for
  * tests, SSR and browsers that refuse IndexedDB (private mode, blocked storage).
  */
 
@@ -17,6 +17,8 @@ export interface DesignMockStorage {
   save(snapshot: DesignMockSnapshot): Promise<void>;
   putBlob(key: string, blob: Blob): Promise<void>;
   getBlob(key: string): Promise<Blob | null>;
+  /** Removes one blob; an unknown key is not an error. */
+  deleteBlob(key: string): Promise<void>;
   clear(): Promise<void>;
 }
 
@@ -38,10 +40,13 @@ export function createMemoryStorage(): DesignMockStorage {
       snapshot = structuredClone(next);
     },
     async putBlob(key, blob) {
-      blobs.set(key, blob);
+      blobs.set(key, blob); // kept by reference: a Blob is immutable
     },
     async getBlob(key) {
       return blobs.get(key) ?? null;
+    },
+    async deleteBlob(key) {
+      blobs.delete(key);
     },
     async clear() {
       snapshot = null;
@@ -66,29 +71,69 @@ function committed(tx: IDBTransaction): Promise<void> {
   });
 }
 
+/**
+ * Opens the database. A blocked open (another tab holds an older version) is refused at once, so
+ * the caller can fall back to memory; should the browser let that open through later, the late
+ * connection is closed instead of leaking.
+ */
 function openDatabase(dbName: string): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (typeof indexedDB === "undefined") {
       reject(new Error("IndexedDB is unavailable"));
       return;
     }
+    let settled = false;
+    const settle = (finish: () => void) => {
+      if (settled) return;
+      settled = true;
+      finish();
+    };
     const req = indexedDB.open(dbName, 1);
     req.onupgradeneeded = () => {
       req.result.createObjectStore(STATE_STORE);
       req.result.createObjectStore(BLOB_STORE);
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error ?? new Error("IndexedDB open failed"));
-    req.onblocked = () => reject(new Error("IndexedDB open blocked"));
+    req.onsuccess = () => {
+      if (settled) req.result.close();
+      else settle(() => resolve(req.result));
+    };
+    req.onerror = () => settle(() => reject(req.error ?? new Error("IndexedDB open failed")));
+    req.onblocked = () => settle(() => reject(new Error("IndexedDB open blocked")));
   });
 }
 
 export async function createIndexedDbStorage(dbName: string = DB_NAME): Promise<DesignMockStorage> {
-  const db = await openDatabase(dbName);
+  /**
+   * The open connection, made again on the next call once it is gone: closed for another tab's
+   * upgrade or delete (`versionchange`), or by the browser (`close`). A failed open is retried.
+   */
+  let current: Promise<IDBDatabase> | null = null;
+  function connection(): Promise<IDBDatabase> {
+    if (current) return current;
+    const opening = openDatabase(dbName).then((db) => {
+      const forget = () => {
+        if (current === opening) current = null;
+      };
+      db.onversionchange = () => {
+        db.close();
+        forget();
+      };
+      db.onclose = forget;
+      return db;
+    });
+    opening.catch(() => {
+      if (current === opening) current = null;
+    });
+    current = opening;
+    return opening;
+  }
+  // The first open decides: when it fails, `openDesignStorage` falls back to memory.
+  await connection();
 
   return {
     persistent: true,
     async load() {
+      const db = await connection();
       const tx = db.transaction(STATE_STORE, "readonly");
       const value = await request<DesignMockSnapshot | undefined>(
         tx.objectStore(STATE_STORE).get(SNAPSHOT_KEY),
@@ -96,21 +141,31 @@ export async function createIndexedDbStorage(dbName: string = DB_NAME): Promise<
       return value ?? null;
     },
     async save(snapshot) {
+      const db = await connection();
       const tx = db.transaction(STATE_STORE, "readwrite");
       tx.objectStore(STATE_STORE).put(snapshot, SNAPSHOT_KEY);
       await committed(tx);
     },
     async putBlob(key, blob) {
+      const db = await connection();
       const tx = db.transaction(BLOB_STORE, "readwrite");
       tx.objectStore(BLOB_STORE).put(blob, key);
       await committed(tx);
     },
     async getBlob(key) {
+      const db = await connection();
       const tx = db.transaction(BLOB_STORE, "readonly");
       const value = await request<Blob | undefined>(tx.objectStore(BLOB_STORE).get(key));
       return value ?? null;
     },
+    async deleteBlob(key) {
+      const db = await connection();
+      const tx = db.transaction(BLOB_STORE, "readwrite");
+      tx.objectStore(BLOB_STORE).delete(key);
+      await committed(tx);
+    },
     async clear() {
+      const db = await connection();
       const tx = db.transaction([STATE_STORE, BLOB_STORE], "readwrite");
       tx.objectStore(STATE_STORE).clear();
       tx.objectStore(BLOB_STORE).clear();
@@ -119,11 +174,22 @@ export async function createIndexedDbStorage(dbName: string = DB_NAME): Promise<
   };
 }
 
-/** IndexedDB when the browser allows it, memory otherwise. */
+/** Whether this page already said that the design mock keeps its data in memory. */
+let warnedMemory = false;
+
+/** IndexedDB when the browser allows it, memory otherwise (said once per page in the console). */
 export async function openDesignStorage(): Promise<DesignMockStorage> {
   try {
     return await createIndexedDbStorage();
-  } catch {
+  } catch (error) {
+    if (!warnedMemory) {
+      warnedMemory = true;
+      const reason = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[mock-design] IndexedDB cannot be opened (${reason}); the design mock keeps its data in memory, lost on reload.`,
+        error,
+      );
+    }
     return createMemoryStorage();
   }
 }

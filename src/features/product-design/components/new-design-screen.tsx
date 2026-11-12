@@ -35,6 +35,14 @@ export function NewDesignScreen({ product, sku }: { product: string; sku: string
   const create = useCreateDesign();
   // The in-flight create of this visit, by link: a re-run effect (StrictMode) reuses it.
   const attempt = useRef<{ key: string; promise: Promise<Design> } | null>(null);
+  // A create that lands after the customer left the launcher opens nothing.
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const key = `${product}+${sku}`;
   const limit = count.data?.limit;
@@ -51,7 +59,9 @@ export function NewDesignScreen({ product, sku }: { product: string; sku: string
       const promise = mutateAsync({ productSlug: product, sku, name });
       attempt.current = { key, promise };
       promise.then(
-        (design) => replace(STORE_ROUTES.design.detail(design.id)),
+        (design) => {
+          if (mounted.current) replace(STORE_ROUTES.design.detail(design.id));
+        },
         () => undefined, // shown from the mutation's error, with a retry
       );
     },
@@ -63,17 +73,20 @@ export function NewDesignScreen({ product, sku }: { product: string; sku: string
   }, [ready, start]);
 
   const productHref = STORE_ROUTES.catalog.detail(product);
+  // Only a read with no answer yet stops the launcher: a failed re-read keeps what it answered.
+  const configFailed = config.isError && config.data === undefined;
+  const countFailed = count.isError && count.data === undefined;
   const body = (() => {
     if (signedIn === undefined) return <LauncherLoading label="Đang chuẩn bị thiết kế…" />;
     if (!signedIn) return <LauncherSignIn from={STORE_ROUTES.design.newFor(product, sku)} />;
-    if (create.isError || (create.isIdle && (config.isError || count.isError))) {
+    if (create.isError || (create.isIdle && (configFailed || countFailed))) {
       const retry = create.isError
         ? () => start(true)
-        : () => void (config.isError ? config.refetch() : count.refetch());
+        : () => void (configFailed ? config.refetch() : count.refetch());
       return (
         <LauncherError
           title="Không bắt đầu được thiết kế"
-          message={describeDesignError(create.error ?? config.error ?? count.error)}
+          message={describeDesignError(create.error ?? (configFailed ? config.error : count.error))}
           onRetry={retry}
           retrying={create.isPending || config.isFetching || count.isFetching}
           backHref={productHref}

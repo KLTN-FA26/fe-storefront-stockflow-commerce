@@ -9,4 +9,4 @@ export {
   isToday,
 } from "./date";
 export { formatCompact, formatMoney, formatVND } from "./money";
-export { formatCompactNumber, formatNumber, formatPercent } from "./number";
+export { formatCompactNumber, formatFileSize, formatNumber, formatPercent } from "./number";

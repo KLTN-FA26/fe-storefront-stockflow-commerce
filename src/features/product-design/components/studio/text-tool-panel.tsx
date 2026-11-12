@@ -79,7 +79,7 @@ export function TextToolPanel() {
         </div>
       ) : null}
       <p className="text-ink-tertiary text-xs">
-        Nhấp đúp vào chữ trên khung vẽ, hoặc nhấn Enter ở tab Lớp, để sửa nội dung.
+        Nhấp đúp vào chữ trên khung vẽ, hoặc nhấn Enter trong Lớp, để sửa nội dung.
       </p>
     </div>
   );

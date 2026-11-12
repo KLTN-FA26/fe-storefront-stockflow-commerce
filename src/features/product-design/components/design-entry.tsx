@@ -15,7 +15,20 @@ import { isPrintConfigUsable } from "../selectors";
  * when the variant has a usable print configuration (an ACTIVE variant of an APPROVED or PUBLISHED
  * product); otherwise the reason and the way to Sales.
  */
-export function DesignEntry({ productSlug, sku }: { productSlug: string; sku: string }) {
+export function DesignEntry({
+  productSlug,
+  sku,
+  withSalesChat = true,
+}: {
+  productSlug: string;
+  sku: string;
+  /**
+   * Offer "Chat với Sale" beside the reason. false where the page already offers it, so the
+   * customer does not get it twice: the product page's purchase panel quotes every customizable
+   * product through the Sales chat.
+   */
+  withSalesChat?: boolean;
+}) {
   const config = usePrintConfig(productSlug, sku, true);
 
   if (config.isPending) return <Skeleton className="min-h-11 w-full rounded-[var(--r-md)]" />;
@@ -41,6 +54,11 @@ export function DesignEntry({ productSlug, sku }: { productSlug: string; sku: st
           Thiết kế
         </Link>
       </Button>
+    );
+  }
+  if (!withSalesChat) {
+    return (
+      <p className="text-ink-secondary self-center text-sm">Quy cách này chưa nhận thiết kế</p>
     );
   }
   return (

@@ -6,6 +6,7 @@ import { cn } from "@/lib/cn";
 
 import { isWebGLAvailable } from "../../engine";
 import { FlatPreview } from "./flat-preview";
+import { PreviewCardHeader, type PreviewCardControls } from "./preview-card";
 import { Viewer3D } from "./viewer-3d";
 import { ViewerTitle } from "./viewer-toolbar";
 
@@ -16,14 +17,19 @@ export const COLOR_DISCLAIMER = "Màu sắc hiển thị có thể sai lệch so
  * The live preview: the three.js model where WebGL works, else (no WebGL, the context lost for
  * good, a model that cannot be built) the flat preview with "Preview 3D không khả dụng". The
  * colour disclaimer is always below it, in full screen too (the whole panel goes full screen).
- * `productPhoto` is the product's gallery photo, shown by the flat preview.
+ * `productPhoto` is the product's gallery photo, shown by the flat preview. `card` is set while the
+ * preview is the draft studio's corner card: it then has the card header (title, Đổi chỗ, Thu nhỏ)
+ * and the view controls float over the model; without it the panel has its own title bar.
  */
 export function ViewerHost({
   productPhoto,
   className,
+  card,
 }: {
   productPhoto?: ReactNode;
   className?: string;
+  /** Present while the preview is the corner card; absent when it fills its area. */
+  card?: PreviewCardControls | null;
 }) {
   // Probed once: a browser does not gain or lose WebGL while the studio is open.
   const [available, setAvailable] = useState(isWebGLAvailable);
@@ -39,11 +45,12 @@ export function ViewerHost({
         className,
       )}
     >
+      {card && <PreviewCardHeader kind="3D" {...card} />}
       {available ? (
-        <Viewer3D onUnavailable={fallBack} fullscreenTarget={panelRef} />
+        <Viewer3D onUnavailable={fallBack} fullscreenTarget={panelRef} compact={!!card} />
       ) : (
         <>
-          <ViewerTitle />
+          {!card && <ViewerTitle />}
           <div className="min-h-0 flex-1">
             <FlatPreview productPhoto={productPhoto} />
           </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, X } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
 import { Alert, EmptyState, Skeleton } from "@/components/shared";
@@ -62,6 +62,27 @@ export function DesignLoadError({
         {describeDesignError(error)}
       </Alert>
       <RetryButton onRetry={onRetry} retrying={retrying} />
+    </div>
+  );
+}
+
+/** Why "Tạo bản sửa" failed; the customer can put it away (the list's next action does too). */
+export function RevisionError({ error, onDismiss }: { error: unknown; onDismiss: () => void }) {
+  return (
+    <div className="mb-4 flex items-start gap-2">
+      <Alert tone="danger" className="flex-1">
+        {describeDesignError(error)}
+      </Alert>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="min-h-11 min-w-11 rounded-[var(--r-md)]"
+        aria-label="Đóng thông báo"
+        onClick={onDismiss}
+      >
+        <X aria-hidden className="size-4" />
+      </Button>
     </div>
   );
 }

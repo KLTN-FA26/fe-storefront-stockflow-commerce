@@ -56,9 +56,9 @@ async function openStudio(designId: string) {
   return seen;
 }
 
-/** The "Kiểm tra" tab's report, once it has settled on `summary`. */
+/** The "Kiểm tra" panel's report, once it has settled on `summary`. */
 async function checkPanel(summary: "Đạt" | "Không đạt") {
-  await userEvent.click(screen.getByRole("tab", { name: "Kiểm tra" }));
+  await userEvent.click(await screen.findByRole("button", { name: "Kiểm tra" }));
   const panel = screen.getByRole("region", { name: "Kết quả kiểm tra" });
   await within(panel).findByText(summary);
   return within(panel);
@@ -94,11 +94,11 @@ describe("PreflightPanel", () => {
 
     const panel = await checkPanel("Không đạt");
     expect(panel.getByRole("heading", { name: "Mặt sau" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Mặt trước" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("radio", { name: "Mặt trước" })).toBeChecked();
 
     await user.click(panel.getByRole("button", { name: /127 DPI/ }));
 
-    expect(screen.getByRole("tab", { name: "Mặt sau" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("radio", { name: "Mặt sau" })).toBeChecked();
     expect(seen.current!.editor.store.getState()).toMatchObject({
       activeSurface: "BACK",
       selectedId: "low",

@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +8,7 @@ import { MOCK_BLOCKED_SKU, printConfigFor } from "@/lib/api/mock-fixtures/design
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { NewDesignScreen } from "../components/new-design-screen";
+import { designKeys } from "../queries";
 import { designBackend } from "./design-backend";
 
 // The mock adapter adds latency per request; give multi-request flows headroom under load.
@@ -147,8 +148,53 @@ describe("NewDesignScreen", () => {
     post.mockRejectedValueOnce(new ApiError(500, "SERVER_ERROR", "boom"));
     renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
 
-    await userEvent.click(await screen.findByRole("button", { name: /Thử lại/ }, WAIT));
+    const retry = await screen.findByRole("button", { name: /Thử lại/ }, WAIT);
+    expect(screen.getByText("Không bắt đầu được thiết kế")).toBeInTheDocument();
+    expect(
+      screen.getByText("Hệ thống đang gặp sự cố. Vui lòng thử lại sau ít phút."),
+    ).toBeInTheDocument();
+    await userEvent.click(retry);
     await waitFor(() => expect(env.replace).toHaveBeenCalledTimes(1), WAIT);
     expect(post).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps its screen when a background re-read fails while it has the answer (L10)", async () => {
+    const { store, get } = await designBackend();
+    for (let i = 0; i < 48; i += 1) {
+      await store.create({ productSlug: CUP, sku: CUP_SKU, name: `Ly ${i}` });
+    }
+    const { client } = renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
+    expect(await screen.findByText("Bạn đã có 50 bản nháp", undefined, WAIT)).toBeInTheDocument();
+
+    // A refusal is not retried by itself: the re-read fails at once.
+    get.mockRejectedValueOnce(new ApiError(403, "FORBIDDEN", "x"));
+    await act(() => client.refetchQueries({ queryKey: designKeys.draftCount() }));
+
+    expect(client.getQueryState(designKeys.draftCount())?.status).toBe("error");
+    expect(screen.getByText("Bạn đã có 50 bản nháp")).toBeInTheDocument();
+    expect(screen.queryByText("Không bắt đầu được thiết kế")).not.toBeInTheDocument();
+  });
+
+  it("does not open the studio once the customer has left the launcher (L12)", async () => {
+    const { post } = await designBackend();
+    const { client, unmount } = renderWithProviders(
+      <NewDesignScreen product={CUP} sku={CUP_SKU} />,
+    );
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1), WAIT);
+
+    unmount();
+    await waitFor(
+      () =>
+        expect(
+          client
+            .getMutationCache()
+            .getAll()
+            .map((m) => m.state.status),
+        ).toEqual(["success"]),
+      WAIT,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(env.replace).not.toHaveBeenCalled();
   });
 });

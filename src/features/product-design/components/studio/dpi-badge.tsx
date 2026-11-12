@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
 import type { SemanticTone } from "@/lib/domain/types";
 
-import { dpiTier, placedDpi, type ImageElement } from "../../engine";
+import { dpiTier, placedDpi, type ImageElement, type PrintSurface } from "../../engine";
 
 const TIERS = {
   "below-min": {
@@ -22,18 +22,24 @@ const TIERS = {
 
 /**
  * The resolution the image reaches where it sits: the worse of its two axes at the placed size,
- * judged by the same threshold as the print check (under `minDpi` is blurry).
+ * judged by the same threshold as the print check (under `minDpi` is blurry). `surface` is the one
+ * the image sits on: bent around the cup, its stretched outer edge counts, as in the print check.
  */
 export function DpiBadge({
   element,
+  surface,
   minDpi,
   className,
+  compact = false,
 }: {
   element: ImageElement;
+  surface?: PrintSurface;
   minDpi: number;
   className?: string;
+  /** For a toolbar: the advice is read by assistive technology and shown as a tooltip only. */
+  compact?: boolean;
 }) {
-  const dpi = placedDpi(element);
+  const dpi = placedDpi(element, surface);
   const tier = dpiTier(dpi, minDpi);
   const { tone, classes, advice } = TIERS[tier];
   const shown = Math.round(dpi);
@@ -41,11 +47,12 @@ export function DpiBadge({
     <div className={cn("flex flex-col items-start gap-1.5", className)}>
       <Badge
         data-tone={tone}
+        title={compact ? advice : undefined}
         className={cn("h-7 rounded-full px-3 text-sm font-semibold tabular-nums", classes)}
       >
         {tier === "ok" ? `${shown} DPI ✓` : `${shown} DPI – sẽ mờ`}
       </Badge>
-      <p className="text-ink-tertiary text-xs">{advice}</p>
+      <p className={compact ? "sr-only" : "text-ink-tertiary text-xs"}>{advice}</p>
     </div>
   );
 }

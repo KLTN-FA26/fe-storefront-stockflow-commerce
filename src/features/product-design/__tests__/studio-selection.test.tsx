@@ -71,7 +71,7 @@ async function openStudio(designId: string) {
       }}
     />,
   );
-  await screen.findByRole("tab", { name: "Lớp" }, { timeout: 4000 });
+  await screen.findByRole("group", { name: /^Khung vẽ/ }, { timeout: 4000 });
   return seen;
 }
 
@@ -84,8 +84,11 @@ const elementOf = (
     .current!.editor.store.getState()
     .document.surfaces[code]?.elements.find((element) => element.id === id);
 
-const showTab = (user: UserEvent, name: "Thuộc tính" | "Lớp") =>
-  user.click(screen.getByRole("tab", { name }));
+/** Opens the layers panel from the rail (it toggles: not while it is open). */
+const showLayers = (user: UserEvent) => user.click(screen.getByRole("button", { name: "Lớp" }));
+/** The "Vị trí" popover of the context bar: X, Y, rotation and scale. */
+const openPosition = (user: UserEvent) =>
+  user.click(screen.getByRole("button", { name: "Vị trí" }));
 const option = (name: string | RegExp) => screen.getByRole("option", { name });
 const layerNames = () => screen.getAllByRole("option").map((o) => o.textContent);
 const stage = () => screen.getByRole("group", { name: "Khung vẽ Thân ly" });
@@ -98,9 +101,9 @@ describe("selection, layers and properties", () => {
     const user = userEvent.setup();
     const { store: studio } = await designBackend();
     await openStudio(await cupDraft(studio, [logo(), coffee()]));
-    await showTab(user, "Lớp");
+    await showLayers(user);
 
-    expect(screen.getByRole("tabpanel", { name: "Lớp" })).toHaveClass("focus-visible:ring-2");
+    expect(screen.getByRole("region", { name: "Lớp" })).toBeInTheDocument();
     expect(layerNames()).toEqual(["Chữ: Cà phê", "Ảnh"]); // topmost first
     await user.click(option(/Chữ: Cà phê/));
     expect(option(/Chữ: Cà phê/)).toHaveAttribute("aria-selected", "true");
@@ -114,7 +117,7 @@ describe("selection, layers and properties", () => {
     const user = userEvent.setup();
     const { store: studio } = await designBackend();
     await openStudio(await cupDraft(studio, [logo(), coffee()]));
-    await showTab(user, "Lớp");
+    await showLayers(user);
 
     await user.click(option("Ảnh"));
     await user.keyboard("{Delete}");
@@ -130,7 +133,7 @@ describe("selection, layers and properties", () => {
     const user = userEvent.setup();
     const { store: studio } = await designBackend();
     const services = await openStudio(await cupDraft(studio, [logo(at(8))]));
-    await showTab(user, "Lớp");
+    await showLayers(user);
     await user.click(option("Ảnh"));
     act(() => stage().focus());
 
@@ -142,39 +145,43 @@ describe("selection, layers and properties", () => {
     await user.keyboard("{Shift>}{ArrowLeft}{ArrowLeft}{/Shift}");
     await user.keyboard("{ArrowDown}");
 
-    await showTab(user, "Thuộc tính");
+    await openPosition(user);
     expect(screen.getByLabelText("X (mm)")).toHaveValue(0);
     expect(screen.getByLabelText("Y (mm)")).toHaveValue(55.5);
+    await user.keyboard("{Escape}");
     // One history step per key press: the step down, then the press that reached the edge.
     await user.click(undoButton());
     await user.click(undoButton());
+    await openPosition(user);
     expect(numberIn("X (mm)")).toBeCloseTo(once, 1);
   });
 
-  it("edits rotation and opacity from the properties panel, one undo step per field", async () => {
+  it("edits rotation and opacity from the context bar, one undo step per field", async () => {
     const user = userEvent.setup();
     const { store: studio } = await designBackend();
     const services = await openStudio(await cupDraft(studio, [logo(), coffee()]));
-    await showTab(user, "Lớp");
+    await showLayers(user);
     await user.click(option(/Chữ: Cà phê/));
-    await showTab(user, "Thuộc tính");
 
+    await openPosition(user);
     const rotation = screen.getByLabelText("Góc xoay (°)");
     await user.clear(rotation);
     await user.type(rotation, "15");
     await user.tab();
     expect(elementOf(services, "text")!.placement.rotationDeg).toBe(15);
+    await user.keyboard("{Escape}");
 
-    const opacity = screen.getByLabelText("Độ mờ đục (%)");
-    await user.clear(opacity);
-    await user.type(opacity, "50");
-    await user.tab();
-    expect(elementOf(services, "text")!.opacity).toBe(0.5);
-    expect(opacity).toHaveValue(50);
+    await user.click(screen.getByRole("button", { name: "Độ mờ" }));
+    const opacity = await screen.findByRole("slider", { name: "Độ mờ đục" });
+    act(() => opacity.focus());
+    await user.keyboard("{PageDown}"); // one key press is one scrub: one undo step
+    expect(elementOf(services, "text")!.opacity).toBe(0.9);
+    expect(opacity).toHaveAttribute("aria-valuetext", "90 %");
+    await user.keyboard("{Escape}");
 
     await user.click(undoButton());
-    expect(opacity).toHaveValue(100);
-    expect(rotation).toHaveValue(15);
+    expect(elementOf(services, "text")!.opacity).toBe(1);
+    expect(elementOf(services, "text")!.placement.rotationDeg).toBe(15);
   });
 
   it("centres, duplicates and restacks the selection", async () => {
@@ -183,7 +190,7 @@ describe("selection, layers and properties", () => {
     const services = await openStudio(await cupDraft(studio, [logo(), coffee()]));
     const { surfaces } = services.current!;
     const [centreU, centreV] = surfaceSnapTargets(surfaces.byCode.BODY!, []);
-    await showTab(user, "Lớp");
+    await showLayers(user);
     await user.click(option("Ảnh"));
 
     await user.click(
@@ -194,19 +201,19 @@ describe("selection, layers and properties", () => {
     await user.keyboard("{Control>}[[{/Control}");
     expect(layerNames()).toEqual(["Chữ: Cà phê", "Ảnh"]);
 
-    await showTab(user, "Thuộc tính");
+    await openPosition(user);
     await user.click(screen.getByRole("button", { name: "Căn giữa ngang" }));
     await user.click(screen.getByRole("button", { name: "Căn giữa dọc" }));
     expect(elementOf(services, "logo")!.placement).toMatchObject({
       u: centreU!.u,
       v: centreV!.v,
     });
+    await user.keyboard("{Escape}");
 
     await user.click(screen.getByRole("button", { name: "Nhân bản" }));
     const { selectedId } = services.current!.editor.store.getState();
     expect(selectedId).not.toBe("logo");
     expect(elementOf(services, selectedId!)).toMatchObject({ type: "image" });
-    await showTab(user, "Lớp");
     expect(layerNames()).toEqual(["Chữ: Cà phê", "Ảnh", "Ảnh"]);
   });
 
@@ -214,7 +221,7 @@ describe("selection, layers and properties", () => {
     const user = userEvent.setup();
     const { store: studio } = await designBackend();
     const services = await openStudio(await cupDraft(studio, [logo(), coffee()]));
-    await showTab(user, "Lớp");
+    await showLayers(user);
     const row = () => within(screen.getByRole("group", { name: "Chữ: Cà phê" }));
 
     await user.click(row().getByRole("button", { name: "Ẩn" }));
@@ -230,7 +237,7 @@ describe("selection, layers and properties", () => {
     await user.keyboard("{ArrowRight}");
     expect(elementOf(services, "text")!.placement.u).toBe(170);
     expect(option(/Chữ: Cà phê/)).toBeInTheDocument();
-    await showTab(user, "Thuộc tính");
+    await openPosition(user);
     expect(screen.getByLabelText("X (mm)")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Xoá" })).toBeDisabled();
   });
@@ -293,30 +300,44 @@ describe("selection, layers and properties", () => {
 });
 
 describe("read-only designs", () => {
-  it("has no editing tools, and its layers and properties cannot change it", async () => {
+  it("has no editing tools, no panel and no bar, and the stage cannot change it", async () => {
     const user = userEvent.setup();
     await designBackend();
     const services = await openStudio(MOCK_DESIGN_IDS.approved);
 
-    // Read-only: the tool rail and the tool options are not there at all.
-    expect(screen.queryByRole("group", { name: "Công cụ" })).not.toBeInTheDocument();
+    // Read-only: no tool items and no context bar; the rail keeps only its lists.
     expect(screen.queryByRole("button", { name: "Chữ (T)" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Chọn (V)" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Thuộc tính phần tử" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Tạo bản sửa" })).toBeInTheDocument();
 
-    await showTab(user, "Lớp");
+    const text = () => elementOf(services, "el-cup-1");
+    act(() => services.current!.editor.select("el-cup-1"));
+    const placed = text()!.placement;
+    act(() => stage().focus());
+    await user.keyboard("{Delete}");
+    await user.keyboard("{ArrowRight}");
+    expect(text()).toBeDefined();
+    expect(text()!.placement).toEqual(placed);
+
+    await user.keyboard("t");
+    expect(services.current!.editor.store.getState().tool).toBe("select");
+  });
+
+  it("opens its layers from the rail, and nothing there can change the design", async () => {
+    const user = userEvent.setup();
+    await designBackend();
+    const services = await openStudio(MOCK_DESIGN_IDS.approved);
+
+    await showLayers(user);
     await user.click(option("Chữ: Nhà Mình"));
+    expect(services.current!.editor.store.getState().selectedId).toBe("el-cup-1");
     await user.keyboard("{Delete}");
     expect(option("Chữ: Nhà Mình")).toBeInTheDocument();
     const row = within(screen.getByRole("group", { name: "Chữ: Nhà Mình" }));
     expect(row.getByRole("button", { name: "Ẩn" })).toBeDisabled();
+    expect(row.getByRole("button", { name: "Khoá" })).toBeDisabled();
     expect(row.getByRole("button", { name: "Đưa xuống" })).toBeDisabled();
-
-    act(() => stage().focus());
-    await user.keyboard("t");
-    expect(services.current!.editor.store.getState().tool).toBe("select");
-    await showTab(user, "Thuộc tính");
-    expect(screen.getByLabelText("Góc xoay (°)")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Nhân bản" })).toBeDisabled();
   });
 });
 
@@ -475,7 +496,7 @@ describe("on the stage", () => {
 
     expect(handles("scale")).toHaveLength(4);
     expect(handles("rotate")).toHaveLength(0);
-    await showTab(user, "Thuộc tính");
+    await openPosition(user);
     expect(screen.getByLabelText("Góc xoay (°)")).toBeDisabled();
     expect(
       screen.getByText("Phần tử uốn theo thân ly luôn nằm ngang nên không xoay được."),

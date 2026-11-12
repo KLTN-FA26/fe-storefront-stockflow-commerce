@@ -26,6 +26,7 @@ export const UPLOAD_MESSAGES = {
   tooManyPixels: "Ảnh vượt 40 megapixel.",
   unreadable: "Không đọc được kích thước ảnh.",
   noRoom: "Mặt này đã đủ số phần tử tối đa, hãy xoá bớt để thêm ảnh.",
+  uploading: "Đang tải ảnh lên…",
 } as const;
 
 /** A file turned away before anything was sent; its message says why, in the customer's words. */

@@ -18,15 +18,16 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 
 import { createContactShadowTexture } from "./materials";
 
-export const FOV_DEG = 30;
+export const FOV_DEG = 22;
 export const MIN_POLAR_RAD = 0.15 * Math.PI;
 export const MAX_POLAR_RAD = 0.85 * Math.PI;
 /** Orbit distance limits and framing margin, as multiples of the model height. */
 const MIN_DISTANCE_RATIO = 1.2;
 const MAX_DISTANCE_RATIO = 4;
 const FIT_MARGIN = 1.15;
-/** The home view sits a little above the front (+Z) of the model. */
-const HOME_POLAR_RAD = 0.42 * Math.PI;
+/** The home view sits at the front (+Z) of the model, about 5 degrees above its middle. */
+const HOME_ELEVATION_DEG = 5;
+export const HOME_POLAR_RAD = ((90 - HOME_ELEVATION_DEG) * Math.PI) / 180;
 const ENVIRONMENT_BLUR_SIGMA = 0.04;
 const SHADOW_SPREAD = 1.8;
 const SHADOW_LIFT_MM = 0.1;
@@ -34,17 +35,40 @@ const SHADOW_LIFT_MM = 0.1;
 export type Lighting = { dispose(): void };
 
 /**
- * Lights the scene: a `RoomEnvironment` through `PMREMGenerator` (image-based lighting), or plain
- * ambient + key lights when `environment` is false. `dispose` takes the lighting out again, so
- * it can be built anew (a restored WebGL context loses the generated environment).
+ * The camera's azimuth about the target around +Y (0 at the front, +Z; PI/2 at +X). The
+ * environment takes it as its yaw, so the light keeps the same side of the product as seen
+ * by the viewer while the camera orbits.
  */
-export function lightScene(renderer: WebGLRenderer, scene: Scene, environment: boolean): Lighting {
+export function environmentYaw(camera: Vector3, target: Vector3): number {
+  return Math.atan2(camera.x - target.x, camera.z - target.z);
+}
+
+/**
+ * Lights the scene: a `RoomEnvironment` through `PMREMGenerator` (image-based lighting), or plain
+ * ambient + key lights when `environment` is false. The key light is a child of the camera (which
+ * joins the scene), so it turns with the viewer; the environment is turned by the caller with
+ * `environmentYaw`. `dispose` takes the lighting out again, so it can be built anew (a restored
+ * WebGL context loses the generated environment).
+ */
+export function lightScene(
+  renderer: WebGLRenderer,
+  scene: Scene,
+  camera: PerspectiveCamera,
+  environment: boolean,
+): Lighting {
   if (!environment) {
     const key = new DirectionalLight("white", 2);
+    // In the camera's frame: up, right and behind the viewer, aimed at the camera's own origin.
     key.position.set(1, 2, 3);
     const fill = new AmbientLight("white", 1.2);
-    scene.add(fill, key);
-    return { dispose: () => scene.remove(fill, key) };
+    camera.add(key, key.target);
+    scene.add(fill, camera);
+    return {
+      dispose: () => {
+        camera.remove(key, key.target);
+        scene.remove(fill, camera);
+      },
+    };
   }
   const generator = new PMREMGenerator(renderer);
   const room = new RoomEnvironment();
@@ -80,8 +104,11 @@ export function frameModel(
 
   controls.minDistance = MIN_DISTANCE_RATIO * heightMm;
   controls.maxDistance = MAX_DISTANCE_RATIO * heightMm;
+  // The model's near face is closer to the camera than its middle, and so looks larger; the
+  // fit is made for that face, so the narrower field of view cannot crop the rim.
+  const nearDepth = Math.max(size.x, size.z) / 2;
   const distance = Math.min(
-    Math.max(FIT_MARGIN * Math.max(fitHeight, fitWidth), controls.minDistance),
+    Math.max(FIT_MARGIN * Math.max(fitHeight, fitWidth) + nearDepth, controls.minDistance),
     controls.maxDistance,
   );
   camera.near = heightMm / 20;

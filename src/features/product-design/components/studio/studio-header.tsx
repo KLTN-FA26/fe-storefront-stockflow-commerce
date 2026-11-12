@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 
 import { allowedActions, isReturned } from "../../lifecycle";
 import { DesignStatusBadge } from "../design-status-badge";
+import { CheckChip } from "./check-chip";
 import { DesignNameField } from "./design-name-field";
 import { SaveState } from "./save-state";
 import { StudioBackLink } from "./studio-back-link";
@@ -100,6 +101,7 @@ export function StudioHeader({
           returned={isReturned(design)}
           className="ml-1 hidden sm:inline-flex"
         />
+        <CheckChip />
         {action}
       </div>
     </header>

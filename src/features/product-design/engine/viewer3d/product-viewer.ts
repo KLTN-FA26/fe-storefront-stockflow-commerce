@@ -21,6 +21,7 @@ import { uvToSurfacePoint } from "./pick";
 import { buildModelScene, type PrintMesh } from "./scene-parts";
 import {
   ContactShadow,
+  environmentYaw,
   FOV_DEG,
   frameModel,
   lightScene,
@@ -108,7 +109,7 @@ export class ProductViewer {
     this.pixelRatio = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
     this.renderer.setPixelRatio(this.pixelRatio);
     this.useEnvironment = opts.environment ?? true;
-    this.lighting = lightScene(this.renderer, this.scene, this.useEnvironment);
+    this.lighting = lightScene(this.renderer, this.scene, this.camera, this.useEnvironment);
 
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
@@ -116,7 +117,8 @@ export class ProductViewer {
     this.controls.minPolarAngle = MIN_POLAR_RAD;
     this.controls.maxPolarAngle = MAX_POLAR_RAD;
     this.controls.autoRotateSpeed = AUTO_ROTATE_SPEED;
-    this.controls.addEventListener("change", this.invalidate);
+    this.controls.addEventListener("change", this.onControlsChange);
+    this.syncEnvironment();
 
     canvas.addEventListener("webglcontextlost", this.onContextLost);
     canvas.addEventListener("webglcontextrestored", this.onContextRestored);
@@ -154,6 +156,8 @@ export class ProductViewer {
     for (const code of this.textures.keys()) this.applyTexture(code);
 
     const size = frameModel(this.camera, this.controls, group, model.heightMm);
+    // A camera already at the home pose fires no change event, so the yaw is set here as well.
+    this.syncEnvironment();
     const shadow = this.contactShadow.create(size);
     if (shadow) group.add(shadow);
     this.invalidate();
@@ -198,7 +202,7 @@ export class ProductViewer {
     this.invalidate();
   }
 
-  /** Back to the home view: front of the model, slightly above. */
+  /** Back to the home view: front of the model, about 5 degrees above its middle. */
   resetView(): void {
     if (!this.model) return;
     this.controls.reset();
@@ -282,6 +286,17 @@ export class ProductViewer {
     return document.hidden || !this.onScreen;
   }
 
+  /** The camera moved: the light turns with it, and a frame follows. */
+  private onControlsChange = () => {
+    this.syncEnvironment();
+    this.invalidate();
+  };
+
+  /** Turns the environment to the camera's azimuth, so the light keeps its side relative to the viewer. */
+  private syncEnvironment() {
+    this.scene.environmentRotation.y = environmentYaw(this.camera.position, this.controls.target);
+  }
+
   /** Asks for one frame; any number of calls before it runs share it. */
   private invalidate = () => {
     if (this.disposed || this.frameId !== null) return;
@@ -323,7 +338,8 @@ export class ProductViewer {
    */
   private onContextRestored = () => {
     this.lighting.dispose();
-    this.lighting = lightScene(this.renderer, this.scene, this.useEnvironment);
+    this.lighting = lightScene(this.renderer, this.scene, this.camera, this.useEnvironment);
+    this.syncEnvironment();
     this.invalidate();
   };
 

@@ -1,9 +1,10 @@
 import type { TextElement } from "../document/schema";
 import { ptToMm } from "../geometry/units";
 import { FALLBACK_FONT_FAMILY, fontCss, type FontRegistry, type TextMeasurer } from "./fonts";
+import { graphemes } from "./graphemes";
 
 /** Text is measured at this size and scaled, so the metrics do not depend on the placed size. */
-const REFERENCE_SIZE_PX = 100;
+export const REFERENCE_SIZE_PX = 100;
 
 export type TextLine = {
   text: string;
@@ -20,30 +21,48 @@ export type TextLayout = {
   widthMm: number;
   heightMm: number;
   fontSizeMm: number;
-  /** Extra advance after every code point of a line, so the renderer can reproduce the measured widths. */
+  /** Extra advance after every grapheme of a line, so the renderer can reproduce the measured widths. */
   letterSpacingMm: number;
+  /** How far the font reaches above a baseline (the tallest line's, as measured). */
+  ascentMm: number;
+  /** How far the font reaches below a baseline (the deepest line's, as measured). */
+  descentMm: number;
   family: string;
   bold: boolean;
   italic: boolean;
 };
 
+/** The face `el` is set in: its registry family (or the fallback), italic only where that family has one. */
+function textFace(el: TextElement, fonts: FontRegistry) {
+  const font = fonts[el.fontCode];
+  return {
+    family: font?.family ?? FALLBACK_FONT_FAMILY,
+    bold: el.bold,
+    italic: el.italic && (font?.italic ?? false),
+  };
+}
+
+/** The CSS font `el` is measured in: its face at `REFERENCE_SIZE_PX`. */
+export function referenceFont(el: TextElement, fonts: FontRegistry): string {
+  return fontCss(textFace(el, fonts), REFERENCE_SIZE_PX);
+}
+
 /**
  * Lays out a text element in millimetres around the origin. Lines split on `\n` only (no wrapping).
  * Each line is measured at a 100 px reference size and scaled to `ptToMm(sizePt)`; letter spacing
- * adds `(codePoints − 1) × letterSpacingEm × fontSizeMm`. Each line owns a box `lineHeight ×
- * fontSizeMm` tall with its glyphs centred in it (CSS line-box model), so an overlay `<textarea>`
- * with the same font and line height sits exactly on the rendered text.
+ * adds `(graphemes − 1) × letterSpacingEm × fontSizeMm`, between the characters a reader sees, as
+ * the canvas's own `letterSpacing` spaces them (a letter and its combining marks are one). Each
+ * line owns a box `lineHeight × fontSizeMm` tall with its glyphs centred in it (CSS line-box
+ * model), so an overlay `<textarea>` with the same font and line height sits exactly on the
+ * rendered text.
  */
 export function layoutText(
   el: TextElement,
   fonts: FontRegistry,
   measure: TextMeasurer,
 ): TextLayout {
-  const font = fonts[el.fontCode];
-  const family = font?.family ?? FALLBACK_FONT_FAMILY;
-  const bold = el.bold;
-  const italic = el.italic && (font?.italic ?? false);
-  const css = fontCss({ family, bold, italic }, REFERENCE_SIZE_PX);
+  const { family, bold, italic } = textFace(el, fonts);
+  const css = referenceFont(el, fonts);
 
   const fontSizeMm = ptToMm(el.sizePt);
   const mmPerPx = fontSizeMm / REFERENCE_SIZE_PX;
@@ -51,7 +70,7 @@ export function layoutText(
 
   const measured = el.content.split("\n").map((text) => {
     const m = measure(text, css);
-    const gaps = Math.max(0, [...text].length - 1);
+    const gaps = Math.max(0, graphemes(text).length - 1);
     return {
       text,
       widthMm: Math.max(0, m.width * mmPerPx + gaps * el.letterSpacingEm * fontSizeMm),
@@ -90,6 +109,8 @@ export function layoutText(
     heightMm,
     fontSizeMm,
     letterSpacingMm: el.letterSpacingEm * fontSizeMm,
+    ascentMm,
+    descentMm,
     family,
     bold,
     italic,

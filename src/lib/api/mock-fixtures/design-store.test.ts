@@ -431,7 +431,7 @@ describe("design mock store", () => {
     const after = data<DesignDto>(submitted);
     expect(after).toMatchObject({ status: "PENDING_REVIEW", version: version + 1 });
     expect(after.submittedAt).toEqual(after.updatedAt);
-    expect(after.previewUrl).toBe(`blob:test/file/${id}/CUSTOMER_PREVIEW`);
+    expect(after.previewUrl).toBe(`blob:test/file/${id}/v${version + 1}/CUSTOMER_PREVIEW`);
     expect(data<DesignEventDto[]>(await store.history(id)).at(-1)).toEqual({
       type: "SUBMITTED_FOR_REVIEW",
       at: after.submittedAt,
@@ -444,21 +444,21 @@ describe("design mock store", () => {
         name: "preview.png",
         sizeBytes: files.CUSTOMER_PREVIEW.size,
         sha256: checksums.CUSTOMER_PREVIEW,
-        url: `blob:test/file/${id}/CUSTOMER_PREVIEW`,
+        url: `blob:test/file/${id}/v${version + 1}/CUSTOMER_PREVIEW`,
       },
       {
         role: "PRINT_READY",
         name: "print-ready.pdf",
         sizeBytes: files.PRINT_READY.size,
         sha256: checksums.PRINT_READY,
-        url: `blob:test/file/${id}/PRINT_READY`,
+        url: `blob:test/file/${id}/v${version + 1}/PRINT_READY`,
       },
       {
         role: "TECHNICAL_SPEC",
         name: "technical-spec.pdf",
         sizeBytes: files.TECHNICAL_SPEC.size,
         sha256: checksums.TECHNICAL_SPEC,
-        url: `blob:test/file/${id}/TECHNICAL_SPEC`,
+        url: `blob:test/file/${id}/v${version + 1}/TECHNICAL_SPEC`,
       },
     ]);
     expect(
@@ -890,6 +890,243 @@ describe("design mock store", () => {
     expect((await store.reset()).status).toBe(200);
     expect(data<{ totalElements: number }>(await store.list()).totalElements).toBe(4);
     expect(refusal(await store.get(created.id))).toEqual([404, "NOT_FOUND"]);
+  });
+
+  it("list treats a null status like no filter", async () => {
+    const store = await makeStore();
+    const listed = await store.list({ status: null, page: null, size: null });
+    expect(listed.status).toBe(200);
+    expect(data<{ totalElements: number }>(listed).totalElements).toBe(4);
+  });
+
+  it("the envelope's timestamp is the store's clock, on an answer and on a refusal", async () => {
+    const at = new Date(T0);
+    const store = await makeStore({ now: () => at });
+    const stampOf = (result: MockResult) => (result.data as { timestamp: string }).timestamp;
+
+    expect(stampOf(await store.draftCount())).toBe(at.toISOString());
+    expect(stampOf(await store.get(uuid(0xbad)))).toBe(at.toISOString());
+    expect(stampOf(await store.printConfig("no-such-product", "NOPE"))).toBe(at.toISOString());
+    expect(stampOf(await store.reset())).toBe(at.toISOString());
+  });
+
+  it("submit refuses a Fail preflight that lists no failing issue (422 VALIDATION_FAILED) and records nothing", async () => {
+    const store = await makeStore();
+    const id = MOCK_DESIGN_IDS.draft;
+    const { version } = await design(store, id);
+    const events = data<DesignEventDto[]>(await store.history(id));
+    const note: PreflightIssue = {
+      ruleId: "CMYK_CONVERSION",
+      level: "note",
+      message: "Màu in có thể khác màu trên màn hình.",
+    };
+
+    for (const issues of [[], [note]]) {
+      const refused = await store.submit(id, {
+        version,
+        preflight: { result: "Fail", issues },
+        ...(await bundle()),
+      });
+      expect(refused.status).toBe(422);
+      expect(refused.data).toMatchObject({
+        errorCode: "VALIDATION_FAILED",
+        fieldErrors: [{ field: "preflight" }],
+      });
+    }
+    expect(data<DesignEventDto[]>(await store.history(id))).toEqual(events);
+  });
+
+  it("two saves of the same version at once: one is saved, the other answers 409 VERSION_CONFLICT", async () => {
+    const store = await makeStore();
+    const id = MOCK_DESIGN_IDS.draft;
+    const record = data<DesignDocumentRecordDto>(await store.getDocument(id));
+    const save = (code: string) =>
+      store.putDocument(id, {
+        version: record.version,
+        document: {
+          ...record.document,
+          surfaces: { ...record.document.surfaces, BACK: text(code) },
+        },
+      });
+
+    const answers = await Promise.all([save("a"), save("b")]);
+
+    expect(answers.map((answer) => answer.status).sort()).toEqual([200, 409]);
+    expect(refusal(answers.find((answer) => answer.status === 409)!)).toEqual([
+      409,
+      "VERSION_CONFLICT",
+    ]);
+    expect((await design(store, id)).version).toBe(record.version + 1);
+  });
+
+  it("a submit and a save of the same version at once: the submit goes first, the save answers 409 INVALID_STATE", async () => {
+    const store = await makeStore();
+    const id = MOCK_DESIGN_IDS.draft;
+    const record = data<DesignDocumentRecordDto>(await store.getDocument(id));
+    const files = await bundle();
+
+    const [submitted, saved] = await Promise.all([
+      store.submit(id, { version: record.version, preflight: PASS, ...files }),
+      store.putDocument(id, { version: record.version, document: record.document }),
+    ]);
+
+    expect(submitted.status).toBe(200);
+    expect(refusal(saved)).toEqual([409, "INVALID_STATE"]);
+    expect(data<DesignDocumentRecordDto>(await store.getDocument(id)).version).toBe(
+      record.version + 1,
+    );
+  });
+
+  it("an image that cannot be stored (its bytes or then its row) answers 500 and leaves neither row nor bytes", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const memory = createMemoryStorage();
+    let failing: "putBlob" | "save" | null = null;
+    const written: string[] = [];
+    const storage: DesignMockStorage = {
+      ...memory,
+      putBlob: async (key, blob) => {
+        written.push(key);
+        if (failing === "putBlob") throw new Error("quota exceeded");
+        await memory.putBlob(key, blob);
+      },
+      save: async (snapshot) => {
+        if (failing === "save") throw new Error("quota exceeded");
+        await memory.save(snapshot);
+      },
+    };
+    const store = await makeStore({ storage });
+    const id = MOCK_DESIGN_IDS.draft;
+    const before = data<DesignAssetDto[]>(await store.listAssets(id));
+
+    for (const point of ["putBlob", "save"] as const) {
+      written.length = 0;
+      failing = point;
+      expect(refusal(await store.uploadAsset(id, png()))).toEqual([500, "DESIGN_MOCK_FAILED"]);
+      failing = null;
+
+      expect(data<DesignAssetDto[]>(await store.listAssets(id))).toEqual(before);
+      expect(written).toEqual([expect.stringMatching(/^asset\//)]);
+      expect(await memory.getBlob(written[0]!)).toBeNull();
+    }
+    expect(errors).toHaveBeenCalledWith(
+      expect.stringContaining("[mock-design]"),
+      expect.objectContaining({ message: "quota exceeded" }),
+    );
+    errors.mockRestore();
+  });
+
+  it("a resubmission that fails part-way (second or third file, or the rows) answers 500, deletes the files it stored and leaves the earlier submission whole", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const memory = createMemoryStorage();
+    /** Which write of the attempt fails: its nth file (1-based), or the save of the rows. */
+    let failOn: number | "save" | null = null;
+    let deletes: "work" | "fail" = "work";
+    const written: string[] = [];
+    const storage: DesignMockStorage = {
+      ...memory,
+      putBlob: async (key, blob) => {
+        written.push(key);
+        if (failOn === written.length) throw new Error("quota exceeded");
+        await memory.putBlob(key, blob);
+      },
+      save: async (snapshot) => {
+        if (failOn === "save") throw new Error("quota exceeded");
+        await memory.save(snapshot);
+      },
+      deleteBlob: (key) =>
+        deletes === "work" ? memory.deleteBlob(key) : Promise.reject(new Error("disk error")),
+    };
+    const store = await makeStore({ storage });
+    const id = MOCK_DESIGN_IDS.draft;
+    expect((await submitPassing(store, id, "first")).status).toBe(200);
+    await store.simulateReturn(id, { reason: "Logo bị mờ" });
+    const before = await design(store, id);
+    const events = data<DesignEventDto[]>(await store.history(id));
+    const first = data<DesignFileDto[]>(await store.files(id));
+
+    for (const point of [2, 3, "save"] as const) {
+      written.length = 0;
+      failOn = point;
+      expect(refusal(await submitPassing(store, id, "second"))).toEqual([
+        500,
+        "DESIGN_MOCK_FAILED",
+      ]);
+      failOn = null;
+
+      expect(written).toHaveLength(point === "save" ? 3 : point);
+      for (const key of written) expect(await memory.getBlob(key)).toBeNull();
+      expect(await design(store, id)).toEqual(before);
+      expect(data<DesignEventDto[]>(await store.history(id))).toEqual(events);
+      expect(data<DesignFileDto[]>(await store.files(id))).toEqual(first);
+      // Every listed file still has the bytes its checksum names.
+      for (const file of first) {
+        const blob = await memory.getBlob(file.url.replace("blob:test/", ""));
+        expect(await sha256Hex(new Uint8Array(await blob!.arrayBuffer()))).toBe(file.sha256);
+      }
+    }
+
+    // A clean-up that fails too is only logged: the answer and the error logged are the write's.
+    errors.mockClear();
+    deletes = "fail";
+    written.length = 0;
+    failOn = 2;
+    expect(refusal(await submitPassing(store, id, "second"))).toEqual([500, "DESIGN_MOCK_FAILED"]);
+    expect(errors).toHaveBeenCalledWith(
+      expect.stringContaining("[mock-design]"),
+      expect.objectContaining({ message: "quota exceeded" }),
+    );
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("[mock-design]"), expect.anything());
+    errors.mockRestore();
+    warn.mockRestore();
+  });
+
+  it("a resubmission stores the new files under new keys and deletes the earlier ones; a failed delete still answers 200", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const memory = createMemoryStorage();
+    let deletes: "work" | "fail" = "work";
+    const storage: DesignMockStorage = {
+      ...memory,
+      deleteBlob: (key) =>
+        deletes === "work" ? memory.deleteBlob(key) : Promise.reject(new Error("disk error")),
+    };
+    const store = await makeStore({ storage });
+    const id = MOCK_DESIGN_IDS.draft;
+    const keysOf = async () =>
+      data<DesignFileDto[]>(await store.files(id)).map((file) =>
+        file.url.replace("blob:test/", ""),
+      );
+
+    await submitPassing(store, id, "first");
+    const firstKeys = await keysOf();
+    await store.simulateReturn(id, { reason: "Logo bị mờ" });
+    expect((await submitPassing(store, id, "second")).status).toBe(200);
+
+    const secondKeys = await keysOf();
+    expect(secondKeys).toHaveLength(3);
+    for (const key of firstKeys) {
+      expect(secondKeys).not.toContain(key);
+      expect(await storage.getBlob(key)).toBeNull();
+    }
+
+    await store.simulateReturn(id, { reason: "Chữ nhỏ" });
+    deletes = "fail";
+    expect((await submitPassing(store, id, "third")).status).toBe(200);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("[mock-design]"), expect.anything());
+    warn.mockRestore();
+  });
+
+  it("reset revokes the links it made", async () => {
+    const revokeUrl = vi.fn();
+    const store = await makeStore({ revokeUrl });
+    const id = MOCK_DESIGN_IDS.draft;
+    const asset = data<DesignAssetDto>(await store.uploadAsset(id, png()));
+    const { url } = data<{ url: string }>(await store.assetLink(id, asset.assetId));
+    expect(revokeUrl).not.toHaveBeenCalled();
+
+    await store.reset();
+
+    expect(revokeUrl).toHaveBeenCalledWith(url);
   });
 
   it("printConfig answers the variant's configuration or 404", async () => {

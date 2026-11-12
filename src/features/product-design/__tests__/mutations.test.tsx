@@ -164,6 +164,18 @@ describe("useSaveDesignDocument (spec §4.4: detail version, lists updatedAt)", 
     expect(invalidated(invalidate)).toEqual([{ queryKey: designKeys.lists() }]);
   });
 
+  it("does not invent a design in the cache when it holds none", async () => {
+    vi.spyOn(api, "put").mockResolvedValueOnce({ data: documentRecordDto({ version: 4 }) });
+    const { client, wrapper } = setup();
+    const { result } = renderHook(() => useSaveDesignDocument(id), { wrapper });
+
+    result.current.mutate({ version: 3, document: cupDocument() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(client.getQueryData(designKeys.detail(id))).toBeUndefined();
+    expect(client.getQueryData(designKeys.document(id))).toMatchObject({ version: 4 });
+  });
+
   it("re-reads the design on 409 INVALID_STATE, so the studio follows its new status", async () => {
     vi.spyOn(api, "put").mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "x"));
     const { invalidate, wrapper } = setup();

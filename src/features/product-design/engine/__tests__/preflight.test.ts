@@ -6,14 +6,17 @@ import type {
   DesignDocument,
   DesignElement,
   Hex,
+  ImageElement,
   Stroke,
   SurfaceContent,
 } from "../document/schema";
 import { elementOutline } from "../geometry/element";
-import { dpiTier, printDpi } from "../preflight/rules/resolution";
+import { polarWarp, warpStretch } from "../geometry/polar-warp";
+import { dpiTier, placedDpi, printDpi } from "../preflight/rules/resolution";
 import { VARIANT_OK } from "../preflight/rules/variant";
 import { runPreflight } from "../preflight/run";
 import type { PreflightInput, PreflightIssue, PreflightRuleId } from "../preflight/types";
+import { effectiveDpi } from "../geometry/units";
 import { createSurfaces, cupSector } from "../surfaces";
 import type { BagModel, CupModel, CustomizationTemplate, PrintAreaCode } from "../template/schema";
 import { bagM, cup12oz, cupBody, drawingEl, imageEl, sizer, textEl } from "./fixtures";
@@ -706,7 +709,7 @@ describe("TOO_THIN", () => {
   const thinIssues = (el: DesignElement) =>
     only(runPreflight(input(onFront(el))).issues, "TOO_THIN");
 
-  it("warns about a stroke thinner than 0.25 mm", () => {
+  it("adds a note about a stroke thinner than 0.25 mm", () => {
     expect(thinIssues(drawingEl("pen", { strokes: [stroke(0.2)] }))).toEqual([thin("pen")]);
     expect(thinIssues(drawingEl("pen", { strokes: [stroke(0.25)] }))).toEqual([]);
   });
@@ -720,13 +723,13 @@ describe("TOO_THIN", () => {
     expect(thinIssues(drawingEl("pen", { strokes: [stroke(0.1, { mode: "erase" })] }))).toEqual([]);
   });
 
-  it("warns about a text outline thinner than 0.25 mm", () => {
+  it("adds a note about a text outline thinner than 0.25 mm", () => {
     const outlined = (widthMm: number) => textEl("txt", { outline: { color: "#112233", widthMm } });
     expect(thinIssues(outlined(0.2))).toEqual([thin("txt")]);
     expect(thinIssues(outlined(0.3))).toEqual([]);
   });
 
-  it("warns about text smaller than 6 pt", () => {
+  it("adds a note about text smaller than 6 pt", () => {
     expect(thinIssues(textEl("txt", { sizePt: 5.5 }))).toEqual([thin("txt")]);
     expect(thinIssues(textEl("txt", { sizePt: 6 }))).toEqual([]);
   });
@@ -759,16 +762,16 @@ describe("WHITE_ON_KRAFT", () => {
   const pen = (color: Hex) =>
     drawingEl("pen", { strokes: [{ mode: "draw", color, sizeMm: 2, points: [[0, 0, 0.5]] }] });
 
-  it("warns about white text on kraft-brown paper", () => {
+  it("adds a note about white text on kraft-brown paper", () => {
     expect(whiteIssues(textEl("txt", { color: "#FFFFFF" }))).toEqual([white("FRONT", "txt")]);
   });
 
-  it("warns about a white text outline", () => {
+  it("adds a note about a white text outline", () => {
     const el = textEl("txt", { color: "#000000", outline: { color: "#FFFFFF", widthMm: 1 } });
     expect(whiteIssues(el)).toEqual([white("FRONT", "txt")]);
   });
 
-  it("warns about a near-white stroke, but not an erase stroke", () => {
+  it("adds a note about a near-white stroke, but not an erase stroke", () => {
     expect(whiteIssues(pen("#F8F8F8"))).toEqual([white("FRONT", "pen")]);
     const eraser = drawingEl("pen", {
       strokes: [{ mode: "erase", color: "#FFFFFF", sizeMm: 2, points: [[0, 0, 0.5]] }],
@@ -782,7 +785,7 @@ describe("WHITE_ON_KRAFT", () => {
     expect(whiteIssues(textEl("txt", { color: "#0000FF" }))).toEqual([]);
   });
 
-  it("warns about a white background as a surface-level issue", () => {
+  it("adds a note about a white background as a surface-level issue", () => {
     const solid = docOf({ FRONT: content([textEl("t")], { kind: "color", color: "#FFFFFF" }) });
     expect(only(runPreflight(input(solid)).issues, "WHITE_ON_KRAFT")).toEqual([white("FRONT")]);
 
@@ -828,7 +831,7 @@ describe("TOO_MANY_COLORS", () => {
   const run = (doc: DesignDocument, maxColors: number | null) =>
     only(runPreflight(input(doc, { maxColors })).issues, "TOO_MANY_COLORS");
 
-  it("warns when distinct solid colours exceed maxColors", () => {
+  it("adds a note when distinct solid colours exceed maxColors", () => {
     const doc = docOf({
       FRONT: content([textEl("a", { color: "#111111" }), textEl("b", { color: "#C0392B" })], {
         kind: "color",
@@ -882,7 +885,7 @@ describe("TOO_MANY_COLORS", () => {
     expect(run(doc, 1)).toEqual([tooMany("FRONT", 1), tooMany("BACK", 1)]);
   });
 
-  it("warns about any image when maxColors is set", () => {
+  it("adds a note about any image when maxColors is set", () => {
     const doc = onFront(imageEl("img"));
     expect(run(doc, 4)).toEqual([tooMany("FRONT", 4)]);
   });
@@ -965,5 +968,60 @@ describe("variant rules", () => {
     expect(ruleIds(both.issues)).toEqual(["VARIANT_UNAVAILABLE", "NO_CARTON_SPEC"]);
     expect(both.issues.every((i) => i.elementId === undefined)).toBe(true);
     expect(runPreflight(input(cleanDoc)).issues).toEqual([]);
+  });
+});
+
+describe("DPI of a wrapped image (the outer edge is stretched)", () => {
+  const BOX_W = 60;
+  const BOX_H = 40;
+  const wrapPlacement = { ...cupPlacement, scale: 1 };
+  // `dpi` over the 60 × 40 mm frame, whole pixels.
+  const cupImage = (dpi: number, overrides: Partial<ImageElement> = {}) =>
+    imageEl("img", {
+      naturalWidthPx: Math.round((dpi * BOX_W) / 25.4),
+      naturalHeightPx: Math.round((dpi * BOX_H) / 25.4),
+      placement: wrapPlacement,
+      ...overrides,
+    });
+  const stretchOf = (el: ImageElement) =>
+    warpStretch(
+      polarWarp(el, cupBody, { x: -BOX_W / 2, y: -BOX_H / 2, width: BOX_W, height: BOX_H })!,
+    );
+  const cupDpiIssues = (el: ImageElement) =>
+    only(
+      runPreflight(input(docOf({ BODY: content([el]) }, cup12oz), cup12oz)).issues,
+      "DPI_BELOW_MIN",
+    );
+
+  it("divides the horizontal DPI by warpStretch when wrapped on the cup", () => {
+    const el = cupImage(320, { wrap: true });
+    const stretch = stretchOf(el);
+    expect(stretch).toBeGreaterThan(1.07);
+    const horizontal = effectiveDpi(el.naturalWidthPx, BOX_W) / stretch;
+    expect(placedDpi(el, cupBody)).toBeCloseTo(horizontal, 9);
+    expect(placedDpi(el, cupBody)).toBeLessThan(placedDpi(el));
+  });
+
+  it("fails a wrapped image that the stretch pushes under minDpi; the unwrapped one passes", () => {
+    const wrapped = cupImage(320, { wrap: true });
+    expect(cupDpiIssues(wrapped)).toEqual([
+      expect.objectContaining({ ruleId: "DPI_BELOW_MIN", surfaceCode: "BODY", elementId: "img" }),
+    ]);
+    expect(cupDpiIssues(cupImage(320))).toEqual([]);
+  });
+
+  it("reports the same number the badge shows (rounded, stretch included)", () => {
+    const wrapped = cupImage(320, { wrap: true });
+    const [issue] = cupDpiIssues(wrapped);
+    expect(issue!.message).toBe(
+      `Ảnh chỉ đạt ${Math.round(placedDpi(wrapped, cupBody))} DPI, thấp hơn mức tối thiểu 300 DPI.`,
+    );
+  });
+
+  it("leaves an unwrapped image and any image on a bag unchanged", () => {
+    const flat = cupImage(320);
+    expect(placedDpi(flat, cupBody)).toBe(placedDpi(flat));
+    const onBag = imageEl("img", { wrap: true });
+    expect(placedDpi(onBag, createSurfaces(bagM).byCode.FRONT!)).toBe(placedDpi(onBag));
   });
 });

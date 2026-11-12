@@ -84,10 +84,18 @@ export {
   elementOutline,
   hitTest,
   isWrapped,
-  wrapStripMatrix,
+  wrapColumnMatrix,
   type ElementSizer,
   type Flip,
 } from "./geometry/element";
+export {
+  polarWarp,
+  warpBounds,
+  warpStretch,
+  warpToFlat,
+  warpToLocal,
+  type PolarWarp,
+} from "./geometry/polar-warp";
 export { alongEdges, boundsOf, pointInPolygon } from "./geometry/polygon";
 export { simplifyRdp } from "./geometry/simplify";
 export type { PathCmd, PointMm, RectMm } from "./geometry/types";
@@ -103,9 +111,9 @@ export {
   type TextMeasurer,
 } from "./render/fonts";
 export { layoutText, type TextLayout, type TextLine } from "./render/text-layout";
-export type { ComposeTarget, DrawOp, Strip, WarpableOp } from "./render/ops";
+export type { ComposeTarget, DrawOp } from "./render/ops";
 export { compose, KRAFT_INK_TINT, type ComposeInput } from "./render/compose";
-export { WARP_STRIP_COUNT, warpStrips } from "./render/warp";
+export { arcGlyphs, type ArcGlyph } from "./render/arc-text";
 export { execute, type ChromeColors, type Ctx2D, type RenderEnv } from "./render/execute";
 export { drawPattern } from "./render/patterns";
 export { strokePolygon } from "./render/brush";

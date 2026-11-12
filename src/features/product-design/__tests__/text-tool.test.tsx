@@ -76,7 +76,7 @@ async function openStudio(designId: string, fonts: FontRegistry = TEST_FONTS) {
       }}
     />,
   );
-  await screen.findByRole("tab", { name: "Lớp" }, { timeout: 4000 });
+  await screen.findByRole("group", { name: /^Khung vẽ/ }, { timeout: 4000 });
   return seen;
 }
 
@@ -100,8 +100,25 @@ const addText = async (user: UserEvent, name = "Thêm chữ") => {
   await chooseTextTool(user);
   await user.click(screen.getByRole("button", { name }));
 };
-const showTab = (user: UserEvent, name: "Thuộc tính" | "Lớp") =>
-  user.click(screen.getByRole("tab", { name }));
+/** Closes the open panel with its button (a Lớp list would be a second listbox beside a font list). */
+const closePanel = (user: UserEvent) =>
+  user.click(screen.getByRole("button", { name: "Đóng bảng" }));
+/** "Thêm" of the context bar: outline, letter spacing and line height. */
+const openMore = (user: UserEvent) => user.click(screen.getByRole("button", { name: "Thêm" }));
+/** The colour popover of the context bar; the swatches and the hex field are inside it. */
+const openTextColour = async (user: UserEvent) => {
+  await user.click(screen.getByRole("button", { name: /^Màu chữ/ }));
+  return within(await screen.findByRole("group", { name: "Màu chữ" }));
+};
+/** The "Vị trí" popover of the context bar: X, Y, rotation and scale. */
+const openPosition = (user: UserEvent) =>
+  user.click(screen.getByRole("button", { name: "Vị trí" }));
+
+/** Opens the layers panel from the rail, unless it is open already (the rail item toggles). */
+async function showLayers(user: UserEvent) {
+  const item = screen.getByRole("button", { name: "Lớp" });
+  if (item.getAttribute("aria-pressed") !== "true") await user.click(item);
+}
 const editor = () => screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Nội dung chữ" });
 const undoButton = () => screen.getByRole("button", { name: "Hoàn tác (Ctrl+Z)" });
 const stage = () => screen.getByRole("group", { name: "Khung vẽ Thân ly" });
@@ -116,7 +133,6 @@ describe("adding text", () => {
     await user.paste("Cà phê ".repeat(100)); // 700 characters over the selected placeholder
     expect([...lastText(services).content]).toHaveLength(500);
     await user.keyboard("{Escape}");
-    await showTab(user, "Thuộc tính");
     expect(screen.getByText(/Chữ đã đạt tối đa 500 ký tự/)).toHaveAttribute("role", "status");
   });
 
@@ -137,7 +153,7 @@ describe("adding text", () => {
     await user.type(box, `${SAMPLE_TEXT}{Escape}`);
 
     expect(screen.queryByRole("textbox", { name: "Nội dung chữ" })).not.toBeInTheDocument();
-    await showTab(user, "Lớp");
+    await showLayers(user);
     expect(screen.getByRole("option", { name: `Chữ: ${SAMPLE_TEXT}` })).toBeInTheDocument();
     expect(lastText(services).content).toBe(SAMPLE_TEXT);
     expect(services.current!.editor.store.getState().selectedId).toBe(lastText(services).id);
@@ -196,7 +212,6 @@ describe("adding text", () => {
     await addText(user);
     await user.clear(editor());
     await user.type(editor(), `${SAMPLE_TEXT}{Escape}`);
-    await showTab(user, "Thuộc tính");
     await user.click(screen.getByRole("combobox", { name: /^Phông chữ/ }));
     await user.click(await screen.findByRole("option", { name: /Lobster/ }));
 
@@ -225,7 +240,7 @@ describe("inline editing", () => {
     await user.keyboard("{Escape}");
 
     expect(textsOf(services)).toEqual([]);
-    await showTab(user, "Lớp");
+    await showLayers(user);
     expect(screen.queryByRole("option", { name: /^Chữ/ })).not.toBeInTheDocument();
     expect(screen.getByText("Đã xoá phần tử")).toBeInTheDocument();
     // One step for the whole session: undo brings the placeholder back, not an empty text.
@@ -297,7 +312,7 @@ describe("inline editing", () => {
     const user = userEvent.setup();
     const { store: studio } = await designBackend();
     await openStudio(await cupDraft(studio, [textEl("hello", { content: "Chào" })]));
-    await showTab(user, "Lớp");
+    await showLayers(user);
 
     await user.click(screen.getByRole("option", { name: "Chữ: Chào" }));
     await user.keyboard("{Enter}");
@@ -315,7 +330,7 @@ describe("inline editing", () => {
     const services = await openStudio(
       await cupDraft(studio, [textEl("hello", { content: "Chào" })]),
     );
-    await showTab(user, "Lớp");
+    await showLayers(user);
     await user.click(screen.getByRole("option", { name: "Chữ: Chào" }));
     act(() => stage().focus());
 
@@ -341,7 +356,7 @@ describe("inline editing", () => {
         textEl("locked", { content: "Khoá", locked: true }),
       ]),
     );
-    await showTab(user, "Lớp");
+    await showLayers(user);
 
     for (const name of ["Ảnh", "Chữ: Khoá"]) {
       await user.click(screen.getByRole("option", { name }));
@@ -358,9 +373,8 @@ describe("inline editing", () => {
   it("does nothing on Enter on the stage of a read-only design", async () => {
     const user = userEvent.setup();
     await designBackend();
-    await openStudio(MOCK_DESIGN_IDS.approved);
-    await showTab(user, "Lớp");
-    await user.click(screen.getByRole("option", { name: "Chữ: Nhà Mình" }));
+    const services = await openStudio(MOCK_DESIGN_IDS.approved);
+    act(() => services.current!.editor.select("el-cup-1"));
     act(() => stage().focus());
 
     await user.keyboard("{Enter}");
@@ -372,7 +386,7 @@ describe("inline editing", () => {
     const user = userEvent.setup();
     const { store: studio } = await designBackend();
     const services = await openStudio(await cupDraft(studio, [textEl("hello")]));
-    await showTab(user, "Lớp");
+    await showLayers(user);
     await user.click(screen.getByRole("option", { name: /^Chữ/ }));
     const zoomIn = screen.getByRole("button", { name: "Phóng to" });
     act(() => zoomIn.focus());
@@ -392,7 +406,7 @@ describe("inline editing", () => {
         textEl("hidden", { content: "Ẩn", hidden: true }),
       ]),
     );
-    await showTab(user, "Lớp");
+    await showLayers(user);
 
     await user.click(screen.getByRole("option", { name: "Chữ: Khoá" }));
     await user.keyboard("{Enter}");
@@ -406,14 +420,15 @@ describe("inline editing", () => {
     const user = userEvent.setup();
     await designBackend();
     await openStudio(MOCK_DESIGN_IDS.approved);
-    await showTab(user, "Lớp");
-
+    await showLayers(user);
     await user.click(screen.getByRole("option", { name: "Chữ: Nhà Mình" }));
+
     await user.keyboard("{Enter}");
 
     expect(screen.queryByRole("textbox", { name: "Nội dung chữ" })).not.toBeInTheDocument();
-    await showTab(user, "Thuộc tính");
-    expect(screen.getByRole("combobox", { name: /^Phông chữ/ })).toBeDisabled();
+    // There is no context bar to change it with, and no tool items.
+    expect(screen.queryByRole("combobox", { name: /^Phông chữ/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Chữ (T)" })).not.toBeInTheDocument();
   });
 });
 
@@ -511,13 +526,12 @@ describe("on the stage", () => {
   });
 });
 
-/** A cup holding one text, opened on the Properties tab with that text selected. */
+/** A cup holding one text, selected: its properties are in the context bar. */
 async function openWithText(user: UserEvent) {
   const { store: studio } = await designBackend();
   const services = await openStudio(await cupDraft(studio, [textEl("hello")]));
-  await showTab(user, "Lớp");
+  await showLayers(user);
   await user.click(screen.getByRole("option", { name: /^Chữ/ }));
-  await showTab(user, "Thuộc tính");
   return { services };
 }
 
@@ -531,7 +545,6 @@ describe("text properties", () => {
     await user.keyboard("{Escape}");
     // The first allowed font, in the template's order, not the registry's.
     expect(lastText(services).fontCode).toBe("lobster");
-    await showTab(user, "Thuộc tính");
 
     expect(screen.getByRole("button", { name: "In nghiêng" })).toBeDisabled();
     await user.click(screen.getByRole("combobox", { name: /^Phông chữ/ }));
@@ -561,9 +574,9 @@ describe("text properties", () => {
       const user = userEvent.setup();
       const { store: studio } = await designBackend(fontsRestrictedTo(codes as string[] | null));
       await openStudio(await cupDraft(studio, [textEl("hello")]), FONTS);
-      await showTab(user, "Lớp");
+      await showLayers(user);
       await user.click(screen.getByRole("option", { name: /^Chữ/ }));
-      await showTab(user, "Thuộc tính");
+      await closePanel(user);
 
       await user.click(screen.getByRole("combobox", { name: /^Phông chữ/ }));
 
@@ -580,9 +593,9 @@ describe("text properties", () => {
     const user = userEvent.setup();
     const { store: studio } = await designBackend();
     await openStudio(await cupDraft(studio, [textEl("hello")]), FONTS);
-    await showTab(user, "Lớp");
+    await showLayers(user);
     await user.click(screen.getByRole("option", { name: /^Chữ/ }));
-    await showTab(user, "Thuộc tính");
+    await closePanel(user);
 
     await user.click(screen.getByRole("combobox", { name: /^Phông chữ/ }));
     await user.type(await screen.findByPlaceholderText("Tìm phông chữ…"), "lob");
@@ -622,6 +635,7 @@ describe("text properties", () => {
     const user = userEvent.setup();
     const { services } = await openWithText(user);
 
+    await openMore(user);
     const spacing = screen.getByLabelText("Giãn chữ (em)");
     await user.clear(spacing);
     await user.type(spacing, "0.1");
@@ -637,6 +651,7 @@ describe("text properties", () => {
     const user = userEvent.setup();
     const { services } = await openWithText(user);
 
+    await openMore(user);
     expect(screen.queryByLabelText("Độ dày viền (mm)")).not.toBeInTheDocument();
     await user.click(screen.getByRole("switch", { name: "Viền chữ" }));
     expect(lastText(services).outline).toEqual({ color: "#2563EB", widthMm: 0.5 });
@@ -659,10 +674,9 @@ describe("text properties", () => {
     const user = userEvent.setup();
     const { store: studio } = await designBackend();
     const services = await openStudio(await cupDraft(studio, [textEl("hello")]));
-    await showTab(user, "Lớp");
+    await showLayers(user);
     await user.click(screen.getByRole("option", { name: /^Chữ/ }));
-    await showTab(user, "Thuộc tính");
-    const colour = within(screen.getByRole("group", { name: "Màu chữ" }));
+    const colour = await openTextColour(user);
 
     await user.click(colour.getByRole("button", { name: /#DC2626/ }));
     expect(lastText(services).color).toBe("#DC2626");
@@ -679,14 +693,15 @@ describe("text properties", () => {
     const user = userEvent.setup();
     const { store: studio } = await designBackend();
     const services = await openStudio(await cupDraft(studio, [textEl("hello")]));
-    await showTab(user, "Lớp");
+    await showLayers(user);
     await user.click(screen.getByRole("option", { name: /^Chữ/ }));
-    await showTab(user, "Thuộc tính");
 
     await user.click(screen.getByRole("switch", { name: "Uốn theo thân ly" }));
     expect(lastText(services).wrap).toBe(true);
     // A wrapped text reads horizontally, so it cannot turn (R15).
+    await openPosition(user);
     expect(screen.getByLabelText("Góc xoay (°)")).toBeDisabled();
+    await user.keyboard("{Escape}");
     await user.click(screen.getByRole("switch", { name: "Uốn theo thân ly" }));
     expect(lastText(services).wrap).toBeUndefined();
   });
@@ -695,10 +710,9 @@ describe("text properties", () => {
     const user = userEvent.setup();
     await designBackend();
     await openStudio(MOCK_DESIGN_IDS.draft);
-    await showTab(user, "Lớp");
+    await showLayers(user);
 
     await user.click(screen.getByRole("option", { name: "Chữ: Tiệm Bánh Hoa" }));
-    await showTab(user, "Thuộc tính");
 
     expect(screen.getByRole("combobox", { name: /^Phông chữ/ })).toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "Uốn theo thân ly" })).not.toBeInTheDocument();
@@ -708,9 +722,8 @@ describe("text properties", () => {
     const user = userEvent.setup();
     const { store: studio } = await designBackend();
     await openStudio(await cupDraft(studio, [textEl("hello", { locked: true })]));
-    await showTab(user, "Lớp");
+    await showLayers(user);
     await user.click(screen.getByRole("option", { name: /^Chữ/ }));
-    await showTab(user, "Thuộc tính");
 
     expect(screen.getByLabelText("Cỡ chữ (pt)")).toBeDisabled();
     expect(screen.getByRole("combobox", { name: /^Phông chữ/ })).toBeDisabled();
@@ -723,8 +736,7 @@ describe("text properties", () => {
     const services = await openStudio(MOCK_DESIGN_IDS.draft);
     await addText(user);
     await user.keyboard("{Escape}");
-    await showTab(user, "Thuộc tính");
-    const colour = within(screen.getByRole("group", { name: "Màu chữ" }));
+    const colour = await openTextColour(user);
     const warning = "Giấy kraft không in được màu trắng.";
     expect(screen.queryByText(warning)).not.toBeInTheDocument();
 
@@ -740,11 +752,10 @@ describe("text properties", () => {
     const user = userEvent.setup();
     const { store: studio } = await designBackend();
     await openStudio(await cupDraft(studio, [textEl("hello")]));
-    await showTab(user, "Lớp");
+    await showLayers(user);
     await user.click(screen.getByRole("option", { name: /^Chữ/ }));
-    await showTab(user, "Thuộc tính");
 
-    const colour = within(screen.getByRole("group", { name: "Màu chữ" }));
+    const colour = await openTextColour(user);
     await user.click(colour.getByRole("button", { name: /#FFFFFF/ }));
 
     expect(screen.queryByText("Giấy kraft không in được màu trắng.")).not.toBeInTheDocument();
@@ -785,9 +796,9 @@ describe("font loading", () => {
     const services = await openStudio(await cupDraft(studio, [textEl("hello")]), FONTS);
     const repainted: string[][] = [];
     services.current!.repaint.subscribe((codes) => repainted.push([...codes]));
-    await showTab(user, "Lớp");
+    await showLayers(user);
     await user.click(screen.getByRole("option", { name: /^Chữ/ }));
-    await showTab(user, "Thuộc tính");
+    await closePanel(user);
 
     await user.click(screen.getByRole("combobox", { name: /^Phông chữ/ }));
 

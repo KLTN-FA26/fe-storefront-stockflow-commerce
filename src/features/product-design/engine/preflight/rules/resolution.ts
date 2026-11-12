@@ -1,5 +1,7 @@
 import type { DesignElement, ImageElement } from "../../document/schema";
+import { polarWarp, warpStretch } from "../../geometry/polar-warp";
 import { effectiveDpi } from "../../geometry/units";
+import type { PrintSurface } from "../../surfaces/types";
 import type { PreflightIssue, SurfaceScope } from "../types";
 
 // BR-DSG-001 (BE) and docs 12 §3 step 3 / edge cases (spec §7): below `minDpi` fails. There is no
@@ -12,11 +14,24 @@ export const PRINT_DPI_FLOOR = 300;
 /** The DPI the print file is rendered at: `max(minDpi, 300)`. */
 export const printDpi = (minDpi: number): number => Math.max(minDpi, PRINT_DPI_FLOOR);
 
-/** The DPI the image reaches once placed: the worse of its two axes, at the placed (scaled) size. */
-export function placedDpi(el: ImageElement): number {
+/**
+ * The DPI the image reaches once placed: the worse of its two axes, at the placed (scaled) size.
+ * Bent around the cup on `surface`, its outer edge is stretched by `warpStretch` (spec §4), so the
+ * horizontal DPI is divided by it.
+ */
+export function placedDpi(el: ImageElement, surface?: PrintSurface): number {
   const { scale } = el.placement;
+  const warp =
+    surface &&
+    polarWarp(el, surface, {
+      x: -el.widthMm / 2,
+      y: -el.heightMm / 2,
+      width: el.widthMm,
+      height: el.heightMm,
+    });
+  const stretch = warp ? warpStretch(warp) : 1;
   return Math.min(
-    effectiveDpi(el.naturalWidthPx, el.widthMm * scale),
+    effectiveDpi(el.naturalWidthPx, el.widthMm * scale) / stretch,
     effectiveDpi(el.naturalHeightPx, el.heightMm * scale),
   );
 }
@@ -31,7 +46,7 @@ export function resolutionIssues(scope: SurfaceScope, el: DesignElement): Prefli
   if (el.type !== "image") return [];
 
   const { minDpi } = scope.input.template;
-  const dpi = placedDpi(el);
+  const dpi = placedDpi(el, scope.surface);
   if (dpiTier(dpi, minDpi) === "ok") return [];
   return [
     {

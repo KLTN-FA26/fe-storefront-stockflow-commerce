@@ -2,11 +2,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { ImageElement, SurfaceContent } from "../document/schema";
-import { applyToPoint } from "../geometry/affine";
 import { elementMatrix } from "../geometry/element";
+import { polarWarp, warpToFlat } from "../geometry/polar-warp";
+import { arcGlyphs } from "../render/arc-text";
 import { compose, KRAFT_INK_TINT } from "../render/compose";
-import type { ComposeTarget, DrawOp, Strip } from "../render/ops";
-import { warpStrips } from "../render/warp";
+import type { TextMeasurer } from "../render/fonts";
+import type { ComposeTarget, DrawOp } from "../render/ops";
+import { layoutText } from "../render/text-layout";
 import { cupSector } from "../surfaces";
 import type { CupModel, MaterialKind } from "../template/schema";
 import {
@@ -223,42 +225,104 @@ describe("compose", () => {
   });
 
   describe("wrap", () => {
-    it("wraps text along the cup arc at one radius", () => {
-      const ops = compose({
-        ...input,
-        content: { ...content, elements: [textEl("w", { wrap: true })] },
-        target: "print",
-      });
-      const warped = opOf(ops, "warped")!;
-      expect(warped.strips).toHaveLength(48);
-
-      const { outerRadiusMm } = cupSector(cup12oz.model as CupModel);
-      const { u, v } = textEl("w").placement;
-      const apex = cupBody.toFlat(u, outerRadiusMm);
-      const radii = warped.strips.map((s) => {
-        const xc = s.srcX + s.srcWidth / 2;
-        const centre = applyToPoint(s.matrix, { x: xc, y: 0 });
-        return Math.hypot(centre.x - apex.x, centre.y - apex.y);
-      });
-      radii.forEach((r) => expect(r).toBeCloseTo(radii[0]!, 6));
-      expect(radii[0]).toBeCloseTo(outerRadiusMm - v, 6);
-    });
-
-    it("keeps the unwarped source op alongside the strips", () => {
-      const el = textEl("w", { wrap: true });
+    it("bends text around the cup as its glyphs along the arc, with the rigid op as the source", () => {
+      const el = textEl("w", { wrap: true, outline: { color: "#FFFFFF", widthMm: 0.4 } });
       const ops = compose({ ...input, content: { ...content, elements: [el] } });
-      const warped = opOf(ops, "warped")!;
-      expect(warped.source.op).toBe("text");
-      expect(warped.source.matrix).toEqual(elementMatrix(el, cupBody));
+      const layout = layoutText(el, FONTS, fakeMeasure);
+      expect(opOf(ops, "arcText")).toEqual({
+        op: "arcText",
+        source: {
+          op: "text",
+          matrix: elementMatrix(el, cupBody),
+          layout,
+          color: el.color,
+          outline: { color: "#FFFFFF", widthMm: 0.4 },
+          opacity: el.opacity,
+        },
+        glyphs: arcGlyphs(el, layout, cupBody, FONTS, fakeMeasure),
+      });
       expect(ops.some((o) => o.op === "text")).toBe(false);
     });
 
-    it("warps images too", () => {
-      const ops = compose({
-        ...input,
-        content: { ...content, elements: [imageEl("w", { wrap: true })] },
+    it("measures a wrapped text's glyphs once, however often it is composed", () => {
+      const asked: string[] = [];
+      const measure: TextMeasurer = (text, css) => {
+        asked.push(text);
+        return fakeMeasure(text, css);
+      };
+      const el = textEl("w", { wrap: true, content: "Xin chào\nThế giới" });
+      const composeIt = () =>
+        compose({ ...input, measure, content: { ...content, elements: [el] } });
+      const first = composeIt();
+      expect(asked.length).toBeGreaterThan(2);
+      asked.length = 0;
+      const again = composeIt();
+      // The layout's own measure of each line, then the glyphs' key (each line at the reference
+      // size): the glyphs' measures were kept.
+      expect(asked).toEqual(["Xin chào", "Thế giới", "Xin chào", "Thế giới"]);
+      expect(again).toEqual(first);
+    });
+
+    describe("images", () => {
+      const placement = { u: 140, v: 60, rotationDeg: 0, scale: 1.5 };
+      const composed = (el: ImageElement, surface = cupBody) =>
+        compose({ ...input, surface, content: { ...content, elements: [el] } });
+
+      it("emits a warpedImage whose warp is the element's polar warp over its box", () => {
+        const el = imageEl("w", { wrap: true, opacity: 0.4, placement });
+        const ops = composed(el);
+        expect(ops.some((o) => o.op === "image")).toBe(false);
+        const { sheetRadiiMm, ...op } = opOf(ops, "warpedImage")!;
+        // The radii the bleed spans about the apex: what of the element the sheet can show.
+        const sector = cupSector(cup12oz.model as CupModel);
+        expect(sheetRadiiMm[0]).toBeCloseTo(sector.trimInnerMm - cupBody.bleedMm, 9);
+        expect(sheetRadiiMm[1]).toBeCloseTo(sector.trimOuterMm + cupBody.bleedMm, 9);
+        expect(op).toEqual({
+          op: "warpedImage",
+          id: "w",
+          source: {
+            op: "image",
+            matrix: elementMatrix(el, cupBody),
+            box: sizer(el),
+            assetId: "asset-1",
+            opacity: 0.4,
+          },
+          warp: polarWarp(el, cupBody, sizer(el)),
+        });
       });
-      expect(opOf(ops, "warped")!.source.op).toBe("image");
+
+      it("carries the flips in the warp: flipX mirrors along the arc, flipY across it", () => {
+        const warpOf = (flips: Partial<ImageElement>) =>
+          opOf(composed(imageEl("w", { wrap: true, placement, ...flips })), "warpedImage")!.warp;
+        const plain = warpOf({});
+        const near = (a: { x: number; y: number }, b: { x: number; y: number }) => {
+          expect(a.x).toBeCloseTo(b.x, 9);
+          expect(a.y).toBeCloseTo(b.y, 9);
+        };
+        expect([plain.flipX, plain.flipY]).toEqual([false, false]);
+        const both = warpOf({ flipX: true, flipY: true });
+        expect([both.flipX, both.flipY]).toEqual([true, true]);
+        for (const [x, y] of [
+          [-30, -20],
+          [12, 5],
+          [30, 20],
+        ] as const) {
+          near(warpToFlat(warpOf({ flipX: true }), x, y), warpToFlat(plain, -x, y));
+          near(warpToFlat(warpOf({ flipY: true }), x, y), warpToFlat(plain, x, -y));
+          near(warpToFlat(both, x, y), warpToFlat(plain, -x, -y));
+        }
+      });
+
+      it("emits a plain image op unwrapped, or wrapped on a rect surface", () => {
+        const unwrapped = imageEl("w", { placement });
+        expect(opOf(composed(unwrapped), "image")!.matrix).toEqual(
+          elementMatrix(unwrapped, cupBody),
+        );
+        const onBag = imageEl("w", { wrap: true, placement: { ...placement, rotationDeg: 25 } });
+        const ops = composed(onBag, bagFront);
+        expect(ops.some((o) => o.op === "warpedImage")).toBe(false);
+        expect(opOf(ops, "image")!.matrix).toEqual(elementMatrix(onBag, bagFront));
+      });
     });
 
     it("draws a wrapped drawing on the cup as a rigid drawing op", () => {
@@ -278,71 +342,10 @@ describe("compose", () => {
         ],
       });
       const ops = compose({ ...input, content: { ...content, elements: [el] } });
-      expect(ops.some((o) => o.op === "warped")).toBe(false);
+      expect(ops.some((o) => o.op === "warpedImage" || o.op === "arcText")).toBe(false);
       expect(opOf(ops, "drawing")).toMatchObject({
         matrix: elementMatrix(el, cupBody),
         box: sizer(el),
-      });
-    });
-
-    describe("flipped images", () => {
-      const stripsOf = (overrides: Partial<ImageElement>) => {
-        const el = imageEl("w", { wrap: true, ...overrides });
-        const ops = compose({ ...input, content: { ...content, elements: [el] } });
-        return opOf(ops, "warped")!.strips;
-      };
-      const plain = stripsOf({});
-      const centreOf = (s: Strip) => applyToPoint(s.matrix, { x: s.srcX + s.srcWidth / 2, y: 0 });
-      const near = (a: { x: number; y: number }, b: { x: number; y: number }) => {
-        expect(a.x).toBeCloseTo(b.x, 6);
-        expect(a.y).toBeCloseTo(b.y, 6);
-      };
-
-      it("flipX places the leftmost source column at the rightmost arc position", () => {
-        const flipped = stripsOf({ flipX: true });
-        const { u } = imageEl("w").placement;
-        // the first strip samples the leftmost column and sits where the plain last strip does
-        near(centreOf(flipped[0]!), centreOf(plain.at(-1)!));
-        near(centreOf(flipped.at(-1)!), centreOf(plain[0]!));
-        const first = centreOf(flipped[0]!);
-        expect(cupBody.fromFlat(first.x, first.y).u).toBeGreaterThan(u);
-        // inside every strip the source x axis is mirrored
-        flipped.forEach((strip, i) => {
-          const mirror = plain[plain.length - 1 - i]!;
-          for (const dx of [-0.2, 0, 0.3]) {
-            const x = strip.srcX + strip.srcWidth / 2 + dx;
-            near(
-              applyToPoint(strip.matrix, { x, y: 4 }),
-              applyToPoint(mirror.matrix, { x: -x, y: 4 }),
-            );
-          }
-        });
-      });
-
-      it("flipY keeps the strip layout and reverses each strip's y axis", () => {
-        const flipped = stripsOf({ flipY: true });
-        flipped.forEach((strip, i) => {
-          const rigid = plain[i]!;
-          near(centreOf(strip), centreOf(rigid));
-          expect(strip.matrix[0]).toBeCloseTo(rigid.matrix[0]);
-          expect(strip.matrix[1]).toBeCloseTo(rigid.matrix[1]);
-          expect(strip.matrix[2]).toBeCloseTo(-rigid.matrix[2]);
-          expect(strip.matrix[3]).toBeCloseTo(-rigid.matrix[3]);
-        });
-      });
-
-      it("flipX and flipY together do both", () => {
-        const both = stripsOf({ flipX: true, flipY: true });
-        const flipX = stripsOf({ flipX: true });
-        both.forEach((strip, i) => {
-          near(centreOf(strip), centreOf(flipX[i]!));
-          expect(strip.matrix[2]).toBeCloseTo(-flipX[i]!.matrix[2]);
-          expect(strip.matrix[3]).toBeCloseTo(-flipX[i]!.matrix[3]);
-        });
-      });
-
-      it("an unflipped wrapped image is unchanged by the flip support", () => {
-        expect(stripsOf({ flipX: false, flipY: false })).toEqual(plain);
       });
     });
 
@@ -356,44 +359,12 @@ describe("compose", () => {
         surface: bagFront,
         content: { ...content, elements: [el] },
       });
-      expect(ops.some((o) => o.op === "warped")).toBe(false);
+      expect(ops.some((o) => o.op === "arcText")).toBe(false);
       expect(opOf(ops, "text")!.matrix).toEqual(elementMatrix(el, bagFront));
     });
 
     it("does not warp an element that has no wrap flag, even on the cup", () => {
-      expect(base("print").some((o) => o.op === "warped")).toBe(false);
+      expect(base("print").some((o) => o.op === "warpedImage" || o.op === "arcText")).toBe(false);
     });
-  });
-});
-
-describe("warpStrips", () => {
-  const el = textEl("w", { wrap: true });
-  const box = sizer(el);
-
-  it("splits the box into equal contiguous strips, 48 by default", () => {
-    const strips = warpStrips(el, cupBody, box);
-    expect(strips).toHaveLength(48);
-    strips.forEach((s, i) => {
-      expect(s.srcWidth).toBeCloseTo(box.width / 48, 9);
-      expect(s.srcX).toBeCloseTo(box.x + (i * box.width) / 48, 9);
-    });
-    const last = strips.at(-1)!;
-    expect(last.srcX + last.srcWidth).toBeCloseTo(box.x + box.width, 9);
-  });
-
-  it("honours the strip count", () => {
-    expect(warpStrips(el, cupBody, box, 8)).toHaveLength(8);
-  });
-
-  it("turns each strip to its own upright, so the strips fan out along the arc", () => {
-    const strips = warpStrips(el, cupBody, box);
-    const angle = (m: readonly number[]) => Math.atan2(m[1]!, m[0]!);
-    expect(angle(strips[0]!.matrix)).toBeLessThan(angle(strips.at(-1)!.matrix));
-  });
-
-  it("on a rect surface lays the strips out in a straight line", () => {
-    const strips = warpStrips(el, bagFront, box);
-    const ys = strips.map((s) => applyToPoint(s.matrix, { x: s.srcX + s.srcWidth / 2, y: 0 }).y);
-    ys.forEach((y) => expect(y).toBeCloseTo(ys[0]!, 9));
   });
 });

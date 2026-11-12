@@ -18,7 +18,7 @@ export function ViewerTitle({ children }: { children?: ReactNode }) {
   );
 }
 
-/** The 3D view's controls: auto-rotate (a toggle), back to the home view, full screen. */
+/** The 3D view's controls: auto-rotate (a toggle), "Nhìn thẳng" (the home view), full screen. */
 export function ViewerToolbar({
   autoRotate,
   onAutoRotate,
@@ -47,7 +47,7 @@ export function ViewerToolbar({
         </TooltipTrigger>
         <TooltipContent>Tự xoay</TooltipContent>
       </Tooltip>
-      <StudioIconButton label="Đặt lại góc nhìn" onClick={onResetView}>
+      <StudioIconButton label="Nhìn thẳng" onClick={onResetView}>
         <Focus aria-hidden />
       </StudioIconButton>
       <StudioIconButton label="Toàn màn hình" aria-pressed={fullscreen} onClick={onFullscreen}>
