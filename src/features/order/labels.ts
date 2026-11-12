@@ -9,6 +9,8 @@ import type {
   PaymentStatus,
   PaymentTerm,
   ProductionState,
+  VehicleMilestone,
+  VehicleShipment,
 } from "./types";
 
 // Customer-facing wording for the BE's enums. UNKNOWN (a value newer than this FE) always has a
@@ -143,4 +145,23 @@ export const CANCELLATION_REQUEST_META: Record<
     tone: "muted",
     note: "Hãy chat với chúng tôi nếu bạn cần biết tình trạng yêu cầu huỷ này.",
   },
+};
+
+/** Journey milestones the carrier reports for a vehicle (kltn-docs 17 §5.2). */
+export const VEHICLE_MILESTONE_LABEL: Record<VehicleMilestone["milestone"], string> = {
+  PICKED_UP: "Đã lấy hàng",
+  IN_TRANSIT: "Đang giao",
+  RETURNING: "Đang hoàn hàng",
+  UNKNOWN: "Đang cập nhật",
+};
+
+/** Outcome of one shipment on a vehicle, in the customer's wording. */
+export const VEHICLE_SHIPMENT_STATUS_LABEL: Record<VehicleShipment["status"], string> = {
+  READY_TO_DISPATCH: "Chờ bàn giao vận chuyển",
+  HANDED_OVER: "Đã bàn giao vận chuyển",
+  DELIVERED: "Đã giao",
+  DELIVERY_FAILED: "Giao không thành công",
+  RETURNED: "Đã hoàn về kho",
+  CANCELLED: "Đã huỷ",
+  UNKNOWN: "Đang cập nhật",
 };

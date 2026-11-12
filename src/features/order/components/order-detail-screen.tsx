@@ -20,6 +20,7 @@ import { OrderDeliveryCard, OrderLinesCard, OrderTotalCard } from "./order-detai
 import { OrderHelpCard } from "./order-help-card";
 import { OrderReorder } from "./order-reorder";
 import { OrderPaymentCard } from "./order-payment-card";
+import { OrderVehiclesCard } from "./order-vehicles-card";
 import { OrderTimelineCard } from "./order-timeline-card";
 import {
   OrderDetailSkeleton,
@@ -114,6 +115,7 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
           <OrderTotalCard order={order} />
           <OrderPaymentCard order={order} />
           <OrderDeliveryCard order={order} />
+          <OrderVehiclesCard orderId={order.orderId} />
           {order.cancellationRequest && order.cancellationRequest.status !== "PENDING" ? (
             <OrderCancellationCard request={order.cancellationRequest} />
           ) : null}

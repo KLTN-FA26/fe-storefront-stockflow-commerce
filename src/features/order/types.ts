@@ -18,6 +18,9 @@ import type {
   orderLineDtoSchema,
   orderStatusGroupSchema,
   orderTimelineEntryDtoSchema,
+  orderVehicleDtoSchema,
+  vehicleMilestoneDtoSchema,
+  vehicleShipmentDtoSchema,
   reorderedQuoteDtoSchema,
   orderStatusSchema,
 } from "./schemas";
@@ -61,3 +64,8 @@ export interface MyOrdersParams {
   page: number;
   size: number;
 }
+
+/** One vehicle carrying goods of the order (BE OrderShippingTracking.Vehicle). */
+export type OrderVehicle = z.infer<typeof orderVehicleDtoSchema>;
+export type VehicleMilestone = z.infer<typeof vehicleMilestoneDtoSchema>;
+export type VehicleShipment = z.infer<typeof vehicleShipmentDtoSchema>;
