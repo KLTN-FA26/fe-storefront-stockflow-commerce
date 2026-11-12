@@ -55,7 +55,7 @@ Do not introduce back-office/admin styling, caramel legacy theme, or one-off hex
 - Preflight result must be visible.
 - Preflight is Pass or Fail; Fail blocks submitting for review.
 - A design is bound to one variant; its print configuration decides the dieline.
-- Only an `APPROVED` design can be quoted (part D).
+- Only an `APPROVED` design can be quoted (quote requests come with part D of the Module 12 work).
 - 2D/3D preview must disclose that real print color can differ.
 
 ## Module 13 — Catalog

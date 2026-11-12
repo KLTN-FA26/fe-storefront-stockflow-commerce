@@ -219,9 +219,12 @@ message, fieldErrors?: [{ field, message }], details?, correlationId, timestamp 
 on `errorCode`, never on `message`.
 
 **Order of checks on a write.** Not found (`404`, also for `ARCHIVED` and other customers'
-designs) → malformed input (`422 VALIDATION_FAILED`) → `409 INVALID_STATE` → `409
-VERSION_CONFLICT` → the write's own checks. `INVALID_STATE` comes before `VERSION_CONFLICT` so a
-tab that missed a submit learns that the status changed, not only that its version is stale.
+designs) → a malformed `version`, `name` or `reason` (`422 VALIDATION_FAILED`) → `409
+INVALID_STATE` → `409 VERSION_CONFLICT` → the write's own checks. For a document save those are:
+a malformed or wrong-template document (`422 VALIDATION_FAILED`), then the size limit (`413
+PAYLOAD_TOO_LARGE`); both come after `INVALID_STATE` and `VERSION_CONFLICT`. `INVALID_STATE` comes
+before `VERSION_CONFLICT` so a tab that missed a submit learns that the status changed, not only
+that its version is stale.
 
 **Malformed input.** A missing or wrong field (`version` not a whole number ≥ 0, a blank or
 over-long name or reason, a document that does not parse or is not for the design's template,
@@ -283,7 +286,9 @@ PREFLIGHT_FAILED` and is recorded as a `PREFLIGHT_FAILED` event; a missing part 
 does not match the bytes received answers `422 FILE_REJECTED`. Success answers the design
 (`PENDING_REVIEW`, `version + 1`, `submittedAt`); its `previewUrl` is the new `CUSTOMER_PREVIEW`.
 `GET /designs/{id}/files` then lists `[{ role, name, sizeBytes, sha256, url }]` in role order
-(`[]` before a submission).
+(`[]` before a submission). The BE signs each file `url` with `Content-Disposition: attachment;
+filename=…` (the file's `name`): a browser ignores `download` on a cross-origin link, which the
+studio opens in a new tab and re-reads each time "File đã gửi" opens.
 
 **`422 PREFLIGHT_FAILED`.** `details.issues` lists the issues in the engine's `PreflightIssue`
 shape: `{ ruleId, level: "fail" | "note", message, surfaceCode?, elementId? }`, the last two left
@@ -349,8 +354,9 @@ says `500 DESIGN_MOCK_FAILED`, one that never started `503 DESIGN_MOCK_UNAVAILAB
   design.
 - `<DesignEntry>` reads the print configuration of the selected variant: present and usable →
   button **"Thiết kế"** to `/design/new?product=…&sku=…` (today's `STORE_ROUTES.design.newFor`);
-  absent → the line "Quy cách này chưa nhận thiết kế"
-  with **"Chat với Sale"**.
+  absent → the line "Quy cách này chưa nhận thiết kế". On the product page the purchase panel's
+  **"Chat với Sale"** (below) is that variant's way to Sales, so the entry does not repeat it; where
+  no such panel is beside it, the entry carries its own "Chat với Sale".
 - The catalog's "Liên hệ Sale báo giá" button (PR #31) becomes **"Chat với Sale"** (catalog BR-11: a
   variant is never quoted directly).
 

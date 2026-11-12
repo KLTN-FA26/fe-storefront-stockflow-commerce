@@ -256,8 +256,9 @@ interface PrintSurface {
   If `rt − rb < 0.5 mm` the cup is treated as a cylinder (rect surface).
 - **Seam:** a radial strip of `seamMm` at one end of the sector is the glue overlap; it is shown as a guide and
   checked by preflight.
-- **`wrap: true`** (cup text/image): the element is rasterised offscreen, sliced into narrow vertical strips and each
-  strip is placed with `toFlat`, so wide text follows the circumference and reads horizontally on the cup.
+- **`wrap: true`** (cup text/image): the element follows the circumference and reads horizontally on the cup. An
+  image is remapped pixel by pixel through its exact polar warp; a text is drawn as vector glyphs, each placed with
+  `toFlat` at its own angle on the arc (spec `2026-11-11-design-wrap-fidelity.md`, §5).
 - The mesh builder computes UVs from the same `toFlat`/`uvOf`, so 2D, 3D and print share one geometry.
 
 ## 5. Rendering
@@ -266,7 +267,7 @@ interface PrintSurface {
 
 `compose(surface, content, target, deps) → DrawOp[]` is pure and testable; `execute(ops, ctx2d)` is the only code
 that touches a canvas. Ops: `clip`, `fillColor`, `fillPattern`, `drawImage`, `drawText`, `drawDrawing`,
-`drawWarped`, `drawGuides`.
+`warpedImage`, `arcText`, `drawGuides`.
 
 | Target      | Resolution                                                          | Notes                                                                                                  |
 | ----------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
@@ -466,7 +467,7 @@ Result = highest level present (`Pass` / `Warning` / `Fail`).
 
 1. `CUSTOMER_PREVIEW`: PNG 1600 × 1600 from `ProductViewer.screenshot` at the front angle (flat preview fallback).
 2. `PRINT_READY`: PDF via `pdf-lib`, one page per print area, page = bleed box in mm (pt = mm × 72 / 25.4), raster at
-   `max(minDpi, 300)` DPI, cut path drawn as a vector in a `CutContour` spot colour (sector outline for the cup), overprinting (decided 2026-10-26: no hairline knocked out of the artwork; the print partner confirms names and stroke width). Pages too large for one canvas are drawn in bands that overlap the next by one row.
+   `max(minDpi, 300)` DPI, cut path drawn as a vector in a `CutContour` spot colour (sector outline for the cup), overprinting (decided 2026-10-26: no hairline knocked out of the artwork; the print partner confirms names and stroke width). Pages too large for one canvas are drawn in bands that meet edge to edge, every row painted once (decided 2026-11-12: an overlap row would blend translucent ink twice at the join).
    RGB only — CMYK conversion is prepress/BE work (G8).
 3. `TECHNICAL_SPEC`: PDF summary — template, SKU, area sizes, fonts, colours, preflight report, document SHA-256.
 4. Then `PUT /specification` (summary) and P5. Uploads use `Idempotency-Key` so a retried request does not
