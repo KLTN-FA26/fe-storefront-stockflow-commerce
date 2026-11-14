@@ -597,6 +597,38 @@ export function createMockOrderBook(
       });
     },
 
+    /**
+     * GET /orders/credit-position/me (BE CreditPositionResponse, 15 §4.3): the limit, what the
+     * AFTER_DELIVERY installments still owe, what is overdue among them.
+     */
+    creditPosition(): MockResult {
+      const owed = orders
+        .filter((o) => o.customerId === customerId)
+        .flatMap((o) => mockInstallmentsOf(o) ?? [])
+        .filter((i) => i.milestone === "AFTER_DELIVERY" && i.status !== "CANCELLED");
+      const exposureNow = owed.reduce((sum, i) => sum + i.outstanding, 0);
+      const overdue = owed.filter((i) => i.overdue);
+      const oldest = overdue
+        .map((i) => i.dueDate)
+        .filter((d): d is string => d !== undefined)
+        .sort()[0];
+      return ok({
+        customerId,
+        ...(terms.creditLimit > 0
+          ? {
+              creditLimit: terms.creditLimit,
+              creditTermDays: terms.creditTermDays,
+              availableCredit: Math.max(0, terms.creditLimit - exposureNow),
+            }
+          : {}),
+        exposure: exposureNow,
+        currency: "VND",
+        hasOverdue: overdue.length > 0 || terms.overdue === true,
+        overdueAmount: overdue.reduce((sum, i) => sum + i.outstanding, 0),
+        ...(oldest ? { oldestOverdueDueDate: oldest } : {}),
+      });
+    },
+
     /** POST /orders — the checkout: one transaction, nothing is left behind on a refusal. */
     place(body: Record<string, unknown>): MockResult {
       const catalog = deps.catalog;
