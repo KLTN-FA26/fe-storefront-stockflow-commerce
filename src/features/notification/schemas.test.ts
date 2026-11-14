@@ -55,3 +55,20 @@ describe("BE #102 inbox contract", () => {
     expect(() => inboxPageDto.parse({ ...page, unreadCount: undefined })).toThrow();
   });
 });
+
+describe("inboxPageDto — handover notice link", () => {
+  it("rewrites the BE /orders/{id} link to the storefront order page", () => {
+    const id = "0e380000-0000-4000-8000-000000000201";
+    const parsed = inboxPageDto.parse({
+      items: [{ ...notice, link: `/orders/${id}` }],
+      page: 0,
+      size: 20,
+      totalElements: 1,
+      totalPages: 1,
+      hasNext: false,
+      hasPrevious: false,
+      unreadCount: 1,
+    });
+    expect(parsed.items[0]?.link).toBe(`/account/orders/${id}`);
+  });
+});

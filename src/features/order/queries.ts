@@ -4,7 +4,7 @@ import { z } from "zod";
 import { QUERY_TIMES } from "@/lib/api/query-client";
 import { ORDERS_QUERY_ROOT } from "@/lib/api/query-keys";
 
-import { getMyOrders, getOrder } from "./api";
+import { getMyOrders, getOrder, getOrderVehicles } from "./api";
 import { isApiError } from "./errors";
 import { isValidOrderId } from "./schemas";
 import type { MyOrdersParams } from "./types";
@@ -15,6 +15,7 @@ export const orderKeys = {
   list: (params: MyOrdersParams) => [...orderKeys.lists(), params] as const,
   details: () => [...orderKeys.all, "detail"] as const,
   detail: (orderId: string) => [...orderKeys.details(), orderId] as const,
+  vehicles: (orderId: string) => [...orderKeys.all, "vehicles", orderId.toLowerCase()] as const,
   cancellationRequest: (orderId: string) =>
     [...orderKeys.all, "cancellation-request", orderId.toLowerCase()] as const,
 };
@@ -46,6 +47,17 @@ export function useOrder(orderId: string) {
     enabled: isValidOrderId(orderId),
     retry: retryTransient,
     ...QUERY_TIMES.detail,
+  });
+}
+
+/** The order's vehicles (carrier, waybill, plate, journey). Polled lightly: a carrier reports while the page is open. */
+export function useOrderVehicles(orderId: string, enabled = true) {
+  return useQuery({
+    queryKey: orderKeys.vehicles(orderId),
+    queryFn: ({ signal }) => getOrderVehicles(orderId, signal),
+    enabled: enabled && isValidOrderId(orderId),
+    retry: retryTransient,
+    ...QUERY_TIMES.tracking,
   });
 }
 
