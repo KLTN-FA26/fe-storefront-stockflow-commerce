@@ -19,6 +19,7 @@ import { CopyOrderNumber } from "./copy-order-number";
 import { OrderDeliveryCard, OrderLinesCard, OrderTotalCard } from "./order-detail-sections";
 import { OrderHelpCard } from "./order-help-card";
 import { OrderReorder } from "./order-reorder";
+import { OrderCompletionHint } from "./order-completion-hint";
 import { OrderInvoicesCard } from "./order-invoices-card";
 import { OrderPaymentCard } from "./order-payment-card";
 import { OrderRefundCard } from "./order-refund-card";
@@ -110,6 +111,7 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
         <div className="min-w-0 space-y-5">
           <OrderStatusHero group={order.statusGroup} holdReason={order.holdReasonPublic} />
+          <OrderCompletionHint order={order} />
           <OrderLinesCard order={order} />
           <OrderTimelineCard order={order} />
         </div>
