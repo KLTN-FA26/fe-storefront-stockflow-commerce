@@ -9,20 +9,31 @@ import { tolerantEnum } from "@/lib/validation/tolerant-enum";
 export const orderIdSchema = beId();
 export const isValidOrderId = (orderId: string) => orderIdSchema.safeParse(orderId).success;
 
-// Mirrors BE order.api.OrderStatus (develop). Lifecycle rules for these live in lifecycle.ts.
+// Mirrors BE order.api.OrderStatus (main, after the 4B rescope). Lifecycle rules for these live in
+// lifecycle.ts. IN_FULFILMENT is kept for the timeline of an order read before the rescope.
 export const ORDER_STATUSES = [
   "DRAFT",
+  "PENDING_CONTRACT",
   "PENDING_PAYMENT",
   "CONFIRMED",
+  "AWAITING_STOCK",
   "IN_PRODUCTION",
   "READY_TO_FULFILL",
+  "PICKING",
+  "PARTIALLY_FULFILLED",
+  "PACKED",
   "IN_FULFILMENT",
   "ON_HOLD",
   "SHIPPED",
+  "DELIVERY_FAILED",
   "DELIVERED",
+  "RETURN_REQUESTED",
+  "RETURNED",
+  "REFUNDED",
+  "PARTIALLY_REFUNDED",
   "COMPLETED",
   "CANCELLED",
-  "RETURNED",
+  "CLOSED",
 ] as const;
 export type KnownOrderStatus = (typeof ORDER_STATUSES)[number];
 
@@ -49,9 +60,11 @@ export const orderStatusSchema = z
  * order's own status is. Tolerant like the status: a group newer than this FE becomes UNKNOWN.
  */
 export const ORDER_STATUS_GROUPS = [
+  "AWAITING_CONTRACT",
   "AWAITING_PAYMENT",
   "UNDER_REVIEW",
   "CONFIRMED",
+  "AWAITING_STOCK",
   "IN_PRODUCTION",
   "PREPARING",
   "SHIPPING",
@@ -72,7 +85,14 @@ export const orderStatusGroupSchema = z
   );
 
 /** BE CustomerOrders.DeliveryState; only what staff recorded. Free-form on purpose: display only. */
-export const DELIVERY_STATES = ["NOT_SHIPPED", "IN_TRANSIT", "DELIVERED", "RETURNED"] as const;
+export const DELIVERY_STATES = [
+  "NOT_SHIPPED",
+  "IN_TRANSIT",
+  "PARTIALLY_DELIVERED",
+  "DELIVERY_FAILED",
+  "DELIVERED",
+  "RETURNED",
+] as const;
 export type KnownDeliveryState = (typeof DELIVERY_STATES)[number];
 export const DELIVERY_STATE_UNKNOWN = "UNKNOWN";
 

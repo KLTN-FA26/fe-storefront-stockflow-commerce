@@ -5,8 +5,10 @@ import {
   CircleX,
   CreditCard,
   Factory,
+  FileSignature,
   Hourglass,
   Package,
+  PackageSearch,
   PauseCircle,
   Truck,
   Undo2,
@@ -20,6 +22,8 @@ import { ORDER_TONE_CLASSES } from "./order-status-badge";
 import { OrderStepper } from "./order-stepper";
 
 const GROUP_ICON: Record<OrderStatusGroup, LucideIcon> = {
+  AWAITING_CONTRACT: FileSignature,
+  AWAITING_STOCK: PackageSearch,
   AWAITING_PAYMENT: CreditCard,
   UNDER_REVIEW: PauseCircle,
   CONFIRMED: BadgeCheck,

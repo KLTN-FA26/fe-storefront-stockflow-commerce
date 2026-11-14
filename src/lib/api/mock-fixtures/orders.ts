@@ -300,7 +300,9 @@ const toDetail = (order: MockOrder, listingOf?: MockCatalog["listingOf"]) => {
     // CustomerOrdersService#allowedActions: reorder is true only for an order that came from a quote.
     allowedActions: {
       cancel: CANCELLABLE.has(order.status),
-      requestCancellation: REQUESTABLE.has(order.status) && !order.pendingCancellation,
+      // A decided request (approved, rejected, expired) does not stop the customer asking again.
+      requestCancellation:
+        REQUESTABLE.has(order.status) && order.pendingCancellation?.status !== "PENDING",
       reorder: order.fromQuote === true,
     },
     ...(order.shippingAddress ? { shippingAddress: order.shippingAddress } : {}),
