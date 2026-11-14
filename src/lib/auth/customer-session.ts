@@ -2,7 +2,6 @@ import { z } from "zod";
 
 import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error";
-import { useCartStore } from "@/lib/store/use-cart-store";
 
 import { loginApi, logoutApi, type LoginRequest } from "./auth-api";
 import { useAuthStore } from "./auth-store";
@@ -40,7 +39,7 @@ export interface SignInResult {
  *  1. POST /identity/auth/login (5 per minute per IP) → a bearer token and nothing else;
  *  2. GET /identity/me → who it is; GET /identity/me/permissions → what it may do: only an account
  *     holding the storefront's permissions (permission-codes.ts) may use it, whatever its roles are called;
- *  3. GET /customers/me → the customer profile id, which owns the cart and the orders.
+ *  3. GET /customers/me → the customer profile id, which owns the orders.
  * Steps 2 and 3 carry the new token explicitly and it is stored only once both have passed:
  * storing it first would make the login page (and every screen) see a signed-in customer while a
  * staff account is still being turned away.
@@ -64,8 +63,6 @@ export async function signInCustomer(credentials: LoginRequest): Promise<SignInR
         })
       ).data,
     );
-    // Before the user is set: nothing may render a cart that is not this customer's.
-    useCartStore.getState().bindOwner(customerId);
     useAuthStore.getState().login(
       {
         userId: me.userId,
@@ -86,8 +83,8 @@ export async function signInCustomer(credentials: LoginRequest): Promise<SignInR
   }
 }
 
-/** Customer-initiated sign-out: the session at the BE, the token, cached data and the cart. */
+/** Customer-initiated sign-out: the session at the BE, the token, cached data and drafts. */
 export async function signOutCustomer(): Promise<void> {
   await logoutApi();
-  endSession({ clearCart: true });
+  endSession({ forgetDrafts: true });
 }

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   availabilitySchema,
-  priceScheduleDtoSchema,
   skuAvailabilitiesDtoSchema,
   skuListInputSchema,
 } from "@/lib/catalog/schemas";
@@ -17,7 +16,7 @@ import {
   searchSuggestionsDtoSchema,
   suggestionInputSchema,
 } from "../schemas";
-import { beCard, beGallery, bePage, beProduct, beSchedule } from "./fixtures";
+import { beCard, beGallery, bePage, beProduct } from "./fixtures";
 
 describe("catalogue schemas follow the BE DTOs", () => {
   it("parses a page of cards: title and slug only, seoTitle omitted (NON_NULL)", () => {
@@ -110,25 +109,6 @@ describe("catalogue schemas follow the BE DTOs", () => {
   it("still rejects an availability that is missing or not a string", () => {
     expect(availabilitySchema.safeParse(undefined).success).toBe(false);
     expect(availabilitySchema.safeParse(3).success).toBe(false);
-  });
-
-  it("parses a price schedule, and a source newer than the FE as UNKNOWN", () => {
-    expect(priceScheduleDtoSchema.parse(beSchedule).tiers).toHaveLength(2);
-    expect(priceScheduleDtoSchema.parse({ ...beSchedule, source: "PROMO" }).source).toBe("UNKNOWN");
-  });
-
-  it("rejects a price that is not a number, a MOQ of 0 and a tier below 1 unit", () => {
-    expect(priceScheduleDtoSchema.safeParse({ ...beSchedule, moq: 0 }).success).toBe(false);
-    expect(
-      priceScheduleDtoSchema.safeParse({
-        ...beSchedule,
-        tiers: [{ minQuantity: 1, unitPrice: "780" }],
-      }).success,
-    ).toBe(false);
-    expect(
-      priceScheduleDtoSchema.safeParse({ ...beSchedule, tiers: [{ minQuantity: 0, unitPrice: 1 }] })
-        .success,
-    ).toBe(false);
   });
 
   it("accepts the ids the BE really sends, RFC version/variant bits or not (dev data, 2026-10-20)", () => {

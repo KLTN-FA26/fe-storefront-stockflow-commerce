@@ -38,9 +38,6 @@ export function registerCatalogMockRoutes(
   registerMockRoute("GET", "/catalog/products/availability", (config) =>
     respond(catalog.availability(queryParams(config).sku)),
   );
-  registerMockRoute("GET", "/catalog/products/prices", (config) =>
-    respond(catalog.prices(queryParams(config).sku)),
-  );
   registerMockRoute("GET", "/catalog/products", (config) =>
     respond(catalog.list(queryParams(config))),
   );

@@ -4,17 +4,16 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { APP_ROUTES, STORE_ROUTES } from "@/constants";
-import { EmptyState, Skeleton, toast } from "@/components/shared";
+import { EmptyState, Skeleton } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { ImageGallery } from "@/components/storefront/image-gallery";
 import { PageShell } from "@/components/storefront/layout";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
-import { useAvailability, usePrices } from "@/lib/catalog/queries";
+import { useAvailability } from "@/lib/catalog/queries";
 import { normalizeSku } from "@/lib/catalog/schemas";
-import { availabilityBySku, indexBySku } from "@/lib/catalog/selectors";
-import { useCartStore } from "@/lib/store/use-cart-store";
+import { availabilityBySku } from "@/lib/catalog/selectors";
 
-import { isForbidden, isPriceUnavailable, isProductNotFound } from "../errors";
+import { isPriceUnavailable, isProductNotFound } from "../errors";
 import { useCatalogGallery, useCatalogProduct } from "../queries";
 import { imageFor, sortedImages } from "../selectors";
 import { CatalogLoadError, SignInRequired } from "./catalog-states";
@@ -47,11 +46,7 @@ export function ProductDetailScreen({ slug }: { slug: string }) {
   const variants = useMemo(() => product.data?.variants ?? [], [product.data]);
   const skus = variants.map((variant) => variant.sku);
   const stock = useAvailability(skus, enabled && variants.length > 0);
-  const prices = usePrices(skus, enabled && variants.length > 0);
-  const add = useCartStore((state) => state.add);
-
   const [picked, setPicked] = useState<string>();
-  const [typedQuantity, setTypedQuantity] = useState<number>();
 
   if (signedIn === undefined || (enabled && product.isPending))
     return (
@@ -85,8 +80,8 @@ export function ProductDetailScreen({ slug }: { slug: string }) {
     return (
       <PageShell breadcrumbs={crumbs()}>
         <EmptyState
-          title="Sản phẩm tạm thời chưa có giá"
-          description="Sản phẩm này chưa được niêm yết giá nên chưa đặt được. Hãy chat với Sales để được báo giá."
+          title="Sản phẩm tạm thời chưa mở bán"
+          description="Sản phẩm này chưa sẵn sàng trên sàn. Hãy chat với Sale để được tư vấn và báo giá."
           action={
             <div className="flex flex-wrap justify-center gap-3">
               <Button asChild className="min-h-11 rounded-[var(--r-md)] px-5">
@@ -118,22 +113,13 @@ export function ProductDetailScreen({ slug }: { slug: string }) {
   const stockBySku = availabilityBySku(stock.data);
   const availabilityOf = (sku: string) =>
     stockBySku.get(normalizeSku(sku)) ??
-    variants.find((variant) => normalizeSku(variant.sku) === normalizeSku(sku))?.availability;
+    variants.find((variant) => normalizeSku(variant.sku) === normalizeSku(sku))?.availability ??
+    undefined;
   const sku =
     picked ??
     variants.find((variant) => availabilityOf(variant.sku) !== "OUT_OF_STOCK")?.sku ??
     variants[0]?.sku ??
     "";
-  const schedule = indexBySku(prices.data).get(normalizeSku(sku));
-  const quantity = typedQuantity ?? schedule?.moq ?? 1;
-  const pricesState = prices.isPending
-    ? "loading"
-    : isForbidden(prices.error)
-      ? "restricted"
-      : prices.error
-        ? "error"
-        : "ready";
-
   // The chosen SKU's own picture leads; the rest follow in the BE's order.
   const lead = imageFor(gallery.data, sku);
   const images = [lead, ...sortedImages(gallery.data).filter((image) => image !== lead)]
@@ -163,32 +149,12 @@ export function ProductDetailScreen({ slug }: { slug: string }) {
             <ProductPurchasePanel
               variants={variants}
               sku={sku}
-              onSkuChange={(next) => {
-                setPicked(next);
-                setTypedQuantity(undefined);
-              }}
+              onSkuChange={setPicked}
               availabilityOf={availabilityOf}
-              schedule={schedule}
-              pricesState={pricesState}
-              quantity={quantity}
-              onQuantityChange={setTypedQuantity}
               designHref={
                 data.kind === "CUSTOMIZABLE" ? STORE_ROUTES.design.newFor(data.slug, sku) : null
               }
-              // A product printed to a design is quoted by Sales, never added to the cart.
-              quoteHref={data.kind === "CUSTOMIZABLE" ? STORE_ROUTES.chat.list : null}
-              onAdd={() => {
-                add(
-                  {
-                    sku,
-                    slug: data.slug,
-                    title: data.title,
-                    ...(lead ? { imageUrl: lead.url } : {}),
-                  },
-                  quantity,
-                );
-                toast.success("Đã thêm vào giỏ hàng", `${data.title} · ${sku} × ${quantity}`);
-              }}
+              chatHref={STORE_ROUTES.chat.list}
             />
           )}
         </div>

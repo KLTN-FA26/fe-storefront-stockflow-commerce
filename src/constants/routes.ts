@@ -21,13 +21,6 @@ export const STORE_ROUTES = {
       `/design/new?product=${encodeURIComponent(slug)}${sku ? `&sku=${encodeURIComponent(sku)}` : ""}`,
     detail: (id: string) => `/design/${id}`,
   },
-  cart: "/cart",
-  checkout: {
-    index: "/checkout",
-    shipping: "/checkout/shipping",
-    payment: "/checkout/payment",
-    review: "/checkout/review",
-  },
   chat: {
     list: "/chat",
     detail: (id: string) => `/chat/${id}`,

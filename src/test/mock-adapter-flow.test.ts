@@ -1,13 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { getCatalogPage, getCatalogProduct, getSearchSuggestions } from "@/features/catalog/api";
-import { placeOrder } from "@/features/cart/checkout-api";
-import { getMyCustomerId, listAddresses } from "@/features/customer/address/api";
 import { cancelMyOrder, getMyOrders, getOrder } from "@/features/order/api";
 import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error";
 import { activateMockAdapter } from "@/lib/api/mock-adapter";
-import { getAvailability, getPrices } from "@/lib/catalog/api";
+import { getAvailability } from "@/lib/catalog/api";
 import { NotCustomerError, signInCustomer } from "@/lib/auth/customer-session";
 import { useAuthStore } from "@/lib/auth/auth-store";
 import { MOCK_PASSWORD, MOCK_CUSTOMER_LOGIN } from "@/lib/api/mock-auth";
@@ -27,7 +25,7 @@ afterAll(() => {
 });
 
 describe("mock adapter serves the storefront the way the BE does", () => {
-  it("browses, prices, checks stock, orders, and cancels", async () => {
+  it("browses, checks stock, reads an order and cancels it", async () => {
     // Catalogue: fixed-word routes win over /{slug}; a SKU list rides as repeated `sku` params.
     const page = await getCatalogPage({ page: 1, size: 12 });
     expect(page).toMatchObject({ page: 1, size: 12, hasNext: true });
@@ -41,66 +39,27 @@ describe("mock adapter serves the storefront the way the BE does", () => {
       { sku: "CUP-PAPER-8OZ-WHT", availability: "IN_STOCK" },
       { sku: "CUP-PAPER-8OZ-KRAFT", availability: "LOW_STOCK" },
     ]);
-    const prices = await getPrices(["CUP-PAPER-8OZ-WHT", "CUP-CUSTOM-LOGO"]);
-    expect(prices.map((p) => p.sku)).toEqual(["CUP-PAPER-8OZ-WHT"]);
     expect((await getSearchSuggestions("ly gi"))[0]?.slug).toBe("ly-giay-2-lop-8oz");
     await expect(getCatalogProduct("khong-ton-tai")).rejects.toMatchObject({
       status: 404,
       code: "NOT_FOUND",
     });
 
-    // Checkout: the customer id and address come from the same mock customer.
-    const customerId = await getMyCustomerId();
-    const addresses = await listAddresses(customerId);
-    const shipping = addresses.find((a) => a.type === "SHIPPING" && a.defaultAddress)!;
-    const ordersBefore = (await getMyOrders({ page: 1, size: 1 })).totalElements;
-    const placed = await placeOrder({
-      requestId: crypto.randomUUID(),
-      customerId,
-      shippingAddressId: shipping.addressId,
-      lines: [{ sku: "CUP-PAPER-8OZ-WHT", quantity: 1000, unitPrice: 780 }],
-    });
-    expect(placed).toMatchObject({ status: "PENDING_PAYMENT", totalAmount: 780000 });
-    expect((await getMyOrders({ page: 1, size: 1 })).totalElements).toBe(ordersBefore + 1);
-    const detail = await getOrder(placed.orderId);
-    expect(detail).toMatchObject({ statusGroup: "AWAITING_PAYMENT" });
-    expect(detail.shippingAddress?.recipientName).toBe(shipping.recipientName);
+    // No checkout: orders are drawn up by Sales from an accepted quote (kltn-docs 14 BR-01). The
+    // customer reads them and may cancel one not yet released.
+    const confirmed = (await getMyOrders({ page: 1, size: 50 })).items.find(
+      (order) => order.status === "CONFIRMED",
+    )!;
+    const detail = await getOrder(confirmed.orderId);
+    expect(detail.orderNumber).toBe(confirmed.orderNumber);
 
-    // The same lines again within the window are asked about first (SCRUM-190), naming the earlier order.
+    // Not yet released: cancelled at once.
     await expect(
-      placeOrder({
-        requestId: crypto.randomUUID(),
-        customerId,
-        shippingAddressId: shipping.addressId,
-        lines: [{ sku: "CUP-PAPER-8OZ-WHT", quantity: 1000, unitPrice: 780 }],
-      }),
-    ).rejects.toMatchObject({
-      status: 409,
-      code: "DUPLICATE_ORDER_SUSPECTED",
-      details: { orderId: placed.orderId, orderNumber: placed.orderNumber },
-    });
-
-    // A refusal comes back as ApiError with the BE's code.
-    await expect(
-      placeOrder({
-        requestId: crypto.randomUUID(),
-        customerId,
-        shippingAddressId: shipping.addressId,
-        lines: [{ sku: "CUP-PAPER-8OZ-WHT", quantity: 1000, unitPrice: 1 }],
-        confirmDuplicate: true,
-      }),
-    ).rejects.toMatchObject({ status: 409, code: "CHECKOUT_PRICE_CHANGED" });
-
-    // Not yet released: cancelled at once. The stock it held is back.
-    await expect(
-      cancelMyOrder({ orderId: placed.orderId, reasonCode: "DUPLICATE_ORDER" }),
+      cancelMyOrder({ orderId: confirmed.orderId, reasonCode: "DUPLICATE_ORDER" }),
     ).resolves.toEqual({
       result: "CANCELLED",
     });
-    expect((await getOrder(placed.orderId)).statusGroup).toBe("CANCELLED");
-    expect(await getAvailability(["CUP-PAPER-8OZ-WHT"])).toEqual([
-      { sku: "CUP-PAPER-8OZ-WHT", availability: "IN_STOCK" },
-    ]);
+    expect((await getOrder(confirmed.orderId)).statusGroup).toBe("CANCELLED");
   }, 30_000);
 
   it("answers a cancellation past release with 202 REQUESTED, then 409 while it waits", async () => {
