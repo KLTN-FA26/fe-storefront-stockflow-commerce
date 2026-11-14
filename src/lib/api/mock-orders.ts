@@ -1,6 +1,8 @@
 /**
  * Mock routes for the BE orders a customer reaches: POST /orders (checkout), GET /orders/payment-terms, /orders/me,
- * /orders/me/{orderId} and /orders/{orderId}/cancellation and /reorder. Responses use the real ApiResponse
+ * /orders/me/{orderId} and /orders/{orderId}/cancellation and /reorder, and the customer's
+ * contract installments (GET /installments/me, /installments/me/orders/{orderId},
+ * /installments/me/{installmentId}/transfer-instructions). Responses use the real ApiResponse
  * envelope; the mock adapter rejects error statuses so the client interceptor turns them into
  * ApiError. `GET /orders` (the back-office list) is not mocked here.
  */
@@ -56,6 +58,15 @@ export function registerOrderMockRoutes(
   registerMockRoute("GET", "/orders/me", (config) => respond(book.page(queryParams(config))));
   registerMockRoute("GET", "/orders/me/:orderId", (config) =>
     respond(book.get(pathParams(config).orderId ?? "")),
+  );
+  registerMockRoute("GET", "/installments/me", (config) =>
+    respond(book.myInstallments(queryParams(config))),
+  );
+  registerMockRoute("GET", "/installments/me/orders/:orderId", (config) =>
+    respond(book.orderInstallments(pathParams(config).orderId ?? "")),
+  );
+  registerMockRoute("GET", "/installments/me/:installmentId/transfer-instructions", (config) =>
+    respond(book.installmentTransfer(pathParams(config).installmentId ?? "")),
   );
   registerMockRoute("POST", "/orders/:orderId/reorder", (config) =>
     respond(book.reorder(pathParams(config).orderId ?? "", bodyOf(config))),

@@ -50,6 +50,10 @@ function fakeBackend() {
       return { data: { roles: ["CUSTOMER"], permissions: [...permissions], dataScope: "OWN" } };
     }
     if (url === "/orders/me") return settle(book.page(config?.params as Record<string, unknown>));
+    const plan = /^\/installments\/me\/orders\/([^/]+)$/.exec(url);
+    if (plan) return settle(book.orderInstallments(plan[1]!));
+    const transfer = /^\/installments\/me\/([^/]+)\/transfer-instructions$/.exec(url);
+    if (transfer) return settle(book.installmentTransfer(transfer[1]!));
     return settle(book.get(url.replace("/orders/me/", "")));
   });
   vi.spyOn(api, "post").mockImplementation(async (url, body) =>
@@ -586,30 +590,37 @@ describe("OrderDetailScreen: what the BE reports about the order", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows a deposit order's payment: term, deposit, what arrived and what is still due", async () => {
+  it("shows a deposit order's installments: the deposit paid, the rest due before delivery", async () => {
     const order = seedMockOrders(CUSTOMER).find(
       (o) => o.customerId === CUSTOMER && o.paymentTerm === "DEPOSIT" && o.status === "CONFIRMED",
     )!;
     renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
 
     const payment = await screen.findByRole("region", { name: "Thanh toán" });
-    expect(within(payment).getByText("Đặt cọc")).toBeInTheDocument();
-    expect(within(payment).getByText("Đã thanh toán một phần")).toBeInTheDocument();
-    expect(within(payment).getByText("Tiền cọc cần thanh toán")).toBeInTheDocument();
-    expect(within(payment).getByText("Còn phải thanh toán")).toBeInTheDocument();
-    expect(within(payment).queryByText("Hạn thanh toán")).not.toBeInTheDocument();
+    const list = await within(payment).findByRole("list", { name: "Các đợt thanh toán" });
+    const [deposit, rest] = within(list).getAllByRole("listitem");
+    expect(within(deposit!).getByText("Đợt 1 · Đặt cọc")).toBeInTheDocument();
+    expect(within(deposit!).getByText("Đã thanh toán")).toBeInTheDocument();
+    expect(within(rest!).getByText("Trước khi giao hàng")).toBeInTheDocument();
+    expect(within(rest!).getByText("Cần thanh toán trước khi giao hàng")).toBeInTheDocument();
+    expect(
+      within(rest!).getByRole("button", { name: "Xem thông tin chuyển khoản" }),
+    ).toBeInTheDocument();
   });
 
-  it("shows a credit order's days to pay instead of an amount due", async () => {
+  it("shows a credit order's installment due after delivery, with no transfer asked yet", async () => {
     const order = seedMockOrders(CUSTOMER).find(
-      (o) => o.customerId === CUSTOMER && o.paymentTerm === "CREDIT",
+      (o) =>
+        o.customerId === CUSTOMER &&
+        o.paymentTerm === "CREDIT" &&
+        !["DRAFT", "DELIVERED", "COMPLETED", "CANCELLED", "RETURNED"].includes(o.status),
     )!;
     renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
 
     const payment = await screen.findByRole("region", { name: "Thanh toán" });
-    expect(within(payment).getByText("Công nợ", { selector: "dd" })).toBeInTheDocument();
-    expect(within(payment).getByText("30 ngày sau khi giao")).toBeInTheDocument();
-    expect(within(payment).queryByText("Còn phải thanh toán")).not.toBeInTheDocument();
+    expect(await within(payment).findByText("Sau khi giao hàng")).toBeInTheDocument();
+    expect(within(payment).getByText("Đến hạn sau khi giao hàng")).toBeInTheDocument();
+    expect(within(payment).getByText("Chưa đến hạn")).toBeInTheDocument();
   });
 
   it("shows print progress for a printed line and nothing for stock goods", async () => {
@@ -637,14 +648,15 @@ describe("OrderDetailScreen: what the BE reports about the order", () => {
     expect(within(delivery).getByText("Đang trên đường giao")).toBeInTheDocument();
   });
 
-  it("does not claim a cancelled order still has money to pay", async () => {
+  it("shows no payment section for an order cancelled before its contract", async () => {
     const cancelled = seedMockOrders(CUSTOMER).find(
-      (o) => o.customerId === CUSTOMER && o.status === "CANCELLED",
+      (o) => o.customerId === CUSTOMER && o.status === "CANCELLED" && o.paidAmount === 0,
     )!;
     renderWithProviders(<OrderDetailScreen orderId={cancelled.orderId} />);
-    const payment = await screen.findByRole("region", { name: "Thanh toán" });
-    expect(within(payment).getByText("Chưa thanh toán")).toBeInTheDocument();
-    expect(within(payment).queryByText("Còn phải thanh toán")).not.toBeInTheDocument();
+    await screen.findByRole("region", { name: /Sản phẩm/ });
+    await waitFor(() =>
+      expect(screen.queryByRole("region", { name: "Thanh toán" })).not.toBeInTheDocument(),
+    );
   });
 });
 

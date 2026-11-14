@@ -52,6 +52,11 @@ export function fakeBackend(deps: {
     if (orders) {
       if (url === "/orders/payment-terms") return settle(orders().paymentTerms());
       if (url === "/orders/me") return settle(orders().page(params));
+      if (url === "/installments/me") return settle(orders().myInstallments(params));
+      const plan = /^\/installments\/me\/orders\/([^/]+)$/.exec(url);
+      if (plan) return settle(orders().orderInstallments(decodeURIComponent(plan[1]!)));
+      const transfer = /^\/installments\/me\/([^/]+)\/transfer-instructions$/.exec(url);
+      if (transfer) return settle(orders().installmentTransfer(decodeURIComponent(transfer[1]!)));
       if (url.startsWith("/orders/me/"))
         return settle(orders().get(url.replace("/orders/me/", "")));
     }

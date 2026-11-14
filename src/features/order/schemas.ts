@@ -98,14 +98,6 @@ export const PRODUCTION_STATES = [
 ] as const;
 export const productionStateSchema = tolerantEnum(PRODUCTION_STATES);
 
-/** BE payment status (kltn-docs 15 §5.2). */
-export const PAYMENT_STATUSES = ["UNPAID", "PARTIALLY_PAID", "ON_CREDIT", "PAID"] as const;
-export const paymentStatusSchema = tolerantEnum(PAYMENT_STATUSES);
-
-/** BE order.api.PaymentTerm. */
-export const PAYMENT_TERMS = ["PREPAID", "DEPOSIT", "CREDIT"] as const;
-export const paymentTermSchema = tolerantEnum(PAYMENT_TERMS);
-
 /** What an ON_HOLD order is waiting for, as the customer may be told (never the internal reason). */
 export const HOLD_REASONS = ["AWAITING_CREDIT_APPROVAL", "UNDER_REVIEW"] as const;
 export const holdReasonSchema = tolerantEnum(HOLD_REASONS);
@@ -177,13 +169,6 @@ export const orderLineDtoSchema = z.object({
   productSlug: z.string().min(1).nullish(),
   productTitle: z.string().min(1).nullish(),
   productImageUrl: z.string().min(1).nullish(),
-});
-
-export const orderPaymentDtoSchema = z.object({
-  status: paymentStatusSchema,
-  paidAmount: z.number().nonnegative().nullish(),
-  depositRequired: z.number().nonnegative().nullish(),
-  creditTermDays: z.number().int().nonnegative().nullish(),
 });
 
 /**
@@ -279,7 +264,10 @@ export const orderAllowedActionsDtoSchema = z.object({
   reorder: z.boolean().catch(false),
 });
 
-/** GET /orders/me/{orderId} (CustomerOrderDetailResponse). */
+/**
+ * GET /orders/me/{orderId} (CustomerOrderDetailResponse). How the order is paid is not on it since
+ * the BE moved payment to the contract's installments (4B-10): see `@/lib/installments`.
+ */
 export const orderDtoSchema = z.object({
   orderId: beId(),
   orderNumber: z.string().min(1),
@@ -287,7 +275,6 @@ export const orderDtoSchema = z.object({
   statusGroup: orderStatusGroupSchema,
   // Set only while the order is ON_HOLD.
   holdReasonPublic: holdReasonSchema.nullish(),
-  paymentTerm: paymentTermSchema.nullish(),
   total: z.number().nonnegative(),
   currency: currencySchema,
   placedAt: instantSchema,
@@ -296,7 +283,6 @@ export const orderDtoSchema = z.object({
   // Absent on an older BE.
   allowedActions: orderAllowedActionsDtoSchema.nullish(),
   shippingAddress: orderAddressDtoSchema.nullish(),
-  payment: orderPaymentDtoSchema.nullish(),
   lines: z.array(orderLineDtoSchema),
   // Oldest first.
   timeline: z.array(orderTimelineEntryDtoSchema).nullish(),

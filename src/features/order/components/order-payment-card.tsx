@@ -1,12 +1,25 @@
-import { TransferInstructionsSection } from "@/components/storefront/transfer-instructions";
-import { formatMoney } from "@/lib/format/money";
+"use client";
 
-import { PAYMENT_STATUS_LABEL, PAYMENT_TERM_LABEL } from "../labels";
-import { amountDue } from "../selectors";
+import { RefreshCw } from "lucide-react";
+
+import { Alert, Skeleton } from "@/components/shared";
+import { Button } from "@/components/ui/button";
+import { describeApiError } from "@/lib/api/describe-error";
+import { formatMoney } from "@/lib/format/money";
+import {
+  isNoInstallments,
+  useMyOrderInstallments,
+  type OrderInstallments,
+} from "@/lib/installments";
+
 import type { Order } from "../types";
+import { OrderInstallmentRow } from "./order-installment-row";
 
 const CARD =
   "rounded-[var(--r-lg)] border border-border-default bg-bg-surface p-[var(--card-pad)] shadow-[var(--card-shadow)]";
+
+/** An order that ended before a contract was signed has no installments and nothing to say here. */
+const ENDED_STATUSES: ReadonlySet<Order["status"]> = new Set(["CANCELLED", "RETURNED"]);
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -17,16 +30,34 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
+function Summary({ plan }: { plan: OrderInstallments }) {
+  const money = (amount: number) => formatMoney(amount, plan.currency);
+  return (
+    <dl className="space-y-2 text-sm">
+      {plan.contractNumber ? (
+        <Row label="Hợp đồng">
+          <span className="font-mono">{plan.contractNumber}</span>
+        </Row>
+      ) : null}
+      <Row label="Tổng theo hợp đồng">{money(plan.total)}</Row>
+      <Row label="Đã thanh toán">{money(plan.paid)}</Row>
+      <Row label="Còn phải thanh toán">{money(plan.outstanding)}</Row>
+    </dl>
+  );
+}
+
 /**
- * How the order is paid: the term, what has arrived, the deposit it needs, what is still due, or
- * a credit order's days to pay. The BE sends a field only when it applies (NON_NULL), so each row
- * appears only then. Nothing here when the order has neither a payment record nor a term.
+ * How the order is paid (kltn-docs 15): the installments of its sales contract, what each still owes
+ * and, for one that does, how to transfer for it. An order without a signed contract has no
+ * installments yet (404 INSTALLMENT_NOT_FOUND): the card says so, or is left out once the order
+ * ended without one.
  */
 export function OrderPaymentCard({ order }: { order: Order }) {
-  const { payment, paymentTerm } = order;
-  if (!payment && !paymentTerm) return null;
-  const money = (amount: number) => formatMoney(amount, order.currency);
-  const due = amountDue(order);
+  const query = useMyOrderInstallments(order.orderId);
+
+  if (!query.isPending && isNoInstallments(query.error) && ENDED_STATUSES.has(order.status)) {
+    return null;
+  }
 
   return (
     <section className={`${CARD} space-y-3`} aria-labelledby="order-payment-heading">
@@ -36,24 +67,40 @@ export function OrderPaymentCard({ order }: { order: Order }) {
       >
         Thanh toán
       </h2>
-      <dl className="space-y-2 text-sm">
-        {paymentTerm ? <Row label="Hình thức">{PAYMENT_TERM_LABEL[paymentTerm]}</Row> : null}
-        {payment ? <Row label="Trạng thái">{PAYMENT_STATUS_LABEL[payment.status]}</Row> : null}
-        {payment?.depositRequired != null ? (
-          <Row label="Tiền cọc cần thanh toán">{money(payment.depositRequired)}</Row>
-        ) : null}
-        {payment?.paidAmount != null ? (
-          <Row label="Đã thanh toán">{money(payment.paidAmount)}</Row>
-        ) : null}
-        {due !== undefined && due > 0 ? <Row label="Còn phải thanh toán">{money(due)}</Row> : null}
-        {payment?.creditTermDays != null ? (
-          <Row label="Hạn thanh toán">{payment.creditTermDays} ngày sau khi giao</Row>
-        ) : null}
-      </dl>
-      {/* Only while money is still due: the BE says NONE otherwise, and a shop without a bank account
-          set up should not warn about an order that owes nothing. */}
-      {due !== undefined && due > 0 ? (
-        <TransferInstructionsSection orderId={order.orderId} />
+      {query.isPending ? (
+        <Skeleton
+          role="status"
+          aria-label="Đang tải"
+          className="h-24 w-full rounded-[var(--r-md)]"
+        />
+      ) : isNoInstallments(query.error) ? (
+        <p className="text-ink-secondary text-sm">
+          Lịch thanh toán theo đợt sẽ hiển thị khi hợp đồng mua bán của đơn được ký.
+        </p>
+      ) : query.error ? (
+        <div className="space-y-2" role="alert">
+          <Alert tone="warning" title="Không tải được lịch thanh toán.">
+            {describeApiError(query.error)}
+          </Alert>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 rounded-[var(--r-md)] px-4"
+            onClick={() => void query.refetch()}
+          >
+            <RefreshCw aria-hidden className="mr-2 size-4" />
+            Thử lại
+          </Button>
+        </div>
+      ) : query.data ? (
+        <>
+          <Summary plan={query.data} />
+          <ul className="space-y-2" aria-label="Các đợt thanh toán">
+            {query.data.installments.map((installment) => (
+              <OrderInstallmentRow key={installment.installmentId} installment={installment} />
+            ))}
+          </ul>
+        </>
       ) : null}
     </section>
   );

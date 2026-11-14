@@ -9,8 +9,6 @@ import type {
   deliveryModeSchema,
   deliveryStateSchema,
   holdReasonSchema,
-  paymentStatusSchema,
-  paymentTermSchema,
   productionStateSchema,
   orderAddressDtoSchema,
   orderCardDtoSchema,
@@ -29,8 +27,6 @@ export type OrderStatus = z.infer<typeof orderStatusSchema>;
 export type OrderStatusGroup = z.infer<typeof orderStatusGroupSchema>;
 export type DeliveryMode = z.infer<typeof deliveryModeSchema>;
 export type DeliveryState = z.infer<typeof deliveryStateSchema>;
-export type PaymentStatus = z.infer<typeof paymentStatusSchema>;
-export type PaymentTerm = z.infer<typeof paymentTermSchema>;
 export type ProductionState = z.infer<typeof productionStateSchema>;
 export type HoldReason = z.infer<typeof holdReasonSchema>;
 export type CancellationReasonCode = z.infer<typeof cancellationReasonCodeSchema>;

@@ -6,8 +6,6 @@ import type {
   DeliveryMode,
   DeliveryState,
   HoldReason,
-  PaymentStatus,
-  PaymentTerm,
   ProductionState,
   VehicleMilestone,
   VehicleShipment,
@@ -15,21 +13,6 @@ import type {
 
 // Customer-facing wording for the BE's enums. UNKNOWN (a value newer than this FE) always has a
 // neutral line, never the raw code.
-
-export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
-  UNPAID: "Chưa thanh toán",
-  PARTIALLY_PAID: "Đã thanh toán một phần",
-  ON_CREDIT: "Ghi nhận công nợ",
-  PAID: "Đã thanh toán đủ",
-  UNKNOWN: "Đang cập nhật",
-};
-
-export const PAYMENT_TERM_LABEL: Record<PaymentTerm, string> = {
-  PREPAID: "Trả trước 100%",
-  DEPOSIT: "Đặt cọc",
-  CREDIT: "Công nợ",
-  UNKNOWN: "Theo thoả thuận",
-};
 
 export const PRODUCTION_STATE_LABEL: Record<ProductionState, string> = {
   NOT_REQUIRED: "Hàng có sẵn, không cần sản xuất",
