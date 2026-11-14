@@ -13,4 +13,12 @@ export const STOREFRONT_REDIRECTS = [
     destination: "/search",
     permanent: false,
   },
+  {
+    // The BE links the handover notice to /orders/{id}; the storefront page is /account/orders/{id}.
+    // Only a UUID id matches, so /orders/anything-else stays a 404.
+    source:
+      "/orders/:id([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})",
+    destination: "/account/orders/:id",
+    permanent: false,
+  },
 ];
