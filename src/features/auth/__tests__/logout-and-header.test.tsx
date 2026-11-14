@@ -4,8 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/auth/auth-store";
-import { useCartStore } from "@/lib/store/use-cart-store";
-import { resetCart, signIn, signOut } from "@/test/render";
+import { signIn, signOut } from "@/test/render";
 
 import { HeaderAccountLink } from "../components/header-account-link";
 import { LogoutButton } from "../components/logout-button";
@@ -16,21 +15,15 @@ beforeEach(() => {
   replace.mockReset();
   vi.spyOn(window, "location", "get").mockReturnValue({ replace } as unknown as Location);
   vi.spyOn(api, "post").mockResolvedValue({ data: undefined });
-  resetCart();
 });
 afterEach(() => {
   vi.restoreAllMocks();
   signOut();
-  resetCart();
 });
 
 describe("LogoutButton", () => {
-  it("ends the session, empties the cart and loads the login page afresh", async () => {
+  it("ends the session and loads the login page afresh", async () => {
     signIn();
-    useCartStore.setState({
-      ownerId: "c",
-      lines: [{ sku: "A", slug: "a", title: "A", quantity: 1 }],
-    });
     render(<LogoutButton />);
 
     await userEvent.click(screen.getByRole("button", { name: "Đăng xuất" }));
@@ -38,7 +31,6 @@ describe("LogoutButton", () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/login"));
     expect(api.post).toHaveBeenCalledWith("/identity/auth/logout");
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
-    expect(useCartStore.getState().lines).toEqual([]);
   });
 });
 

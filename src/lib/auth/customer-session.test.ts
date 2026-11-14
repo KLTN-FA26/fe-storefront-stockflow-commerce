@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error";
-import { useCartStore } from "@/lib/store/use-cart-store";
 
 import { NotCustomerError, signInCustomer, signOutCustomer } from "./customer-session";
 import { STOREFRONT_PERMISSIONS } from "./permission-codes";
@@ -63,7 +62,6 @@ function backend(
 
 beforeEach(() => {
   useAuthStore.getState().logout();
-  useCartStore.setState({ ownerId: null, lines: [] });
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -94,26 +92,6 @@ describe("signInCustomer", () => {
         email: "nam@example.vn",
       },
     });
-  });
-
-  it("binds the cart to the customer profile, so another customer never inherits the lines", async () => {
-    useCartStore.setState({
-      ownerId: "someone-else",
-      lines: [{ sku: "A", slug: "a", title: "A", quantity: 1 }],
-    });
-    backend();
-    await signInCustomer({ username: "u", password: "p" });
-    expect(useCartStore.getState()).toMatchObject({ ownerId: CUSTOMER_ID, lines: [] });
-  });
-
-  it("keeps lines added before signing in (nobody owned them yet)", async () => {
-    useCartStore.setState({
-      ownerId: null,
-      lines: [{ sku: "A", slug: "a", title: "A", quantity: 1 }],
-    });
-    backend();
-    await signInCustomer({ username: "u", password: "p" });
-    expect(useCartStore.getState().lines).toHaveLength(1);
   });
 
   it("lets in any account that holds the storefront permissions, whatever its role is called", async () => {
@@ -149,7 +127,6 @@ describe("signInCustomer", () => {
       tokens: null,
       user: null,
     });
-    expect(useCartStore.getState().ownerId).toBeNull();
   });
 
   it("never shows a staff account as signed in, not even for a moment", async () => {
@@ -202,7 +179,7 @@ describe("signInCustomer", () => {
 });
 
 describe("signOutCustomer", () => {
-  it("ends the BE session, drops token and user, empties the query cache and the cart", async () => {
+  it("ends the BE session, drops token and user and empties the query cache", async () => {
     const client = new QueryClient();
     client.setQueryData(["orders", "list"], { items: ["private"] });
     registerSessionQueryClient(client);
@@ -217,10 +194,6 @@ describe("signOutCustomer", () => {
       },
       tokenResponse,
     );
-    useCartStore.setState({
-      ownerId: CUSTOMER_ID,
-      lines: [{ sku: "A", slug: "a", title: "A", quantity: 1 }],
-    });
     const post = vi.spyOn(api, "post").mockResolvedValue({ data: undefined });
 
     await signOutCustomer();
@@ -232,7 +205,6 @@ describe("signOutCustomer", () => {
       user: null,
     });
     expect(client.getQueryData(["orders", "list"])).toBeUndefined();
-    expect(useCartStore.getState().lines).toEqual([]);
   });
 
   it("still signs out locally when the BE cannot be reached", async () => {

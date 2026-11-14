@@ -34,8 +34,6 @@ export function toGridItem(item: CatalogListingItem): ProductGridItem {
     name: item.card.title,
     imageSrc: item.imageUrl,
     imageAlt: item.imageAlt,
-    price: item.priceFrom,
-    priceLabel: "Từ",
     availability: badgeStatus(item.availability),
   };
 }

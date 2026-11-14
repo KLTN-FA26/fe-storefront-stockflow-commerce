@@ -98,7 +98,7 @@ export interface MockOrder {
   contactPhone?: string;
   shippingAddress?: MockOrderAddress;
   billingAddress?: MockOrderAddress;
-  /** Bought through an accepted quote: POST /orders/{id}/reorder drafts a new quote for it. */
+  /** Bought through an accepted quote (seed data; every order is, since 14 BR-01). */
   fromQuote?: boolean;
   /** Idempotency key of the checkout that placed it (absent on seeded history). */
   requestId?: string;
@@ -127,8 +127,6 @@ export interface MockCreditTerms {
   /** An overdue receivable: credit orders wait for approval whatever the limit. */
   overdue?: boolean;
 }
-
-const PAYMENT_TERM_VALUES = ["PREPAID", "DEPOSIT", "CREDIT"];
 
 export const DEFAULT_MOCK_TERMS: MockCreditTerms = {
   defaultTerm: "PREPAID",
@@ -259,17 +257,8 @@ const toCard = (order: MockOrder) => ({
   deliveryState: deliveryState(order.status),
 });
 
-const productFields = (listing: ReturnType<MockCatalog["listingOf"]>) =>
-  listing
-    ? {
-        productSlug: listing.slug,
-        productTitle: listing.title,
-        ...(listing.imageUrl ? { productImageUrl: listing.imageUrl } : {}),
-      }
-    : {};
-
 /** CustomerOrderDetailResponse: no reservations, checksums, actors or contact block. */
-const toDetail = (order: MockOrder, listingOf?: MockCatalog["listingOf"]) => {
+const toDetail = (order: MockOrder) => {
   const { lineCount: _lineCount, ...card } = toCard(order);
   return {
     ...card,
@@ -297,13 +286,12 @@ const toDetail = (order: MockOrder, listingOf?: MockCatalog["listingOf"]) => {
           },
         }
       : {}),
-    // CustomerOrdersService#allowedActions: reorder is true only for an order that came from a quote.
+    // CustomerOrdersService#allowedActions
     allowedActions: {
       cancel: CANCELLABLE.has(order.status),
       // A decided request (approved, rejected, expired) does not stop the customer asking again.
       requestCancellation:
         REQUESTABLE.has(order.status) && order.pendingCancellation?.status !== "PENDING",
-      reorder: order.fromQuote === true,
     },
     ...(order.shippingAddress ? { shippingAddress: order.shippingAddress } : {}),
     payment: {
@@ -321,7 +309,6 @@ const toDetail = (order: MockOrder, listingOf?: MockCatalog["listingOf"]) => {
       ...(line.designSnapshotId ? { designSnapshotId: line.designSnapshotId } : {}),
       production: production(order, line),
       // Where the SKU is on sale today; NON_NULL drops them for a SKU that is not, and for a design line.
-      ...(listingOf && !line.designSnapshotId ? productFields(listingOf(line.sku)) : {}),
     })),
     timeline: order.history.map((entry) => ({
       status: entry.status,
@@ -356,24 +343,9 @@ const toPlaced = (order: MockOrder) => ({
 });
 
 /** BE stockflow.order.duplicate-window default (PT24H, awaiting the owner's confirmation). */
-const DUPLICATE_WINDOW_MS = 24 * 3_600_000;
-
-/** Same content = same total per SKU and design, whatever the order of the lines (DuplicateOrderService). */
-const contentOf = (
-  lines: ReadonlyArray<{ sku: string; quantity: number; designSnapshotId?: string }>,
-): string => {
-  const totals = new Map<string, number>();
-  for (const l of lines) {
-    const key = `${l.sku.toUpperCase()}|${l.designSnapshotId ?? ""}`;
-    totals.set(key, (totals.get(key) ?? 0) + l.quantity);
-  }
-  return JSON.stringify([...totals].sort(([a], [b]) => a.localeCompare(b)));
-};
-
 const MAX_PAGE_SIZE = 200;
 const DEFAULT_PAGE_SIZE = 20;
 const NOTE_MAX = 1000;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function toInt(value: unknown, fallback: number): number {
   if (value === undefined || value === null || value === "") return fallback;
@@ -411,63 +383,6 @@ export function createMockOrderBook(
   const own = (orderId: string) =>
     orders.find((o) => o.orderId === orderId && o.customerId === customerId);
   const notFound = (orderId: string) => fail(404, "NOT_FOUND", `No order with id ${orderId}`);
-
-  const allowedTerms = (): MockPaymentTerm[] => [
-    ...PAYMENT_TERM_VALUES.filter(
-      (t): t is MockPaymentTerm =>
-        terms.allowed.includes(t as MockPaymentTerm) || (t === "CREDIT" && terms.creditLimit > 0),
-    ),
-  ];
-
-  // Owed on credit orders not yet delivered: what the terms start with plus what this session placed.
-  const exposure = () =>
-    (terms.exposure ?? 0) +
-    orders
-      .filter((o) => o.requestId && o.paymentTerm === "CREDIT" && o.status !== "CANCELLED")
-      .reduce((sum, o) => sum + o.totalAmount, 0);
-
-  /** BE PlaceOrderRequest bean validation, plus OrderWebMapper.wholeVnd. */
-  function validatePlace(body: Record<string, unknown>) {
-    const errors: Array<{ field: string; message: string; code: string }> = [];
-    if (typeof body.requestId !== "string" || !UUID_RE.test(body.requestId)) {
-      errors.push({ field: "requestId", message: "requestId is required", code: "NotNull" });
-    }
-    if (typeof body.customerId !== "string" || !UUID_RE.test(body.customerId)) {
-      errors.push({ field: "customerId", message: "customerId is required", code: "NotNull" });
-    }
-    const lines = Array.isArray(body.lines) ? (body.lines as Array<Record<string, unknown>>) : [];
-    if (lines.length === 0) {
-      errors.push({
-        field: "lines",
-        message: "An order needs at least one line",
-        code: "NotEmpty",
-      });
-    }
-    let fractional = false;
-    lines.forEach((line, i) => {
-      if (typeof line.sku !== "string" || !line.sku.trim()) {
-        errors.push({ field: `lines[${i}].sku`, message: "sku is required", code: "NotBlank" });
-      }
-      if (!Number.isInteger(line.quantity) || (line.quantity as number) < 1) {
-        errors.push({
-          field: `lines[${i}].quantity`,
-          message: "quantity must be at least 1",
-          code: "Min",
-        });
-      }
-      if (typeof line.unitPrice !== "number" || line.unitPrice < 0) {
-        errors.push({
-          field: `lines[${i}].unitPrice`,
-          message: "unitPrice must not be negative",
-          code: "DecimalMin",
-        });
-      } else if (!Number.isInteger(line.unitPrice)) {
-        fractional = true; // OrderWebMapper.wholeVnd: VALIDATION_FAILED without a field
-      }
-    });
-    if (errors.length === 0 && fractional) return { wholeVnd: false as const };
-    return errors.length ? { errors } : { lines };
-  }
 
   const releaseStock = (order: MockOrder) => {
     if (!order.stockHeld || !deps.catalog) return;
@@ -508,7 +423,7 @@ export function createMockOrderBook(
     /** GET /orders/me/{orderId} */
     get(orderId: string): MockResult {
       const order = own(orderId);
-      return order ? ok(toDetail(order, deps.catalog?.listingOf)) : notFound(orderId);
+      return order ? ok(toDetail(order)) : notFound(orderId);
     },
 
     /**
@@ -645,30 +560,6 @@ export function createMockOrderBook(
     },
 
     /**
-     * GET /orders/payment-terms (BE CreditPosition): the terms the caller may use, the default, the
-     * deposit share and the caller's own credit position (limit, what is owed, what is left).
-     */
-    paymentTerms(): MockResult {
-      const allowed = allowedTerms();
-      return ok({
-        customerId,
-        allowedTerms: allowed,
-        defaultTerm: terms.defaultTerm,
-        ...(allowed.includes("DEPOSIT") ? { depositPercent: terms.depositPercent } : {}),
-        ...(terms.creditLimit > 0
-          ? {
-              creditLimit: terms.creditLimit,
-              creditTermDays: terms.creditTermDays,
-              exposure: exposure(),
-              availableCredit: terms.creditLimit - exposure(),
-            }
-          : {}),
-        currency: "VND",
-        hasOverdue: terms.overdue === true,
-      });
-    },
-
-    /**
      * GET /orders/credit-position/me (BE CreditPositionResponse, 15 §4.3): the limit, what the
      * AFTER_DELIVERY installments still owe, what is overdue among them.
      */
@@ -698,205 +589,6 @@ export function createMockOrderBook(
         overdueAmount: overdue.reduce((sum, i) => sum + i.outstanding, 0),
         ...(oldest ? { oldestOverdueDueDate: oldest } : {}),
       });
-    },
-
-    /** POST /orders — the checkout: one transaction, nothing is left behind on a refusal. */
-    place(body: Record<string, unknown>): MockResult {
-      const catalog = deps.catalog;
-      if (!catalog) return fail(501, "INTERNAL_ERROR", "The mock order book has no catalogue");
-      // Controller: a customerId that is not the caller's is hidden behind a plain 404.
-      if (typeof body.customerId === "string" && body.customerId !== customerId) {
-        return fail(404, "NOT_FOUND", "Resource not found");
-      }
-      const checked = validatePlace(body);
-      if ("wholeVnd" in checked) return fail(400, "VALIDATION_FAILED", "Invalid request data");
-      if ("errors" in checked)
-        return fail(400, "VALIDATION_FAILED", "Dữ liệu không hợp lệ", checked.errors);
-      const requestId = body.requestId as string;
-
-      // Idempotency first: the original order comes back, whatever the new request says.
-      const already = orders.find((o) => o.requestId === requestId);
-      if (already) {
-        return already.customerId === customerId
-          ? ok(toPlaced(already), 201)
-          : fail(
-              422,
-              "IDEMPOTENCY_KEY_REUSED",
-              "This idempotency key was already used for a different request",
-            );
-      }
-
-      const lines = checked.lines.map((l) => ({
-        sku: String(l.sku).trim().toUpperCase(),
-        quantity: l.quantity as number,
-        unitPrice: l.unitPrice as number,
-      }));
-      // SCRUM-190 (OrderController.refuseUnconfirmedDuplicate): the same lines placed by this customer
-      // within the window and not cancelled, unless the request confirms it.
-      if (body.confirmDuplicate !== true) {
-        const wanted = contentOf(lines);
-        const earlier = orders
-          .filter(
-            (o) =>
-              o.customerId === customerId &&
-              o.status !== "CANCELLED" &&
-              Date.now() - Date.parse(o.placedAt) < DUPLICATE_WINDOW_MS &&
-              contentOf(o.lines) === wanted,
-          )
-          .sort((a, b) => Date.parse(b.placedAt) - Date.parse(a.placedAt))[0];
-        if (earlier) {
-          return fail(
-            409,
-            "DUPLICATE_ORDER_SUSPECTED",
-            `Order ${earlier.orderNumber} with the same items was placed at ${earlier.placedAt}`,
-            undefined,
-            {
-              orderId: earlier.orderId,
-              orderNumber: earlier.orderNumber,
-              placedAt: earlier.placedAt,
-            },
-          );
-        }
-      }
-      // SCRUM-428: a SKU is priced on the order's total of it; the client's price is only what it expects.
-      const totals = new Map<string, number>();
-      for (const l of lines) totals.set(l.sku, (totals.get(l.sku) ?? 0) + l.quantity);
-      const prices = new Map<string, number>();
-      for (const [sku, total] of totals) {
-        const priced = catalog.checkoutPrice(sku, total);
-        if ("error" in priced) {
-          return priced.error === "NOT_PURCHASABLE"
-            ? fail(
-                409,
-                "PRODUCT_NOT_PURCHASABLE",
-                "This product is not currently available for purchase",
-              )
-            : priced.error === "NO_PRICE"
-              ? fail(409, "PRICE_NOT_AVAILABLE", "No selling price is available for this SKU")
-              : fail(
-                  409,
-                  "CUSTOMER_PRICE_BELOW_MOQ",
-                  "The quantity is below this customer's price list minimum for the SKU; ask Sales for a quote",
-                );
-        }
-        prices.set(sku, priced.price);
-      }
-      if (lines.some((l) => prices.get(l.sku) !== l.unitPrice)) {
-        return fail(
-          409,
-          "CHECKOUT_PRICE_CHANGED",
-          "The selling price changed; review the basket and confirm again",
-        );
-      }
-
-      const addressId =
-        typeof body.shippingAddressId === "string"
-          ? body.shippingAddressId
-          : deps.defaultShippingAddressId?.();
-      if (!addressId)
-        return fail(
-          409,
-          "SHIPPING_ADDRESS_REQUIRED",
-          "Add a shipping address before placing an order",
-        );
-      const shipping = deps.shippingAddress?.(addressId);
-      if (!shipping) return fail(404, "ADDRESS_NOT_FOUND", "Address not found");
-
-      // BE: a paymentTerm that is not PREPAID/DEPOSIT/CREDIT cannot be read (400); none means the
-      // customer's default. A term the customer may not use is 409 PAYMENT_TERM_NOT_ALLOWED (BR-01).
-      if (body.paymentTerm != null && !PAYMENT_TERM_VALUES.includes(String(body.paymentTerm))) {
-        return fail(400, "MALFORMED_REQUEST", "The request body could not be read");
-      }
-      const term = (body.paymentTerm ?? terms.defaultTerm) as MockPaymentTerm;
-      if (!allowedTerms().includes(term)) {
-        return fail(409, "PAYMENT_TERM_NOT_ALLOWED", `Customer may not be sold on ${term} terms`);
-      }
-
-      // inventory.reserve: all or nothing.
-      const held: typeof lines = [];
-      for (const l of lines) {
-        if (!catalog.reserve(l.sku, l.quantity)) {
-          for (const h of held) catalog.release(h.sku, h.quantity);
-          return fail(
-            409,
-            "INSUFFICIENT_STOCK",
-            `Insufficient stock for SKU ${l.sku}: requested ${l.quantity}, available ${catalog.stockOf(l.sku)}`,
-          );
-        }
-        held.push(l);
-      }
-
-      const now = new Date();
-      const total = lines.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0);
-      sequence += 1;
-      const status: MockOrderStatus =
-        term === "CREDIT"
-          ? !terms.overdue && total <= terms.creditLimit - exposure()
-            ? "CONFIRMED"
-            : "ON_HOLD"
-          : "PENDING_PAYMENT";
-      const order: MockOrder = {
-        orderId: `0b7d3c1e-0000-4000-8000-${(0xf000 + sequence).toString(16).padStart(12, "0")}`,
-        orderNumber: orderNumberFor(now, 431 + sequence),
-        customerId,
-        status,
-        totalAmount: total,
-        currency: "VND",
-        lines: lines.map((l, i) => ({
-          lineId: `1a2b3c4d-0000-4000-8000-${(0xf0000 + sequence * 100 + i).toString(16).padStart(12, "0")}`,
-          sku: l.sku,
-          quantity: l.quantity,
-          unitPrice: l.unitPrice,
-          lineTotal: l.unitPrice * l.quantity,
-          reservationIds: [
-            `5e6f7a8b-0000-4000-8000-${(0xf0000 + sequence * 100 + i).toString(16).padStart(12, "0")}`,
-          ],
-        })),
-        placedAt: now.toISOString(),
-        createdBy: "customer",
-        lastModifiedAt: now.toISOString(),
-        shippingAddress: shipping,
-        requestId,
-        paymentTerm: term,
-        paidAmount: 0,
-        ...(term === "DEPOSIT"
-          ? { depositRequired: Math.round((total * terms.depositPercent) / 100) }
-          : {}),
-        ...(term === "CREDIT" ? { creditTermDays: terms.creditTermDays } : {}),
-        history: [{ status, occurredAt: now.toISOString() }],
-        stockHeld: true,
-      };
-      orders.push(order);
-      return ok(toPlaced(order), 201);
-    },
-
-    /**
-     * POST /orders/{orderId}/reorder with `{ requestId }` (QuoteService.reorder): a new DRAFT quote for an
-     * order that came from a quote; an order bought at the price list is 409 ORDER_NOT_QUOTED.
-     */
-    reorder(orderId: string, body: { requestId?: unknown } = {}): MockResult {
-      if (typeof body.requestId !== "string" || !UUID_RE.test(body.requestId)) {
-        return fail(400, "VALIDATION_FAILED", "Invalid request data", [
-          { field: "requestId", message: "requestId is required", code: "NotNull" },
-        ]);
-      }
-      const order = own(orderId);
-      if (!order) return notFound(orderId);
-      if (!order.fromQuote) {
-        return fail(
-          409,
-          "ORDER_NOT_QUOTED",
-          `Order ${order.orderNumber} was bought at the price list`,
-        );
-      }
-      return ok(
-        {
-          id: body.requestId,
-          quoteNumber: `QT-${order.orderNumber.slice(3)}-R`,
-          status: "DRAFT",
-        },
-        201,
-      );
     },
 
     /**

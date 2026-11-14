@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api/error";
 
 import { createMockCatalog, seedMockCatalog } from "@/lib/api/mock-fixtures/catalog";
-import { priceSchedulesDtoSchema, skuAvailabilitiesDtoSchema } from "@/lib/catalog/schemas";
+import { skuAvailabilitiesDtoSchema } from "@/lib/catalog/schemas";
 
 import {
   catalogGalleryDtoSchema,
@@ -132,7 +132,7 @@ describe("mock catalogue satisfies the FE catalogue contract", () => {
     expect(asApiError(limited)).toMatchObject({ status: 429, code: "RATE_LIMITED" });
   });
 
-  it("answers suggestions, availability and prices with bodies the schemas accept", () => {
+  it("answers suggestions and availability with bodies the schemas accept", () => {
     expect(
       searchSuggestionsDtoSchema.safeParse(dataOf(catalog.suggestions({ q: "ly" }))).success,
     ).toBe(true);
@@ -140,6 +140,5 @@ describe("mock catalogue satisfies the FE catalogue contract", () => {
     expect(skuAvailabilitiesDtoSchema.safeParse(dataOf(catalog.availability(skus))).success).toBe(
       true,
     );
-    expect(priceSchedulesDtoSchema.safeParse(dataOf(catalog.prices(skus))).success).toBe(true);
   });
 });

@@ -2,7 +2,7 @@ import { describeApiError, hasErrorCode, isForbiddenError } from "@/lib/api/desc
 
 const MESSAGE_BY_CODE: Record<string, string> = {
   UNAUTHORIZED: "Vui lòng đăng nhập để xem sản phẩm, giá và tồn kho.",
-  FORBIDDEN: "Chỉ tài khoản khách hàng đã kích hoạt mới xem được giá và tồn kho.",
+  FORBIDDEN: "Chỉ tài khoản khách hàng đã kích hoạt mới xem được tình trạng còn hàng.",
   NOT_FOUND: "Sản phẩm không còn khả dụng.",
   PRICE_NOT_AVAILABLE: "Sản phẩm tạm thời chưa có giá.",
 };

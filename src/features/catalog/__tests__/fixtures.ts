@@ -45,14 +45,3 @@ export const beGallery = {
     },
   ],
 };
-
-export const beSchedule = {
-  sku: "CUP-PAPER-8OZ-WHT",
-  source: "CUSTOMER",
-  moq: 1000,
-  currency: "VND",
-  tiers: [
-    { minQuantity: 1000, unitPrice: 780 },
-    { minQuantity: 5000, unitPrice: 720 },
-  ],
-};

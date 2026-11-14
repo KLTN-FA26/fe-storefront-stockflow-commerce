@@ -32,7 +32,7 @@ export function SignInRequired({ from }: { from?: string | undefined }) {
   return (
     <EmptyState
       title="Đăng nhập để xem sản phẩm"
-      description="Cổng khách hàng chỉ dành cho khách sỉ đã được cấp tài khoản. Đăng nhập để xem sản phẩm, giá riêng và tình trạng còn hàng."
+      description="Cổng khách hàng chỉ dành cho khách sỉ đã được cấp tài khoản. Đăng nhập để xem sản phẩm, tình trạng còn hàng và tự thiết kế."
       action={
         <Button asChild className="min-h-11 rounded-[var(--r-md)] px-5">
           <Link href={loginUrl(from)}>Đăng nhập</Link>
@@ -72,11 +72,11 @@ export function CatalogLoadError({
   );
 }
 
-/** Products came back but the stock/price figures did not: say so instead of showing blanks. */
+/** Products came back but the stock indicator did not: say so instead of showing blanks. */
 export function FiguresNotice({ error }: { error: unknown }) {
   return (
     <div role="status">
-      <Alert tone="warning" title="Chưa hiển thị được giá và tồn kho.">
+      <Alert tone="warning" title="Chưa hiển thị được tình trạng còn hàng.">
         {describeCatalogError(error)}
       </Alert>
     </div>
