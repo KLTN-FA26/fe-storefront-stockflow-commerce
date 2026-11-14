@@ -4,7 +4,6 @@ import { CircleCheck } from "lucide-react";
 import { STORE_ROUTES } from "@/constants";
 import { Button } from "@/components/ui/button";
 import { SurfaceCard } from "@/components/storefront/layout";
-import { TransferInstructionsSection } from "@/components/storefront/transfer-instructions";
 import { formatMoney } from "@/lib/format/money";
 
 import { describePlacedStatus } from "../checkout-errors";
@@ -34,10 +33,12 @@ export function OrderPlacedPanel({ order }: { order: PlacedOrder }) {
           </dd>
         </div>
       </dl>
-      {/* A credit order is paid after delivery: nothing to transfer now. */}
-      {order.paymentTerm === "CREDIT" ? null : (
-        <TransferInstructionsSection orderId={order.orderId} />
-      )}
+      {/* Payment goes by the installments of the order's sales contract (kltn-docs 15): they and how
+          to transfer for each appear on the order page once the contract is signed. */}
+      <p className="text-ink-secondary text-sm">
+        Lịch thanh toán theo đợt và thông tin chuyển khoản sẽ hiển thị trên trang đơn hàng khi hợp
+        đồng mua bán được ký.
+      </p>
       <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
         <Button asChild className="min-h-11 rounded-[var(--r-md)] px-5">
           <Link href={STORE_ROUTES.account.orders.detail(order.orderId)}>Xem đơn hàng</Link>

@@ -63,7 +63,7 @@ describe("mock adapter serves the storefront the way the BE does", () => {
     expect(placed).toMatchObject({ status: "PENDING_PAYMENT", totalAmount: 780000 });
     expect((await getMyOrders({ page: 1, size: 1 })).totalElements).toBe(ordersBefore + 1);
     const detail = await getOrder(placed.orderId);
-    expect(detail).toMatchObject({ statusGroup: "AWAITING_PAYMENT", paymentTerm: "PREPAID" });
+    expect(detail).toMatchObject({ statusGroup: "AWAITING_PAYMENT" });
     expect(detail.shippingAddress?.recipientName).toBe(shipping.recipientName);
 
     // The same lines again within the window are asked about first (SCRUM-190), naming the earlier order.

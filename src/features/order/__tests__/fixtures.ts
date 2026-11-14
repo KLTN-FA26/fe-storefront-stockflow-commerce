@@ -23,11 +23,9 @@ export const beOrder = {
   orderNumber: "SO-20260907-000431",
   status: "CONFIRMED",
   statusGroup: "CONFIRMED",
-  paymentTerm: "PREPAID",
   total: 507000,
   currency: "VND",
   placedAt: "2026-09-07T03:00:00Z",
-  payment: { status: "PAID", paidAmount: 507000 },
   lines: [
     {
       lineId: "1a2b3c4d-0000-4000-8000-000000000001",

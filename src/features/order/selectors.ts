@@ -23,26 +23,6 @@ export function customerTimeline(entries: readonly OrderTimelineEntry[] | null |
 }
 
 /**
- * What is still to be paid on an order awaiting money. `undefined` when it does not apply: a
- * credit order is paid after delivery, a paid order owes nothing, and without a payment record
- * (or a status newer than this FE) there is nothing to compute from.
- *
- * A closed order owes nothing either: cancelling releases the stock but does not settle payment
- * (BE OrderServiceImpl.cancelLoaded), so a CANCELLED order still reads UNPAID and the total would
- * be shown as due; COMPLETED is closed and RETURNED is refunded outside this order.
- */
-const CLOSED: ReadonlySet<Order["status"]> = new Set(["CANCELLED", "COMPLETED", "RETURNED"]);
-
-export function amountDue(order: Pick<Order, "total" | "payment" | "status">): number | undefined {
-  const payment = order.payment;
-  if (CLOSED.has(order.status)) return undefined;
-  if (!payment || (payment.status !== "UNPAID" && payment.status !== "PARTIALLY_PAID")) {
-    return undefined;
-  }
-  return Math.max(order.total - (payment.paidAmount ?? 0), 0);
-}
-
-/**
  * The delivery modes the coordinator chose. The order-level mode wins when the BE sends it; else
  * the shipments' modes, once each, in shipment order (an older BE, or an order the BE has no mode
  * for). Empty when neither carries one: the page then says the order is awaiting coordination.

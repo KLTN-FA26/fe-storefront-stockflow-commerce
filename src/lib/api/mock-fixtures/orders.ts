@@ -19,6 +19,7 @@
  */
 
 import type { MockCatalog } from "./catalog";
+import { MOCK_COMPANY_BANK, mockInstallmentsOf, mockOrderInstallments } from "./installments";
 
 export type MockOrderStatus =
   | "DRAFT"
@@ -506,6 +507,70 @@ export function createMockOrderBook(
     get(orderId: string): MockResult {
       const order = own(orderId);
       return order ? ok(toDetail(order, deps.catalog?.listingOf)) : notFound(orderId);
+    },
+
+    /** GET /installments/me/orders/{orderId} (BE InstallmentController.myOrder). */
+    orderInstallments(orderId: string): MockResult {
+      const order = own(orderId);
+      const plan = order ? mockOrderInstallments(order) : undefined;
+      return plan
+        ? ok(plan)
+        : fail(404, "INSTALLMENT_NOT_FOUND", `Order ${orderId} has no installments`);
+    },
+
+    /** GET /installments/me?orderId=&status=&page=&size= (earliest due first). */
+    myInstallments(
+      query: { orderId?: unknown; status?: unknown; page?: unknown; size?: unknown } = {},
+    ): MockResult {
+      const page = toInt(query.page, 0);
+      const size = toInt(query.size, DEFAULT_PAGE_SIZE);
+      if (!(page >= 0) || !(size >= 1) || size > MAX_PAGE_SIZE) {
+        return fail(
+          400,
+          "UNSUPPORTED_PARAMETER",
+          `page must be >= 0 and size between 1 and ${MAX_PAGE_SIZE}`,
+        );
+      }
+      const all = orders
+        .filter((o) => o.customerId === customerId)
+        .filter((o) => query.orderId == null || o.orderId === query.orderId)
+        .flatMap((o) => mockInstallmentsOf(o) ?? [])
+        .filter((i) => query.status == null || i.status === query.status)
+        .sort((a, b) => (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999"));
+      const totalPages = Math.ceil(all.length / size);
+      return ok({
+        items: all.slice(page * size, (page + 1) * size),
+        page,
+        size,
+        totalElements: all.length,
+        totalPages,
+        hasNext: page + 1 < totalPages,
+        hasPrevious: page > 0,
+      });
+    },
+
+    /** GET /installments/me/{installmentId}/transfer-instructions (15 §4.2 step 5). */
+    installmentTransfer(installmentId: string): MockResult {
+      const installment = orders
+        .filter((o) => o.customerId === customerId)
+        .flatMap((o) => mockInstallmentsOf(o) ?? [])
+        .find((i) => i.installmentId === installmentId);
+      if (!installment) return fail(404, "INSTALLMENT_NOT_FOUND", "Installment not found");
+      if (installment.status === "PAID" || installment.status === "CANCELLED") {
+        return fail(409, "INSTALLMENT_NOT_PAYABLE", "This installment is paid or cancelled");
+      }
+      return ok({
+        installmentId,
+        contractNumber: installment.contractNumber,
+        orderNumber: installment.orderNumber,
+        seq: installment.seq,
+        name: installment.name,
+        ...MOCK_COMPANY_BANK,
+        amountDue: installment.outstanding,
+        currency: installment.currency,
+        reference: installment.transferReference,
+        ...(installment.dueDate ? { dueDate: installment.dueDate } : {}),
+      });
     },
 
     /**
