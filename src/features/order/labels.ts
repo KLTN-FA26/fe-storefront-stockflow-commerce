@@ -26,6 +26,8 @@ export const PRODUCTION_STATE_LABEL: Record<ProductionState, string> = {
 export const DELIVERY_STATE_LABEL: Record<DeliveryState, string> = {
   NOT_SHIPPED: "Chưa giao cho đơn vị vận chuyển",
   IN_TRANSIT: "Đang trên đường giao",
+  PARTIALLY_DELIVERED: "Đã giao một phần",
+  DELIVERY_FAILED: "Giao không thành công",
   DELIVERED: "Đã giao",
   RETURNED: "Đã trả lại",
   UNKNOWN: "Đang cập nhật",
@@ -73,6 +75,9 @@ export const CUSTOMER_REASON_OPTIONS = [
  * but an ON_HOLD one (credit limit, review) never reached production or the warehouse, so it must
  * not be told it did. `holdReason` is the BE's holdReasonPublic.
  */
+/** Signed or awaiting its contract, nothing released yet (BE OrderStatus, kltn-docs 17 §4.8). */
+const BEFORE_RELEASE = new Set(["DRAFT", "PENDING_CONTRACT", "PENDING_PAYMENT", "CONFIRMED"]);
+
 export function requestReason(
   status: string,
   holdReason: HoldReason | null | undefined,
@@ -85,6 +90,13 @@ export function requestReason(
     return {
       help: `${state}, chưa chuyển cho sản xuất hoặc kho. Bạn có thể gửi yêu cầu huỷ để Sales xử lý, hoặc chat với chúng tôi.`,
       dialog: `${state} và chưa được chuyển cho sản xuất hoặc kho. Yêu cầu huỷ của bạn sẽ được Sales xem xét; đơn giữ nguyên cho đến khi có quyết định.`,
+    };
+  }
+  if (BEFORE_RELEASE.has(status)) {
+    return {
+      help: "Đơn chưa chuyển cho kho. Bạn có thể gửi yêu cầu huỷ để Sales xử lý theo hợp đồng, hoặc chat với chúng tôi.",
+      dialog:
+        "Đơn chưa được chuyển cho kho. Yêu cầu huỷ của bạn sẽ được Sales xem xét theo điều khoản hợp đồng; tiền đã thanh toán (nếu có) được hoàn theo hợp đồng. Đơn giữ nguyên cho đến khi có quyết định.",
     };
   }
   return {

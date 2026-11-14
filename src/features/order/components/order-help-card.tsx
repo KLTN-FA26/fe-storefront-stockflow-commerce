@@ -5,7 +5,7 @@ import { STORE_ROUTES } from "@/constants";
 import { Alert } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 
-import { isCancellationRequestable, isOrderCancellable, isOrderTerminal } from "../lifecycle";
+import { allowedCancellation, isCancellationRequestable, isOrderTerminal } from "../lifecycle";
 import { requestReason } from "../labels";
 import { ORDER_STATUS_UNKNOWN } from "../schemas";
 import type { Order } from "../types";
@@ -20,12 +20,25 @@ interface OrderHelpCardProps {
   requestPending: boolean;
 }
 
-function helpText(order: Order, mode: "cancel" | "request" | null, mayCancel: boolean) {
+type CancelMode = "cancel" | "request" | null;
+
+/**
+ * What cancelling this order looks like, the permission aside: the BE's allowedActions decide; a
+ * request already waiting makes the BE answer requestCancellation=false, yet the order is still one
+ * a request was made for, so it stays "request" (the card then shows the request as waiting).
+ */
+function cancellationOf(order: Order, requestPending: boolean): CancelMode {
+  const fromBe = allowedCancellation(order.status, order.allowedActions);
+  if (fromBe) return fromBe;
+  return requestPending && isCancellationRequestable(order.status) ? "request" : null;
+}
+
+function helpText(order: Order, mode: CancelMode, possible: CancelMode, mayCancel: boolean) {
   if (mode === "cancel") {
     return "Bạn có thể huỷ đơn khi đơn chưa chuyển cho kho hoặc sản xuất, hoặc chat với chúng tôi nếu cần đổi thông tin.";
   }
   if (mode === "request") return requestReason(order.status, order.holdReasonPublic).help;
-  if (isOrderCancellable(order.status) || isCancellationRequestable(order.status)) {
+  if (possible !== null) {
     return mayCancel
       ? "Có thắc mắc về đơn này? Đội chăm sóc khách hàng luôn sẵn sàng hỗ trợ."
       : "Tài khoản của bạn hiện không thể tự huỷ đơn. Hãy chat với chúng tôi để được hỗ trợ.";
@@ -39,18 +52,13 @@ function helpText(order: Order, mode: "cancel" | "request" | null, mayCancel: bo
 }
 
 /**
- * Support first, cancellation second: cancelling is a quiet secondary action. The status decides
- * what the BE will do with it — cancel at once (DRAFT, PENDING_PAYMENT, CONFIRMED) or record a
- * request Sales decide (released to production or the warehouse) — and the button says which.
+ * Support first, cancellation second: cancelling is a quiet secondary action. The BE's
+ * allowedActions decide what it will do — cancel at once or record a request Sales decide (since the
+ * 4B rescope always a request: the order runs under a signed contract) — and the button says which.
  */
 export function OrderHelpCard({ order, onCancel, mayCancel, requestPending }: OrderHelpCardProps) {
-  const mode = !mayCancel
-    ? null
-    : isOrderCancellable(order.status)
-      ? "cancel"
-      : isCancellationRequestable(order.status)
-        ? "request"
-        : null;
+  const possible = cancellationOf(order, requestPending);
+  const mode = mayCancel ? possible : null;
 
   return (
     <section
@@ -64,7 +72,9 @@ export function OrderHelpCard({ order, onCancel, mayCancel, requestPending }: Or
         >
           Cần hỗ trợ?
         </h2>
-        <p className="text-ink-secondary mt-1 text-sm">{helpText(order, mode, mayCancel)}</p>
+        <p className="text-ink-secondary mt-1 text-sm">
+          {helpText(order, mode, possible, mayCancel)}
+        </p>
       </div>
       {requestPending && mode === "request" ? (
         <div role="status">
