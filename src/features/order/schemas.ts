@@ -194,6 +194,46 @@ export const orderShipmentDtoSchema = z.object({
   deliveryMode: deliveryModeSchema.nullish(),
 });
 
+/**
+ * BE fulfillment OrderShippingTracking (GET /fulfillment/orders/me/{orderId}/vehicles, kltn-docs 17
+ * BR-27 / §5.2): one entry per vehicle that left with goods of the order. NON_NULL drops absent
+ * fields (a carrier without a waybill yet, a vehicle without a plate). Never the driver, the waybill
+ * files or the proof of delivery. Milestone and shipment status are strings the carrier / warehouse
+ * set; a value newer than this FE falls back to "UNKNOWN" instead of failing the page.
+ */
+export const VEHICLE_MILESTONES = ["PICKED_UP", "IN_TRANSIT", "RETURNING"] as const;
+export const VEHICLE_SHIPMENT_STATUSES = [
+  "READY_TO_DISPATCH",
+  "HANDED_OVER",
+  "DELIVERED",
+  "DELIVERY_FAILED",
+  "RETURNED",
+  "CANCELLED",
+] as const;
+
+export const vehicleMilestoneDtoSchema = z.object({
+  milestone: tolerantEnum(VEHICLE_MILESTONES),
+  at: instantSchema,
+});
+
+export const vehicleShipmentDtoSchema = z.object({
+  shipmentCode: z.string().min(1),
+  status: tolerantEnum(VEHICLE_SHIPMENT_STATUSES),
+  outcomeAt: instantSchema.nullish(),
+});
+
+export const orderVehicleDtoSchema = z.object({
+  loadCode: z.string().min(1),
+  carrierName: z.string().nullish(),
+  waybillNo: z.string().nullish(),
+  vehiclePlate: z.string().nullish(),
+  handedOverAt: instantSchema.nullish(),
+  milestones: z.array(vehicleMilestoneDtoSchema).nullish(),
+  shipments: z.array(vehicleShipmentDtoSchema).nullish(),
+});
+
+export const orderVehiclesDtoSchema = z.array(orderVehicleDtoSchema);
+
 export const orderTimelineEntryDtoSchema = z.object({
   status: orderStatusSchema,
   statusGroup: orderStatusGroupSchema,

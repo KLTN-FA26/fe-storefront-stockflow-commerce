@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { toSafeNotificationPath } from "./link";
+import { resolveNotificationLink, toSafeNotificationPath } from "./link";
 
 describe("toSafeNotificationPath — strict root-relative storefront policy (SCRUM-147)", () => {
   it.each([
@@ -41,5 +41,28 @@ describe("toSafeNotificationPath — strict root-relative storefront policy (SCR
     ["oversized", `/account/${"a".repeat(2100)}`],
   ])("rejects %s", (_, raw) => {
     expect(toSafeNotificationPath(raw)).toBeNull();
+  });
+});
+
+describe("resolveNotificationLink — BE order links open the customer's order page", () => {
+  const id = "0e380000-0000-4000-8000-000000000201";
+
+  it("maps the handover notice link /orders/{id} to /account/orders/{id}", () => {
+    expect(resolveNotificationLink(`/orders/${id}`)).toBe(`/account/orders/${id}`);
+    expect(resolveNotificationLink(`/orders/${id.toUpperCase()}`)).toBe(
+      `/account/orders/${id.toUpperCase()}`,
+    );
+  });
+
+  it("leaves a link that is already a storefront path, and other paths, unchanged", () => {
+    expect(resolveNotificationLink(`/account/orders/${id}`)).toBe(`/account/orders/${id}`);
+    expect(resolveNotificationLink("/orders")).toBe("/orders");
+    expect(resolveNotificationLink(`/orders/${id}/extra`)).toBe(`/orders/${id}/extra`);
+    expect(resolveNotificationLink("/orders/not-a-uuid")).toBe("/orders/not-a-uuid");
+  });
+
+  it("still refuses unsafe links", () => {
+    expect(resolveNotificationLink("//evil.test/orders")).toBeNull();
+    expect(resolveNotificationLink("/admin/orders")).toBeNull();
   });
 });

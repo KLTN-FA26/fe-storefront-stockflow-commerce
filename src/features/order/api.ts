@@ -5,6 +5,7 @@ import {
   cancellationResultDtoSchema,
   orderDtoSchema,
   orderPageDtoSchema,
+  orderVehiclesDtoSchema,
 } from "./schemas";
 import type {
   CancelOrderInput,
@@ -12,6 +13,7 @@ import type {
   MyOrdersParams,
   Order,
   OrderPage,
+  OrderVehicle,
 } from "./types";
 
 // BE OrderController: /api/v1/orders — the /v1 prefix lives in API_URL.
@@ -55,4 +57,21 @@ export async function cancelMyOrder(input: CancelOrderInput): Promise<Cancellati
     body,
   );
   return cancellationResultDtoSchema.parse(data);
+}
+
+/**
+ * GET /fulfillment/orders/me/{orderId}/vehicles (BE CustomerShippingController, not the order
+ * module: fulfillment holds the vehicles): carrier, waybill, plate, milestones and shipments of each
+ * vehicle that has left with goods of the customer's own order. Empty until the first handover;
+ * another customer's order answers 404 NOT_FOUND.
+ */
+export async function getOrderVehicles(
+  orderId: string,
+  signal?: AbortSignal,
+): Promise<OrderVehicle[]> {
+  const { data } = await api.get<unknown>(
+    `/fulfillment/orders/me/${encodeURIComponent(orderId)}/vehicles`,
+    signal ? { signal } : {},
+  );
+  return orderVehiclesDtoSchema.parse(data);
 }
