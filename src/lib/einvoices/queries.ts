@@ -29,3 +29,16 @@ export function useMyOrderEInvoices(orderId: string, enabled = true) {
     ...QUERY_TIMES.list,
   });
 }
+
+/** The order of one of the customer's invoices, or null when it is not theirs (notification links). */
+export function useMyInvoiceOrder(invoiceId: string) {
+  return useQuery({
+    queryKey: [...einvoiceKeys.all, "invoice-order", invoiceId] as const,
+    queryFn: async ({ signal }) => {
+      const page = await listMyEInvoices({ page: 0, size: MY_EINVOICES_SCAN_SIZE }, signal);
+      return page.items.find((invoice) => invoice.id === invoiceId)?.orderId ?? null;
+    },
+    retry: retryTransient,
+    ...QUERY_TIMES.detail,
+  });
+}
