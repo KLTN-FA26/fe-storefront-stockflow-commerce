@@ -511,6 +511,75 @@ export function createMockOrderBook(
       return order ? ok(toDetail(order, deps.catalog?.listingOf)) : notFound(orderId);
     },
 
+    /**
+     * GET /einvoices/me (BE CustomerEInvoiceController): one issued invoice per delivered order, dated
+     * the delivery day (kltn-docs 21 §4.1), newest first.
+     */
+    myEInvoices(): MockResult {
+      const items = orders
+        .filter(
+          (o) =>
+            o.customerId === customerId && (o.status === "DELIVERED" || o.status === "COMPLETED"),
+        )
+        .map((o, index) => {
+          const delivered =
+            o.history.find((h) => h.status === "DELIVERED")?.occurredAt ?? o.lastModifiedAt;
+          const tax = Math.round(o.totalAmount * 0.08);
+          return {
+            id: `5e1a0000${o.orderId.slice(8)}`,
+            type: "ORIGINAL",
+            status: "ISSUED",
+            adjusted: false,
+            orderId: o.orderId,
+            orderNumber: o.orderNumber,
+            shipmentCode: `${o.orderNumber}-S1`,
+            issueDate: delivered.slice(0, 10),
+            templateCode: "1",
+            symbol: "C26TAA",
+            invoiceNumber: 100 + index,
+            subtotal: o.totalAmount,
+            taxTotal: tax,
+            grandTotal: o.totalAmount + tax,
+            issuedAt: delivered,
+          };
+        })
+        .sort((a, b) => b.issueDate.localeCompare(a.issueDate));
+      return ok({
+        items,
+        page: 0,
+        size: items.length || 1,
+        totalElements: items.length,
+        totalPages: 1,
+        hasNext: false,
+        hasPrevious: false,
+      });
+    },
+
+    /** GET /einvoices/me/{id}/files/{kind}: a short-lived link to the file. */
+    myEInvoiceFile(id: string, kind: string): MockResult {
+      return ok({
+        url: `https://files.example/einvoices/${id}.${kind.toLowerCase()}`,
+        expiresAt: new Date(Date.now() + 300_000).toISOString(),
+      });
+    },
+
+    /** GET /refunds/me/orders/{orderId}: what a cancelled order that had money paid gets back (15 §4.5). */
+    myOrderRefund(orderId: string): MockResult {
+      const order = own(orderId);
+      if (!order) return notFound(orderId);
+      const refundable = order.status === "CANCELLED" ? order.paidAmount : 0;
+      return ok({
+        orderId,
+        orderNumber: order.orderNumber,
+        currency: order.currency,
+        refundStatus: refundable > 0 ? "PENDING" : "NONE",
+        refundable,
+        refunded: 0,
+        remaining: refundable,
+        records: [],
+      });
+    },
+
     /** GET /installments/me/orders/{orderId} (BE InstallmentController.myOrder). */
     orderInstallments(orderId: string): MockResult {
       const order = own(orderId);

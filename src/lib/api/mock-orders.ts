@@ -60,6 +60,13 @@ export function registerOrderMockRoutes(
   registerMockRoute("GET", "/orders/me/:orderId", (config) =>
     respond(book.get(pathParams(config).orderId ?? "")),
   );
+  registerMockRoute("GET", "/einvoices/me", () => respond(book.myEInvoices()));
+  registerMockRoute("GET", "/einvoices/me/:id/files/:kind", (config) =>
+    respond(book.myEInvoiceFile(pathParams(config).id ?? "", pathParams(config).kind ?? "PDF")),
+  );
+  registerMockRoute("GET", "/refunds/me/orders/:orderId", (config) =>
+    respond(book.myOrderRefund(pathParams(config).orderId ?? "")),
+  );
   registerMockRoute("GET", "/installments/me", (config) =>
     respond(book.myInstallments(queryParams(config))),
   );

@@ -50,6 +50,9 @@ function fakeBackend() {
       return { data: { roles: ["CUSTOMER"], permissions: [...permissions], dataScope: "OWN" } };
     }
     if (url === "/orders/me") return settle(book.page(config?.params as Record<string, unknown>));
+    if (url === "/einvoices/me") return settle(book.myEInvoices());
+    const refund = /^\/refunds\/me\/orders\/([^/]+)$/.exec(url);
+    if (refund) return settle(book.myOrderRefund(refund[1]!));
     const plan = /^\/installments\/me\/orders\/([^/]+)$/.exec(url);
     if (plan) return settle(book.orderInstallments(plan[1]!));
     const transfer = /^\/installments\/me\/([^/]+)\/transfer-instructions$/.exec(url);
