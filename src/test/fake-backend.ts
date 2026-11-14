@@ -51,6 +51,7 @@ export function fakeBackend(deps: {
     }
     if (orders) {
       if (url === "/orders/payment-terms") return settle(orders().paymentTerms());
+      if (url === "/orders/credit-position/me") return settle(orders().creditPosition());
       if (url === "/orders/me") return settle(orders().page(params));
       if (url === "/installments/me") return settle(orders().myInstallments(params));
       const plan = /^\/installments\/me\/orders\/([^/]+)$/.exec(url);

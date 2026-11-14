@@ -55,6 +55,7 @@ export function registerOrderMockRoutes(
 ): void {
   registerMockRoute("POST", "/orders", (config) => respond(book.place(bodyOf(config) ?? {})));
   registerMockRoute("GET", "/orders/payment-terms", () => respond(book.paymentTerms()));
+  registerMockRoute("GET", "/orders/credit-position/me", () => respond(book.creditPosition()));
   registerMockRoute("GET", "/orders/me", (config) => respond(book.page(queryParams(config))));
   registerMockRoute("GET", "/orders/me/:orderId", (config) =>
     respond(book.get(pathParams(config).orderId ?? "")),

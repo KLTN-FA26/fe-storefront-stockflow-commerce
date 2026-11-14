@@ -5,17 +5,19 @@ import { WalletCards } from "lucide-react";
 import { Alert, Skeleton } from "@/components/shared";
 import { SurfaceCard } from "@/components/storefront/layout";
 import { formatMoney } from "@/lib/format/money";
-import { creditSummary, usePaymentTerms } from "@/lib/payment-terms";
+import { creditSummary, useMyCreditPosition } from "@/lib/credit-position";
+import { formatDate } from "@/lib/format/date";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 
 /**
- * The customer's own credit position on the account page (SFCREDIT): limit, owed, left, the days to
- * pay and a warning while a receivable is overdue. A customer who may order on credit sees it even with
- * a limit of zero; one without credit sees nothing. Nothing is shown while the terms are not loaded.
+ * The customer's own credit position on the account page (SFCREDIT; kltn-docs 15 §4.3, 18 §2): limit,
+ * what the installments paid after delivery still owe, what is left, the days to pay and a warning
+ * while an installment is overdue. Read from GET /orders/credit-position/me. A customer with neither
+ * credit nor anything owed sees nothing; nothing is shown while the position is not loaded.
  */
 export function CreditCard() {
   const signedIn = useSignedIn();
-  const query = usePaymentTerms(signedIn === true);
+  const query = useMyCreditPosition(signedIn === true);
   const credit = query.data ? creditSummary(query.data) : undefined;
 
   if (query.isPending && signedIn === true) {
@@ -23,18 +25,20 @@ export function CreditCard() {
       <Skeleton role="status" aria-label="Đang tải" className="h-40 w-full rounded-[var(--r-lg)]" />
     );
   }
-  // Not loaded: whether credit matters to this customer is unknown, and a prepaid-only customer
-  // must not be shown a credit warning. The checkout reports its own terms error, with a retry.
+  // Not loaded: whether credit matters to this customer is unknown, and a customer without credit
+  // must not be shown a credit warning.
   if (!credit) return null;
 
   const money = (amount: number) => formatMoney(amount, credit.currency);
   const usedPercent =
     credit.limit > 0 ? Math.min(100, Math.round((credit.exposure / credit.limit) * 100)) : 0;
-  const rows = [
-    { label: "Hạn mức", value: money(credit.limit) },
-    { label: "Dư nợ", value: money(credit.exposure) },
-    { label: "Còn lại", value: money(credit.available) },
-  ];
+  const rows = credit.hasCredit
+    ? [
+        { label: "Hạn mức", value: money(credit.limit) },
+        { label: "Dư nợ", value: money(credit.exposure) },
+        { label: "Còn lại", value: money(credit.available) },
+      ]
+    : [{ label: "Dư nợ", value: money(credit.exposure) }];
 
   return (
     <SurfaceCard className="space-y-4">
@@ -62,13 +66,14 @@ export function CreditCard() {
         </div>
       ) : null}
       <p className="text-ink-tertiary text-xs">
-        Dư nợ gồm các đơn công nợ chưa thanh toán đủ, kể cả đơn đã giao.
+        Dư nợ gồm các đợt thanh toán sau giao hàng của hợp đồng đã ký chưa trả đủ (kể cả đợt chưa
+        đến hạn) và phí huỷ đơn chưa thanh toán.
       </p>
-      {credit.limit <= 0 ? (
+      {credit.hasCredit && credit.limit <= 0 ? (
         <div role="status">
           <Alert tone="warning" title="Hạn mức công nợ của bạn là 0 ₫.">
-            Đơn công nợ sẽ chờ duyệt công nợ trước khi được xử lý. Vui lòng liên hệ Sales nếu cần
-            thêm hạn mức.
+            Hợp đồng có đợt thanh toán sau giao hàng sẽ chờ kế toán duyệt công nợ khi ký. Vui lòng
+            liên hệ Sales nếu cần thêm hạn mức.
           </Alert>
         </div>
       ) : null}
@@ -82,7 +87,14 @@ export function CreditCard() {
       {credit.overdue ? (
         <div role="alert">
           <Alert tone="warning" title="Bạn có khoản công nợ quá hạn.">
-            Các đơn công nợ mới sẽ chờ duyệt cho đến khi khoản quá hạn được thanh toán. Vui lòng
+            {credit.overdueAmount > 0
+              ? `Còn ${money(credit.overdueAmount)} quá hạn${
+                  credit.oldestOverdueDueDate
+                    ? ` (sớm nhất từ ${formatDate(credit.oldestOverdueDueDate)})`
+                    : ""
+                }. `
+              : ""}
+            Hợp đồng mới sẽ chờ kế toán duyệt cho đến khi khoản quá hạn được thanh toán. Vui lòng
             liên hệ Sales nếu cần hỗ trợ.
           </Alert>
         </div>
