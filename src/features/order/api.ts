@@ -5,6 +5,7 @@ import {
   cancellationResultDtoSchema,
   orderDtoSchema,
   orderPageDtoSchema,
+  orderVehiclesDtoSchema,
   reorderedQuoteDtoSchema,
 } from "./schemas";
 import type {
@@ -13,6 +14,7 @@ import type {
   MyOrdersParams,
   Order,
   OrderPage,
+  OrderVehicle,
   ReorderedQuote,
 } from "./types";
 
@@ -74,4 +76,21 @@ export async function reorderQuotedOrder(
     requestId,
   });
   return reorderedQuoteDtoSchema.parse(data);
+}
+
+/**
+ * GET /fulfillment/orders/me/{orderId}/vehicles (BE CustomerShippingController, not the order
+ * module: fulfillment holds the vehicles): carrier, waybill, plate, milestones and shipments of each
+ * vehicle that has left with goods of the customer's own order. Empty until the first handover;
+ * another customer's order answers 404 NOT_FOUND.
+ */
+export async function getOrderVehicles(
+  orderId: string,
+  signal?: AbortSignal,
+): Promise<OrderVehicle[]> {
+  const { data } = await api.get<unknown>(
+    `/fulfillment/orders/me/${encodeURIComponent(orderId)}/vehicles`,
+    signal ? { signal } : {},
+  );
+  return orderVehiclesDtoSchema.parse(data);
 }
