@@ -189,6 +189,7 @@ describe("design mock store", () => {
       variant: { sku: CUP12.sku, label: CUP12.sku },
       version: 0,
       projectId: null,
+      project: null,
       sourceSnapshotId: null,
       lastReturn: null,
       previewUrl: null,

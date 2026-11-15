@@ -29,16 +29,60 @@ export function createExclusive() {
   };
 }
 
-/** A snapshot this store can read. */
-function isState(rows: Record<string, unknown>): rows is DesignMockState {
-  const { designs, documents, assets, history, files, seq } = rows;
+/** The collections of part E: a snapshot stored before them lacks them. */
+type LaterCollection =
+  | "projects"
+  | "projectEvents"
+  | "library"
+  | "reviewRounds"
+  | "submissionUploads"
+  | "failNextApproval";
+
+/**
+ * A snapshot this store can read: the state of before design projects (part E) has none of the
+ * later collections and no `seq.project`; `completed` adds them, empty.
+ */
+type StoredState = Omit<DesignMockState, LaterCollection | "seq"> &
+  Partial<Pick<DesignMockState, LaterCollection>> & { seq: { design: number; project?: number } };
+
+const hasSeq = (project: unknown) =>
+  typeof project === "object" &&
+  project !== null &&
+  typeof (project as { seq?: unknown }).seq === "number";
+
+function isState(rows: Record<string, unknown>): rows is StoredState {
+  const { designs, documents, assets, history, files, seq, projects, projectEvents, library } =
+    rows;
   return (
     [designs, assets, history, files].every(Array.isArray) &&
+    (projects === undefined || Array.isArray(projects)) &&
+    (projectEvents === undefined || Array.isArray(projectEvents)) &&
+    (library === undefined || Array.isArray(library)) &&
+    (rows.reviewRounds === undefined || Array.isArray(rows.reviewRounds)) &&
+    (rows.submissionUploads === undefined || Array.isArray(rows.submissionUploads)) &&
+    (rows.failNextApproval === undefined || Array.isArray(rows.failNextApproval)) &&
+    (projects === undefined || projects.every(hasSeq)) &&
     typeof documents === "object" &&
     documents !== null &&
     typeof seq === "object" &&
     seq !== null
   );
+}
+
+/** The stored state with the collections of later parts present: empty when it predates them. */
+function completed(stored: StoredState): DesignMockState {
+  const projects = stored.projects ?? [];
+  const projectSeq = Math.max(stored.seq.project ?? 0, ...projects.map((project) => project.seq));
+  return {
+    ...stored,
+    projects,
+    projectEvents: stored.projectEvents ?? [],
+    library: stored.library ?? [],
+    reviewRounds: stored.reviewRounds ?? [],
+    submissionUploads: stored.submissionUploads ?? [],
+    failNextApproval: stored.failNextApproval ?? [],
+    seq: { ...stored.seq, project: projectSeq },
+  };
 }
 
 /** The stored state; `null` when the storage is empty; `"unreadable"` (logged) otherwise. */
@@ -56,7 +100,7 @@ export async function loadState(
     return "unreadable";
   }
   if (snapshot === null) return null;
-  if (isState(snapshot.rows)) return snapshot.rows;
+  if (isState(snapshot.rows)) return completed(snapshot.rows);
   console.error(
     "[mock-design] The stored design mock data has a shape this version does not know; nothing was changed. Reset the mock (POST /__mock/reset) to start again.",
     snapshot.rows,

@@ -340,7 +340,20 @@ export async function seedDesignState(
   );
 
   return {
-    state: { designs, documents, assets: [logo], history, files, seq: { design: designs.length } },
+    state: {
+      designs,
+      documents,
+      assets: [logo],
+      history,
+      files,
+      projects: [],
+      projectEvents: [],
+      library: [],
+      reviewRounds: [],
+      submissionUploads: [],
+      failNextApproval: [],
+      seq: { design: designs.length, project: 0 },
+    },
     blobs,
   };
 }

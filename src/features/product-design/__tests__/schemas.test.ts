@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import { cup12oz } from "../engine/__tests__/fixtures";
@@ -161,6 +161,77 @@ describe("print configuration (spec §4.1 PrintConfigDto)", () => {
   it("refuses a variant status outside ACTIVE / BLOCKED / OBSOLETE", () => {
     expect(printConfigDtoSchema.parse(printConfigDto({ variantStatus: "BLOCKED" }))).toBeTruthy();
     refuses(printConfigDtoSchema, printConfigDto({ variantStatus: "DRAFT" }));
+  });
+
+  describe("model3d (the .glb link): a bad one is dropped, never blocks the config", () => {
+    const model3d = {
+      url: "/models/cup.glb",
+      surfaces: [{ printAreaCode: "BODY", meshName: "print:BODY" }],
+    };
+    const without = () => printConfigDtoSchema.parse(printConfigDto());
+    const warn = vi.spyOn(console, "warn");
+
+    beforeEach(() => warn.mockReset().mockImplementation(() => undefined));
+    afterAll(() => warn.mockRestore());
+
+    /** Parses with the bad link: it becomes null, one warning, the rest equals the payload without it. */
+    const degrades = (bad: unknown) => {
+      const config = printConfigDtoSchema.parse(printConfigDto({ model3d: bad }));
+      expect(config.model3d).toBeNull();
+      expect(config).toEqual(without());
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]?.[0])).toContain("model3d");
+    };
+
+    it("is null when the key is missing, without a warning", () => {
+      expect(without().model3d).toBeNull();
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("keeps an explicit null, without a warning", () => {
+      expect(printConfigDtoSchema.parse(printConfigDto({ model3d: null })).model3d).toBeNull();
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("keeps a valid link, without a warning", () => {
+      expect(printConfigDtoSchema.parse(printConfigDto({ model3d })).model3d).toEqual(model3d);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("drops a print area code that is not one of the template's", () => {
+      degrades({ ...model3d, surfaces: [{ printAreaCode: "FRONT", meshName: "print:FRONT" }] });
+    });
+
+    it("drops a link that leaves a print area of the template unmapped", () => {
+      const front = { ...cup12oz.printAreas[0], code: "FRONT", name: "Front" };
+      const template = { ...cup12oz, printAreas: [...cup12oz.printAreas, front] };
+      const config = printConfigDtoSchema.parse(printConfigDto({ template, model3d }));
+      expect(config.model3d).toBeNull();
+      expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it("drops a repeated print area code", () => {
+      degrades({ ...model3d, surfaces: [...model3d.surfaces, ...model3d.surfaces] });
+    });
+
+    it("drops an empty mesh name", () => {
+      degrades({ ...model3d, surfaces: [{ printAreaCode: "BODY", meshName: "" }] });
+    });
+
+    it("drops a mesh name other than print: plus the print area code", () => {
+      degrades({ ...model3d, surfaces: [{ printAreaCode: "BODY", meshName: "body" }] });
+    });
+
+    it("drops a link of the wrong shape", () => {
+      degrades({ url: "", surfaces: [] });
+      warn.mockClear();
+      degrades("cup.glb");
+    });
+
+    it("still throws for an error anywhere else, with or without a model3d", () => {
+      refuses(printConfigDtoSchema, printConfigDto({ variantStatus: "DRAFT", model3d }));
+      refuses(printConfigDtoSchema, printConfigDto({ variantStatus: "DRAFT", model3d: 7 }));
+    });
   });
 });
 

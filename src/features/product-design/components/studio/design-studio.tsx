@@ -14,6 +14,7 @@ import type { Design } from "../../types";
 import { LauncherFrame, LauncherSignIn } from "../launcher-states";
 import type { ExportRenderer } from "./export-renderer";
 import type { StudioServices } from "./studio-context";
+import { STUDIO_LOAD_MESSAGES } from "./studio-kit";
 import { StudioSkeleton } from "./studio-skeleton";
 import { StudioLoadError, StudioNotFound } from "./studio-states";
 import { StudioWorkspace } from "./studio-workspace";
@@ -36,9 +37,6 @@ const isUnreadableAddress = (error: unknown) => error instanceof ApiError && err
 const DESIGN_ID = beId();
 /** Design ids are UUIDs: anything else (a mistyped or cut-off link) names no design. */
 const isDesignId = (id: string) => DESIGN_ID.safeParse(id).success;
-
-/** A design's variant that lost its print configuration cannot be opened (catalog BR-14). */
-const NO_PRINT_CONFIG = "Quy cách này chưa nhận thiết kế.";
 
 /**
  * `/design/[id]`: signed-in customers only (ruling R18) — a visitor gets the launcher's sign-in
@@ -119,9 +117,9 @@ function LoadedDesignStudio({
     );
   }
   // Retrying cannot help: the variant has no print configuration until the warehouse adds one.
-  if (config === null) return <StudioLoadError message={NO_PRINT_CONFIG} />;
+  if (config === null) return <StudioLoadError message={STUDIO_LOAD_MESSAGES.noPrintConfig} />;
   if (config?.template.model.kind === "gltf") {
-    return <StudioLoadError message="Mẫu 3D của sản phẩm này chưa được hỗ trợ." />;
+    return <StudioLoadError message={STUDIO_LOAD_MESSAGES.model3d} />;
   }
   return <StudioSkeleton />;
 }

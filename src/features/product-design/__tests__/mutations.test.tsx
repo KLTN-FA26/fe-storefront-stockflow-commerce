@@ -15,7 +15,7 @@ import {
   useSaveDesignDocument,
   useUploadAsset,
 } from "../mutations";
-import { designKeys, designQuery } from "../queries";
+import { designKeys, designQuery, projectKeys } from "../queries";
 import type { Design } from "../types";
 import {
   approvedDto,
@@ -79,6 +79,7 @@ describe("create and revision (spec §4.4: lists, draftCount)", () => {
     expect(invalidated(invalidate)).toEqual([
       { queryKey: designKeys.lists() },
       { queryKey: designKeys.draftCount() },
+      { queryKey: projectKeys.all },
     ]);
   });
 });
@@ -98,7 +99,10 @@ describe("useRenameDesign (spec §4.4: detail, lists)", () => {
       version: 4,
     });
     // The answer is the fresh design: no refetch that could land with an older version.
-    expect(invalidated(invalidate)).toEqual([{ queryKey: designKeys.lists() }]);
+    expect(invalidated(invalidate)).toEqual([
+      { queryKey: designKeys.lists() },
+      { queryKey: projectKeys.all },
+    ]);
   });
 
   it("keeps the cached document's version in step: the rename moved the shared version on", async () => {
@@ -162,6 +166,18 @@ describe("useSaveDesignDocument (spec §4.4: detail version, lists updatedAt)", 
       updatedAt: "2026-11-02T09:00:00Z",
     });
     expect(invalidated(invalidate)).toEqual([{ queryKey: designKeys.lists() }]);
+  });
+
+  it("marks the project's designs stale when the design belongs to a project, without waiting", async () => {
+    vi.spyOn(api, "put").mockResolvedValueOnce({ data: documentRecordDto({ version: 4 }) });
+    const { client, invalidate, wrapper } = setup();
+    client.setQueryData(designKeys.detail(id), design({ projectId: ids.project }));
+    const { result } = renderHook(() => useSaveDesignDocument(id), { wrapper });
+
+    result.current.mutate({ version: 3, document: cupDocument() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(invalidated(invalidate)).toContainEqual({ queryKey: projectKeys.designs(ids.project) });
   });
 
   it("does not invent a design in the cache when it holds none", async () => {
@@ -322,6 +338,7 @@ describe("useDeleteDesign (spec §4.4: lists, draftCount; removes detail)", () =
     expect(invalidated(invalidate)).toEqual([
       { queryKey: designKeys.lists() },
       { queryKey: designKeys.draftCount() },
+      { queryKey: projectKeys.all },
     ]);
   });
 
@@ -357,6 +374,7 @@ describe("useDeleteDesign (spec §4.4: lists, draftCount; removes detail)", () =
     expect(invalidated(invalidate)).toEqual([
       { queryKey: designKeys.lists() },
       { queryKey: designKeys.draftCount() },
+      { queryKey: projectKeys.all },
     ]);
   });
 });
@@ -374,6 +392,7 @@ describe("invalidateDesign (spec §4.4: submit, simulated approve / return)", ()
       { queryKey: designKeys.files(id) },
       { queryKey: designKeys.lists() },
       { queryKey: designKeys.draftCount() },
+      { queryKey: projectKeys.all },
     ]);
   });
 });

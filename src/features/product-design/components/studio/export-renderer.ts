@@ -36,7 +36,7 @@ export type ExportRenderer = {
    * else a short-lived offscreen one when the preview fell back to its flat view), else, where there
    * is no WebGL, the flat front.
    */
-  preview(size: number): Promise<Uint8Array>;
+  preview(size: number, signal?: AbortSignal): Promise<Uint8Array>;
   /**
    * One print area over its bleed box at `pxPerMm`, with every image at full resolution: its
    * bands, top to bottom (one, unless the page is more than a canvas may hold).
@@ -113,7 +113,7 @@ export function createCanvasExportRenderer(deps: RendererDeps): ExportRenderer {
   }
 
   return {
-    preview: (size) => exportPreview(deps, size),
+    preview: (size, signal) => exportPreview(deps, size, signal),
 
     async printSurface(code, doc, pxPerMm) {
       const surface = surfaces.byCode[code];

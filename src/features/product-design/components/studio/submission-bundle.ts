@@ -40,11 +40,15 @@ export async function buildSubmissionBundle(input: {
   checksum: string;
   renderer: ExportRenderer;
   onStep?: (step: BundleStep, fraction: number) => void;
+  /** "Hủy": ends the preview's wait for the 3D model at once (rejects with the signal's reason). */
+  signal?: AbortSignal;
 }): Promise<SubmissionBundle> {
-  const { name, document, template, surfaces, report, checksum, renderer, onStep } = input;
+  const { name, document, template, surfaces, report, checksum, renderer, onStep, signal } = input;
 
   onStep?.("preview", 0);
-  const preview = await renderer.preview(PREVIEW_PX);
+  const preview = await (signal
+    ? renderer.preview(PREVIEW_PX, signal)
+    : renderer.preview(PREVIEW_PX));
 
   onStep?.("print", 0);
   const pxPerMm = mmToPx(1, printDpi(template.minDpi));

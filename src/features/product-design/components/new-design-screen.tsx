@@ -1,9 +1,10 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
 
 import { STORE_ROUTES } from "@/constants";
+import { hasErrorCode } from "@/lib/api/describe-error";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 
 import { describeDesignError } from "../errors";
@@ -28,6 +29,9 @@ import {
  */
 export function NewDesignScreen({ product, sku }: { product: string; sku: string }) {
   const { replace } = useRouter();
+  // `?project=` makes the new design join that project (a project page's "Tạo bản mới"); the route
+  // reads only `product` and `sku`, so the screen reads this one itself.
+  const projectId = useSearchParams()?.get("project")?.trim() || undefined;
   const signedIn = useSignedIn();
   const config = usePrintConfig(product, sku, signedIn === true);
   const printable = config.data && isPrintConfigUsable(config.data) ? config.data : null;
@@ -44,7 +48,7 @@ export function NewDesignScreen({ product, sku }: { product: string; sku: string
     };
   }, []);
 
-  const key = `${product}+${sku}`;
+  const key = `${product}+${sku}+${projectId ?? ""}`;
   const limit = count.data?.limit;
   const full = count.data !== undefined && count.data.drafts >= count.data.limit;
   const { mutateAsync } = create;
@@ -56,7 +60,7 @@ export function NewDesignScreen({ product, sku }: { product: string; sku: string
     (force: boolean) => {
       if (name === null) return;
       if (!force && attempt.current?.key === key) return;
-      const promise = mutateAsync({ productSlug: product, sku, name });
+      const promise = mutateAsync({ productSlug: product, sku, name, projectId });
       attempt.current = { key, promise };
       promise.then(
         (design) => {
@@ -65,7 +69,7 @@ export function NewDesignScreen({ product, sku }: { product: string; sku: string
         () => undefined, // shown from the mutation's error, with a retry
       );
     },
-    [key, name, mutateAsync, product, sku, replace],
+    [key, name, mutateAsync, product, sku, projectId, replace],
   );
 
   useEffect(() => {
@@ -78,18 +82,26 @@ export function NewDesignScreen({ product, sku }: { product: string; sku: string
   const countFailed = count.isError && count.data === undefined;
   const body = (() => {
     if (signedIn === undefined) return <LauncherLoading label="Đang chuẩn bị thiết kế…" />;
-    if (!signedIn) return <LauncherSignIn from={STORE_ROUTES.design.newFor(product, sku)} />;
+    if (!signedIn)
+      return <LauncherSignIn from={STORE_ROUTES.design.newFor(product, sku, projectId)} />;
     if (create.isError || (create.isIdle && (configFailed || countFailed))) {
       const retry = create.isError
         ? () => start(true)
         : () => void (configFailed ? config.refetch() : count.refetch());
+      // The project refused the design (full, closed): trying again cannot help, the page can.
+      const refused =
+        create.isError &&
+        projectId !== undefined &&
+        (hasErrorCode(create.error, "PROJECT_FULL") ||
+          hasErrorCode(create.error, "PROJECT_ARCHIVED"));
       return (
         <LauncherError
           title="Không bắt đầu được thiết kế"
           message={describeDesignError(create.error ?? (configFailed ? config.error : count.error))}
-          onRetry={retry}
+          {...(refused ? {} : { onRetry: retry })}
           retrying={create.isPending || config.isFetching || count.isFetching}
-          backHref={productHref}
+          backHref={refused ? STORE_ROUTES.design.project(projectId) : productHref}
+          {...(refused ? { backLabel: "Về dự án" } : {})}
         />
       );
     }

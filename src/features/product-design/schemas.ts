@@ -4,6 +4,7 @@ import { pageResponseSchema } from "@/lib/api/page-response";
 import { beId } from "@/lib/validation/primitives";
 
 import { designDocumentSchema } from "./engine/document/schema";
+import { type Model3dRef, model3dRefSchema } from "./engine/model3d/schema";
 import type { PreflightRuleId } from "./engine/preflight/types";
 import { customizationTemplateSchema, printAreaCodeSchema } from "./engine/template/schema";
 
@@ -26,6 +27,9 @@ const code = z.string().min(1);
 const NAME_MAX = 200;
 const REASON_MAX = 2000;
 
+/** docs 12 §5.4 (spec 2026-11-12 §3): a project is open, or closed for good. */
+export const projectStatusSchema = z.enum(["ACTIVE", "ARCHIVED"]);
+
 /** GET /designs/{id} and every write that answers the design. */
 export const designDtoSchema = z.object({
   id: beId(),
@@ -35,7 +39,11 @@ export const designDtoSchema = z.object({
   variant: z.object({ sku: code, label: z.string().min(1) }),
   /** The optimistic-lock token every write echoes back (docs 12 BR-11). */
   version,
-  projectId: beId().nullable(), // part E; always null in part A
+  projectId: beId().nullable(),
+  /** The project's name and status, for the studio header and the card label (part E). */
+  project: z
+    .object({ id: beId(), name: z.string().min(1), status: projectStatusSchema })
+    .nullable(),
   sourceSnapshotId: beId().nullable(),
   lastReturn: z
     .object({ reason: z.string().min(1).max(REASON_MAX), returnedAt: instant })
@@ -67,6 +75,8 @@ export const designEventTypeSchema = z.enum([
   "RETURNED",
   "APPROVED",
   "ARCHIVED",
+  "ADDED_TO_PROJECT", // part E: the note is the project's name
+  "REMOVED_FROM_PROJECT",
 ]);
 
 /** GET /designs/{id}/history rows, oldest first. */
@@ -114,23 +124,83 @@ export const designFileDtoSchema = z.object({
   url: z.string().min(1),
 });
 
+/** The link when it is valid by its own shape and against the template, else `null` plus a warning. */
+function usableModel3d(config: {
+  sku: string;
+  template: z.infer<typeof customizationTemplateSchema>;
+  model3d?: unknown;
+}): Model3dRef | null {
+  if (config.model3d === undefined || config.model3d === null) return null;
+  const parsed = model3dRefSchema.safeParse(config.model3d);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    warnIgnored(config, issue?.path ?? [], issue?.message ?? "invalid");
+    return null;
+  }
+  const problem = templateProblem(parsed.data, config.template);
+  if (problem === null) return parsed.data;
+  warnIgnored(config, problem.path, problem.message);
+  return null;
+}
+
+type Problem = { path: PropertyKey[]; message: string };
+
+/** Every print area of the template has one entry, and every entry is a print area of it. */
+function templateProblem(
+  ref: Model3dRef,
+  template: z.infer<typeof customizationTemplateSchema>,
+): Problem | null {
+  const codes = new Set<string>(template.printAreas.map((area) => area.code));
+  const foreign = ref.surfaces.findIndex((surface) => !codes.has(surface.printAreaCode));
+  if (foreign >= 0) {
+    return {
+      path: ["surfaces", foreign, "printAreaCode"],
+      message: `The template has no print area ${ref.surfaces[foreign]?.printAreaCode}`,
+    };
+  }
+  const mapped = new Set<string>(ref.surfaces.map((surface) => surface.printAreaCode));
+  const missing = [...codes].find((code) => !mapped.has(code));
+  return missing === undefined
+    ? null
+    : { path: ["surfaces"], message: `Print area ${missing} has no mesh` };
+}
+
+function warnIgnored(
+  config: { sku: string; template: { code: string } },
+  path: PropertyKey[],
+  message: string,
+): void {
+  console.warn(
+    `Print configuration ${config.template.code} (${config.sku}): model3d ignored, the code-built model is used. ${["model3d", ...path.map(String)].join(".")}: ${message}`,
+  );
+}
+
 /**
  * GET /catalog/products/{slug}/variants/{sku}/print-config. File formats are lowercase MIME types,
  * as the engine's template wants them (docs open-questions B34: 300 DPI, PNG/JPG, 50 MB).
  */
-export const printConfigDtoSchema = z.object({
-  sku: code,
-  product: z.object({ slug: code, title: z.string().min(1), status: code }),
-  variantStatus: z.enum(["ACTIVE", "BLOCKED", "OBSOLETE"]),
-  /** docs 12 BR-05, B25: needed before submitting. */
-  hasCartonSpec: z.boolean(),
-  template: customizationTemplateSchema,
-  fileRules: z.object({
-    minDpi: z.number().positive(),
-    formats: z.array(z.string().min(1)).min(1),
-    maxFileSizeMb: z.number().positive(),
-  }),
-});
+export const printConfigDtoSchema = z
+  .object({
+    sku: code,
+    product: z.object({ slug: code, title: z.string().min(1), status: code }),
+    variantStatus: z.enum(["ACTIVE", "BLOCKED", "OBSOLETE"]),
+    /** docs 12 BR-05, B25: needed before submitting. */
+    hasCartonSpec: z.boolean(),
+    template: customizationTemplateSchema,
+    /**
+     * The `.glb` beside the template's numbers (spec 2026-11-13 §3). Read as `unknown` and checked
+     * in the transform below, where the template is known.
+     */
+    model3d: z.unknown().optional(),
+    fileRules: z.object({
+      minDpi: z.number().positive(),
+      formats: z.array(z.string().min(1)).min(1),
+      maxFileSizeMb: z.number().positive(),
+    }),
+  })
+  // A bad `.glb` link never blocks the config (spec 2026-11-13 §8): it becomes `null` and one
+  // warning says why. Everything else in the object stays strict.
+  .transform((config) => ({ ...config, model3d: usableModel3d(config) }));
 
 /** Every engine rule, once: adding a rule to `PreflightRuleId` fails here until it is listed. */
 const PREFLIGHT_RULE_IDS = {
@@ -184,6 +254,27 @@ export const createDesignInputSchema = z.object({
   productSlug: z.string().trim().min(1),
   sku: z.string().trim().min(1),
   name: designName,
+  /** Part E: the design starts inside this project (the same checks as adding one). */
+  projectId: beId().optional(),
+});
+
+/**
+ * POST /designs/{id}/clones: the design's document re-fitted to the other variant's print areas
+ * (`retargetDocument`). The server makes the draft, copies the images the document uses and points
+ * the copy at them (spec 2026-11-12 §4, §7).
+ */
+export const cloneDesignInputSchema = z.object({
+  variantSku: z.string().trim().min(1),
+  document: designDocumentSchema,
+});
+
+/** Why a clone did not join the project of its source (ASSUMPTION A-E3); the other cases join, or have none. */
+export const notInProjectReasonSchema = z.enum(["PROJECT_ARCHIVED", "PROJECT_FULL"]);
+
+/** The answer of a clone: the new draft, and why it is in no project when its source had one. */
+export const cloneResultDtoSchema = z.object({
+  design: designDtoSchema,
+  notInProject: notInProjectReasonSchema.nullable(),
 });
 
 /** PATCH /designs/{id}: the name field (the version travels beside it). */

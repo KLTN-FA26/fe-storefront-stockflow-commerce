@@ -1,6 +1,7 @@
 /**
  * The customer's designs in the design mock (spec 2026-11-09 §4.1, §4.5): create, read, rename,
- * record a preflight refusal, delete, and derive a revision. The document record is
+ * record a preflight refusal, delete, and derive a revision. A design may start in a project
+ * (`design-store-projects.ts`). The document record is
  * `design-store-documents.ts`. Each runs as an operation of `design-store.ts`, over the shared
  * `StoreContext`.
  */
@@ -23,46 +24,53 @@ import {
   issuesNote,
   notFound,
   ok,
+  projectNotFound,
   toEventDto,
   versionConflict,
   type DesignRow,
   type MockResult,
 } from "./design-rows";
+import { joinProject, joinRefusal } from "./design-store-projects";
 import type { StoreContext } from "./design-store-context";
 import type { DesignFiles } from "./design-store-files";
 
-export function createDesignOps(ctx: StoreContext, files: DesignFiles) {
-  function newDraft(
-    from: Pick<DesignRow, "product" | "variant">,
-    name: string,
-    sourceSnapshotId: string | null,
-    at: string,
-  ): DesignRow {
-    const state = ctx.state();
-    state.seq.design += 1;
-    const row: DesignRow = {
-      id: ctx.newId(),
-      seq: state.seq.design,
-      name,
-      status: "DRAFT",
-      product: { slug: from.product.slug, title: from.product.title },
-      variant: { sku: from.variant.sku, label: from.variant.label },
-      version: 0,
-      projectId: null, // part E
-      sourceSnapshotId,
-      lastReturn: null,
-      createdAt: at,
-      updatedAt: at,
-      submittedAt: null,
-      approvedAt: null,
-      approval: null,
-    };
-    state.designs.push(row);
-    return row;
-  }
+/** A new DRAFT row (version 0, no project) in the state; the caller records its first event. */
+export function newDraft(
+  ctx: StoreContext,
+  from: Pick<DesignRow, "product" | "variant">,
+  name: string,
+  sourceSnapshotId: string | null,
+  at: string,
+): DesignRow {
+  const state = ctx.state();
+  state.seq.design += 1;
+  const row: DesignRow = {
+    id: ctx.newId(),
+    seq: state.seq.design,
+    name,
+    status: "DRAFT",
+    product: { slug: from.product.slug, title: from.product.title },
+    variant: { sku: from.variant.sku, label: from.variant.label },
+    version: 0,
+    projectId: null, // joined by `joinProject` (design-store-projects.ts)
+    sourceSnapshotId,
+    lastReturn: null,
+    createdAt: at,
+    updatedAt: at,
+    submittedAt: null,
+    approvedAt: null,
+    approval: null,
+  };
+  state.designs.push(row);
+  return row;
+}
 
+export function createDesignOps(ctx: StoreContext, files: DesignFiles) {
   return {
-    /** POST /designs `{ productSlug, sku, name }` — a DRAFT with the template's empty document. */
+    /**
+     * POST /designs `{ productSlug, sku, name, projectId? }` — a DRAFT with the template's empty
+     * document, in the project when one is given (the checks of adding a design to it, BR-17).
+     */
     async create(body: unknown): Promise<MockResult> {
       const input = asRecord(body);
       const productSlug = typeof input.productSlug === "string" ? input.productSlug.trim() : "";
@@ -80,12 +88,23 @@ export function createDesignOps(ctx: StoreContext, files: DesignFiles) {
       if (!isUsable(config)) {
         return fail(422, "VARIANT_UNAVAILABLE", "This variant no longer takes designs");
       }
+      let project;
+      if (input.projectId !== undefined && input.projectId !== null) {
+        if (typeof input.projectId !== "string" || !input.projectId.trim()) {
+          return invalid("projectId", "projectId must be a project's id");
+        }
+        project = ctx.findProject(input.projectId);
+        if (!project) return projectNotFound();
+        const refused = joinRefusal(ctx, project);
+        if (refused) return refused;
+      }
       if (ctx.drafts() >= DRAFT_LIMIT) return draftLimit();
       const document = emptyDocument(config.template);
       const checksum = await documentChecksum(document);
 
       const at = ctx.stamp();
       const row = newDraft(
+        ctx,
         { product: config.product, variant: { sku: config.sku, label: config.sku } },
         name.text,
         null,
@@ -93,6 +112,7 @@ export function createDesignOps(ctx: StoreContext, files: DesignFiles) {
       );
       ctx.state().documents[row.id] = { designId: row.id, document, checksum, updatedAt: at };
       ctx.record(row, "CREATED", null, 0, at);
+      if (project) joinProject(ctx, row, project);
       await ctx.persist();
       return ok(await files.toDto(row), 201);
     },
@@ -160,6 +180,9 @@ export function createDesignOps(ctx: StoreContext, files: DesignFiles) {
       if (row.version !== version) return versionConflict();
       row.status = "ARCHIVED";
       ctx.advance(row, "ARCHIVED", null);
+      // A member draft leaving changes its project's count: the project's list order follows.
+      const home = row.projectId === null ? undefined : ctx.findProject(row.projectId);
+      if (home) home.updatedAt = row.updatedAt;
       await ctx.persist();
       return ok(await files.toDto(row));
     },
@@ -178,7 +201,7 @@ export function createDesignOps(ctx: StoreContext, files: DesignFiles) {
       const state = ctx.state();
       const at = ctx.stamp();
       const { snapshotId } = source.approval;
-      const row = newDraft(source, source.name, snapshotId, at);
+      const row = newDraft(ctx, source, source.name, snapshotId, at);
       const { document, checksum } = state.documents[source.id]!;
       state.documents[row.id] = {
         designId: row.id,
@@ -191,6 +214,12 @@ export function createDesignOps(ctx: StoreContext, files: DesignFiles) {
         .map((asset) => ({ ...asset, designId: row.id, uploadKey: null }));
       state.assets.push(...copies);
       ctx.record(row, "DERIVED_FROM_SNAPSHOT", snapshotId, 0, at);
+      // BR-22: a revision of a design of a closed project belongs to none. ASSUMPTION (A-E3,
+      // as for a clone): in an ACTIVE project it joins while there is room; of a full project it
+      // belongs to none, and unlike a clone's the customer is not told (a revision opens its own
+      // draft at once, where the studio header shows the project, or none).
+      const home = source.projectId === null ? undefined : ctx.findProject(source.projectId);
+      if (home && !joinRefusal(ctx, home)) joinProject(ctx, row, home);
       await ctx.persist();
       return ok(await files.toDto(row), 201);
     },

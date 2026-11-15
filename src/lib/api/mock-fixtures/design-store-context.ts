@@ -6,7 +6,14 @@
  */
 
 import { printConfigFor, type PrintConfigRow } from "./design-print-configs";
-import type { DesignMockState, DesignRow, EventRow } from "./design-rows";
+import type {
+  DesignMockState,
+  DesignRow,
+  EventRow,
+  ProjectEventRow,
+  ProjectRow,
+  ReviewRoundRow,
+} from "./design-rows";
 import type { DesignMockStorage } from "./design-storage";
 
 export interface DesignMockDeps {
@@ -97,6 +104,57 @@ export function createStoreContext(deps: DesignMockDeps) {
 
     record,
     touch,
+
+    /** A project of the caller, whatever its status (a closed one is read-only, not hidden). */
+    findProject: (id: string) => state.projects.find((project) => project.id === id),
+    /** The designs of a project that count: ARCHIVED ones do not. */
+    designsOf: (project: ProjectRow) =>
+      state.designs.filter((d) => d.projectId === project.id && d.status !== "ARCHIVED"),
+    recordProject(
+      project: ProjectRow,
+      type: ProjectEventRow["type"],
+      note: string | null,
+      at = stamp(),
+    ): ProjectEventRow {
+      const event: ProjectEventRow = {
+        projectId: project.id,
+        type,
+        at,
+        version: project.version,
+        note,
+      };
+      state.projectEvents.push(event);
+      return event;
+    },
+
+    /** The design waits in `round`: PENDING_REVIEW, and its latest submission is that round's. */
+    waitsIn(round: ReviewRoundRow, design: DesignRow | undefined): boolean {
+      if (!design || design.status !== "PENDING_REVIEW") return false;
+      const submitted = state.history.filter(
+        (event) => event.designId === design.id && event.type === "SUBMITTED_FOR_REVIEW",
+      );
+      return submitted.at(-1)?.note === round.id;
+    },
+
+    /**
+     * What the reviewer decided about `designId` in `round`: the first approval or return after
+     * the design was sent in that round (docs 12 §5.4). Null while it has no decision there.
+     */
+    decisionIn(
+      round: ReviewRoundRow,
+      designId: string,
+    ): { type: "APPROVED" | "RETURNED"; note: string | null } | null {
+      const events = state.history.filter((event) => event.designId === designId);
+      const sent = events.findIndex(
+        (event) => event.type === "SUBMITTED_FOR_REVIEW" && event.note === round.id,
+      );
+      if (sent < 0) return null;
+      const decided = events
+        .slice(sent + 1)
+        .find((event) => event.type === "APPROVED" || event.type === "RETURNED");
+      return decided ? { type: decided.type as "APPROVED" | "RETURNED", note: decided.note } : null;
+    },
+
     /** Version + 1 and `updatedAt`, then the event at that version. */
     advance(row: DesignRow, type: EventRow["type"], note: string | null) {
       touch(row);

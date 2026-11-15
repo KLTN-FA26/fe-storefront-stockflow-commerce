@@ -4,6 +4,29 @@
 // design in another status 409 INVALID_STATE.
 
 export {
+  deleteLibraryItem,
+  listProjectLibrary,
+  placeFromLibrary,
+  saveImageToLibrary,
+  saveTextStyle,
+  uploadLibraryImage,
+} from "./api-library";
+export {
+  addDesignToProject,
+  archiveProject,
+  createProject,
+  getProject,
+  getProjectHistory,
+  listProjectDesigns,
+  listProjects,
+  openReviewRound,
+  recordSetPreflightFailure,
+  removeDesignFromProject,
+  updateProject,
+  uploadSubmission,
+} from "./api-projects";
+export {
+  cloneDesign,
   createDesign,
   createRevision,
   deleteDesign,

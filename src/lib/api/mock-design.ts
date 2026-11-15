@@ -1,7 +1,8 @@
 /**
- * Mock routes of Module 12 (spec 2026-11-09 §4.2, §4.3): the docs' design API, served by the store
- * of `mock-fixtures/design-store.ts`, and the reviewer simulation under `/__mock`. Responses use
- * the ApiResponse envelope; the mock adapter turns error statuses into ApiError.
+ * Mock routes of Module 12 (spec 2026-11-09 §4.2, §4.3; projects: part E spec §4): the docs'
+ * design API, served by the store of `mock-fixtures/design-store.ts`, and the reviewer simulation
+ * under `/__mock`. Responses use the ApiResponse envelope; the mock adapter turns error statuses
+ * into ApiError.
  * The first matching pattern wins, so `/designs/draft-count` is registered before `/designs/:id`.
  */
 
@@ -18,6 +19,7 @@ import {
 } from "./mock-fixtures/design-rows";
 import { openDesignStorage } from "./mock-fixtures/design-storage";
 import { createDesignMockStore, type DesignMockStore } from "./mock-fixtures/design-store";
+import type { BundleForm } from "./mock-fixtures/design-store-files";
 import type { DesignSubmission } from "./mock-fixtures/design-store-submission";
 
 const respond = (result: MockResult) => ({ status: result.status, data: result.data, headers: {} });
@@ -84,20 +86,24 @@ const textPart = (form: FormData | undefined, name: string) => {
   return typeof part === "string" ? part : undefined;
 };
 
-/** The multipart parts of a submission: `version`, `preflight`, `checksums` and one file per role. */
-function submissionOf(config: AxiosRequestConfig): DesignSubmission {
-  const form = formOf(config);
-  const version = textPart(form, "version");
+/** The files of a bundle (one part per role) and their `checksums`, as a multipart sends them. */
+function bundleOf(form: FormData | undefined): BundleForm {
   const files: Partial<Record<BundleRole, Blob>> = {};
   for (const role of BUNDLE_ROLES) {
     const file = blobPart(form, role);
     if (file) files[role] = file;
   }
+  return { checksums: parseJson(textPart(form, "checksums")), files };
+}
+
+/** The multipart parts of a submission: `version`, `preflight`, `checksums` and one file per role. */
+function submissionOf(config: AxiosRequestConfig): DesignSubmission {
+  const form = formOf(config);
+  const version = textPart(form, "version");
   return {
     version: version === undefined || version.trim() === "" ? undefined : Number(version),
     preflight: parseJson(textPart(form, "preflight")),
-    checksums: parseJson(textPart(form, "checksums")),
-    files,
+    ...bundleOf(form),
   };
 }
 
@@ -161,6 +167,47 @@ export function registerDesignMockRoutes(store: DesignMockStore | Promise<Design
   route("GET", "/designs/:id/document", (s, config) => s.getDocument(id(config)));
   route("PUT", "/designs/:id/document", (s, config) => s.putDocument(id(config), bodyOf(config)));
 
+  /* ── Projects (part E spec §4) ── */
+
+  route("GET", "/design-projects", (s, config) => s.listProjects(queryParams(config)));
+  route("POST", "/design-projects", (s, config) => s.createProject(bodyOf(config)));
+  route("GET", "/design-projects/:id", (s, config) => s.getProject(id(config)));
+  route("PATCH", "/design-projects/:id", (s, config) =>
+    s.updateProject(id(config), bodyOf(config)),
+  );
+  route("POST", "/design-projects/:id/archive", (s, config) =>
+    s.archiveProject(id(config), bodyOf(config)),
+  );
+  route("GET", "/design-projects/:id/designs", (s, config) => s.projectDesigns(id(config)));
+  route("POST", "/design-projects/:id/designs", (s, config) =>
+    s.addToProject(id(config), bodyOf(config)),
+  );
+  route("DELETE", "/design-projects/:id/designs/:designId", (s, config) =>
+    s.removeFromProject(id(config), param(config, "designId")),
+  );
+  route("GET", "/design-projects/:id/history", (s, config) => s.projectHistory(id(config)));
+  route("POST", "/design-projects/:id/review-rounds", (s, config) =>
+    s.openReviewRound(id(config), bodyOf(config)),
+  );
+  route("POST", "/design-projects/:id/preflight-failures", (s, config) =>
+    s.recordSetPreflightFailure(id(config), bodyOf(config)),
+  );
+  route("GET", "/design-projects/:id/library", (s, config) => s.listLibrary(id(config)));
+  route("POST", "/design-projects/:id/library/images", async (s, config) => {
+    const file = blobPart(formOf(config), "file");
+    if (!file) return fileRejected("The file part is required");
+    return s.uploadLibraryImage(id(config), file, undefined, headerOf(config, "Idempotency-Key"));
+  });
+  route("POST", "/design-projects/:id/library/images/from-design", (s, config) =>
+    s.saveLibraryImageFromDesign(id(config), bodyOf(config)),
+  );
+  route("POST", "/design-projects/:id/library/texts", (s, config) =>
+    s.saveLibraryText(id(config), bodyOf(config)),
+  );
+  route("DELETE", "/design-projects/:id/library/:itemId", (s, config) =>
+    s.deleteLibraryItem(id(config), param(config, "itemId")),
+  );
+
   /* ── Images ── */
 
   route("GET", "/designs/:id/assets", (s, config) => s.listAssets(id(config)));
@@ -169,6 +216,9 @@ export function registerDesignMockRoutes(store: DesignMockStore | Promise<Design
     if (!file) return fileRejected("The file part is required");
     return s.uploadAsset(id(config), file, undefined, headerOf(config, "Idempotency-Key"));
   });
+  route("POST", "/designs/:id/assets/from-library", (s, config) =>
+    s.placeFromLibrary(id(config), bodyOf(config)),
+  );
   route("GET", "/designs/:id/assets/:assetId/url", (s, config) =>
     s.assetLink(id(config), param(config, "assetId")),
   );
@@ -178,11 +228,17 @@ export function registerDesignMockRoutes(store: DesignMockStore | Promise<Design
   route("POST", "/designs/:id/submissions", (s, config) =>
     s.submit(id(config), submissionOf(config)),
   );
+  route("POST", "/designs/:id/submission-uploads", (s, config) =>
+    s.uploadSubmission(id(config), bundleOf(formOf(config)), headerOf(config, "Idempotency-Key")),
+  );
   route("POST", "/designs/:id/preflight-failures", (s, config) =>
     s.recordPreflightFailure(id(config), bodyOf(config)),
   );
   route("GET", "/designs/:id/files", (s, config) => s.files(id(config)));
   route("POST", "/designs/:id/revisions", (s, config) => s.revise(id(config)));
+  route("POST", "/designs/:id/clones", (s, config) =>
+    s.clone(id(config), bodyOf(config), headerOf(config, "Idempotency-Key")),
+  );
 
   /* ── Catalogue ── */
 
@@ -195,6 +251,13 @@ export function registerDesignMockRoutes(store: DesignMockStore | Promise<Design
   route("POST", "/__mock/designs/:id/approve", (s, config) => s.simulateApprove(id(config)));
   route("POST", "/__mock/designs/:id/return", (s, config) =>
     s.simulateReturn(id(config), bodyOf(config)),
+  );
+  route("POST", "/__mock/designs/:id/fail-next-approval", (s, config) =>
+    s.simulateFailNextApproval(id(config), bodyOf(config)),
+  );
+  route("GET", "/__mock/design-rounds", (s) => s.simulateRounds());
+  route("POST", "/__mock/design-rounds/:id/approve-all", (s, config) =>
+    s.simulateApproveRound(id(config)),
   );
   route("POST", "/__mock/reset", (s) => s.reset());
   // Whether the mock data survives a reload: the panel says so when it does not.

@@ -154,3 +154,64 @@ export async function submitElsewhere(store: DesignMockStore, id: string): Promi
     }),
   );
 }
+
+/** A cup document whose body holds a text: one the server's own check accepts. */
+function cupDocumentWithText(): DesignDocument {
+  const document: DesignDocument = emptyDocument(cup12oz);
+  document.surfaces.BODY = {
+    background: { kind: "none" },
+    elements: [
+      textEl("text", {
+        content: "Cà phê",
+        placement: { u: 170, v: 55, rotationDeg: 0, scale: 1 },
+      }),
+    ],
+  };
+  return document;
+}
+
+/**
+ * A project with one cup draft per name, all sent in one review round, written in `store` itself
+ * (uploads, then the round): what the reviewer simulation lists. Answers the ids.
+ */
+export async function roundIn(
+  store: DesignMockStore,
+  names: readonly string[] = ["Ly A", "Ly B"],
+  projectName = "Quán Hoa",
+) {
+  const project = settle(await store.createProject({ name: projectName })).data as { id: string };
+  const items = [];
+  const designIds: string[] = [];
+  for (const [i, name] of names.entries()) {
+    const created = settle(
+      await store.create({ ...STUDIO_PRODUCTS.cup, name, projectId: project.id }),
+    );
+    const { id } = created.data as { id: string };
+    settle(await store.putDocument(id, { version: 0, document: cupDocumentWithText() }));
+    const files = {
+      CUSTOMER_PREVIEW: new File([PNG_1x1.slice()], "preview.png", { type: "image/png" }),
+      PRINT_READY: new File([new Uint8Array([1, i])], "print-ready.pdf", {
+        type: "application/pdf",
+      }),
+      TECHNICAL_SPEC: new File([new Uint8Array([3, i])], "technical-spec.pdf", {
+        type: "application/pdf",
+      }),
+    };
+    const checksums: Record<string, string> = {};
+    for (const [role, file] of Object.entries(files)) {
+      checksums[role] = await sha256Hex(new Uint8Array(await file.arrayBuffer()));
+    }
+    const upload = settle(await store.uploadSubmission(id, { files, checksums }, `key-${id}`));
+    const { uploadToken } = upload.data as { uploadToken: string };
+    items.push({
+      designId: id,
+      version: 1,
+      uploadToken,
+      preflight: { result: "Pass", issues: [] },
+      checksums,
+    });
+    designIds.push(id);
+  }
+  const round = settle(await store.openReviewRound(project.id, { items })).data as { id: string };
+  return { projectId: project.id, roundId: round.id, designIds };
+}

@@ -11,3 +11,6 @@ export const multipart = (headers: Record<string, string> = {}) => ({
   headers: { "Content-Type": "multipart/form-data", ...headers },
   timeout: UPLOAD_TIMEOUT_MS,
 });
+
+/** The pages of the app count from 1, the wire from 0. */
+export const to0Based = (page: number) => Math.max(page, 1) - 1;

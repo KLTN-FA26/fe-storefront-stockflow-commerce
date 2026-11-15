@@ -15,8 +15,10 @@ import type {
   Design,
   DesignEvent,
   DesignFile,
+  DesignFileRole,
   PreflightFailureInput,
   PrintConfig,
+  SubmissionFiles,
   SubmitDesignInput,
 } from "./types";
 
@@ -40,6 +42,19 @@ export const plainBytes = (bytes: Uint8Array): Uint8Array<ArrayBuffer> =>
  */
 export async function submitDesign(id: string, input: SubmitDesignInput): Promise<Design> {
   const { version, preflight, files } = input;
+  const { body } = await bundleForm(files, {
+    version: String(version),
+    preflight: JSON.stringify({ result: preflight.result, issues: preflight.issues }),
+  });
+  const { data } = await api.post<unknown>(designPath(id, "/submissions"), body, multipart());
+  return designDtoSchema.parse(data);
+}
+
+/**
+ * A bundle as multipart: the `fields` given, `checksums` (JSON, SHA-256 hex by role, for the
+ * server to check what it received) and one file part per role. Answers the checksums too.
+ */
+export async function bundleForm(files: SubmissionFiles, fields: Record<string, string> = {}) {
   const parts = await Promise.all(
     designFileRoleSchema.options.map(async (role) => {
       // Hashed and sent from the same bytes: the checksum covers exactly what is uploaded.
@@ -47,18 +62,17 @@ export async function submitDesign(id: string, input: SubmitDesignInput): Promis
       return { role, bytes, sha256: await sha256Hex(bytes) };
     }),
   );
+  const checksums = Object.fromEntries(parts.map((p) => [p.role, p.sha256])) as Record<
+    DesignFileRole,
+    string
+  >;
   const body = new FormData();
-  body.append("version", String(version));
-  body.append("preflight", JSON.stringify({ result: preflight.result, issues: preflight.issues }));
-  body.append(
-    "checksums",
-    JSON.stringify(Object.fromEntries(parts.map((p) => [p.role, p.sha256]))),
-  );
+  for (const [name, value] of Object.entries(fields)) body.append(name, value);
+  body.append("checksums", JSON.stringify(checksums));
   for (const { role, bytes } of parts) {
     body.append(role, new Blob([bytes], { type: files[role].type }), files[role].name);
   }
-  const { data } = await api.post<unknown>(designPath(id, "/submissions"), body, multipart());
-  return designDtoSchema.parse(data);
+  return { body, checksums };
 }
 
 /**

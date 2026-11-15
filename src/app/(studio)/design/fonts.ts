@@ -11,7 +11,7 @@ import {
 
 import type { FontRegistry } from "@/features/product-design/engine";
 
-// The studio's text fonts, self-hosted by next/font. Only the studio route imports this module:
+// The studio's text fonts, self-hosted by next/font. Only the studio routes import this module (and the project page, lazily, for "Xem 3D"):
 // next/font cannot run under Vitest, and the storefront must not pay for eight font families.
 // `latin` is listed beside `vietnamese` because Google's `vietnamese` subset holds only the accented
 // letters: without it every plain letter of a Vietnamese text would fall back to the system font.

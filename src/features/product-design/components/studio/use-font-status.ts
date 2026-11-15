@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { fontCss, type FontRegistry } from "../../engine";
+import { within } from "./deadline";
 import { useStudio, type FontLoadState } from "./studio-context";
 
 /** Text that pulls in the Vietnamese subset of a face as well as the latin one. */
@@ -50,6 +51,49 @@ const parseFaces = (key: string): Face[] =>
 export const fontSet = () => (typeof document === "undefined" ? undefined : document.fonts);
 
 /**
+ * Each font of `key` as far as its least loaded face (`settled` by font string): one failed face
+ * is an error, one pending is loading.
+ */
+function statusByCode(key: string, settled: Readonly<Record<string, FontLoadState>>) {
+  const byCode: Record<string, FontLoadState> = {};
+  for (const { fontCode, css } of parseFaces(key)) {
+    const state = settled[css] ?? "loading";
+    const current = byCode[fontCode];
+    if (current === undefined || STATE_RANK[state] > STATE_RANK[current]) byCode[fontCode] = state;
+  }
+  return byCode;
+}
+
+/** Asks the browser for one face: `ready` once it has loaded, `error` when it failed. */
+const loadFace = (set: FontFaceSet, css: string) =>
+  set.load(css, SAMPLE_TEXT).then<FontLoadState, FontLoadState>(
+    () => "ready",
+    () => "error",
+  );
+
+/**
+ * The faces of `key` loaded the way the studio loads them, for a check run without it: answers
+ * each font's state once every face has loaded or failed. With `deadlineMs`, a face that has not
+ * answered by then is an error, so a stalled font file cannot hold the check. Without a font
+ * loading API nothing is requested and nothing is reported, as in the studio.
+ */
+export async function settleFaces(
+  key: string,
+  deadlineMs?: number,
+): Promise<Readonly<Record<string, FontLoadState>>> {
+  const set = fontSet();
+  if (set === undefined) return {};
+  const settled: Record<string, FontLoadState> = {};
+  await Promise.all(
+    parseFaces(key).map(async ({ css }) => {
+      const load = loadFace(set, css);
+      settled[css] = await (deadlineMs === undefined ? load : within(load, deadlineMs, "error"));
+    }),
+  );
+  return statusByCode(key, settled);
+}
+
+/**
  * Loads the faces of `key` (`facesKey`) and reports them per font code, for preflight and for the
  * font picker. The one loader of the studio: `useStudioFonts` (the faces the document's text
  * uses) and `useFontStatus` (the faces a picker lists) both read through it.
@@ -70,28 +114,17 @@ export function useFaceStates(key: string) {
     const settle = (css: string, state: FontLoadState) =>
       setSettled((prev) => (prev[css] === state ? prev : { ...prev, [css]: state }));
     const loads = parseFaces(key).map(({ css }) =>
-      set.load(css, SAMPLE_TEXT).then(
-        () => settle(css, "ready"),
-        () => settle(css, "error"),
-      ),
+      loadFace(set, css).then((state) => settle(css, state)),
     );
     const timer = setTimeout(() => setReady(true), FIRST_PAINT_WAIT_MS);
     void Promise.all(loads).then(() => setReady(true));
     return () => clearTimeout(timer);
   }, [key]);
 
-  /** A font is as far as its least loaded face: one failed face is an error, one pending is loading. */
-  const status = useMemo(() => {
-    const byCode: Record<string, FontLoadState> = {};
-    if (!supported) return byCode;
-    for (const { fontCode, css } of parseFaces(key)) {
-      const state = settled[css] ?? "loading";
-      const current = byCode[fontCode];
-      if (current === undefined || STATE_RANK[state] > STATE_RANK[current])
-        byCode[fontCode] = state;
-    }
-    return byCode;
-  }, [key, settled, supported]);
+  const status = useMemo(
+    (): Record<string, FontLoadState> => (supported ? statusByCode(key, settled) : {}),
+    [key, settled, supported],
+  );
 
   return { ready, status };
 }

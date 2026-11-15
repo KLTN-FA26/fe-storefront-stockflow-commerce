@@ -27,8 +27,15 @@ import {
 } from "./design-rows";
 import type { StoreContext } from "./design-store-context";
 
+/** 413 when the document, as sent, is over the size the API takes; else null. */
+export function documentTooLarge(document: unknown): MockResult | null {
+  return new TextEncoder().encode(JSON.stringify(document)).length > MAX_DOCUMENT_BYTES
+    ? fail(413, "PAYLOAD_TOO_LARGE", "The design document is too large")
+    : null;
+}
+
 /** Why a document cannot be this design's (spec §4.1: the engine's schema, the template's areas). */
-function documentProblem(document: unknown, config: PrintConfigRow | null): string | null {
+export function documentProblem(document: unknown, config: PrintConfigRow | null): string | null {
   const parsed = designDocumentSchema.safeParse(document);
   if (!parsed.success) {
     const [issue] = parsed.error.issues;
@@ -74,9 +81,8 @@ export function createDocumentOps(ctx: StoreContext) {
       if (row.version !== version) return versionConflict();
       const problem = documentProblem(document, ctx.configOf(row));
       if (problem) return invalid("document", problem);
-      if (new TextEncoder().encode(JSON.stringify(document)).length > MAX_DOCUMENT_BYTES) {
-        return fail(413, "PAYLOAD_TOO_LARGE", "The design document is too large");
-      }
+      const tooLarge = documentTooLarge(document);
+      if (tooLarge) return tooLarge;
       // Kept as sent (the schema only checked it), so its checksum is the browser's.
       const saved = structuredClone(document) as DesignDocument;
       const checksum = await documentChecksum(saved);

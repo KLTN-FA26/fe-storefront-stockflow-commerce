@@ -10,27 +10,37 @@ import { Textarea } from "@/components/ui/textarea";
 import { describeDesignError } from "../errors";
 import { invalidateDesign } from "../mutations";
 import { returnReasonInputSchema } from "../schemas";
-import { simulateApprove, simulateReturn } from "../simulation";
+import { MOCK_ROUNDS_KEY, simulateApprove, simulateReturn } from "../simulation";
 import type { ReturnReasonInput } from "../types";
 
-/** Duyệt / Trả lại for one design waiting for review (docs 12 BR-06: a return needs a reason). */
-export function ReviewActions({ designId }: { designId: string }) {
+/**
+ * Duyệt / Trả lại for one design waiting for review (docs 12 BR-06: a return needs a reason).
+ * `name` goes into the accessible names when several designs are listed together.
+ */
+export function ReviewActions({ designId, name }: { designId: string; name?: string }) {
   const client = useQueryClient();
   const form = useForm<ReturnReasonInput>({
     resolver: zodResolver(returnReasonInputSchema),
     defaultValues: { reason: "" },
   });
+  // The design's own queries, its project's (banner, cards, openRound) and the panel's open rounds.
+  const settled = () =>
+    Promise.all([
+      invalidateDesign(client, designId),
+      client.invalidateQueries({ queryKey: MOCK_ROUNDS_KEY }),
+    ]);
   const approve = useMutation({
     mutationFn: () => simulateApprove(designId),
-    onSettled: () => invalidateDesign(client, designId),
+    onSettled: settled,
   });
   const giveBack = useMutation({
     mutationFn: (input: ReturnReasonInput) => simulateReturn(designId, input),
     onSuccess: () => form.reset(),
-    onSettled: () => invalidateDesign(client, designId),
+    onSettled: settled,
   });
   const pending = approve.isPending || giveBack.isPending;
   const error = approve.error ?? giveBack.error;
+  const named = (label: string) => (name ? `${label}: ${name}` : label);
   const reasonError = form.formState.errors.reason;
 
   return (
@@ -40,7 +50,7 @@ export function ReviewActions({ designId }: { designId: string }) {
       className="flex flex-col gap-2"
     >
       <Textarea
-        aria-label="Lý do trả lại"
+        aria-label={named("Lý do trả lại")}
         placeholder="Lý do trả lại"
         aria-invalid={reasonError ? true : undefined}
         disabled={pending}
@@ -61,11 +71,18 @@ export function ReviewActions({ designId }: { designId: string }) {
           type="button"
           className="min-h-11 flex-1"
           disabled={pending}
+          aria-label={named("Duyệt")}
           onClick={() => approve.mutate()}
         >
           Duyệt
         </Button>
-        <Button type="submit" variant="outline" className="min-h-11 flex-1" disabled={pending}>
+        <Button
+          type="submit"
+          variant="outline"
+          aria-label={named("Trả lại")}
+          className="min-h-11 flex-1"
+          disabled={pending}
+        >
           Trả lại
         </Button>
       </div>

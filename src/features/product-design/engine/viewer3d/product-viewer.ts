@@ -1,4 +1,5 @@
 import {
+  Box3,
   CanvasTexture,
   Mesh,
   NeutralToneMapping,
@@ -8,17 +9,20 @@ import {
   Spherical,
   SRGBColorSpace,
   Vector2,
+  Vector3,
   WebGLRenderer,
   type Group,
   type Material,
 } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
+import { loadGlb, type Model3dRef } from "../model3d";
 import type { SurfaceSet } from "../surfaces";
 import type { CustomizationTemplate, PrintAreaCode } from "../template/schema";
 import type { ProductMaterials } from "./materials";
+import { Model3dSwap, type LoadModel3d, type Model3dState } from "./model3d-swap";
 import { uvToSurfacePoint } from "./pick";
-import { buildModelScene, type PrintMesh } from "./scene-parts";
+import { buildModelScene, type ModelScene, type PrintMesh } from "./scene-parts";
 import {
   ContactShadow,
   environmentYaw,
@@ -35,10 +39,18 @@ export type ViewerOptions = {
   createRenderer?: (canvas: HTMLCanvasElement) => WebGLRenderer;
   /** Light the scene with a `RoomEnvironment` (default true); false uses plain lights. */
   environment?: boolean;
+  /** Test seam: loads a model's `.glb` (default `loadGlb`). */
+  loadModel3d?: LoadModel3d;
 };
 
-type ViewerEvent = "contextlost" | "error";
+export type { Model3dState };
+
+type ViewerEvent = "contextlost" | "error" | "model3d";
 type Listener = (event?: unknown) => void;
+type ModelListener = (state: Model3dState) => void;
+
+/** Where the camera was when a `.glb` came in, so the swap can keep the user's view. */
+type ViewSnapshot = { position: Vector3; target: Vector3; homeDistance: number };
 
 /** A print area's texture and the size last uploaded for it (a resized canvas needs fresh GPU storage). */
 type AreaTexture = { texture: CanvasTexture; width: number; height: number };
@@ -50,6 +62,12 @@ const MAX_FRAME_SECONDS = 1 / 30;
 /** The second lost context gives up on recovering and tells the caller to fall back. */
 const CONTEXT_LOSSES_BEFORE_EVENT = 2;
 
+/**
+ * A real model whose box is within this share of the height of the parametric one (size and centre)
+ * leaves the camera exactly where it is; a bigger difference re-frames distance and target.
+ */
+const SWAP_REFRAME_SHARE = 0.02;
+
 /** Camera azimuth that faces each surface (0 = +Z, towards +X for positive angles). */
 const FACE_AZIMUTH: Record<PrintAreaCode, number> = {
   BODY: 0,
@@ -57,6 +75,36 @@ const FACE_AZIMUTH: Record<PrintAreaCode, number> = {
   RIGHT: Math.PI / 2,
   BACK: Math.PI,
   LEFT: -Math.PI / 2,
+};
+
+/** Calls every listener; one that throws is logged and never stops the others or the viewer. */
+function notify<T>(listeners: Set<(payload: T) => void>, payload: T) {
+  for (const listener of [...listeners]) {
+    try {
+      listener(payload);
+    } catch (error) {
+      console.error("A viewer listener threw", error);
+    }
+  }
+}
+
+/** What a swap must put back if it fails halfway: the model that was on show and the camera. */
+type Detached = {
+  model: Group | null;
+  materials: ProductMaterials | null;
+  printMeshes: PrintMesh[];
+  modelMeshes: Mesh[];
+  bounds: Box3 | null;
+};
+type Pose = {
+  position: Vector3;
+  target: Vector3;
+  position0: Vector3;
+  target0: Vector3;
+  minDistance: number;
+  maxDistance: number;
+  near: number;
+  far: number;
 };
 
 const createDefaultRenderer = (canvas: HTMLCanvasElement) =>
@@ -74,10 +122,14 @@ export class ProductViewer {
   private readonly camera = new PerspectiveCamera(FOV_DEG, 1, 1, 10_000);
   private readonly controls: OrbitControls;
   private readonly raycaster = new Raycaster();
-  private readonly listeners: Record<ViewerEvent, Set<Listener>> = {
+  private readonly listeners: Record<"contextlost" | "error", Set<Listener>> = {
     contextlost: new Set(),
     error: new Set(),
   };
+  private readonly modelListeners = new Set<ModelListener>();
+  private readonly swap: Model3dSwap;
+  /** The box of the model on show (without its contact shadow), to compare with the next one. */
+  private modelBounds: Box3 | null = null;
   private readonly textures = new Map<PrintAreaCode, AreaTexture>();
   private readonly printMaterials = new Map<PrintAreaCode, Material>();
   private readonly pixelRatio: number;
@@ -102,6 +154,10 @@ export class ProductViewer {
   constructor(canvas: HTMLCanvasElement, opts: ViewerOptions = {}) {
     this.canvas = canvas;
     this.renderer = (opts.createRenderer ?? createDefaultRenderer)(canvas);
+    this.swap = new Model3dSwap({
+      load: opts.loadModel3d ?? loadGlb,
+      emit: (state) => notify(this.modelListeners, state),
+    });
     this.renderer.outputColorSpace = SRGBColorSpace;
     // Neutral (Khronos PBR Neutral, Q10) keeps base colours at their sRGB values below the
     // highlights, so a printed brand colour reads as chosen; ACES shifts hue and saturation.
@@ -140,27 +196,37 @@ export class ProductViewer {
     this.resize();
   }
 
-  /** Replaces the model. Textures set earlier (or later) are applied to it by print area. */
-  setModel(template: CustomizationTemplate, surfaces: SurfaceSet): void {
+  /**
+   * Replaces the model. Textures set earlier (or later) are applied to it by print area. The model
+   * built from the template's figures is shown at once; with `model3d` its `.glb` loads in the
+   * background and replaces it when ready (`model3d` events, `whenModelReady`). A failed load keeps
+   * the parametric model.
+   */
+  setModel(
+    template: CustomizationTemplate,
+    surfaces: SurfaceSet,
+    model3d?: Model3dRef | null,
+  ): void {
     const { model } = template;
     if (model.kind === "gltf") throw new Error("GLB models are not enabled");
     // Builds first: a template that cannot be built throws before the current model is touched.
-    const { group, meshes, materials, printMeshes } = buildModelScene(model, surfaces);
+    const scene = buildModelScene(model, surfaces);
 
-    this.clearModel();
-    this.materials = materials;
-    this.printMeshes = printMeshes;
-    this.modelMeshes = meshes;
-    this.model = group;
-    this.scene.add(group);
-    for (const code of this.textures.keys()) this.applyTexture(code);
+    this.swap.cancel();
+    this.attachScene(scene, model.heightMm, false);
+    if (model3d && !this.disposed) {
+      this.swap.start({
+        ref: model3d,
+        model,
+        surfaces,
+        attach: (loaded) => this.attachScene(loaded, model.heightMm, true),
+      });
+    }
+  }
 
-    const size = frameModel(this.camera, this.controls, group, model.heightMm);
-    // A camera already at the home pose fires no change event, so the yaw is set here as well.
-    this.syncEnvironment();
-    const shadow = this.contactShadow.create(size);
-    if (shadow) group.add(shadow);
-    this.invalidate();
+  /** Resolves when the current model's `.glb` is in or has failed; at once without one. Never rejects. */
+  whenModelReady(): Promise<void> {
+    return this.swap.whenReady();
   }
 
   /** Uploads (or refreshes, in place) a print area's canvas as its texture; cheap enough to call every frame of a drag. */
@@ -255,10 +321,16 @@ export class ProductViewer {
     });
   }
 
-  /** Subscribes to `contextlost` (the second lost WebGL context) or `error` (a failed render); returns the unsubscribe. */
-  on(event: ViewerEvent, callback: Listener): () => void {
-    this.listeners[event].add(callback);
-    return () => void this.listeners[event].delete(callback);
+  /**
+   * Subscribes to `contextlost` (the second lost WebGL context), `error` (a failed render) or
+   * `model3d` (the `.glb` is `loading`, `ready` or `failed` with a code); returns the unsubscribe.
+   */
+  on(event: "model3d", callback: ModelListener): () => void;
+  on(event: "contextlost" | "error", callback: Listener): () => void;
+  on(event: ViewerEvent, callback: Listener | ModelListener): () => void {
+    const listeners = event === "model3d" ? this.modelListeners : this.listeners[event];
+    listeners.add(callback);
+    return () => void listeners.delete(callback);
   }
 
   dispose(): void {
@@ -279,6 +351,7 @@ export class ProductViewer {
     this.contactShadow.dispose();
     this.lighting.dispose();
     for (const listeners of Object.values(this.listeners)) listeners.clear();
+    this.modelListeners.clear();
     this.renderer.dispose();
   }
 
@@ -322,8 +395,8 @@ export class ProductViewer {
     }
   }
 
-  private emit(event: ViewerEvent, payload?: unknown) {
-    for (const listener of this.listeners[event]) listener(payload);
+  private emit(event: "contextlost" | "error", payload?: unknown) {
+    notify(this.listeners[event], payload);
   }
 
   private onContextLost = () => {
@@ -376,16 +449,145 @@ export class ProductViewer {
     for (const { mesh } of targets) mesh.material = material;
   }
 
+  /** Puts a built scene in place: textures, frame, shadow, light and a frame (`keepView`: a swap that keeps the user's angles). */
+  private attachScene(scene: ModelScene, heightMm: number, keepView: boolean) {
+    const { group, meshes, materials, printMeshes } = scene;
+    const before = keepView ? this.snapshotView() : null;
+    const pose = this.snapshotPose();
+    // The old model is only set aside: it is freed once the new one is fully in place, and put
+    // back if anything throws, so the viewer is never left without a model.
+    const previous = this.detachModel();
+    try {
+      this.materials = materials;
+      this.printMeshes = printMeshes;
+      this.modelMeshes = meshes;
+      this.model = group;
+      this.scene.add(group);
+      for (const code of this.textures.keys()) this.applyTexture(code);
+
+      const size = frameModel(this.camera, this.controls, group, heightMm);
+      this.modelBounds = new Box3().setFromObject(group);
+      if (before && previous.bounds) this.restoreView(before, previous.bounds, heightMm);
+      // A camera already at the home pose fires no change event, so the yaw is set here as well.
+      this.syncEnvironment();
+      const shadow = this.contactShadow.create(size);
+      if (shadow) group.add(shadow);
+    } catch (error) {
+      this.scene.remove(group);
+      this.printMaterials.clear();
+      this.reinstate(previous, pose);
+      throw error;
+    }
+    this.freeModel(previous);
+    this.invalidate();
+  }
+
+  private snapshotPose(): Pose {
+    const { camera, controls } = this;
+    return {
+      position: camera.position.clone(),
+      target: controls.target.clone(),
+      position0: controls.position0.clone(),
+      target0: controls.target0.clone(),
+      minDistance: controls.minDistance,
+      maxDistance: controls.maxDistance,
+      near: camera.near,
+      far: camera.far,
+    };
+  }
+
+  private reinstate(previous: Detached, pose: Pose) {
+    const { camera, controls } = this;
+    this.model = previous.model;
+    this.materials = previous.materials;
+    this.printMeshes = previous.printMeshes;
+    this.modelMeshes = previous.modelMeshes;
+    this.modelBounds = previous.bounds;
+    if (previous.model) this.scene.add(previous.model);
+    for (const code of this.textures.keys()) this.applyTexture(code);
+    camera.position.copy(pose.position);
+    controls.target.copy(pose.target);
+    controls.position0.copy(pose.position0);
+    controls.target0.copy(pose.target0);
+    controls.minDistance = pose.minDistance;
+    controls.maxDistance = pose.maxDistance;
+    camera.near = pose.near;
+    camera.far = pose.far;
+    camera.updateProjectionMatrix();
+    this.syncEnvironment();
+  }
+
+  private snapshotView(): ViewSnapshot {
+    return {
+      position: this.camera.position.clone(),
+      target: this.controls.target.clone(),
+      homeDistance: this.controls.position0.distanceTo(this.controls.target0),
+    };
+  }
+
+  /**
+   * `frameModel` has put the camera at the new home pose. The user's angles always stay. When the
+   * real model's box is within `SWAP_REFRAME_SHARE` of the height of the parametric one, position and
+   * distance stay too; otherwise the target follows the new box and the distance keeps its ratio to
+   * the home distance (a user who zoomed in stays zoomed in).
+   */
+  private restoreView(before: ViewSnapshot, previous: Box3, heightMm: number) {
+    const bounds = this.modelBounds;
+    if (!bounds) return;
+    const limit = heightMm * SWAP_REFRAME_SHARE;
+    const near = (a: Vector3, b: Vector3) => a.distanceTo(b) <= limit;
+    const sameBox =
+      near(previous.getSize(new Vector3()), bounds.getSize(new Vector3())) &&
+      near(previous.getCenter(new Vector3()), bounds.getCenter(new Vector3()));
+    const { controls, camera } = this;
+    if (sameBox) {
+      controls.target.copy(before.target);
+      camera.position.copy(before.position);
+    } else {
+      const offset = before.position.clone().sub(before.target);
+      const spherical = new Spherical().setFromVector3(offset);
+      const home = controls.position0.distanceTo(controls.target0);
+      const scaled =
+        before.homeDistance > 0 ? (spherical.radius * home) / before.homeDistance : home;
+      spherical.radius = Math.min(Math.max(scaled, controls.minDistance), controls.maxDistance);
+      camera.position.copy(controls.target).add(offset.setFromSpherical(spherical));
+    }
+    controls.update();
+  }
+
+  /** Takes the model out and frees it; aborts a `.glb` still loading (it would arrive at a model that is gone). */
   private clearModel() {
-    this.model?.traverse((object) => {
-      if (object instanceof Mesh) object.geometry.dispose();
-    });
+    this.swap.cancel();
+    this.removeModel();
+  }
+
+  private removeModel() {
+    this.freeModel(this.detachModel());
+  }
+
+  /** Takes the model out of the scene and the viewer's state without freeing it. */
+  private detachModel(): Detached {
+    const detached: Detached = {
+      model: this.model,
+      materials: this.materials,
+      printMeshes: this.printMeshes,
+      modelMeshes: this.modelMeshes,
+      bounds: this.modelBounds,
+    };
     if (this.model) this.scene.remove(this.model);
     this.model = null;
-    this.materials?.dispose();
+    this.modelBounds = null;
     this.materials = null;
     this.printMaterials.clear();
     this.printMeshes = [];
     this.modelMeshes = [];
+    return detached;
+  }
+
+  private freeModel({ model, materials }: Detached) {
+    model?.traverse((object) => {
+      if (object instanceof Mesh) object.geometry.dispose();
+    });
+    materials?.dispose();
   }
 }

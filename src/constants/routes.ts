@@ -17,9 +17,14 @@ export const STORE_ROUTES = {
     list: "/design",
     new: "/design/new",
     /** The launcher for a product, and for one of its SKUs when the customer already chose it. */
-    newFor: (slug: string, sku?: string | null) =>
-      `/design/new?product=${encodeURIComponent(slug)}${sku ? `&sku=${encodeURIComponent(sku)}` : ""}`,
+    newFor: (slug: string, sku?: string | null, projectId?: string | null) =>
+      `/design/new?product=${encodeURIComponent(slug)}${sku ? `&sku=${encodeURIComponent(sku)}` : ""}${projectId ? `&project=${encodeURIComponent(projectId)}` : ""}`,
     detail: (id: string) => `/design/${id}`,
+    projects: "/design/projects",
+    project: (id: string) => `/design/projects/${id}`,
+    /** The set submission of a project: the chosen drafts travel in `ids`. */
+    projectSubmit: (id: string, ids: readonly string[]) =>
+      `/design/projects/${id}/submit?ids=${ids.map(encodeURIComponent).join(",")}`,
   },
   cart: "/cart",
   checkout: {

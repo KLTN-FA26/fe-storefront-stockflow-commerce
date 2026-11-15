@@ -1,8 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 
 import { recordPreflightFailure } from "../../api";
-import { runPreflight } from "../../engine";
-import type { DesignDocument, PreflightIssue, PreflightReport } from "../../engine";
+import type { DesignDocument, PreflightIssue } from "../../engine";
 import { isDesignGone, isDesignStateChanged } from "../../errors";
 import { invalidateDesign } from "../../mutations";
 import { designDocumentQuery, designKeys } from "../../queries";
@@ -10,10 +9,10 @@ import type { Design } from "../../types";
 import { ExportError } from "./export-renderer";
 import type { StudioServices } from "./studio-context";
 import { isStored } from "./use-autosave";
-import { preflightVariant } from "./use-preflight";
 
-// The checks a submission ("Gửi duyệt", `useDesignSubmission`) makes against the stored document
-// before anything is drawn or sent.
+// The checks a submission makes against the stored document before anything is drawn or sent:
+// the studio's "Gửi duyệt" (`useDesignSubmission`) and a design loaded without the studio
+// (`run-submission.ts`).
 
 const MESSAGES = {
   notSaved: "Thiết kế chưa lưu được nên chưa thể gửi duyệt. Hãy lưu lại rồi thử lại.",
@@ -38,35 +37,25 @@ export class DocumentEditedError extends ExportError {}
 /** What a submission works with. */
 export type SubmissionContext = { services: StudioServices; client: QueryClient; design: Design };
 
-/** What a preflight was run on, and its report. */
-export type Checked = { document: DesignDocument; report: PreflightReport };
+/** The design whose stored document is read, and the cache it is read through. */
+export type StoredDesign = Pick<SubmissionContext, "client" | "design">;
 
 /** The document the files are drawn from, and its checksum. */
 export type Drawn = { document: DesignDocument; checksum: string };
 
 /** The stored document, read fresh: it carries the design's version counter and the checksum. */
-export const readStored = ({ client, design }: SubmissionContext) =>
+export const readStored = ({ client, design }: StoredDesign) =>
   client.fetchQuery({ ...designDocumentQuery(design.id), staleTime: 0 });
 
 /**
- * Saves what is pending, then runs the preflight on the editor's document, which is then the stored
- * one; refuses to go on when autosave could not store it.
+ * Saves what is pending, then answers the editor's document, which is then the stored one;
+ * refuses to go on when autosave could not store it.
  */
-export async function preflightStored({ services }: SubmissionContext): Promise<Checked> {
-  const { editor, template, surfaces, autosave } = services;
+export async function storedDocument({ services }: SubmissionContext): Promise<DesignDocument> {
+  const { editor, autosave } = services;
   await autosave.flush();
   if (!isStored(autosave.latestState())) throw new ExportError(MESSAGES.notSaved);
-  const document = editor.store.getState().document;
-  const report = runPreflight({
-    document,
-    template,
-    surfaces,
-    sizer: services.sizer,
-    assets: services.assetStatus,
-    fontStatus: services.fontStatus,
-    variant: preflightVariant(services.printConfig),
-  });
-  return { document, report };
+  return editor.store.getState().document;
 }
 
 /**
@@ -94,17 +83,25 @@ export async function assertStoredIs(ctx: SubmissionContext, drawn: Drawn): Prom
 }
 
 /**
+ * For a design no editor of this tab holds: reads the stored document fresh and answers its
+ * version while it is still the one of `checksum`; any other was saved elsewhere
+ * (`DocumentChangedError`).
+ */
+export async function storedVersionOf(ref: StoredDesign, checksum: string): Promise<number> {
+  const stored = await readStored(ref);
+  if (stored.checksum !== checksum) throw new DocumentChangedError(MESSAGES.changed);
+  return stored.version;
+}
+
+/**
  * Records a submit the browser's preflight failed (docs 12 §5.3 PREFLIGHT_FAILED) and re-reads the
  * history that lists it. Answers the failure when the record could not be made (a design that
  * moved on or is gone is re-read), `undefined` once it is recorded.
  */
-export async function recordFailure(
-  ctx: SubmissionContext,
-  issues: PreflightIssue[],
-): Promise<unknown> {
-  const { client, design } = ctx;
+export async function recordFailure(ref: StoredDesign, issues: PreflightIssue[]): Promise<unknown> {
+  const { client, design } = ref;
   try {
-    const { version } = await readStored(ctx);
+    const { version } = await readStored(ref);
     await recordPreflightFailure(design.id, { version, issues });
     void client.invalidateQueries({ queryKey: designKeys.history(design.id) });
     return undefined;

@@ -18,6 +18,7 @@ import { StudioPanel, StudioPanelProvider } from "./studio-panel";
 import { StudioBodySkeleton } from "./studio-skeleton";
 import { SurfaceSwitcher } from "./surface-switcher";
 import { TextEditingProvider } from "./text-editing";
+import { LibraryPlacementProvider } from "./use-library-placement";
 import { ToolRail } from "./tool-rail";
 import { UnsavedDraftDialog } from "./unsaved-draft-dialog";
 import { useStudioServices, type StudioWorkspaceProps } from "./use-studio-services";
@@ -61,38 +62,40 @@ export function StudioWorkspace(props: StudioWorkspaceProps) {
     <StudioProvider value={services}>
       <PreflightProvider>
         <TextEditingProvider value={textEditing}>
-          <TooltipProvider>
-            <StudioPanelProvider>
-              <div className="flex h-dvh flex-col">
-                <StudioHeader autosave={autosave} action={<PrimaryAction />} />
-                <StatusBanner design={design} />
-                {!fontsReady ? (
-                  <StudioBodySkeleton />
-                ) : (
-                  // Desktop only (≥ 1024 px, `DesktopOnlyGate`). Read-only: no bar; the rail keeps
-                  // Lớp, Kiểm tra and Lịch sử (view only), and the stage area splits its width.
-                  <main className="flex min-h-0 flex-1 flex-col" onFocus={noteFocus}>
-                    {readOnly ? null : (
-                      <ContextBar sections={BAR_SECTIONS} end={<SurfaceSwitcher />} />
-                    )}
-                    <div
-                      className={cn(
-                        "relative flex min-h-0 flex-1 gap-3 p-3",
-                        readOnly && "overflow-hidden",
+          <LibraryPlacementProvider>
+            <TooltipProvider>
+              <StudioPanelProvider>
+                <div className="flex h-dvh flex-col">
+                  <StudioHeader autosave={autosave} action={<PrimaryAction />} />
+                  <StatusBanner design={design} />
+                  {!fontsReady ? (
+                    <StudioBodySkeleton />
+                  ) : (
+                    // Desktop only (≥ 1024 px, `DesktopOnlyGate`). Read-only: no bar; the rail keeps
+                    // Lớp, Kiểm tra and Lịch sử (view only), and the stage area splits its width.
+                    <main className="flex min-h-0 flex-1 flex-col" onFocus={noteFocus}>
+                      {readOnly ? null : (
+                        <ContextBar sections={BAR_SECTIONS} end={<SurfaceSwitcher />} />
                       )}
-                    >
-                      <ToolRail />
-                      <StudioPanel {...(readOnly ? {} : { onEditText: textEditing.start })} />
-                      <StageArea productPhoto={productPhoto} readOnly={readOnly} />
-                    </div>
-                  </main>
-                )}
-                <StudioAnnouncer announcement={announcement} />
-                <ConflictDialog open={autosave.state === "conflict"} />
-                <UnsavedDraftDialog record={props.record} />
-              </div>
-            </StudioPanelProvider>
-          </TooltipProvider>
+                      <div
+                        className={cn(
+                          "relative flex min-h-0 flex-1 gap-3 p-3",
+                          readOnly && "overflow-hidden",
+                        )}
+                      >
+                        <ToolRail />
+                        <StudioPanel {...(readOnly ? {} : { onEditText: textEditing.start })} />
+                        <StageArea productPhoto={productPhoto} readOnly={readOnly} />
+                      </div>
+                    </main>
+                  )}
+                  <StudioAnnouncer announcement={announcement} />
+                  <ConflictDialog open={autosave.state === "conflict"} />
+                  <UnsavedDraftDialog record={props.record} />
+                </div>
+              </StudioPanelProvider>
+            </TooltipProvider>
+          </LibraryPlacementProvider>
         </TextEditingProvider>
       </PreflightProvider>
     </StudioProvider>

@@ -7,6 +7,8 @@ import { ApiError } from "@/lib/api/error";
 import { MOCK_BLOCKED_SKU, printConfigFor } from "@/lib/api/mock-fixtures/design-print-configs";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
+import { createProject, getDesign } from "../api";
+
 import { NewDesignScreen } from "../components/new-design-screen";
 import { designKeys } from "../queries";
 import { designBackend } from "./design-backend";
@@ -14,15 +16,17 @@ import { designBackend } from "./design-backend";
 // The mock adapter adds latency per request; give multi-request flows headroom under load.
 const WAIT = { timeout: 5000 };
 
-const env = vi.hoisted(() => ({ replace: vi.fn() }));
+const env = vi.hoisted(() => ({ replace: vi.fn(), search: new URLSearchParams() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: env.replace, push: vi.fn() }),
+  useSearchParams: () => env.search,
 }));
 // Mock mode counts every caller as signed in; the real session is what these tests drive.
 vi.mock("@/providers/app-providers", () => ({ useIsMock: () => false }));
 
 beforeEach(() => {
   env.replace.mockReset();
+  env.search = new URLSearchParams();
   signIn();
 });
 afterEach(() => {
@@ -50,6 +54,36 @@ describe("NewDesignScreen", () => {
       name: NAME,
     });
     expect(env.replace).toHaveBeenCalledTimes(1);
+  });
+
+  it("creates the design inside the project named by ?project=", async () => {
+    const { post } = await designBackend();
+    const project = await createProject({ name: "Bộ ly" });
+    env.search = new URLSearchParams({ project: project.id });
+    renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
+
+    await waitFor(() => expect(env.replace).toHaveBeenCalledTimes(1), WAIT);
+    expect(post).toHaveBeenCalledWith("/designs", {
+      productSlug: CUP,
+      sku: CUP_SKU,
+      name: NAME,
+      projectId: project.id,
+    });
+    const opened = env.replace.mock.calls[0]?.[0] as string;
+    const created = await getDesign(opened.replace("/design/", ""));
+    expect(created.project?.id).toBe(project.id);
+  });
+
+  it("brings a visitor back to the link with the project in it", async () => {
+    signOut();
+    await designBackend();
+    env.search = new URLSearchParams({ project: "p-1" });
+    renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
+    const next = encodeURIComponent(`/design/new?product=${CUP}&sku=${CUP_SKU}&project=p-1`);
+    expect(await screen.findByRole("link", { name: "Đăng nhập" }, WAIT)).toHaveAttribute(
+      "href",
+      `/login?next=${next}`,
+    );
   });
 
   it("creates one design when React runs the effects twice (StrictMode)", async () => {

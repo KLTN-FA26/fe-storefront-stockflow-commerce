@@ -12,17 +12,18 @@ import { useSignedIn } from "@/lib/auth/use-signed-in";
 import {
   designableOf,
   designableSearchText,
+  productSkusOf,
   useDesignableCataloguePages,
 } from "./designable-catalogue";
 
 /**
- * `/design` knows the catalogue, the design feature does not: this reads it for the "Thiết kế mới"
+ * The pages know the catalogue, the design feature does not: this reads it for the "Thiết kế mới"
  * dialog while it is open, searched (server-side) by what the dialog asks, a page at a time, and
  * maps it to the dialog's products. The catalogue cannot be asked for customizable products only,
  * so they are picked from each page; a page with none of them reads on to the next, until one has
  * or the catalogue ends.
  */
-export function DesignListWithCatalog() {
+export function useDesignableCatalogue(): DesignableCatalogue {
   // The catalogue serves signed-in callers only (kltn-docs 13 BR-02): a visitor gets the list's
   // sign-in prompt, and no catalogue call is made for them.
   const signedIn = useSignedIn();
@@ -55,7 +56,7 @@ export function DesignListWithCatalog() {
     if (readOn) void fetchNextPage();
   }, [readOn, pageCount, fetchNextPage]);
 
-  const catalogue: DesignableCatalogue = data
+  return data
     ? {
         status: "ready",
         products,
@@ -69,6 +70,7 @@ export function DesignListWithCatalog() {
               }
             : null,
         onSearch: setSearch,
+        skusOf: productSkusOf,
       }
     : error
       ? {
@@ -77,7 +79,12 @@ export function DesignListWithCatalog() {
           onRetry: () => void refetch(),
           retrying: isFetching,
           onSearch: setSearch,
+          skusOf: productSkusOf,
         }
-      : { status: "loading", onSearch: setSearch };
-  return <DesignListScreen catalogue={catalogue} />;
+      : { status: "loading", onSearch: setSearch, skusOf: productSkusOf };
+}
+
+/** `/design`: the list of designs, with the catalogue behind its "Thiết kế mới" dialog. */
+export function DesignListWithCatalog() {
+  return <DesignListScreen catalogue={useDesignableCatalogue()} />;
 }

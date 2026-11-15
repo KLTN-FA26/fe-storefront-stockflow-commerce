@@ -2,6 +2,7 @@
 
 import { Check, Copy, Monitor } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -46,7 +47,7 @@ const clientFit = (): DeviceFit =>
     : "desktop";
 
 /** The fit of the device, following the window as it is resized. */
-function useDeviceFit(): DeviceFit {
+export function useDeviceFit(): DeviceFit {
   return useSyncExternalStore(subscribe, clientFit, () => "unknown");
 }
 
@@ -82,7 +83,13 @@ function CopyLinkButton() {
 }
 
 /** What a phone, a tablet or a window narrower than 1024 px sees instead of the studio. */
+/** The project a path such as `/design/projects/{id}/submit` belongs to, if it is one. */
+const projectOf = (pathname: string | null) =>
+  /^\/design\/projects\/([^/]+)/.exec(pathname ?? "")?.[1];
+
 function DesktopOnlyNotice({ className }: { className?: string | undefined }) {
+  // The customer came from a project page (the set-submit step): offer the way back to it.
+  const projectId = projectOf(usePathname());
   return (
     <main className={cn("flex flex-1 items-center justify-center p-4", className)}>
       <EmptyState
@@ -94,7 +101,11 @@ function DesktopOnlyNotice({ className }: { className?: string | undefined }) {
           <div className="flex flex-col items-center gap-1">
             <CopyLinkButton />
             <Button asChild variant="ghost" className="min-h-11 rounded-[var(--r-md)] px-4">
-              <Link href={STORE_ROUTES.design.list}>Thiết kế của tôi</Link>
+              {projectId ? (
+                <Link href={STORE_ROUTES.design.project(projectId)}>Về dự án</Link>
+              ) : (
+                <Link href={STORE_ROUTES.design.list}>Thiết kế của tôi</Link>
+              )}
             </Button>
           </div>
         }

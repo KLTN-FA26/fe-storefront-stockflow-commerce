@@ -102,6 +102,7 @@ export function LauncherError({
   onRetry,
   retrying,
   backHref,
+  backLabel = "Quay lại sản phẩm",
 }: {
   title: string;
   message: string;
@@ -109,6 +110,7 @@ export function LauncherError({
   onRetry?: () => void;
   retrying?: boolean;
   backHref: string;
+  backLabel?: string;
 }) {
   return (
     <div className="space-y-4">
@@ -118,7 +120,7 @@ export function LauncherError({
       <div className="flex flex-wrap gap-3">
         {onRetry ? <RetryButton onRetry={onRetry} retrying={retrying ?? false} /> : null}
         <Button asChild variant="outline" className="min-h-11 rounded-[var(--r-md)] px-4">
-          <Link href={backHref}>Quay lại sản phẩm</Link>
+          <Link href={backHref}>{backLabel}</Link>
         </Button>
       </div>
     </div>

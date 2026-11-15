@@ -5,10 +5,11 @@ import { useEffect, useRef } from "react";
 
 import type { ImageElement } from "../../engine";
 import { BarDivider, BarIconButton, WrapSwitch } from "./bar-controls";
-import { BarGroup } from "./bar-overflow";
+import { BarGroup, BarMore } from "./bar-overflow";
 import { DpiBadge } from "./dpi-badge";
 import { patchElement } from "./element-actions";
 import { replacementPatch } from "./image-actions";
+import { SaveImageToProject } from "./project-save-items";
 import type { PropertySectionProps } from "./property-sections";
 import { fitPlacement } from "./safe-fit";
 import { useStudio } from "./studio-context";
@@ -24,7 +25,7 @@ import { acceptedFormats, firstFile, UPLOAD_MESSAGES, useAssetPicker } from "./u
  * it is.
  */
 export function ImageBar({ element, code }: PropertySectionProps<ImageElement>) {
-  const { editor, surfaces, template, announce } = useStudio();
+  const { editor, surfaces, template, announce, design } = useStudio();
   const { pick, busy, error } = useAssetPicker();
   const fileInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -112,6 +113,11 @@ export function ImageBar({ element, code }: PropertySectionProps<ImageElement>) 
             onChange={(wrap) => patch({ wrap: wrap ? true : undefined })}
           />
         </BarGroup>
+      ) : null}
+      {design.project ? (
+        <BarMore>
+          <SaveImageToProject element={element} />
+        </BarMore>
       ) : null}
     </>
   );

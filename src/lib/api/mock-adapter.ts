@@ -70,9 +70,12 @@ export function paginate<T>(
 
 /* ── Match URL to registered pattern ─────────────────────────────────── */
 
-/** The design API the design mock serves (spec 2026-11-09 §5), as a path of the route table. */
+/**
+ * The design API the design mock serves (spec 2026-11-09 §5; projects: part E spec §4), as a
+ * path of the route table.
+ */
 const DESIGN_PATH =
-  /^(?:\/designs(?:\/.*)?|\/catalog\/products\/[^/]+\/variants\/[^/]+\/print-config|\/__mock(?:\/.*)?)$/;
+  /^(?:\/designs(?:\/.*)?|\/design-projects(?:\/.*)?|\/catalog\/products\/[^/]+\/variants\/[^/]+\/print-config|\/__mock(?:\/.*)?)$/;
 
 /**
  * A design URL as the route table knows it, null for any other: without an origin

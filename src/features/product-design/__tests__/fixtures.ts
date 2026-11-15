@@ -18,6 +18,7 @@ export const ids = {
   revision: uuid(2),
   snapshot: uuid(3),
   asset: uuid(4),
+  project: uuid(5),
 };
 
 export const designDto = (overrides: Record<string, unknown> = {}) => ({
@@ -28,6 +29,7 @@ export const designDto = (overrides: Record<string, unknown> = {}) => ({
   variant: { sku: "CUP-PAPER-12OZ-WHT", label: "CUP-PAPER-12OZ-WHT" },
   version: 3,
   projectId: null,
+  project: null,
   sourceSnapshotId: null,
   lastReturn: null,
   previewUrl: null,

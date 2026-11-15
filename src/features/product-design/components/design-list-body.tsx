@@ -23,6 +23,7 @@ type DesignListBodyProps = {
   page: number;
   revision: DesignRevision;
   onDelete: (design: Design) => void;
+  onClone: (design: Design) => void;
   onShowAll: () => void;
   onFirstPage: () => void;
   onPageChange: (page: number) => void;
@@ -35,6 +36,7 @@ export function DesignListBody({
   page,
   revision,
   onDelete,
+  onClone,
   onShowAll,
   onFirstPage,
   onPageChange,
@@ -85,6 +87,7 @@ export function DesignListBody({
               design={design}
               onDelete={onDelete}
               onRevise={revision.revise}
+              onClone={onClone}
               revising={revision.revisingId === design.id}
               reviseDisabled={revision.busy}
             />

@@ -7,6 +7,7 @@ import {
   MOCK_BLOCKED_SKU,
   MOCK_PRINT_CONFIGS,
   MOCK_SKU_WITHOUT_CARTON_SPEC,
+  MOCK_SKU_WITH_MODEL3D,
   MOCK_SKU_WITHOUT_PRINT_CONFIG,
   printConfigFor,
 } from "./design-print-configs";
@@ -58,6 +59,33 @@ describe("MOCK_PRINT_CONFIGS", () => {
       (c) => c.sku !== MOCK_BLOCKED_SKU && c.sku !== MOCK_SKU_WITHOUT_CARTON_SPEC,
     );
     expect(others.every((c) => c.variantStatus === "ACTIVE" && c.hasCartonSpec)).toBe(true);
+  });
+});
+
+describe("the .glb of the mock", () => {
+  it("is on the 12 oz white cup only, and maps to a print area its template has", () => {
+    const withModel = Object.values(MOCK_PRINT_CONFIGS).filter((config) => config.model3d);
+    expect(withModel.map((config) => config.sku)).toEqual([MOCK_SKU_WITH_MODEL3D]);
+    const { model3d, template } = withModel[0]!;
+    expect(model3d?.url).toBe("/models/sample-cup-12oz.glb");
+    const areas = template.printAreas.map((area) => area.code);
+    for (const { printAreaCode } of model3d!.surfaces) expect(areas).toContain(printAreaCode);
+  });
+
+  it("is not inherited by the logo cup, which shares the size spec", () => {
+    expect(MOCK_PRINT_CONFIGS["CUP-CUSTOM-LOGO"]!.model3d).toBeUndefined();
+    expect(
+      printConfigFor("ly-giay-2-lop-12oz", MOCK_SKU_WITH_MODEL3D)!.model3d,
+    ).not.toBeUndefined();
+    expect(MOCK_PRINT_CONFIGS["CUP-PET-500ML"]!.model3d).toBeUndefined();
+  });
+
+  it("is not shared by reference: a copy served to one caller does not change the next", () => {
+    const first = printConfigFor("ly-giay-2-lop-12oz", MOCK_SKU_WITH_MODEL3D)!;
+    first.model3d!.surfaces.length = 0;
+    expect(
+      printConfigFor("ly-giay-2-lop-12oz", MOCK_SKU_WITH_MODEL3D)!.model3d!.surfaces,
+    ).toHaveLength(1);
   });
 });
 

@@ -11,6 +11,7 @@ import { CheckChip } from "./check-chip";
 import { DesignNameField } from "./design-name-field";
 import { SaveState } from "./save-state";
 import { StudioBackLink } from "./studio-back-link";
+import { StudioProjectCrumb } from "./studio-project-crumb";
 import { useEditorState, useStudio } from "./studio-context";
 import { StudioIconButton } from "./studio-icon-button";
 import { isUnsaved, type AutosaveStatus } from "./use-autosave";
@@ -34,10 +35,12 @@ function useSaveShortcut(save: () => void, enabled: boolean) {
 }
 
 /**
- * The studio's compact header: back to the design list (asking first while an edit is unsaved),
- * the name (renamed in place while the design may be renamed), the save state, "Lưu" (Ctrl+S)
- * while it may be saved, undo/redo, the status badge (with "Bị trả lại" for a returned draft) and
- * `action`, the slot for the primary lifecycle action.
+ * The studio's compact header: back to the design list, or to the project page for a design in a
+ * project (asking first while an edit is unsaved), the project's name as a link to that page
+ * before the design's name ("Dự án X › name"), the name (renamed in place while the design may be
+ * renamed), the save state, "Lưu" (Ctrl+S) while it may be saved, undo/redo, the status badge
+ * (with "Bị trả lại" for a returned draft) and `action`, the slot for the primary lifecycle
+ * action.
  */
 export function StudioHeader({
   autosave,
@@ -58,6 +61,7 @@ export function StudioHeader({
     <header className="bg-bg-surface border-border-default flex h-14 shrink-0 items-center gap-1 border-b px-2 sm:gap-2 sm:px-3">
       <StudioBackLink unsaved={canSave && isUnsaved(autosave.state)} />
       <span aria-hidden className="bg-border-default hidden h-6 w-px shrink-0 sm:block" />
+      <StudioProjectCrumb unsaved={canSave && isUnsaved(autosave.state)} />
       <DesignNameField editable={actions.includes("rename")} />
       {canSave ? (
         <SaveState

@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import {
+  cloneDesign,
   createDesign,
   createRevision,
   deleteDesign,
@@ -9,12 +10,34 @@ import {
   uploadDesignAsset,
 } from "./api";
 import { isDesignConflict, isDesignGone, isDesignStateChanged } from "./errors";
-import { designKeys } from "./queries";
-import type { Design, DesignDocumentRecord, RenameDesignInput, SaveDocumentInput } from "./types";
+import { reReadProject, reReadProjects } from "./project-mutations";
+import { designKeys, projectKeys } from "./queries";
+import type {
+  CloneDesignInput,
+  Design,
+  DesignDocumentRecord,
+  RenameDesignInput,
+  SaveDocumentInput,
+} from "./types";
 
 // What each write re-reads (spec 2026-11-09 §4.4). A write whose answer is the fresh design puts
 // it in the cache instead of refetching it: a refetch racing the next autosave could land with an
 // older version and turn that save into a 409.
+
+export {
+  useDeleteLibraryItem,
+  usePlaceFromLibrary,
+  useSaveImageToLibrary,
+  useSaveTextStyle,
+  useUploadLibraryImage,
+} from "./library-mutations";
+export {
+  useAddDesignToProject,
+  useArchiveProject,
+  useCreateProject,
+  useRemoveDesignFromProject,
+  useUpdateProject,
+} from "./project-mutations";
 
 export type UploadAssetInput = { file: Blob; name: string; idempotencyKey: string };
 export type DeleteDesignTarget = { id: string; version: number };
@@ -31,6 +54,7 @@ export function invalidateDesign(client: QueryClient, id: string) {
     client.invalidateQueries({ queryKey: designKeys.files(id) }),
     client.invalidateQueries({ queryKey: designKeys.lists() }),
     client.invalidateQueries({ queryKey: designKeys.draftCount() }),
+    reReadProjects(client),
   ]);
 }
 
@@ -52,10 +76,20 @@ function reReadWhenStateChanged(client: QueryClient, id: string, error: unknown)
   void client.invalidateQueries({ queryKey: designKeys.lists() });
 }
 
-/** POST /designs. The caller opens the studio of the draft it gets back. */
+/**
+ * POST /designs. The caller opens the studio of the draft it gets back. With a `projectId` the
+ * draft starts inside that project, so the project is re-read too (its count, its strip).
+ */
 export function useCreateDesign() {
   const client = useQueryClient();
-  return useMutation({ mutationFn: createDesign, onSuccess: () => reReadDrafts(client) });
+  return useMutation({
+    mutationFn: createDesign,
+    onSuccess: (_design, input) =>
+      Promise.all([
+        reReadDrafts(client),
+        input.projectId ? reReadProject(client, input.projectId) : undefined,
+      ]),
+  });
 }
 
 /** "Tạo bản sửa" (`mutate(approvedId)`); the caller opens the new draft. */
@@ -63,7 +97,24 @@ export function useCreateRevision() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => createRevision(id),
-    onSuccess: () => reReadDrafts(client),
+    // ASSUMPTION (A-E3, as for a clone): a revision joins its source's project when that is
+    // ACTIVE and has room; a closed project takes none (BR-22).
+    onSuccess: () => Promise.all([reReadDrafts(client), reReadProjects(client)]),
+  });
+}
+
+/**
+ * "Nhân bản sang cỡ khác" (`mutate({ variantSku, document })`); the caller opens the new draft. The
+ * copy is a new draft and may join the source's project (A-E3): lists, draft count and projects
+ * are re-read. A source another tab deleted or moved on is re-read too.
+ */
+export function useCloneDesign(id: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ idempotencyKey, ...input }: CloneDesignInput & { idempotencyKey: string }) =>
+      cloneDesign(id, input, idempotencyKey),
+    onSuccess: () => Promise.all([reReadDrafts(client), reReadProjects(client)]),
+    onError: (error) => reReadWhenStateChanged(client, id, error),
   });
 }
 
@@ -92,6 +143,7 @@ export function useRenameDesign(id: string) {
         (record) => record && { ...record, version: design.version },
       );
       void client.invalidateQueries({ queryKey: designKeys.lists() });
+      void reReadProjects(client); // a project card shows the design's name
     },
     onError: (error) => {
       reReadWhenStateChanged(client, id, error);
@@ -119,6 +171,9 @@ export function useSaveDesignDocument(id: string) {
         (design) => design && { ...design, version: record.version, updatedAt: record.updatedAt },
       );
       void client.invalidateQueries({ queryKey: designKeys.lists() });
+      // The project page shows the design's preview and time: stale, not awaited (autosave).
+      const projectId = client.getQueryData<Design>(designKeys.detail(id))?.projectId;
+      if (projectId) void client.invalidateQueries({ queryKey: projectKeys.designs(projectId) });
     },
     onError: (error) => reReadWhenStateChanged(client, id, error),
   });
@@ -149,6 +204,7 @@ export function useDeleteDesign() {
     onSuccess: (_design, { id }) => client.removeQueries({ queryKey: designKeys.detail(id) }),
     // A draft submitted in another tab answers 409 INVALID_STATE: its status moved on, re-read it.
     onError: (error, { id }) => reReadWhenStateChanged(client, id, error),
-    onSettled: () => reReadDrafts(client),
+    // A project's count, strip and gates change with its designs, whatever the answer.
+    onSettled: () => Promise.all([reReadDrafts(client), reReadProjects(client)]),
   });
 }

@@ -23,3 +23,18 @@ export function readDraggedAsset(
     return null;
   }
 }
+
+/** The drag data type of a tile of the project library: the id of the library item, as text. */
+export const LIBRARY_DRAG_TYPE = "application/x-stockflow-library-item";
+
+/** Whether a drag carries a tile of the project library (types only, like `carriesAsset`). */
+export const carriesLibraryItem = (data: Pick<DataTransfer, "types">): boolean =>
+  Array.from(data.types).includes(LIBRARY_DRAG_TYPE);
+
+/** The id of the library item a drag carries, `null` when it carries none. */
+export function readDraggedLibraryItem(
+  data: Pick<DataTransfer, "types" | "getData">,
+): string | null {
+  if (!carriesLibraryItem(data)) return null;
+  return data.getData(LIBRARY_DRAG_TYPE).trim() || null;
+}

@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import { hitTest, ProductViewer } from "../../engine";
+import { Model3dStatusLine, useModel3dStatus } from "./model3d-status";
 import { useStudio } from "./studio-context";
 import { useSurfaceRenderer } from "./use-surface-renderer";
 import { ViewerTitle, ViewerToolbar } from "./viewer-toolbar";
@@ -36,12 +37,21 @@ export function Viewer3D({
   /** In the corner card: no title bar, the controls float over the model's top-left corner. */
   compact?: boolean;
 }) {
-  const { editor, surfaces, template, sizer, viewerRef: studioViewerRef } = useStudio();
+  const {
+    editor,
+    surfaces,
+    template,
+    sizer,
+    printConfig,
+    viewerRef: studioViewerRef,
+  } = useStudio();
+  const model3d = printConfig.model3d;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<ProductViewer | null>(null);
   const pressedAt = useRef<{ x: number; y: number } | null>(null);
   const [autoRotate, setAutoRotate] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const { message: modelMessage, report: reportModel3d } = useModel3dStatus(editor, model3d);
   const giveUp = useEffectEvent(onUnavailable);
 
   const textures = useSurfaceRenderer({
@@ -54,10 +64,14 @@ export function Viewer3D({
     const canvas = canvasRef.current;
     if (!canvas) return;
     let viewer: ProductViewer | undefined;
+    let offModel3d: (() => void) | undefined;
     try {
       viewer = new ProductViewer(canvas);
-      viewer.setModel(template, surfaces);
+      // Before `setModel`: it says "loading" at once, inside the call.
+      offModel3d = viewer.on("model3d", ({ status }) => reportModel3d(status));
+      viewer.setModel(template, surfaces, model3d);
     } catch {
+      offModel3d?.();
       viewer?.dispose();
       giveUp();
       return;
@@ -74,13 +88,14 @@ export function Viewer3D({
     });
     return () => {
       offSurface();
+      offModel3d?.();
       offLost();
       offError();
       viewerRef.current = null;
       if (studioViewerRef.current === viewer) studioViewerRef.current = null;
       viewer.dispose();
     };
-  }, [editor, template, surfaces, textures, studioViewerRef]);
+  }, [editor, template, model3d, reportModel3d, surfaces, textures, studioViewerRef]);
 
   useEffect(() => {
     const onChange = () => setFullscreen(document.fullscreenElement === fullscreenTarget.current);
@@ -142,6 +157,7 @@ export function Viewer3D({
             {toolbar}
           </div>
         )}
+        <Model3dStatusLine message={modelMessage} />
       </div>
     </div>
   );

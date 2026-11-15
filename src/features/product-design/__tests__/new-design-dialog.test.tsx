@@ -87,6 +87,21 @@ describe("NewDesignDialog", () => {
     expect(env.push).toHaveBeenCalledWith("/design/new?product=tui-giay-kraft&sku=BAG-KRAFT-M");
   });
 
+  it("carries the project id to the launcher when the dialog is opened from a project", async () => {
+    renderWithProviders(
+      <NewDesignDialog catalogue={ready()} open onOpenChange={vi.fn()} projectId="p-1" />,
+    );
+    await pickProduct("Túi giấy kraft quai xoắn");
+    await waitFor(() => expect(variant("BAG-KRAFT-M")).toBeEnabled(), WAIT);
+    await userEvent.click(variant("BAG-KRAFT-M"));
+    const start = screen.getByRole("button", { name: "Bắt đầu" });
+    await waitFor(() => expect(start).toBeEnabled());
+    await userEvent.click(start);
+    expect(env.push).toHaveBeenCalledWith(
+      "/design/new?product=tui-giay-kraft&sku=BAG-KRAFT-M&project=p-1",
+    );
+  });
+
   it("disables a variant without a print configuration, and says why (spec §6.3)", async () => {
     open();
     await pickProduct("Túi giấy kraft quai xoắn");

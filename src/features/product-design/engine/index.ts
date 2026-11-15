@@ -61,6 +61,7 @@ export {
   updateElement,
 } from "./document/commands";
 export { DocumentHistory } from "./document/history";
+export { retargetDocument } from "./document/retarget";
 export { PRINT_SWATCHES } from "./document/palette";
 
 // Geometry
@@ -182,7 +183,19 @@ export {
   type ShortcutKeyEvent,
 } from "./editor/shortcuts";
 
-// Live 3D preview (three.js enters the barrel only through here)
+// The .glb link of a print configuration (spec 2026-11-13 §3)
+export { model3dRefSchema, type Model3dRef } from "./model3d/schema";
+export {
+  buildGlbScene,
+  disposeGlbScene,
+  disposeGlbTree,
+  loadGlb,
+  Model3dError,
+  type Model3dErrorCode,
+  type Model3dLoadReason,
+} from "./model3d";
+
+// Live 3D preview (the viewer's three.js; the .glb loader above is imported on demand)
 export { ProductViewer, type ViewerOptions } from "./viewer3d/product-viewer";
 export { printUnderlay } from "./viewer3d/materials";
 export { isWebGLAvailable } from "./viewer3d/webgl";

@@ -43,16 +43,23 @@ export function NewDesignDialog({
   catalogue,
   open,
   onOpenChange,
+  projectId,
 }: {
   catalogue: DesignableCatalogue;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The project the new design joins (the project page); none from "Thiết kế của tôi". */
+  projectId?: string;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-bg-surface border-border-default max-h-[90dvh] gap-4 overflow-y-auto rounded-[var(--r-xl)] border p-[var(--card-pad)] shadow-[var(--sh-lg)] ring-0 sm:max-w-md">
         {/* The content unmounts when the dialog closes: it opens again with nothing chosen. */}
-        <NewDesignForm catalogue={catalogue} onCancel={() => onOpenChange(false)} />
+        <NewDesignForm
+          catalogue={catalogue}
+          projectId={projectId}
+          onCancel={() => onOpenChange(false)}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -60,9 +67,11 @@ export function NewDesignDialog({
 
 function NewDesignForm({
   catalogue,
+  projectId,
   onCancel,
 }: {
   catalogue: DesignableCatalogue;
+  projectId: string | undefined;
   onCancel: () => void;
 }) {
   const router = useRouter();
@@ -86,7 +95,9 @@ function NewDesignForm({
       <DialogHeader>
         <DialogTitle className="text-ink-primary text-lg font-semibold">Thiết kế mới</DialogTitle>
         <DialogDescription className="text-ink-secondary text-sm">
-          Chọn sản phẩm in được, rồi chọn quy cách bạn muốn thiết kế.
+          {projectId
+            ? "Chọn sản phẩm in được, rồi chọn quy cách. Bản mới sẽ nằm trong dự án này."
+            : "Chọn sản phẩm in được, rồi chọn quy cách bạn muốn thiết kế."}
         </DialogDescription>
       </DialogHeader>
 
@@ -135,7 +146,8 @@ function NewDesignForm({
           className="min-h-11 rounded-[var(--r-md)] px-4"
           disabled={!accepted}
           onClick={() => {
-            if (product && sku) router.push(STORE_ROUTES.design.newFor(product.slug, sku));
+            if (product && sku)
+              router.push(STORE_ROUTES.design.newFor(product.slug, sku, projectId));
           }}
         >
           Bắt đầu

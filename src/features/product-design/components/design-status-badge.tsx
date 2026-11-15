@@ -6,7 +6,7 @@ import { DESIGN_STATUS_META, RETURNED_META } from "../lifecycle";
 import type { DesignStatus } from "../types";
 
 /** Tinted background + text per tone, the same mapping as the order status badge. */
-const TONE_CLASSES: Record<SemanticTone, string> = {
+export const TONE_CLASSES: Record<SemanticTone, string> = {
   positive: "bg-positive/10 text-positive",
   info: "bg-info/10 text-info",
   warning: "bg-warning/10 text-warning",
@@ -16,7 +16,7 @@ const TONE_CLASSES: Record<SemanticTone, string> = {
   special: "bg-special/10 text-special",
 };
 
-const BADGE = "h-7 rounded-full px-3 text-sm font-semibold";
+export const BADGE = "h-7 rounded-full px-3 text-sm font-semibold";
 
 /** The status of a design (spec §3.1); a returned DRAFT carries a second, secondary badge. */
 export function DesignStatusBadge({

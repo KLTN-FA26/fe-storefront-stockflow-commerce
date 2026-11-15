@@ -10,6 +10,7 @@
  * `customizationTemplateSchema` checks that they agree with the model.
  */
 
+import type { Model3dRef } from "@/features/product-design/engine/model3d/schema";
 import type {
   BagModel,
   CupModel,
@@ -31,6 +32,8 @@ export type PrintConfigRow = {
   /** docs 12 BR-05, B25: required before submitting. */
   hasCartonSpec: boolean;
   template: CustomizationTemplate;
+  /** The `.glb` beside the template (spec 2026-11-13 §3); only `MOCK_SKU_WITH_MODEL3D` has one. */
+  model3d?: Model3dRef | null;
   fileRules: FileRules;
 };
 
@@ -251,6 +254,17 @@ const TEMPLATES: CustomizationTemplate[] = [
   }),
 ];
 
+/**
+ * The one mock variant with a `.glb` (`public/models/sample-cup-12oz.glb`, built from the 12 oz cup's
+ * numbers by `scripts/make-sample-glb.mjs`): the studio, the preview and "Xem 3D" can be seen with a
+ * real model on the mock. `CUP12-LOGO` shares the size spec but not the file.
+ */
+export const MOCK_SKU_WITH_MODEL3D = "CUP-PAPER-12OZ-WHT";
+const MOCK_MODEL3D: Model3dRef = {
+  url: "/models/sample-cup-12oz.glb",
+  surfaces: [{ printAreaCode: "BODY", meshName: "print:BODY" }],
+};
+
 const CATALOG = seedMockCatalog();
 
 /** The mock catalogue's product of a SKU: its slug and title. */
@@ -270,6 +284,7 @@ export const MOCK_PRINT_CONFIGS: Readonly<Record<string, PrintConfigRow>> = Obje
       variantStatus: template.sku === MOCK_BLOCKED_SKU ? "BLOCKED" : "ACTIVE",
       hasCartonSpec: template.sku !== MOCK_SKU_WITHOUT_CARTON_SPEC,
       template,
+      ...(template.sku === MOCK_SKU_WITH_MODEL3D ? { model3d: structuredClone(MOCK_MODEL3D) } : {}),
       fileRules: structuredClone(DEFAULT_FILE_RULES),
     },
   ]),

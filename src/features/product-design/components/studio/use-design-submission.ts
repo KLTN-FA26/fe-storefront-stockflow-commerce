@@ -4,8 +4,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
 import { submitDesign } from "../../api";
-import { documentChecksum } from "../../engine";
-import type { PreflightReport } from "../../engine";
 import {
   isDesignConflict,
   isDesignGone,
@@ -16,15 +14,14 @@ import {
 import { invalidateDesign } from "../../mutations";
 import { designKeys } from "../../queries";
 import type { Design, ReportedPreflightIssue } from "../../types";
-import { buildSubmissionBundle, type BundleStep, type SubmissionBundle } from "./submission-bundle";
+import { checkDocument, drawBundle, type Checked, type SubmissionSubject } from "./run-submission";
+import type { BundleStep, SubmissionBundle } from "./submission-bundle";
 import {
   assertStoredIs,
   DocumentChangedError,
   DocumentEditedError,
-  preflightStored,
   recordFailure,
-  type Checked,
-  type Drawn,
+  storedDocument,
   type SubmissionContext,
 } from "./submission-checks";
 import { useStudio } from "./studio-context";
@@ -32,7 +29,7 @@ import { useStudio } from "./studio-context";
 export type SubmitStep = "idle" | "checking" | BundleStep | "upload" | "done" | "error";
 
 /** What a run has made, kept so a retry resumes at the upload without drawing again. */
-type Work = Drawn & { bundle: SubmissionBundle; report: PreflightReport };
+type Work = Checked & { bundle: SubmissionBundle };
 
 type State = {
   step: SubmitStep;
@@ -47,13 +44,15 @@ const IDLE: State = { step: "idle", fraction: 0, issues: null };
  * "Gửi duyệt" (spec §6.4): saves what is pending, runs the preflight on exactly what is stored,
  * records a client-side Fail (no files are made), else draws the bundle, checks the stored
  * document is still the drawn one and submits. A failed upload is retried with the same bundle.
- * `check()` is the first half alone, for the dialog to confirm before anything is drawn.
+ * `check()` is the first half alone, for the dialog to confirm before anything is drawn. The check
+ * and the drawing are the runner's (`run-submission.ts`), run on the open design.
  */
 export function useDesignSubmission(design: Design) {
   const services = useStudio();
-  const { template, surfaces, autosave, exportRenderer: renderer } = services;
+  const { autosave } = services;
   const client = useQueryClient();
   const ctx: SubmissionContext = { services, client, design };
+  const subject: SubmissionSubject = { ...services, design };
   const work = useRef<Work | null>(null);
   const busy = useRef(false);
   /** The attempt succeeded: `retry()` resumes a failed attempt only, so it must not submit again. */
@@ -66,7 +65,7 @@ export function useDesignSubmission(design: Design) {
    */
   async function inspect(): Promise<Checked | null> {
     setState({ step: "checking", fraction: 0, issues: null });
-    const checked = await preflightStored(ctx);
+    const checked = await checkDocument(subject, await storedDocument(ctx));
     if (checked.report.result === "Pass") return checked;
     // The issues are shown at once; the attempt is recorded after (docs 12 §5.3). A record that
     // fails does not hide them.
@@ -81,22 +80,13 @@ export function useDesignSubmission(design: Design) {
   async function prepare(): Promise<Work | null> {
     const checked = await inspect();
     if (!checked) return null;
-    const { document, report } = checked;
-    const drawn = { document, checksum: await documentChecksum(document) };
     // Saved, yet not what is stored (another tab or device saved since this one loaded it), or
     // already edited again: nothing is drawn.
-    await assertStoredIs(ctx, drawn);
-    const bundle = await buildSubmissionBundle({
-      name: design.name,
-      document,
-      template,
-      surfaces,
-      report,
-      checksum: drawn.checksum,
-      renderer,
-      onStep: (step, fraction) => setState({ step, fraction, issues: null }),
-    });
-    return { ...drawn, bundle, report };
+    await assertStoredIs(ctx, checked);
+    const bundle = await drawBundle(subject, checked, (step, fraction) =>
+      setState({ step, fraction, issues: null }),
+    );
+    return { ...checked, bundle };
   }
 
   async function execute() {

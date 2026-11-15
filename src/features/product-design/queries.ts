@@ -23,6 +23,10 @@ import {
 } from "./api";
 import type { Design, DesignListParams, DownloadLink, PrintConfig } from "./types";
 
+import { DESIGN_POLL_MS } from "./project-queries";
+
+export * from "./project-queries"; // the projects' keys and queries live in their own file
+
 // Every per-design key nests under `detail(id)`, so deleting a design forgets all of it at once;
 // writes that only change the design itself match `detail(id)` exactly. A short-lived link is
 // outside it: re-reading a design must not hand its images new URLs.
@@ -37,6 +41,8 @@ export const designKeys = {
   document: (id: string) => [...designKeys.detail(id), "document"] as const,
   assets: (id: string) => [...designKeys.detail(id), "assets"] as const,
   files: (id: string) => [...designKeys.detail(id), "files"] as const,
+  /** The SKUs of a product's variants, read for "Nhân bản sang cỡ khác". */
+  variantSkus: (productSlug: string) => [...designKeys.all, "variant-skus", productSlug] as const,
   downloadLink: (designId: string, assetId: string) =>
     [...designKeys.all, "download-link", designId, assetId] as const,
 };
@@ -76,9 +82,6 @@ export function designQuery(id: string) {
     ...QUERY_TIMES.detail,
   });
 }
-
-/** How often a design is re-read while the customer waits for the review. */
-export const DESIGN_POLL_MS = 5_000;
 
 /** The one status that changes without the customer: the Sales Manager approves or returns it. */
 const awaitsReview = (design: Design | undefined) => design?.status === "PENDING_REVIEW";

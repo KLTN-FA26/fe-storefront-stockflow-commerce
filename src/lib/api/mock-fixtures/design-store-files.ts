@@ -14,7 +14,9 @@ import { sha256Hex } from "@/features/product-design/engine/export/checksum";
 
 import { DEFAULT_FILE_RULES, type PrintConfigRow } from "./design-print-configs";
 import {
+  BYTES_PER_MB,
   BUNDLE_ROLES,
+  asRecord,
   assetKey,
   fail,
   fileBlobKey,
@@ -25,16 +27,17 @@ import {
   toAssetDto,
   toDesignDto,
   type AssetRow,
+  type BundleRole,
   type DesignDto,
   type DesignMockState,
   type DesignRow,
   type DesignFileDto,
   type EventRow,
+  type FileRow,
   type MockResult,
 } from "./design-rows";
 import type { DesignMockStorage } from "./design-storage";
 
-const BYTES_PER_MB = 1024 * 1024;
 const LINK_TTL_MS = 5 * 60_000;
 
 /**
@@ -69,8 +72,53 @@ export const hashOf = async (blob: Blob) => sha256Hex(new Uint8Array(await blob.
 
 export const assetsOf = (ctx: FilesContext, designId: string) =>
   ctx.state().assets.filter((a) => a.designId === designId);
-const rulesOf = (ctx: FilesContext, row: DesignRow) =>
+export const rulesOf = (ctx: FilesContext, row: DesignRow) =>
   ctx.configOf(row)?.fileRules ?? DEFAULT_FILE_RULES;
+
+/** The file rules as a refusal of an upload (BR-18, B34), or null when the file passes them. */
+export function ruleRefusal(
+  rules: { formats: readonly string[]; maxFileSizeMb: number },
+  contentType: string,
+  sizeBytes: number,
+): MockResult | null {
+  if (!rules.formats.includes(contentType)) {
+    return fileRejected(`Accepted formats: ${rules.formats.join(", ")}`);
+  }
+  if (sizeBytes > rules.maxFileSizeMb * BYTES_PER_MB) {
+    return fileRejected(`The file is over ${rules.maxFileSizeMb} MB`);
+  }
+  return null;
+}
+
+/**
+ * What an image upload checks before it stores anything, for a design's and a library's alike:
+ * the type and size by `rules`, then that the bytes are a readable image. Answers what the row
+ * needs (type, SHA-256, pixel size), or the refusal.
+ */
+export async function readImageUpload(
+  ctx: FilesContext,
+  file: Blob,
+  rules: { formats: readonly string[]; maxFileSizeMb: number },
+): Promise<
+  | { refused: MockResult }
+  | { contentType: string; checksum: string; widthPx: number; heightPx: number }
+> {
+  const contentType = mimeOf(file);
+  const refused = ruleRefusal(rules, contentType, file.size);
+  if (refused) return { refused };
+  const [checksum, size] = await Promise.all([
+    hashOf(file),
+    ctx.readImageSize(file).catch(() => null),
+  ]);
+  if (!size || size.widthPx < 1 || size.heightPx < 1) {
+    return { refused: fileRejected("The file is not a readable image") };
+  }
+  return { contentType, checksum, ...size };
+}
+
+/** The same key with other bytes (a retry that is not one): 422 `IDEMPOTENCY_KEY_REUSED`. */
+export const keyReused = () =>
+  fail(422, "IDEMPOTENCY_KEY_REUSED", "This key was already used for another file");
 
 /** A stored image is usable when its bytes are still there and it is within the file rules. */
 export async function assetUsable(
@@ -106,6 +154,57 @@ export async function withBlobs<T>(
   }
 }
 
+/** The name of a bundle file sent without one. */
+const FALLBACK_NAMES: Record<BundleRole, string> = {
+  CUSTOMER_PREVIEW: "preview.png",
+  PRINT_READY: "print-ready.pdf",
+  TECHNICAL_SPEC: "technical-spec.pdf",
+};
+
+/** The three files of a submission and the SHA-256 the browser sent for each (`checksums`). */
+export type BundleForm = { checksums: unknown; files: Partial<Record<BundleRole, Blob>> };
+
+/**
+ * The checks every bundle meets (a single submission's, a review round's upload): all three files,
+ * each matching the SHA-256 sent for it, else 422 FILE_REJECTED. Answers the hashes in role order.
+ */
+export async function readBundle(
+  form: BundleForm,
+): Promise<{ hashes: string[] } | { refused: MockResult }> {
+  const missing = BUNDLE_ROLES.filter((role) => !form.files[role]);
+  if (missing.length) return { refused: fileRejected(`Missing ${missing.join(", ")}`) };
+  const sent = asRecord(form.checksums);
+  const hashes = await Promise.all(BUNDLE_ROLES.map((role) => hashOf(form.files[role]!)));
+  const mismatched = BUNDLE_ROLES.filter((role, i) => sent[role] !== hashes[i]);
+  if (mismatched.length) {
+    return { refused: fileRejected(`Checksum mismatch: ${mismatched.join(", ")}`) };
+  }
+  return { hashes };
+}
+
+/** The rows of a bundle `readBundle` accepted, its blobs to be stored under `keyOf(role)`. */
+export function bundleRows(
+  designId: string,
+  files: BundleForm["files"],
+  hashes: readonly string[],
+  storedAt: string,
+  keyOf: (role: BundleRole) => string,
+): FileRow[] {
+  return BUNDLE_ROLES.map((role, i) => {
+    const file = files[role]!;
+    return {
+      designId,
+      role,
+      name: nameOf(file, FALLBACK_NAMES[role]),
+      contentType: mimeOf(file),
+      sizeBytes: file.size,
+      sha256: hashes[i]!,
+      storedAt,
+      key: keyOf(role),
+    };
+  });
+}
+
 export function createDesignFiles(ctx: FilesContext) {
   /** The design's latest submission, by role. */
   const bundleOf = (designId: string) =>
@@ -125,7 +224,11 @@ export function createDesignFiles(ctx: FilesContext) {
   return {
     /** The design as the API answers it, with its `previewUrl`. */
     async toDto(row: DesignRow): Promise<DesignDto> {
-      return toDesignDto(row, await previewUrl(row));
+      return toDesignDto(
+        row,
+        await previewUrl(row),
+        ctx.state().projects.find((project) => project.id === row.projectId),
+      );
     },
 
     /** GET /designs/{id}/assets — newest first. */
@@ -139,38 +242,24 @@ export function createDesignFiles(ctx: FilesContext) {
       const row = ctx.find(id);
       if (!row) return notFound();
       if (row.status !== "DRAFT") return invalidState();
-      const rules = rulesOf(ctx, row);
-      const contentType = mimeOf(file);
-      if (!rules.formats.includes(contentType)) {
-        return fileRejected(`Accepted formats: ${rules.formats.join(", ")}`);
-      }
-      if (file.size > rules.maxFileSizeMb * BYTES_PER_MB) {
-        return fileRejected(`The file is over ${rules.maxFileSizeMb} MB`);
-      }
-      const [checksum, size] = await Promise.all([
-        hashOf(file),
-        ctx.readImageSize(file).catch(() => null),
-      ]);
-      if (!size || size.widthPx < 1 || size.heightPx < 1) {
-        return fileRejected("The file is not a readable image");
-      }
+      const read = await readImageUpload(ctx, file, rulesOf(ctx, row));
+      if ("refused" in read) return read.refused;
+      const { contentType, checksum, widthPx, heightPx } = read;
 
       const uploadKey = key?.trim() || null;
       const earlier = uploadKey
         ? assetsOf(ctx, id).find((a) => a.uploadKey === uploadKey)
         : undefined;
       if (earlier) {
-        return earlier.checksum === checksum
-          ? ok(toAssetDto(earlier), 201)
-          : fail(422, "IDEMPOTENCY_KEY_REUSED", "This key was already used for another file");
+        return earlier.checksum === checksum ? ok(toAssetDto(earlier), 201) : keyReused();
       }
       const asset: AssetRow = {
         designId: id,
         assetId: ctx.newId(),
         originalName: name ?? nameOf(file, "upload"),
         contentType,
-        widthPx: size.widthPx,
-        heightPx: size.heightPx,
+        widthPx,
+        heightPx,
         sizeBytes: file.size,
         checksum,
         storedAt: ctx.stamp(),

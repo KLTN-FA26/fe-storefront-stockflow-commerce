@@ -258,6 +258,81 @@ describe("design mock routes", () => {
     });
   });
 
+  it("the reviewer simulation routes of a round: the open rounds, the failure switch and approve-all", async () => {
+    const { data: none } = await api.get<{ rounds: unknown[] }>("/__mock/design-rounds");
+    expect(none.rounds).toEqual([]);
+
+    const pending = MOCK_DESIGN_IDS.pending;
+    const on = await api.post(`/__mock/designs/${pending}/fail-next-approval`, { enabled: true });
+    expect(on.data).toEqual({ designId: pending, failNext: true });
+    expect(await codeOf(api.post(`/__mock/designs/${pending}/approve`))).toEqual({
+      status: 409,
+      code: "APPROVAL_FAILED",
+    });
+    // The switch went with that failure: the next approval is the design's own.
+    const { data: approved } = await api.post<DesignDto>(`/__mock/designs/${pending}/approve`);
+    expect(approved.status).toBe("APPROVED");
+
+    expect(await codeOf(api.post(`/__mock/design-rounds/${uuid(9)}/approve-all`))).toEqual({
+      status: 404,
+      code: "NOT_FOUND",
+    });
+  });
+
+  it("the /design-projects routes: create, list, read, patch, add, list designs, remove, history, archive", async () => {
+    const created = (await api.post("/design-projects", { name: "Quán Hoa", description: "Bộ" }))
+      .data;
+    expect(created).toMatchObject({
+      status: "ACTIVE",
+      version: 0,
+      designCount: 0,
+      openRound: null,
+    });
+    const base = `/design-projects/${created.id}`;
+
+    const list = (
+      await api.get("/design-projects", { params: { status: "ACTIVE", page: 0, size: 5 } })
+    ).data as Page<{ id: string }>;
+    expect(list.items.map((p) => p.id)).toEqual([created.id]);
+    expect((await api.get(base)).data).toEqual(created);
+    expect((await api.patch(base, { name: "Quán Hoa 2", version: 0 })).data).toMatchObject({
+      name: "Quán Hoa 2",
+      version: 1,
+    });
+
+    const design = (await api.post("/designs", { ...CUP12, name: "Ly" })).data as DesignDto;
+    const added = (await api.post(`${base}/designs`, { designId: design.id })).data as DesignDto;
+    expect(added.project).toEqual({ id: created.id, name: "Quán Hoa 2", status: "ACTIVE" });
+    expect(((await api.get(`${base}/designs`)).data as DesignDto[]).map((d) => d.id)).toEqual([
+      design.id,
+    ]);
+    const inProject = (
+      await api.post("/designs", { ...CUP12, name: "Ly 2", projectId: created.id })
+    ).data as DesignDto;
+    expect(inProject.projectId).toBe(created.id);
+
+    expect(await codeOf(api.post(`${base}/archive`, { version: 0 }))).toEqual({
+      status: 409,
+      code: "VERSION_CONFLICT",
+    });
+    const removed = (await api.delete(`${base}/designs/${design.id}`)).data as DesignDto;
+    expect(removed.project).toBeNull();
+    expect(await codeOf(api.delete(`${base}/designs/${design.id}`))).toEqual({
+      status: 404,
+      code: "NOT_FOUND",
+    });
+    expect((await api.post(`${base}/archive`, { version: 1 })).data).toMatchObject({
+      status: "ARCHIVED",
+      version: 2,
+    });
+    const history = (await api.get(`${base}/history`)).data as Array<{ type: string }>;
+    expect(history.map((e) => e.type)).toEqual(["PROJECT_CREATED", "PROJECT_ARCHIVED"]);
+    expect(await codeOf(api.get("/design-projects/unknown"))).toEqual({
+      status: 404,
+      code: "NOT_FOUND",
+    });
+  });
+
   it("GET /catalog/products/:slug/variants/:sku/print-config, 404 without one; POST /__mock/reset", async () => {
     const { data: config } = await api.get(
       `/catalog/products/${CUP12.productSlug}/variants/${CUP12.sku}/print-config`,

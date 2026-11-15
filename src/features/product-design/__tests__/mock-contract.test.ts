@@ -80,6 +80,28 @@ describe("reads", () => {
     },
   );
 
+  it("only the 12 oz white cup is served with a .glb, mapped to a print area it has", async () => {
+    const withModels: string[] = [];
+    for (const { sku, product } of Object.values(MOCK_PRINT_CONFIGS)) {
+      const config = parse(printConfigDtoSchema, await store.printConfig(product.slug, sku));
+      if (!config.model3d) continue;
+      withModels.push(sku);
+      const areas = config.template.printAreas.map((area) => area.code);
+      for (const { printAreaCode } of config.model3d.surfaces) {
+        expect(areas).toContain(printAreaCode);
+      }
+    }
+    expect(withModels).toEqual(["CUP-PAPER-12OZ-WHT"]);
+    const cup = parse(
+      printConfigDtoSchema,
+      await store.printConfig("ly-giay-2-lop-12oz", "CUP-PAPER-12OZ-WHT"),
+    );
+    expect(cup.model3d).toEqual({
+      url: "/models/sample-cup-12oz.glb",
+      surfaces: [{ printAreaCode: "BODY", meshName: "print:BODY" }],
+    });
+  });
+
   it("the default print configuration of a product the mock does not know parses", async () => {
     parse(printConfigDtoSchema, await store.printConfig("tui-giay-la", "TUI-1"));
     parse(printConfigDtoSchema, await store.printConfig("ly-nhua-la", "LY-1"));

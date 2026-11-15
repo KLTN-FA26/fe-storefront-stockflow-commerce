@@ -12,7 +12,9 @@ import { useSignedIn } from "@/lib/auth/use-signed-in";
 
 import { useDesignList, useDraftCount } from "../queries";
 import type { Design } from "../types";
+import { CloneDesignDialog } from "./clone-design-dialog";
 import { DeleteDesignDialog } from "./delete-design-dialog";
+import { DesignSectionSwitch } from "./design-section-switch";
 import { DesignListBody } from "./design-list-body";
 import { useDesignRevision } from "./design-list-revision";
 import { DesignListSkeleton, RevisionError } from "./design-list-states";
@@ -37,6 +39,7 @@ export function DesignListScreen(props: DesignListScreenProps) {
   if (signedIn) return <SignedInDesignList {...props} />;
   return (
     <PageShell breadcrumbs={CRUMBS} title="Thiết kế của tôi">
+      <DesignSectionSwitch current="designs" />
       {signedIn === undefined ? (
         <DesignListSkeleton />
       ) : (
@@ -50,6 +53,7 @@ function SignedInDesignList({ catalogue }: DesignListScreenProps) {
   const [url, setUrl] = useQueryStates(designListUrlState, { history: "push" });
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<Design | null>(null);
+  const [cloning, setCloning] = useState<Design | null>(null);
   const revision = useDesignRevision();
   const draftCount = useDraftCount();
   const tab = url.tab;
@@ -90,6 +94,7 @@ function SignedInDesignList({ catalogue }: DesignListScreenProps) {
         </Button>
       }
     >
+      <DesignSectionSwitch current="designs" />
       {draftCount.data ? (
         <p className="text-ink-secondary mb-4 text-sm tabular-nums">
           {draftCount.data.drafts}/{draftCount.data.limit} bản nháp
@@ -128,6 +133,7 @@ function SignedInDesignList({ catalogue }: DesignListScreenProps) {
             page={page}
             revision={revision}
             onDelete={nextAction(setDeleting)}
+            onClone={nextAction(setCloning)}
             onShowAll={nextAction(() => void setUrl({ tab: null, page: null }))}
             onFirstPage={nextAction(() => void setUrl({ page: null }))}
             onPageChange={nextAction(
@@ -137,6 +143,12 @@ function SignedInDesignList({ catalogue }: DesignListScreenProps) {
         </TabsContent>
       </Tabs>
       <DeleteDesignDialog design={deleting} onClose={() => setDeleting(null)} />
+      <CloneDesignDialog
+        design={cloning}
+        open={cloning !== null}
+        onOpenChange={(open) => (open ? undefined : setCloning(null))}
+        skusOf={catalogue.skusOf}
+      />
       <NewDesignDialog catalogue={catalogue} open={creating} onOpenChange={setCreating} />
     </PageShell>
   );

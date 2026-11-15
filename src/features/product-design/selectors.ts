@@ -80,6 +80,8 @@ const EVENT_LABELS: Record<DesignEventType, string> = {
   RETURNED: "Bị trả lại",
   APPROVED: "Đã duyệt",
   ARCHIVED: "Xoá bản nháp",
+  ADDED_TO_PROJECT: "Thêm vào dự án",
+  REMOVED_FROM_PROJECT: "Gỡ khỏi dự án",
 };
 
 /**

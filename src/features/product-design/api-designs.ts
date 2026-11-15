@@ -2,8 +2,10 @@ import { z } from "zod";
 
 import { api } from "@/lib/api/client";
 
-import { designPath, withSignal } from "./api-request";
+import { designPath, to0Based, withSignal } from "./api-request";
 import {
+  cloneDesignInputSchema,
+  cloneResultDtoSchema,
   createDesignInputSchema,
   designDtoSchema,
   designEventDtoSchema,
@@ -12,6 +14,8 @@ import {
   renameDesignInputSchema,
 } from "./schemas";
 import type {
+  CloneDesignInput,
+  CloneResult,
   CreateDesignInput,
   DeleteDesignInput,
   Design,
@@ -23,8 +27,6 @@ import type {
 } from "./types";
 
 // The designs themselves and their list (spec 2026-11-09 §4.2); re-exported by `api.ts`.
-
-const to0Based = (page: number) => Math.max(page, 1) - 1; // the wire is 0-based
 
 /** GET /designs?status=&page=&size= — the caller's designs, newest updated first. */
 export async function listDesigns(p: DesignListParams, signal?: AbortSignal): Promise<DesignPage> {
@@ -77,4 +79,20 @@ export async function deleteDesign(id: string, input: DeleteDesignInput): Promis
 export async function createRevision(id: string): Promise<Design> {
   const { data } = await api.post<unknown>(designPath(id, "/revisions"));
   return designDtoSchema.parse(data);
+}
+
+/**
+ * POST /designs/{id}/clones `{ variantSku, document }` — a new DRAFT for another variant of the
+ * same product, 422 VARIANT_NOT_ELIGIBLE when it is not one (spec 2026-11-12 §4).
+ */
+export async function cloneDesign(
+  id: string,
+  input: CloneDesignInput,
+  idempotencyKey: string,
+): Promise<CloneResult> {
+  const body = cloneDesignInputSchema.parse(input);
+  const { data } = await api.post<unknown>(designPath(id, "/clones"), body, {
+    headers: { "Idempotency-Key": idempotencyKey },
+  });
+  return cloneResultDtoSchema.parse(data);
 }

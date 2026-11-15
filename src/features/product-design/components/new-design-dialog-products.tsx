@@ -23,7 +23,15 @@ export type MoreProducts = { onLoad: () => void; loading: boolean; error: unknow
  * (`""`), once typing stops, and with `null` when it closes: the page reads the catalogue only
  * while the dialog is open.
  */
-export type DesignableCatalogue = { onSearch: (text: string | null) => void } & (
+export type DesignableCatalogue = {
+  onSearch: (text: string | null) => void;
+  /**
+   * The SKUs of one product's variants, read on demand: "Nhân bản sang cỡ khác" offers the other
+   * variants of a design's product, which the product list above does not cover (it is read only
+   * while "Thiết kế mới" is open). Without it nothing is offered.
+   */
+  skusOf?: (productSlug: string, signal?: AbortSignal) => Promise<string[]>;
+} & (
   | { status: "loading" }
   | { status: "error"; error: unknown; onRetry: () => void; retrying: boolean }
   | {

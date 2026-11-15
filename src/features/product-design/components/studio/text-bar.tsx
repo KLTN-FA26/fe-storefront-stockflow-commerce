@@ -22,6 +22,7 @@ import {
   MAX_TEXT_SIZE_PT,
   MIN_TEXT_SIZE_PT,
 } from "./text-actions";
+import { SaveTextToProject } from "./project-save-items";
 import { TextMoreFields } from "./text-more-fields";
 
 const ALIGNMENTS = [
@@ -157,6 +158,7 @@ export function TextBar({ element, code, readOnly }: PropertySectionProps<TextEl
       ) : null}
       <BarMore disabled={locked}>
         <TextMoreFields target={target} warnOnKraft={kraft} />
+        <SaveTextToProject element={element} />
       </BarMore>
     </>
   );

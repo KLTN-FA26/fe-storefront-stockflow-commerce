@@ -12,6 +12,7 @@ import {
   downloadLinkQuery,
   downloadLinkStaleTime,
   printConfigKeys,
+  projectKeys,
   useDesign,
   useDesignAssets,
   useDesignDocument,
@@ -21,6 +22,8 @@ import {
   useDownloadLink,
   useDraftCount,
   usePrintConfig,
+  useProject,
+  useProjectDesigns,
 } from "../queries";
 import {
   approvedDto,
@@ -34,6 +37,7 @@ import {
   pageDto,
   printConfigDto,
 } from "./fixtures";
+import { projectDto } from "./project-fixtures";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -107,6 +111,66 @@ describe("reads", () => {
     const { result } = renderHook(() => useDesign(id), { wrapper });
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(get).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("a project polls only while a round is open", () => {
+  const round = { id: ids.revision, designIds: [ids.design], openedAt: "2026-11-11T09:00:00Z" };
+
+  it("useProject re-reads every 5 s while a round is open, and stops once it closes", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const get = vi
+        .spyOn(api, "get")
+        .mockResolvedValueOnce({ data: projectDto({ openRound: round }) })
+        .mockResolvedValue({ data: projectDto({ openRound: null }) });
+      const { wrapper } = setup();
+      const { result } = renderHook(() => useProject(ids.project), { wrapper });
+      await vi.waitFor(() => expect(result.current.data?.openRound).not.toBeNull());
+
+      await act(() => vi.advanceTimersByTimeAsync(DESIGN_POLL_MS));
+      await vi.waitFor(() => expect(result.current.data?.openRound).toBeNull());
+      expect(get).toHaveBeenCalledTimes(2);
+      await act(() => vi.advanceTimersByTimeAsync(6 * DESIGN_POLL_MS));
+      expect(get).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("never polls a project with no round open", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const get = vi.spyOn(api, "get").mockResolvedValue({ data: projectDto({ openRound: null }) });
+      const { wrapper } = setup();
+      const { result } = renderHook(() => useProject(ids.project), { wrapper });
+      await vi.waitFor(() => expect(result.current.isSuccess).toBe(true));
+      await act(() => vi.advanceTimersByTimeAsync(4 * DESIGN_POLL_MS));
+      expect(get).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("useProjectDesigns polls while the cached project has a round open, not otherwise", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const get = vi.spyOn(api, "get").mockResolvedValue({ data: [] });
+      const { client, wrapper } = setup();
+      client.setQueryData(projectKeys.detail(ids.project), projectDto({ openRound: round }));
+      const { result } = renderHook(() => useProjectDesigns(ids.project), { wrapper });
+      await vi.waitFor(() => expect(result.current.isSuccess).toBe(true));
+      await act(() => vi.advanceTimersByTimeAsync(DESIGN_POLL_MS));
+      expect(get.mock.calls.length).toBeGreaterThanOrEqual(2);
+
+      client.setQueryData(projectKeys.detail(ids.project), projectDto({ openRound: null }));
+      await act(() => vi.advanceTimersByTimeAsync(DESIGN_POLL_MS));
+      const settled = get.mock.calls.length;
+      await act(() => vi.advanceTimersByTimeAsync(6 * DESIGN_POLL_MS));
+      expect(get).toHaveBeenCalledTimes(settled);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

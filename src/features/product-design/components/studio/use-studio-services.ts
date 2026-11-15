@@ -3,34 +3,21 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from "react";
 
-import {
-  createCanvasMeasurer,
-  createSizer,
-  createSurfaces,
-  ImageCache,
-  type FontRegistry,
-} from "../../engine";
+import { createSizer, type FontRegistry } from "../../engine";
 import { DESIGN_STATUS_META } from "../../lifecycle";
 import { templateOf } from "../../selectors";
 import type { Design, DesignAsset, DesignDocumentRecord, PrintConfig } from "../../types";
 import { createCanvasExportRenderer, type ExportRenderer } from "./export-renderer";
 import { STUDIO_ANNOUNCEMENTS, useStudioAnnouncer } from "./studio-announcer";
-import {
-  createLivePreview,
-  createRepaintChannel,
-  type StudioServices,
-  type ViewerRef,
-} from "./studio-context";
+import type { StudioServices } from "./studio-context";
+import { createStudioKit } from "./studio-kit";
 import { releaseScratchLayer } from "./studio-paint";
 import { useTextEditingState } from "./text-editing";
-import { pinDocumentImages, useAssetImages } from "./use-asset-images";
+import { useAssetImages } from "./use-asset-images";
 import { useAutosave } from "./use-autosave";
 import { useEditor } from "./use-editor";
 import { useStatusFollow } from "./use-status-follow";
 import { useStudioFonts } from "./use-studio-fonts";
-
-/** Decoded proxy images kept at most, beyond those the document places (a 2048 px proxy is 16 MB). */
-const IMAGE_CACHE_BYTES = 256 * 1024 * 1024;
 
 export type StudioWorkspaceProps = {
   design: Design;
@@ -57,18 +44,7 @@ export function useStudioServices(props: StudioWorkspaceProps) {
   const { status } = design;
   const readOnly = !DESIGN_STATUS_META[status].editable;
   const editor = useEditor({ template, document: props.record.document, readOnly });
-  const [kit] = useState(() => {
-    const repaint = createRepaintChannel();
-    return {
-      surfaces: createSurfaces(template),
-      measure: createCanvasMeasurer(),
-      images: new ImageCache({ maxBytes: IMAGE_CACHE_BYTES, isPinned: pinDocumentImages(editor) }),
-      layerCache: new Map<string, CanvasImageSource>(),
-      repaint,
-      livePreview: createLivePreview(repaint),
-      viewerRef: { current: null } as ViewerRef,
-    };
-  });
+  const [kit] = useState(() => createStudioKit(template, editor));
   const { surfaces, measure, images, layerCache, repaint, livePreview, viewerRef } = kit;
   const sizer = useMemo(() => createSizer(fonts, measure), [fonts, measure]);
   const assets = useMemo(
@@ -103,12 +79,13 @@ export function useStudioServices(props: StudioWorkspaceProps) {
         ...kit,
         editor,
         template,
+        model3d: printConfig.model3d,
         sizer,
         fonts,
         designId: design.id,
         client,
       }),
-    [props.exportRenderer, kit, editor, template, sizer, fonts, design.id, client],
+    [props.exportRenderer, kit, editor, template, printConfig, sizer, fonts, design.id, client],
   );
 
   const services = useMemo<StudioServices>(

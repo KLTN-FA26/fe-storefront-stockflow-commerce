@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Palette } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { STORE_ROUTES } from "@/constants";
 import { Button } from "@/components/ui/button";
@@ -39,12 +40,24 @@ const ACTION_CLASS = "min-h-11 rounded-[var(--r-md)] px-4";
 
 type DesignCardProps = {
   design: Design;
-  onDelete: (design: Design) => void;
-  onRevise: (design: Design) => void;
+  /** "Xoá"; the button is left out without it. */
+  onDelete?: (design: Design) => void;
+  /** "Tạo bản sửa"; the button is left out without it. */
+  onRevise?: (design: Design) => void;
+  /** "Nhân bản sang cỡ khác"; the button is left out without it. */
+  onClone?: (design: Design) => void;
   /** A revision of this design is being created. */
   revising?: boolean;
   /** A revision (of this design or another) is being created: "Tạo bản sửa" waits for it. */
   reviseDisabled?: boolean;
+  /** Left out of the project page, where every card is of that project anyway. */
+  hideProject?: boolean;
+  /** Over the preview's top-left corner (the project page's check box). */
+  selection?: ReactNode;
+  /** More buttons, after the card's own (the project page's "Xem 3D", "Gỡ khỏi dự án"). */
+  extraActions?: ReactNode;
+  /** Short lines under the title (why a button is locked). */
+  notes?: ReactNode;
 };
 
 /** One design: preview, status, what it is for, when it changed, and what its status allows. */
@@ -52,8 +65,13 @@ export function DesignCard({
   design,
   onDelete,
   onRevise,
+  onClone,
   revising = false,
   reviseDisabled = revising,
+  hideProject = false,
+  selection,
+  extraActions,
+  notes,
 }: DesignCardProps) {
   const { title, subtitle, updatedLabel, status, returnReason, previewUrl } =
     designCardView(design);
@@ -63,18 +81,25 @@ export function DesignCard({
     <article className="bg-bg-surface border-border-default flex h-full flex-col overflow-hidden rounded-[var(--r-lg)] border shadow-[var(--card-shadow)] transition-shadow duration-200 hover:shadow-[var(--sh-md)]">
       <div className="bg-bg-subtle relative aspect-[4/3] overflow-hidden">
         <Thumbnail src={previewUrl} alt={`Bản xem trước ${title}`} />
+        {selection ? <div className="absolute top-1 left-1">{selection}</div> : null}
       </div>
       <div className="flex flex-1 flex-col gap-3 p-[var(--card-pad)]">
         <div className="space-y-2">
           <DesignStatusBadge status={status} returned={isReturned(design)} />
           <h2 className="text-ink-primary line-clamp-2 text-base font-semibold">{title}</h2>
           <p className="text-ink-tertiary text-xs break-words">{subtitle}</p>
+          {design.project && !hideProject ? (
+            <p className="bg-bg-muted text-ink-secondary inline-block max-w-full truncate rounded-full px-3 py-1 text-xs font-medium">
+              {`Dự án: ${design.project.name}`}
+            </p>
+          ) : null}
           {updatedLabel ? (
             <p className="text-ink-secondary text-sm tabular-nums">Cập nhật {updatedLabel}</p>
           ) : null}
           {returnReason ? (
             <p className="text-ink-secondary line-clamp-3 text-sm">Lý do trả lại: {returnReason}</p>
           ) : null}
+          {notes}
         </div>
         <div className="mt-auto flex flex-wrap gap-2">
           {actions.includes("edit") ? (
@@ -90,7 +115,7 @@ export function DesignCard({
               </Link>
             </Button>
           )}
-          {actions.includes("createRevision") ? (
+          {onRevise && actions.includes("createRevision") ? (
             <Button
               type="button"
               className={ACTION_CLASS}
@@ -101,7 +126,18 @@ export function DesignCard({
               {revising ? "Đang tạo..." : "Tạo bản sửa"}
             </Button>
           ) : null}
-          {actions.includes("delete") ? (
+          {onClone ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={ACTION_CLASS}
+              aria-label={`Nhân bản ${title} sang cỡ khác`}
+              onClick={() => onClone(design)}
+            >
+              Nhân bản sang cỡ khác
+            </Button>
+          ) : null}
+          {onDelete && actions.includes("delete") ? (
             <Button
               type="button"
               variant="ghost"
@@ -112,6 +148,7 @@ export function DesignCard({
               Xoá
             </Button>
           ) : null}
+          {extraActions}
         </div>
       </div>
     </article>

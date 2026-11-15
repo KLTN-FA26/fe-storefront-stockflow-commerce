@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { MOCK_DESIGN_IDS } from "./design-seed";
 import { createIndexedDbStorage, createMemoryStorage, openDesignStorage } from "./design-storage";
+import { createDesignMockStore } from "./design-store";
 
 async function bytesOf(blob: Blob): Promise<number[]> {
   return Array.from(new Uint8Array(await blob.arrayBuffer()));
@@ -231,5 +233,59 @@ describe("openDesignStorage", () => {
   it("uses IndexedDB when it opens", async () => {
     fakeIndexedDb();
     expect((await openDesignStorage()).persistent).toBe(true);
+  });
+});
+
+describe("a snapshot stored before design projects existed (part E)", () => {
+  /** The state a page saved before part E: no projects, no project events, no project counter. */
+  async function storedBeforePartE() {
+    const storage = createMemoryStorage();
+    const first = await createDesignMockStore({ storage });
+    await first.get(MOCK_DESIGN_IDS.draft); // seeds and saves
+    const rows = { ...(await storage.load())!.rows };
+    delete rows.projects;
+    delete rows.projectEvents;
+    rows.seq = { design: (rows.seq as { design: number }).design };
+    await storage.save({ rows });
+    return storage;
+  }
+
+  it("loads with an empty list of projects, its designs readable and without a project", async () => {
+    const store = await createDesignMockStore({ storage: await storedBeforePartE() });
+    const list = await store.listProjects({});
+    expect(list.status).toBe(200);
+    expect((list.data as { data: { items: unknown[]; totalElements: number } }).data).toMatchObject(
+      {
+        items: [],
+        totalElements: 0,
+      },
+    );
+    const design = await store.get(MOCK_DESIGN_IDS.draft);
+    expect((design.data as { data: { project: unknown } }).data.project).toBeNull();
+  });
+
+  it("is not reseeded: its designs are kept, and a project can be made and used", async () => {
+    const storage = await storedBeforePartE();
+    const store = await createDesignMockStore({ storage });
+    const created = await store.createProject({ name: "Dự án mới" });
+    expect(created.status).toBe(201);
+    const id = (created.data as { data: { id: string } }).data.id;
+    const added = await store.addToProject(id, { designId: MOCK_DESIGN_IDS.draft });
+    expect(added.status).toBe(200);
+    expect((await store.draftCount()).data).toMatchObject({ data: { drafts: 2 } });
+    const history = await store.projectHistory(id);
+    expect((history.data as { data: Array<{ type: string }> }).data.map((e) => e.type)).toEqual([
+      "PROJECT_CREATED",
+    ]);
+  });
+
+  it("a snapshot whose project collection is not an array is unreadable, never written over", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const storage = await storedBeforePartE();
+    const snapshot = (await storage.load())!;
+    await storage.save({ rows: { ...snapshot.rows, projects: "oops" } });
+    const store = await createDesignMockStore({ storage });
+    expect((await store.listProjects({})).status).toBe(500);
+    expect((await storage.load())!.rows.projects).toBe("oops");
   });
 });

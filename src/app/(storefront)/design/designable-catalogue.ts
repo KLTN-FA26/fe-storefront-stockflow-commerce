@@ -1,7 +1,7 @@
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 
 import { catalogKeys, type CatalogCard } from "@/features/catalog";
-import { getCatalogPage } from "@/features/catalog/api";
+import { getCatalogPage, getCatalogProduct } from "@/features/catalog/api";
 import { CATALOG_QUERY_MAX } from "@/features/catalog/schemas";
 import type { DesignableProduct } from "@/features/product-design";
 import { QUERY_TIMES } from "@/lib/api/query-client";
@@ -16,6 +16,12 @@ export const DESIGNABLE_PAGE_SIZE = 50;
  */
 export const designableSearchText = (raw: string) =>
   [...raw.trim()].slice(0, CATALOG_QUERY_MAX).join("");
+
+/** The SKUs of a product's variants, for "Nhân bản sang cỡ khác" (the catalogue's product detail). */
+export async function productSkusOf(productSlug: string, signal?: AbortSignal): Promise<string[]> {
+  const product = await getCatalogProduct(productSlug, signal);
+  return product.variants.map((variant) => variant.sku);
+}
 
 /** The customizable products of a page with their SKUs: what "Thiết kế mới" can start a design on. */
 export const designableOf = (cards: readonly CatalogCard[]): DesignableProduct[] =>

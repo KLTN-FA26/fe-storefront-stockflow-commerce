@@ -108,7 +108,7 @@ export async function uploadKey(
 }
 
 /** The SVG as a PNG named after it, drawn for the active face; a file the browser cannot draw is unreadable. */
-async function rasterized(file: File, widthPx: number): Promise<File> {
+export async function rasterized(file: File, widthPx: number): Promise<File> {
   let png: Blob;
   try {
     png = await rasterizeSvg(await file.text(), widthPx);

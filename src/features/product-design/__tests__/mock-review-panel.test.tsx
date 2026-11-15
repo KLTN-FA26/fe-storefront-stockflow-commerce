@@ -10,7 +10,7 @@ import { renderWithProviders, signIn, signOut } from "@/test/render";
 import { MockReviewPanel } from "../components/mock-review-panel";
 import { DesignStudio } from "../components/studio/design-studio";
 import type { Design } from "../types";
-import { designBackend, draftIn, STUDIO_PRODUCTS } from "./design-backend";
+import { designBackend, draftIn, roundIn, STUDIO_PRODUCTS } from "./design-backend";
 import { TEST_FONTS } from "./fixtures";
 
 const env = vi.hoisted(() => ({
@@ -199,7 +199,9 @@ describe("MockReviewPanel on the design list", () => {
 
     const row = (await within(panel).findByText("Trà sữa Mây", { exact: false })).closest("li");
     expect(row).not.toBeNull();
-    await user.click(within(row as HTMLElement).getByRole("button", { name: "Duyệt" }));
+    await user.click(
+      within(row as HTMLElement).getByRole("button", { name: /^Duyệt: .*trà sữa Mây/ }),
+    );
 
     await waitFor(async () =>
       expect((await designIn(store, MOCK_DESIGN_IDS.pending)).status).toBe("APPROVED"),
@@ -229,7 +231,9 @@ describe("MockReviewPanel reset and storage", () => {
     renderWithProviders(<MockReviewPanel />);
     const panel = await openPanel(user);
     const row = (await within(panel).findByText("Trà sữa Mây", { exact: false })).closest("li");
-    await user.click(within(row as HTMLElement).getByRole("button", { name: "Duyệt" }));
+    await user.click(
+      within(row as HTMLElement).getByRole("button", { name: /^Duyệt: .*trà sữa Mây/ }),
+    );
     await waitFor(async () =>
       expect((await designIn(store, MOCK_DESIGN_IDS.pending)).status).toBe("APPROVED"),
     );
@@ -286,5 +290,151 @@ describe("MockReviewPanel visibility", () => {
 
     expect(screen.queryByRole("button", OPEN)).not.toBeInTheDocument();
     expect(get).not.toHaveBeenCalled();
+  });
+});
+
+describe("MockReviewPanel: Lượt duyệt dự án", () => {
+  type ListedRound = { id: string; openedAt: string };
+  const roundBox = (panel: HTMLElement, project = "Quán Hoa") =>
+    within(panel).findByRole("region", { name: `Lượt duyệt ${project}` });
+  const rowOf = (box: HTMLElement, name: string) =>
+    within(box).getByText(name).closest("li") as HTMLElement;
+  const FAIL_SWITCH = { name: /Lần duyệt kế tiếp sẽ lỗi/ } as const;
+
+  function renderOnProjectPage(projectId: string, path = `/design/projects/${projectId}/submit`) {
+    env.pathname = path;
+    env.params = { id: projectId };
+    return renderWithProviders(<MockReviewPanel placement="studio" />);
+  }
+
+  it("lists the open rounds with the project name, the opened time and the designs", async () => {
+    const user = userEvent.setup();
+    const { store } = await designBackend();
+    const { projectId, roundId } = await roundIn(store);
+    renderOnProjectPage(projectId);
+    const panel = await openPanel(user);
+
+    const box = await roundBox(panel);
+    expect(within(box).getByText("Quán Hoa")).toBeInTheDocument();
+    const listed = (settle(await store.simulateRounds()).data as { rounds: ListedRound[] }).rounds;
+    const opened = listed.find((round) => round.id === roundId)!;
+    expect(within(box).getByText(`Mở lúc ${formatDateTime(opened.openedAt)}`)).toBeInTheDocument();
+    for (const name of ["Ly A", "Ly B"]) {
+      const row = rowOf(box, name);
+      expect(within(row).getByText("Chờ duyệt")).toBeInTheDocument();
+      expect(within(row).getByRole("button", { name: `Duyệt: ${name}` })).toBeInTheDocument();
+      expect(within(row).getByRole("button", { name: `Trả lại: ${name}` })).toBeInTheDocument();
+      expect(within(row).getByRole("switch", FAIL_SWITCH)).toBeInTheDocument();
+    }
+    expect(within(box).getByRole("button", { name: "Duyệt tất cả" })).toBeInTheDocument();
+  });
+
+  it("does not read the project id as a design on /design/projects routes", async () => {
+    const user = userEvent.setup();
+    const { store, get } = await designBackend();
+    const { projectId } = await roundIn(store);
+    renderOnProjectPage(projectId);
+    const panel = await openPanel(user);
+    await roundBox(panel);
+
+    expect(get.mock.calls.some(([url]) => url === `/designs/${projectId}`)).toBe(false);
+    expect(within(panel).queryByText(/không ở trạng thái chờ duyệt/)).not.toBeInTheDocument();
+    expect(within(panel).queryByText("Không có thiết kế nào chờ duyệt")).not.toBeInTheDocument();
+  });
+
+  it("Duyệt and Trả lại call the ops on one design of the round", async () => {
+    const user = userEvent.setup();
+    const { store } = await designBackend();
+    const { projectId, designIds } = await roundIn(store);
+    renderOnProjectPage(projectId, `/design/projects/${projectId}`);
+    const panel = await openPanel(user);
+    const box = await roundBox(panel);
+
+    await user.click(within(rowOf(box, "Ly A")).getByRole("button", { name: "Duyệt: Ly A" }));
+    await waitFor(async () =>
+      expect((await designIn(store, designIds[0]!)).status).toBe("APPROVED"),
+    );
+    await user.type(
+      within(rowOf(box, "Ly B")).getByRole("textbox", { name: "Lý do trả lại: Ly B" }),
+      "Logo bị mờ",
+    );
+    await user.click(within(rowOf(box, "Ly B")).getByRole("button", { name: "Trả lại: Ly B" }));
+
+    await waitFor(async () =>
+      expect(await designIn(store, designIds[1]!)).toMatchObject({
+        status: "DRAFT",
+        lastReturn: { reason: "Logo bị mờ" },
+      }),
+    );
+    // The last decision closed the round: it leaves the list.
+    expect(await within(panel).findByText("Không có lượt duyệt nào đang mở")).toBeInTheDocument();
+  });
+
+  it("the switch fails the next approval, and Duyệt tất cả says who was approved and who failed", async () => {
+    const user = userEvent.setup();
+    const { store } = await designBackend();
+    const { projectId, designIds } = await roundIn(store, ["Ly A", "Ly B", "Ly C"]);
+    renderOnProjectPage(projectId);
+    const panel = await openPanel(user);
+    const box = await roundBox(panel);
+
+    await user.click(within(rowOf(box, "Ly B")).getByRole("switch", FAIL_SWITCH));
+    await waitFor(() => expect(within(rowOf(box, "Ly B")).getByRole("switch")).toBeChecked());
+    await user.click(within(box).getByRole("button", { name: "Duyệt tất cả" }));
+
+    const summary = await within(panel).findByRole("group", {
+      name: "Kết quả duyệt tất cả Quán Hoa",
+    });
+    expect(within(summary).getByText(/đã duyệt 2 bản, 1 bản lỗi/)).toBeInTheDocument();
+    expect(within(summary).getByText("Đã duyệt: Ly A, Ly C")).toBeInTheDocument();
+    expect(within(summary).getByText(/^Ly B: Không xuất được bộ tệp đã duyệt/)).toBeInTheDocument();
+    expect(within(summary).getByText("Lượt duyệt vẫn mở.")).toBeInTheDocument();
+    expect((await designIn(store, designIds[1]!)).status).toBe("PENDING_REVIEW");
+    expect((await designIn(store, designIds[0]!)).status).toBe("APPROVED");
+    // The failed design is still listed, its switch spent.
+    await waitFor(() => expect(within(rowOf(box, "Ly B")).getByRole("switch")).not.toBeChecked());
+  });
+
+  it("words a simulated approval failure as such, and the design stays waiting", async () => {
+    const user = userEvent.setup();
+    const { store } = await designBackend();
+    const { projectId, designIds } = await roundIn(store);
+    renderOnProjectPage(projectId, `/design/projects/${projectId}`);
+    const panel = await openPanel(user);
+    const box = await roundBox(panel);
+
+    await user.click(within(rowOf(box, "Ly A")).getByRole("switch", FAIL_SWITCH));
+    await waitFor(() => expect(within(rowOf(box, "Ly A")).getByRole("switch")).toBeChecked());
+    await user.click(within(rowOf(box, "Ly A")).getByRole("button", { name: "Duyệt: Ly A" }));
+
+    expect(
+      await within(rowOf(box, "Ly A")).findByText(
+        /^Duyệt chưa thành công, bản vẫn đang chờ duyệt./,
+      ),
+    ).toBeInTheDocument();
+    expect((await designIn(store, designIds[0]!)).status).toBe("PENDING_REVIEW");
+  });
+
+  it("lists a design sent on its own on a project page too, to decide it", async () => {
+    const user = userEvent.setup();
+    const { store } = await designBackend();
+    const { projectId } = await roundIn(store);
+    renderOnProjectPage(projectId, `/design/projects/${projectId}`);
+    const panel = await openPanel(user);
+
+    expect(await within(panel).findByText("Ly trà sữa Mây 500ml")).toBeInTheDocument();
+    expect(
+      within(panel).getByRole("button", { name: "Duyệt: Ly trà sữa Mây 500ml" }),
+    ).toBeInTheDocument();
+  });
+
+  it("is not offered on the launcher", async () => {
+    const user = userEvent.setup();
+    await designBackend();
+    env.pathname = "/design/new";
+    renderWithProviders(<MockReviewPanel />);
+    const panel = await openPanel(user);
+
+    expect(within(panel).queryByText("Lượt duyệt dự án")).not.toBeInTheDocument();
   });
 });
