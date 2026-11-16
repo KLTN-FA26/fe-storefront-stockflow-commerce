@@ -2,10 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import { api } from "@/lib/api/client";
-import { getAvailability, getPrices } from "@/lib/catalog/api";
+import { getAvailability } from "@/lib/catalog/api";
 
 import { getCatalogGallery, getCatalogPage, getCatalogProduct, getSearchSuggestions } from "../api";
-import { beGallery, bePage, beProduct, beSchedule } from "./fixtures";
+import { beGallery, bePage, beProduct } from "./fixtures";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -55,7 +55,7 @@ describe("catalogue API (BE StorefrontCatalogController / CatalogSearchControlle
 
   it("rejects with a ZodError when the BE breaks the contract", async () => {
     vi.spyOn(api, "get").mockResolvedValueOnce({
-      data: { ...beProduct, variants: [{ sku: "A" }] },
+      data: { ...beProduct, variants: [{ name: "no sku" }] },
     });
     await expect(getCatalogProduct("ly-giay")).rejects.toBeInstanceOf(z.ZodError);
   });
@@ -71,7 +71,7 @@ describe("catalogue API (BE StorefrontCatalogController / CatalogSearchControlle
   });
 });
 
-describe("stock and price reads (BE CatalogController)", () => {
+describe("stock reads (BE CatalogController)", () => {
   it("repeats `sku` the way Spring binds a List, not as sku[]", async () => {
     const get = vi.spyOn(api, "get").mockResolvedValueOnce({ data: [] });
     await getAvailability(["cup-1", "CUP-2", "cup-1"]);
@@ -82,15 +82,6 @@ describe("stock and price reads (BE CatalogController)", () => {
     expect(api.getUri({ url: "/catalog/products/availability", ...config })).toBe(
       "/api/catalog/products/availability?sku=CUP-1&sku=CUP-2",
     );
-  });
-
-  it("reads prices the same way and parses the schedules", async () => {
-    const get = vi.spyOn(api, "get").mockResolvedValueOnce({ data: [beSchedule] });
-    const prices = await getPrices(["CUP-PAPER-8OZ-WHT"]);
-    expect(api.getUri({ url: "/catalog/products/prices", ...get.mock.calls[0]?.[1] })).toBe(
-      "/api/catalog/products/prices?sku=CUP-PAPER-8OZ-WHT",
-    );
-    expect(prices[0]).toMatchObject({ moq: 1000, source: "CUSTOMER" });
   });
 
   it("splits more than 50 SKUs into calls of at most 50 (BE maxSkusPerRequest) and joins the answers", async () => {
@@ -112,7 +103,7 @@ describe("stock and price reads (BE CatalogController)", () => {
   it("asks nothing for no SKUs and refuses a malformed one without calling the BE", async () => {
     const get = vi.spyOn(api, "get");
     await expect(getAvailability([])).resolves.toEqual([]);
-    await expect(getPrices(["has space"])).rejects.toBeInstanceOf(z.ZodError);
+    await expect(getAvailability(["has space"])).rejects.toBeInstanceOf(z.ZodError);
     expect(get).not.toHaveBeenCalled();
   });
 });

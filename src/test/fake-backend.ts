@@ -41,7 +41,6 @@ export function fakeBackend(deps: {
     const params = query(config);
     if (catalog) {
       if (url === "/catalog/products/availability") return settle(catalog.availability(params.sku));
-      if (url === "/catalog/products/prices") return settle(catalog.prices(params.sku));
       if (url === "/catalog/products") return settle(catalog.list(params));
       if (url === "/catalog/search/suggestions") return settle(catalog.suggestions(params));
       const gallery = /^\/catalog\/products\/([^/]+)\/gallery$/.exec(url);
@@ -50,8 +49,16 @@ export function fakeBackend(deps: {
       if (detail) return settle(catalog.detail(decodeURIComponent(detail[1]!)));
     }
     if (orders) {
-      if (url === "/orders/payment-terms") return settle(orders().paymentTerms());
+      if (url === "/orders/credit-position/me") return settle(orders().creditPosition());
       if (url === "/orders/me") return settle(orders().page(params));
+      if (url === "/installments/me") return settle(orders().myInstallments(params));
+      if (url === "/einvoices/me") return settle(orders().myEInvoices());
+      const refund = /^\/refunds\/me\/orders\/([^/]+)$/.exec(url);
+      if (refund) return settle(orders().myOrderRefund(decodeURIComponent(refund[1]!)));
+      const plan = /^\/installments\/me\/orders\/([^/]+)$/.exec(url);
+      if (plan) return settle(orders().orderInstallments(decodeURIComponent(plan[1]!)));
+      const transfer = /^\/installments\/me\/([^/]+)\/transfer-instructions$/.exec(url);
+      if (transfer) return settle(orders().installmentTransfer(decodeURIComponent(transfer[1]!)));
       if (url.startsWith("/orders/me/"))
         return settle(orders().get(url.replace("/orders/me/", "")));
     }
@@ -60,14 +67,9 @@ export function fakeBackend(deps: {
     throw new ApiError(404, "NOT_FOUND", `No fake route for GET ${url}`);
   });
   vi.spyOn(api, "post").mockImplementation(async (url, body) => {
-    if (orders && url === "/orders") return settle(orders().place(body as Record<string, unknown>));
     const cancel = /^\/orders\/([^/]+)\/cancellation$/.exec(url);
     if (orders && cancel) {
       return settle(orders().cancel(cancel[1]!, body as Record<string, unknown> | undefined));
-    }
-    const reorder = /^\/orders\/([^/]+)\/reorder$/.exec(url);
-    if (orders && reorder) {
-      return settle(orders().reorder(reorder[1]!, body as { requestId?: unknown } | undefined));
     }
     throw new ApiError(404, "NOT_FOUND", `No fake route for POST ${url}`);
   });

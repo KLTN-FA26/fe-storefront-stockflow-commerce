@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { pageResponseSchema } from "@/lib/api/page-response";
-import { availabilitySchema, currencySchema } from "@/lib/catalog/schemas";
+import { availabilitySchema } from "@/lib/catalog/schemas";
 import { beId } from "@/lib/validation/primitives";
 
 // Jackson runs with `default-property-inclusion: non_null`: a nullable field is absent from the
@@ -17,7 +17,7 @@ import { beId } from "@/lib/validation/primitives";
 export const productKindSchema = z.enum(["STANDARD", "CUSTOMIZABLE"]);
 const productKindField = productKindSchema.optional().catch(undefined);
 
-/** A variant on a list row: its SKU and name (never a price or stock; those are /prices and /availability). */
+/** A variant on a list row: its SKU and name (never a price - the portal shows none - nor stock: /availability). */
 export const catalogCardSkuDtoSchema = z.object({
   sku: z.string().min(1),
   name: z.string().nullish(),
@@ -43,11 +43,10 @@ export const catalogPageDtoSchema = pageResponseSchema(catalogCardDtoSchema);
 
 export const catalogVariantDtoSchema = z.object({
   sku: z.string().min(1),
-  // The listing's own price. The customer's price list (tiers, MOQ) is GET /catalog/products/prices.
-  price: z.number().nonnegative(),
-  currency: currencySchema,
-  // The detail only knows IN_STOCK / OUT_OF_STOCK; LOW_STOCK comes from /availability.
-  availability: availabilitySchema,
+  // BE CatalogProductResponse.VariantResponse carries the SKU only: no price on the portal and no
+  // stock (kltn-docs 13 BR-04, BR-11) - the indicator is GET /catalog/products/availability.
+  // An older BE sent one; read it when present.
+  availability: availabilitySchema.nullish(),
 });
 
 /** GET /catalog/products/{slug} (CatalogProductResponse). */

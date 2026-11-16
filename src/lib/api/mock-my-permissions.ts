@@ -30,6 +30,11 @@ export const MOCK_CUSTOMER_PERMISSIONS = [
     CUSTOMER_ACTIONS.map((action) => `${resource}:${action}`),
   ),
   "catalog-storefront:READ",
+  // BE baseline: the CUSTOMER role reads its own contract installments (GET /installments/me).
+  "payment-installments:READ",
+  // Hoá đơn đã phát hành của khách (V20261120000600) và hoàn tiền của đơn mình (baseline)
+  "einvoices:READ",
+  "payment-refunds:READ",
 ].sort();
 
 /** A sales-staff account: the back-office order and customer screens, no storefront catalog. */

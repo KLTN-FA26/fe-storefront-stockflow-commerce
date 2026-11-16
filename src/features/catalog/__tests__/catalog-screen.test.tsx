@@ -49,19 +49,17 @@ const detailAndGalleryCalls = () =>
   vi
     .mocked(api.get)
     .mock.calls.filter(([url]) => /^\/catalog\/products\/[^/]+(\/gallery)?$/.test(String(url)))
-    .filter(([url]) => !/\/(availability|prices)$/.test(String(url)));
+    .filter(([url]) => !/\/availability$/.test(String(url)));
 
 describe("CatalogScreen", () => {
-  it("lists a page of products with the customer's price and the stock indicator", async () => {
+  it("lists a page of products with the stock indicator and no price (kltn-docs 13 BR-04)", async () => {
     renderWithProviders(<CatalogScreen />);
 
     const cup = await card("Ly giấy 2 lớp 8oz");
     expect(cup).toHaveAttribute("href", "/catalog/products/ly-giay-2-lop-8oz");
-    // The lowest unit price over the SKUs' tiers: 720 (the 5.000+ tier of the white cup).
-    await waitFor(() => expect(within(cup).getByText(/720/)).toBeInTheDocument());
-    expect(within(cup).getByText("Từ")).toBeInTheDocument();
     // White cup is IN_STOCK, kraft is LOW_STOCK: a product is as available as its best variant.
-    expect(within(cup).getByText("Còn hàng")).toBeInTheDocument();
+    await waitFor(() => expect(within(cup).getByText("Còn hàng")).toBeInTheDocument());
+    expect(within(cup).queryByText(/₫/)).not.toBeInTheDocument();
     expect(
       await within(await card("Ly nhựa PET 500ml")).findByText("Hết hàng"),
     ).toBeInTheDocument();
@@ -69,7 +67,7 @@ describe("CatalogScreen", () => {
     expect(screen.getByText("Trang 1 / 2")).toBeInTheDocument();
   });
 
-  it("asks the BE for page 0 of 12, then for stock and prices once, for every SKU on the page", async () => {
+  it("asks the BE for page 0 of 12, then for stock once, for every SKU on the page, never for prices", async () => {
     renderWithProviders(<CatalogScreen />);
     await card("Ly giấy 2 lớp 8oz");
 
@@ -81,25 +79,21 @@ describe("CatalogScreen", () => {
       const stockCalls = vi
         .mocked(api.get)
         .mock.calls.filter(([url]) => url === "/catalog/products/availability");
-      const priceCalls = vi
-        .mocked(api.get)
-        .mock.calls.filter(([url]) => url === "/catalog/products/prices");
       expect(stockCalls).toHaveLength(1);
-      expect(priceCalls).toHaveLength(1);
       const skus = (stockCalls[0]?.[1]?.params as { sku: string[] }).sku;
       expect(skus).toContain("CUP-PAPER-8OZ-WHT");
       expect(skus.length).toBeGreaterThan(12);
     });
+    expect(callsTo("/catalog/products/prices")).toHaveLength(0);
   });
 
-  it("makes one list call, one stock call and one price call for a whole page: no detail, no gallery", async () => {
+  it("makes one list call and one stock call for a whole page: no detail, no gallery", async () => {
     renderWithProviders(<CatalogScreen />);
     const cup = await card("Ly giấy 2 lớp 8oz");
-    await waitFor(() => expect(within(cup).getByText(/720/)).toBeInTheDocument());
+    await waitFor(() => expect(within(cup).getByText("Còn hàng")).toBeInTheDocument());
 
     expect(callsTo("/catalog/products")).toHaveLength(1);
     expect(callsTo("/catalog/products/availability")).toHaveLength(1);
-    expect(callsTo("/catalog/products/prices")).toHaveLength(1);
     expect(detailAndGalleryCalls()).toHaveLength(0);
     // The picture comes from the row's primaryImageUrl.
     expect(within(cup).getByRole("img")).toHaveAttribute("src", expect.stringContaining("logo"));
@@ -109,12 +103,11 @@ describe("CatalogScreen", () => {
     stripCardFields();
     renderWithProviders(<CatalogScreen />);
     const cup = await card("Ly giấy 2 lớp 8oz");
-    await waitFor(() => expect(within(cup).getByText(/720/)).toBeInTheDocument());
+    await waitFor(() => expect(within(cup).getByText("Còn hàng")).toBeInTheDocument());
 
     expect(callsTo("/catalog/products")).toHaveLength(1);
     expect(detailAndGalleryCalls().length).toBeGreaterThanOrEqual(24); // 12 details + 12 galleries
     expect(callsTo("/catalog/products/availability")).toHaveLength(1);
-    expect(callsTo("/catalog/products/prices")).toHaveLength(1);
     expect(within(cup).getByRole("img")).toBeInTheDocument();
   });
 
@@ -133,7 +126,7 @@ describe("CatalogScreen", () => {
     });
     renderWithProviders(<CatalogScreen />);
     const cup = await card("Ly giấy 2 lớp 8oz");
-    await waitFor(() => expect(within(cup).getByText(/720/)).toBeInTheDocument());
+    await waitFor(() => expect(within(cup).getByText("Còn hàng")).toBeInTheDocument());
     expect(detailAndGalleryCalls()).toHaveLength(0);
     expect(within(cup).queryByRole("img")).not.toBeInTheDocument();
   });
@@ -142,7 +135,7 @@ describe("CatalogScreen", () => {
     renderWithProviders(<CatalogScreen />);
     const custom = await card("Ly giấy in logo");
     await waitFor(() => expect(within(custom).getByText("Còn hàng")).toBeInTheDocument());
-    expect(within(custom).queryByText("Từ")).not.toBeInTheDocument();
+    expect(within(custom).queryByText(/₫/)).not.toBeInTheDocument();
   });
 
   it("lists a product whose detail the BE would refuse for want of a price, with no price and no error", async () => {
@@ -154,9 +147,8 @@ describe("CatalogScreen", () => {
       "/catalog/products/ly-giay-kraft-16oz",
       expect.anything(),
     );
-    expect(within(cup).queryByText("Từ")).not.toBeInTheDocument();
     expect(within(cup).queryByText(/₫/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Chưa hiển thị được giá/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Chưa hiển thị được/)).not.toBeInTheDocument();
   });
 
   it("asks a visitor to sign in and calls nothing", async () => {
@@ -241,10 +233,10 @@ describe("CatalogScreen", () => {
     });
   });
 
-  it("keeps the products but says so when stock and prices are refused (a staff token: 403)", async () => {
+  it("keeps the products but says so when stock is refused (a staff token: 403)", async () => {
     const real = vi.mocked(api.get).getMockImplementation()!;
     vi.mocked(api.get).mockImplementation(async (url, config) => {
-      if (url === "/catalog/products/availability" || url === "/catalog/products/prices") {
+      if (url === "/catalog/products/availability") {
         throw new ApiError(403, "FORBIDDEN", "Not authorised");
       }
       return real(url, config);
@@ -252,9 +244,9 @@ describe("CatalogScreen", () => {
     renderWithProviders(<CatalogScreen />);
 
     const cup = await card("Ly giấy 2 lớp 8oz");
-    expect(await screen.findByText(/Chưa hiển thị được giá và tồn kho/)).toBeInTheDocument();
+    expect(await screen.findByText(/Chưa hiển thị được tình trạng còn hàng/)).toBeInTheDocument();
     expect(screen.getByText(/Chỉ tài khoản khách hàng/)).toBeInTheDocument();
-    expect(within(cup).queryByText("Từ")).not.toBeInTheDocument();
+    expect(within(cup).queryByText("Còn hàng")).not.toBeInTheDocument();
   });
 
   it("reports a failed list in Vietnamese with the correlation id, and a retry that recovers", async () => {

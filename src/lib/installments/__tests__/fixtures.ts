@@ -1,0 +1,60 @@
+/** BE-shaped installment responses as the real API sends them (NON_NULL drops every null field). */
+export const ORDER_ID = "0b7d3c1e-0000-4000-8000-000000000001";
+export const CONTRACT_ID = "5a6b7c8d-0000-4000-8000-000000000001";
+
+export const beInstallment = (over: Record<string, unknown> = {}) => ({
+  installmentId: "6c7d8e9f-0000-4000-8000-000000000001",
+  contractId: CONTRACT_ID,
+  contractNumber: "HD-20261108-000007-1",
+  orderId: ORDER_ID,
+  orderNumber: "SO-20260907-000431",
+  customerId: "1f2e3d4c-0000-4000-8000-000000000001",
+  seq: 1,
+  name: "Đặt cọc",
+  milestone: "ON_SIGNING",
+  amount: 152_100,
+  paidAmount: 152_100,
+  reducedAmount: 0,
+  outstanding: 0,
+  currency: "VND",
+  reachedAt: "2026-09-07T03:00:00Z",
+  dueDate: "2026-09-14",
+  status: "PAID",
+  overdue: false,
+  paidAt: "2026-09-08T03:00:00Z",
+  transferReference: "HD-20261108-000007-1 DOT1",
+  ...over,
+});
+
+export const beOrderInstallments = (over: Record<string, unknown> = {}) => ({
+  orderId: ORDER_ID,
+  orderNumber: "SO-20260907-000431",
+  contractNumber: "HD-20261108-000007-1",
+  paymentStatus: "PARTIALLY_PAID",
+  total: 507_000,
+  paid: 152_100,
+  outstanding: 354_900,
+  onSigningPaid: true,
+  beforeDeliveryUnpaid: 0,
+  dueBeforeHandover: 0,
+  currency: "VND",
+  installments: [
+    beInstallment(),
+    beInstallment({
+      installmentId: "6c7d8e9f-0000-4000-8000-000000000002",
+      seq: 2,
+      name: "Thanh toán sau giao",
+      milestone: "AFTER_DELIVERY",
+      amount: 354_900,
+      paidAmount: 0,
+      outstanding: 354_900,
+      dueDays: 30,
+      dueDate: "2026-10-01",
+      status: "DUE",
+      overdue: true,
+      paidAt: undefined,
+      transferReference: "HD-20261108-000007-1 DOT2",
+    }),
+  ],
+  ...over,
+});

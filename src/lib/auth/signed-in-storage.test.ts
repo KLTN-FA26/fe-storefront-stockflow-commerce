@@ -18,7 +18,7 @@ function keepBoth() {
 describe("what a signed-in customer leaves in this browser", () => {
   it("goes when the customer signs out; the viewer's preferences stay", () => {
     keepBoth();
-    endSession({ clearCart: true });
+    endSession({ forgetDrafts: true });
 
     expect(window.localStorage.getItem(DRAFT)).toBeNull();
     expect(window.localStorage.getItem(PREFERENCE)).toBe("{}");

@@ -3,24 +3,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { designBackend } from "@/features/product-design/__tests__/design-backend";
 import { printConfigFor } from "@/lib/api/mock-fixtures/design-print-configs";
-import { renderWithProviders, resetCart, signIn, signOut } from "@/test/render";
+import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { ProductWithDesign } from "../product-with-design";
 
-// The mock adapter adds latency per request, and the page reads several (product, prices, stock…).
+// The mock adapter adds latency per request, and the page reads several (product, stock, print config…).
 const WAIT = { timeout: 5000 };
 
 const CUP = "ly-giay-2-lop-12oz";
 const CUP_SKU = "CUP-PAPER-12OZ-WHT";
 
 beforeEach(() => {
-  resetCart();
   signIn();
 });
 afterEach(() => {
   vi.restoreAllMocks();
   signOut();
-  resetCart();
 });
 
 /** The product page as the route composes it: the catalog screen with the design feature's entry. */

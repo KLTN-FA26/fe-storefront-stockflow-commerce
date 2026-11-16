@@ -6,28 +6,16 @@ import { cn } from "@/lib/cn";
 import { isRemoteImage } from "@/lib/remote-image";
 
 import { AvailabilityBadge } from "./availability-badge";
-import { PriceDisplay } from "./price-display";
 
 export interface ProductCardProps {
   href: string;
   name: string;
   imageSrc?: string | undefined;
   imageAlt?: string | undefined;
-  /** The customer's unit price; absent while loading or when the product has no price for them. */
-  price?: number | undefined;
-  priceLabel?: string | undefined;
   availability?: "in-stock" | "low-stock" | "out-of-stock" | undefined;
 }
 
-export function ProductCard({
-  href,
-  name,
-  imageSrc,
-  imageAlt,
-  price,
-  priceLabel,
-  availability,
-}: ProductCardProps) {
+export function ProductCard({ href, name, imageSrc, imageAlt, availability }: ProductCardProps) {
   return (
     <Link
       href={href}
@@ -58,14 +46,6 @@ export function ProductCard({
           {name}
         </h3>
         {availability ? <AvailabilityBadge status={availability} /> : null}
-        <div className="mt-auto pt-1">
-          {typeof price === "number" ? (
-            <>
-              {priceLabel ? <span className="text-ink-tertiary text-xs">{priceLabel} </span> : null}
-              <PriceDisplay price={price} size="sm" />
-            </>
-          ) : null}
-        </div>
       </div>
     </Link>
   );

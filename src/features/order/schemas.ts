@@ -9,20 +9,31 @@ import { tolerantEnum } from "@/lib/validation/tolerant-enum";
 export const orderIdSchema = beId();
 export const isValidOrderId = (orderId: string) => orderIdSchema.safeParse(orderId).success;
 
-// Mirrors BE order.api.OrderStatus (develop). Lifecycle rules for these live in lifecycle.ts.
+// Mirrors BE order.api.OrderStatus (main, after the 4B rescope). Lifecycle rules for these live in
+// lifecycle.ts. IN_FULFILMENT is kept for the timeline of an order read before the rescope.
 export const ORDER_STATUSES = [
   "DRAFT",
+  "PENDING_CONTRACT",
   "PENDING_PAYMENT",
   "CONFIRMED",
+  "AWAITING_STOCK",
   "IN_PRODUCTION",
   "READY_TO_FULFILL",
+  "PICKING",
+  "PARTIALLY_FULFILLED",
+  "PACKED",
   "IN_FULFILMENT",
   "ON_HOLD",
   "SHIPPED",
+  "DELIVERY_FAILED",
   "DELIVERED",
+  "RETURN_REQUESTED",
+  "RETURNED",
+  "REFUNDED",
+  "PARTIALLY_REFUNDED",
   "COMPLETED",
   "CANCELLED",
-  "RETURNED",
+  "CLOSED",
 ] as const;
 export type KnownOrderStatus = (typeof ORDER_STATUSES)[number];
 
@@ -49,9 +60,11 @@ export const orderStatusSchema = z
  * order's own status is. Tolerant like the status: a group newer than this FE becomes UNKNOWN.
  */
 export const ORDER_STATUS_GROUPS = [
+  "AWAITING_CONTRACT",
   "AWAITING_PAYMENT",
   "UNDER_REVIEW",
   "CONFIRMED",
+  "AWAITING_STOCK",
   "IN_PRODUCTION",
   "PREPARING",
   "SHIPPING",
@@ -72,7 +85,14 @@ export const orderStatusGroupSchema = z
   );
 
 /** BE CustomerOrders.DeliveryState; only what staff recorded. Free-form on purpose: display only. */
-export const DELIVERY_STATES = ["NOT_SHIPPED", "IN_TRANSIT", "DELIVERED", "RETURNED"] as const;
+export const DELIVERY_STATES = [
+  "NOT_SHIPPED",
+  "IN_TRANSIT",
+  "PARTIALLY_DELIVERED",
+  "DELIVERY_FAILED",
+  "DELIVERED",
+  "RETURNED",
+] as const;
 export type KnownDeliveryState = (typeof DELIVERY_STATES)[number];
 export const DELIVERY_STATE_UNKNOWN = "UNKNOWN";
 
@@ -97,14 +117,6 @@ export const PRODUCTION_STATES = [
   "CANCELLED",
 ] as const;
 export const productionStateSchema = tolerantEnum(PRODUCTION_STATES);
-
-/** BE payment status (kltn-docs 15 §5.2). */
-export const PAYMENT_STATUSES = ["UNPAID", "PARTIALLY_PAID", "ON_CREDIT", "PAID"] as const;
-export const paymentStatusSchema = tolerantEnum(PAYMENT_STATUSES);
-
-/** BE order.api.PaymentTerm. */
-export const PAYMENT_TERMS = ["PREPAID", "DEPOSIT", "CREDIT"] as const;
-export const paymentTermSchema = tolerantEnum(PAYMENT_TERMS);
 
 /** What an ON_HOLD order is waiting for, as the customer may be told (never the internal reason). */
 export const HOLD_REASONS = ["AWAITING_CREDIT_APPROVAL", "UNDER_REVIEW"] as const;
@@ -171,19 +183,6 @@ export const orderLineDtoSchema = z.object({
   production: z
     .object({ state: productionStateSchema, goodQuantity: z.number().int().nonnegative() })
     .nullish(),
-  // Where the line's SKU is on sale TODAY (SCRUM-190, BE PR #200): what a reorder needs to put the
-  // line back in the basket. `null` = the BE looked and the SKU is not on sale now (or it is a
-  // design line); absent = an older BE that does not send them, so the line cannot be refilled.
-  productSlug: z.string().min(1).nullish(),
-  productTitle: z.string().min(1).nullish(),
-  productImageUrl: z.string().min(1).nullish(),
-});
-
-export const orderPaymentDtoSchema = z.object({
-  status: paymentStatusSchema,
-  paidAmount: z.number().nonnegative().nullish(),
-  depositRequired: z.number().nonnegative().nullish(),
-  creditTermDays: z.number().int().nonnegative().nullish(),
 });
 
 /**
@@ -194,6 +193,46 @@ export const orderShipmentDtoSchema = z.object({
   status: z.string(),
   deliveryMode: deliveryModeSchema.nullish(),
 });
+
+/**
+ * BE fulfillment OrderShippingTracking (GET /fulfillment/orders/me/{orderId}/vehicles, kltn-docs 17
+ * BR-27 / §5.2): one entry per vehicle that left with goods of the order. NON_NULL drops absent
+ * fields (a carrier without a waybill yet, a vehicle without a plate). Never the driver, the waybill
+ * files or the proof of delivery. Milestone and shipment status are strings the carrier / warehouse
+ * set; a value newer than this FE falls back to "UNKNOWN" instead of failing the page.
+ */
+export const VEHICLE_MILESTONES = ["PICKED_UP", "IN_TRANSIT", "RETURNING"] as const;
+export const VEHICLE_SHIPMENT_STATUSES = [
+  "READY_TO_DISPATCH",
+  "HANDED_OVER",
+  "DELIVERED",
+  "DELIVERY_FAILED",
+  "RETURNED",
+  "CANCELLED",
+] as const;
+
+export const vehicleMilestoneDtoSchema = z.object({
+  milestone: tolerantEnum(VEHICLE_MILESTONES),
+  at: instantSchema,
+});
+
+export const vehicleShipmentDtoSchema = z.object({
+  shipmentCode: z.string().min(1),
+  status: tolerantEnum(VEHICLE_SHIPMENT_STATUSES),
+  outcomeAt: instantSchema.nullish(),
+});
+
+export const orderVehicleDtoSchema = z.object({
+  loadCode: z.string().min(1),
+  carrierName: z.string().nullish(),
+  waybillNo: z.string().nullish(),
+  vehiclePlate: z.string().nullish(),
+  handedOverAt: instantSchema.nullish(),
+  milestones: z.array(vehicleMilestoneDtoSchema).nullish(),
+  shipments: z.array(vehicleShipmentDtoSchema).nullish(),
+});
+
+export const orderVehiclesDtoSchema = z.array(orderVehicleDtoSchema);
 
 export const orderTimelineEntryDtoSchema = z.object({
   status: orderStatusSchema,
@@ -229,17 +268,18 @@ export const cancellationRequestDtoSchema = z.object({
 });
 
 /**
- * What the customer may do with the order now (BE CustomerOrderAllowedActions). `reorder` is true
- * only for an order that came from a quote (POST /orders/{id}/reorder drafts a new quote); an order
- * bought at the price list has it false and is refilled into the basket instead.
+ * What the customer may do with the order now (BE CustomerOrderAllowedActions): cancel at once, or ask
+ * Sales to cancel. Ordering again is a conversation with Sales, not an action on the order (13 §3).
  */
 export const orderAllowedActionsDtoSchema = z.object({
   cancel: z.boolean().catch(false),
   requestCancellation: z.boolean().catch(false),
-  reorder: z.boolean().catch(false),
 });
 
-/** GET /orders/me/{orderId} (CustomerOrderDetailResponse). */
+/**
+ * GET /orders/me/{orderId} (CustomerOrderDetailResponse). How the order is paid is not on it since
+ * the BE moved payment to the contract's installments (4B-10): see `@/lib/installments`.
+ */
 export const orderDtoSchema = z.object({
   orderId: beId(),
   orderNumber: z.string().min(1),
@@ -247,7 +287,6 @@ export const orderDtoSchema = z.object({
   statusGroup: orderStatusGroupSchema,
   // Set only while the order is ON_HOLD.
   holdReasonPublic: holdReasonSchema.nullish(),
-  paymentTerm: paymentTermSchema.nullish(),
   total: z.number().nonnegative(),
   currency: currencySchema,
   placedAt: instantSchema,
@@ -256,7 +295,6 @@ export const orderDtoSchema = z.object({
   // Absent on an older BE.
   allowedActions: orderAllowedActionsDtoSchema.nullish(),
   shippingAddress: orderAddressDtoSchema.nullish(),
-  payment: orderPaymentDtoSchema.nullish(),
   lines: z.array(orderLineDtoSchema),
   // Oldest first.
   timeline: z.array(orderTimelineEntryDtoSchema).nullish(),
@@ -265,15 +303,6 @@ export const orderDtoSchema = z.object({
   deliveryMode: deliveryModeSchema.nullish(),
   // Oldest first; empty until the first handover. Absent on an older BE.
   shipments: z.array(orderShipmentDtoSchema).nullish(),
-});
-
-/**
- * POST /orders/{orderId}/reorder (BE QuoteResponse, the part the portal shows): the new DRAFT quote
- * Sales will price and send. Everything is optional: the confirmation does not depend on it.
- */
-export const reorderedQuoteDtoSchema = z.object({
-  quoteNumber: z.string().min(1).nullish(),
-  status: z.string().min(1).nullish(),
 });
 
 export const orderPageDtoSchema = pageResponseSchema(orderCardDtoSchema);

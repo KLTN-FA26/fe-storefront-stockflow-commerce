@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { NOTIFICATION_SEVERITIES } from "@/constants/notifications";
 
-import { toSafeNotificationPath } from "./link";
+import { resolveNotificationLink } from "./link";
 
 /** UserNotificationResponse from BE #102: null fields may be entirely omitted. */
 export const notificationDto = z.object({
@@ -17,7 +17,7 @@ export const notificationDto = z.object({
     .string()
     .nullish()
     .catch(null)
-    .transform((link) => (link ? toSafeNotificationPath(link) : null)),
+    .transform((link) => (link ? resolveNotificationLink(link) : null)),
   sourceType: z.string().nullish(),
   sourceId: z.string().nullish(),
   createdAt: z.iso.datetime({ offset: true }),

@@ -19,7 +19,11 @@ import { CopyOrderNumber } from "./copy-order-number";
 import { OrderDeliveryCard, OrderLinesCard, OrderTotalCard } from "./order-detail-sections";
 import { OrderHelpCard } from "./order-help-card";
 import { OrderReorder } from "./order-reorder";
+import { OrderCompletionHint } from "./order-completion-hint";
+import { OrderInvoicesCard } from "./order-invoices-card";
 import { OrderPaymentCard } from "./order-payment-card";
+import { OrderRefundCard } from "./order-refund-card";
+import { OrderVehiclesCard } from "./order-vehicles-card";
 import { OrderTimelineCard } from "./order-timeline-card";
 import {
   OrderDetailSkeleton,
@@ -107,13 +111,17 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
         <div className="min-w-0 space-y-5">
           <OrderStatusHero group={order.statusGroup} holdReason={order.holdReasonPublic} />
+          <OrderCompletionHint order={order} />
           <OrderLinesCard order={order} />
           <OrderTimelineCard order={order} />
         </div>
         <div className="space-y-5 lg:sticky lg:top-[var(--sticky-top)] lg:-mx-1 lg:max-h-[calc(100dvh-var(--sticky-top)-1rem)] lg:self-start lg:overflow-y-auto lg:px-1">
           <OrderTotalCard order={order} />
           <OrderPaymentCard order={order} />
+          <OrderInvoicesCard order={order} />
+          <OrderRefundCard order={order} />
           <OrderDeliveryCard order={order} />
+          <OrderVehiclesCard orderId={order.orderId} />
           {order.cancellationRequest && order.cancellationRequest.status !== "PENDING" ? (
             <OrderCancellationCard request={order.cancellationRequest} />
           ) : null}

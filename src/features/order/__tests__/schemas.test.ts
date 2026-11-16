@@ -134,29 +134,20 @@ describe("order detail schema follows BE CustomerOrderDetailResponse", () => {
   });
 });
 
-describe("order detail schema reads payment, production and timeline enums tolerantly", () => {
-  it("parses what is reported for a deposit order with a printed line", () => {
+describe("order detail schema reads production, hold and timeline enums tolerantly", () => {
+  it("parses what is reported for a held order with a printed line", () => {
     const parsed = orderDtoSchema.parse({
       ...beOrder,
-      paymentTerm: "DEPOSIT",
-      payment: { status: "PARTIALLY_PAID", paidAmount: 100000, depositRequired: 150000 },
       holdReasonPublic: "AWAITING_CREDIT_APPROVAL",
     });
-    expect(parsed.paymentTerm).toBe("DEPOSIT");
-    expect(parsed.payment).toEqual({
-      status: "PARTIALLY_PAID",
-      paidAmount: 100000,
-      depositRequired: 150000,
-    });
     expect(parsed.holdReasonPublic).toBe("AWAITING_CREDIT_APPROVAL");
+    expect(parsed.lines[1]?.production?.state).toBe("IN_PROGRESS");
   });
 
   it("turns values newer than the FE into UNKNOWN instead of failing the order", () => {
     const parsed = orderDtoSchema.parse({
       ...beOrder,
-      paymentTerm: "BARTER",
       holdReasonPublic: "SOMETHING_NEW",
-      payment: { status: "REFUNDED" },
       lines: [
         {
           ...beOrder.lines[1],
@@ -172,24 +163,22 @@ describe("order detail schema reads payment, production and timeline enums toler
         },
       ],
     });
-    expect(parsed.paymentTerm).toBe("UNKNOWN");
     expect(parsed.holdReasonPublic).toBe("UNKNOWN");
-    expect(parsed.payment?.status).toBe("UNKNOWN");
     expect(parsed.lines[0]?.production?.state).toBe("UNKNOWN");
     expect(parsed.timeline?.[0]?.reasonCode).toBe("UNKNOWN");
   });
 
-  it("omits what the BE omits (NON_NULL): no payment, no term, no hold reason", () => {
-    const { payment: _payment, paymentTerm: _term, ...order } = beOrder;
-    const parsed = orderDtoSchema.parse(order);
-    expect(parsed.payment).toBeUndefined();
-    expect(parsed.paymentTerm).toBeUndefined();
+  it("ignores the payment fields an older BE sent: payment lives on the installments (4B-10)", () => {
+    const parsed = orderDtoSchema.parse({
+      ...beOrder,
+      paymentTerm: "DEPOSIT",
+      payment: { status: "PARTIALLY_PAID", paidAmount: 100000 },
+    });
+    expect(parsed).not.toHaveProperty("payment");
+    expect(parsed).not.toHaveProperty("paymentTerm");
   });
 
-  it("still rejects a payment without a status or a line whose production is not an object", () => {
-    expect(orderDtoSchema.safeParse({ ...beOrder, payment: { paidAmount: 1 } }).success).toBe(
-      false,
-    );
+  it("still rejects a line whose production is not an object", () => {
     expect(
       orderDtoSchema.safeParse({
         ...beOrder,
@@ -268,46 +257,12 @@ describe("order ids the dev BE really sends (no RFC version/variant bits)", () =
   });
 });
 
-describe("order detail: reorder data (SCRUM-190)", () => {
-  const line = beOrder.lines[0]!;
-
-  it("reads where a line's SKU is on sale and what the customer may do", () => {
-    const parsed = orderDtoSchema.parse({
-      ...beOrder,
-      allowedActions: { cancel: true, requestCancellation: false, reorder: true },
-      lines: [
-        {
-          ...line,
-          productSlug: "ao-thun",
-          productTitle: "Áo thun",
-          productImageUrl: "https://x/y.jpg",
-        },
-      ],
-    });
-    expect(parsed.allowedActions).toEqual({
-      cancel: true,
-      requestCancellation: false,
-      reorder: true,
-    });
-    expect(parsed.lines[0]).toMatchObject({ productSlug: "ao-thun", productTitle: "Áo thun" });
-  });
-
-  it("keeps null (not on sale) apart from absent (an older BE)", () => {
-    const parsed = orderDtoSchema.parse({
-      ...beOrder,
-      lines: [{ ...line, productSlug: null }, line],
-    });
-    expect(parsed.lines[0]?.productSlug).toBeNull();
-    expect(parsed.lines[1]?.productSlug).toBeUndefined();
-    expect(parsed.allowedActions).toBeUndefined();
-  });
-
+describe("order detail: allowedActions (SCRUM-190)", () => {
   it("reads a damaged allowedActions flag as false instead of failing the order", () => {
     const parsed = orderDtoSchema.parse({ ...beOrder, allowedActions: { cancel: "yes" } });
     expect(parsed.allowedActions).toEqual({
       cancel: false,
       requestCancellation: false,
-      reorder: false,
     });
   });
 });

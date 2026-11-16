@@ -1,3 +1,4 @@
+import { STORE_ROUTES } from "@/constants";
 import { NOTIFICATION_CONFIG } from "@/constants/notifications";
 
 // Printable ASCII without space. Anything else — tab/CR/LF (stripped by the URL parser, so
@@ -29,4 +30,17 @@ export function toSafeNotificationPath(raw: string): string | null {
   const path = url.pathname;
   if (NOTIFICATION_CONFIG.blockedPathPrefixes.some((prefix) => isUnder(path, prefix))) return null;
   return `${path}${url.search}${url.hash}`;
+}
+
+// BE VehicleHandoverNotificationListener links the order as `/orders/{id}`; the storefront page for
+// it is `/account/orders/{id}` (STORE_ROUTES.account.orders.detail). Only that exact shape is
+// rewritten, so an already-correct `/account/orders/...` link and every other path pass unchanged.
+const BE_ORDER_LINK = /^\/orders\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+
+/** Safe in-app target of a notification link, with BE-side order links mapped to the storefront route. */
+export function resolveNotificationLink(raw: string): string | null {
+  const safe = toSafeNotificationPath(raw);
+  if (safe === null) return null;
+  const order = BE_ORDER_LINK.exec(safe);
+  return order?.[1] ? STORE_ROUTES.account.orders.detail(order[1]) : safe;
 }

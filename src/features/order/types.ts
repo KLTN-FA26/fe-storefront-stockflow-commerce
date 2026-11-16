@@ -9,8 +9,6 @@ import type {
   deliveryModeSchema,
   deliveryStateSchema,
   holdReasonSchema,
-  paymentStatusSchema,
-  paymentTermSchema,
   productionStateSchema,
   orderAddressDtoSchema,
   orderCardDtoSchema,
@@ -18,7 +16,9 @@ import type {
   orderLineDtoSchema,
   orderStatusGroupSchema,
   orderTimelineEntryDtoSchema,
-  reorderedQuoteDtoSchema,
+  orderVehicleDtoSchema,
+  vehicleMilestoneDtoSchema,
+  vehicleShipmentDtoSchema,
   orderStatusSchema,
 } from "./schemas";
 
@@ -26,8 +26,6 @@ export type OrderStatus = z.infer<typeof orderStatusSchema>;
 export type OrderStatusGroup = z.infer<typeof orderStatusGroupSchema>;
 export type DeliveryMode = z.infer<typeof deliveryModeSchema>;
 export type DeliveryState = z.infer<typeof deliveryStateSchema>;
-export type PaymentStatus = z.infer<typeof paymentStatusSchema>;
-export type PaymentTerm = z.infer<typeof paymentTermSchema>;
 export type ProductionState = z.infer<typeof productionStateSchema>;
 export type HoldReason = z.infer<typeof holdReasonSchema>;
 export type CancellationReasonCode = z.infer<typeof cancellationReasonCodeSchema>;
@@ -40,8 +38,6 @@ export type OrderCard = z.infer<typeof orderCardDtoSchema>;
 export type OrderTimelineEntry = z.infer<typeof orderTimelineEntryDtoSchema>;
 /** One order in full (BE CustomerOrderDetailResponse). */
 export type Order = z.infer<typeof orderDtoSchema>;
-/** The draft quote a reorder of a quoted order opened. */
-export type ReorderedQuote = z.infer<typeof reorderedQuoteDtoSchema>;
 export type CancelOrderInput = z.input<typeof cancelOrderInputSchema>;
 export type CancellationResult = z.infer<typeof cancellationResultDtoSchema>;
 
@@ -61,3 +57,8 @@ export interface MyOrdersParams {
   page: number;
   size: number;
 }
+
+/** One vehicle carrying goods of the order (BE OrderShippingTracking.Vehicle). */
+export type OrderVehicle = z.infer<typeof orderVehicleDtoSchema>;
+export type VehicleMilestone = z.infer<typeof vehicleMilestoneDtoSchema>;
+export type VehicleShipment = z.infer<typeof vehicleShipmentDtoSchema>;

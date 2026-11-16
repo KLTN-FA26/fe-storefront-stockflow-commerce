@@ -5,7 +5,7 @@ import {
   cancellationResultDtoSchema,
   orderDtoSchema,
   orderPageDtoSchema,
-  reorderedQuoteDtoSchema,
+  orderVehiclesDtoSchema,
 } from "./schemas";
 import type {
   CancelOrderInput,
@@ -13,7 +13,7 @@ import type {
   MyOrdersParams,
   Order,
   OrderPage,
-  ReorderedQuote,
+  OrderVehicle,
 } from "./types";
 
 // BE OrderController: /api/v1/orders — the /v1 prefix lives in API_URL.
@@ -60,18 +60,18 @@ export async function cancelMyOrder(input: CancelOrderInput): Promise<Cancellati
 }
 
 /**
- * POST /orders/{orderId}/reorder with `{ requestId }` (BE OrderController.reorder, 201): for an
- * order that came from a quote, a new DRAFT quote at today's price list, for Sales to send; the old
- * deal is not reused and nothing is payable. `requestId` makes a retried click return the same
- * draft. An order bought at the price list is 409 ORDER_NOT_QUOTED: those are refilled into the
- * basket instead (reorder.ts).
+ * GET /fulfillment/orders/me/{orderId}/vehicles (BE CustomerShippingController, not the order
+ * module: fulfillment holds the vehicles): carrier, waybill, plate, milestones and shipments of each
+ * vehicle that has left with goods of the customer's own order. Empty until the first handover;
+ * another customer's order answers 404 NOT_FOUND.
  */
-export async function reorderQuotedOrder(
+export async function getOrderVehicles(
   orderId: string,
-  requestId: string,
-): Promise<ReorderedQuote> {
-  const { data } = await api.post<unknown>(`/orders/${encodeURIComponent(orderId)}/reorder`, {
-    requestId,
-  });
-  return reorderedQuoteDtoSchema.parse(data);
+  signal?: AbortSignal,
+): Promise<OrderVehicle[]> {
+  const { data } = await api.get<unknown>(
+    `/fulfillment/orders/me/${encodeURIComponent(orderId)}/vehicles`,
+    signal ? { signal } : {},
+  );
+  return orderVehiclesDtoSchema.parse(data);
 }

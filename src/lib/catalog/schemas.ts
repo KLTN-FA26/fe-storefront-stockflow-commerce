@@ -20,10 +20,6 @@ export type KnownAvailability = (typeof AVAILABILITIES)[number];
 export const AVAILABILITY_UNKNOWN = ENUM_UNKNOWN;
 export const availabilitySchema = tolerantEnum(AVAILABILITIES);
 
-/** BE PriceSchedule.source: whose price list answered. Display only. */
-export const PRICE_SOURCES = ["CUSTOMER", "SEGMENT", "BASE"] as const;
-export const priceSourceSchema = tolerantEnum(PRICE_SOURCES);
-
 // ISO 4217; the storefront sells in VND only today (BE OQ-09).
 export const currencySchema = z.enum(["VND", "USD", "CNY"]);
 
@@ -37,20 +33,7 @@ export const skuAvailabilityDtoSchema = z.object({
 });
 export const skuAvailabilitiesDtoSchema = z.array(skuAvailabilityDtoSchema);
 
-/** GET /catalog/products/prices (PriceScheduleResponse). */
-export const priceScheduleDtoSchema = z.object({
-  sku: z.string().min(1),
-  source: priceSourceSchema,
-  // First tier's quantity (kltn-docs 13 BR-05).
-  moq: z.number().int().positive(),
-  currency: currencySchema,
-  tiers: z.array(
-    z.object({ minQuantity: z.number().int().positive(), unitPrice: z.number().nonnegative() }),
-  ),
-});
-export const priceSchedulesDtoSchema = z.array(priceScheduleDtoSchema);
-
-// BE AvailabilityProperties.maxSkusPerRequest / StorefrontPriceService.MAX_SKUS default.
+// BE AvailabilityProperties.maxSkusPerRequest default.
 export const SKUS_PER_REQUEST = 50;
 
 export const skuListInputSchema = z

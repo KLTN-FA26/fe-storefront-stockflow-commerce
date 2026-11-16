@@ -26,13 +26,6 @@ export const STORE_ROUTES = {
     projectSubmit: (id: string, ids: readonly string[]) =>
       `/design/projects/${id}/submit?ids=${ids.map(encodeURIComponent).join(",")}`,
   },
-  cart: "/cart",
-  checkout: {
-    index: "/checkout",
-    shipping: "/checkout/shipping",
-    payment: "/checkout/payment",
-    review: "/checkout/review",
-  },
   chat: {
     list: "/chat",
     detail: (id: string) => `/chat/${id}`,

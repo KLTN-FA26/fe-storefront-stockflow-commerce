@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  allowedCancellation,
   isCancellationRequestable,
   isOrderCancellable,
   isOrderTerminal,
@@ -10,15 +11,27 @@ import {
 import { ORDER_STATUS_GROUPS, ORDER_STATUSES } from "../schemas";
 
 describe("order lifecycle mirrors BE OrderStatus / CustomerOrders.StatusGroup", () => {
-  it("covers all 12 BE statuses, including ON_HOLD and the CONFIRMED / IN_PRODUCTION / READY_TO_FULFILL steps", () => {
-    expect(ORDER_STATUSES).toHaveLength(12);
-    for (const status of ["ON_HOLD", "CONFIRMED", "IN_PRODUCTION", "READY_TO_FULFILL"] as const) {
+  it("covers the 21 BE statuses after the 4B rescope, plus the legacy IN_FULFILMENT", () => {
+    expect(ORDER_STATUSES).toHaveLength(22);
+    for (const status of [
+      "PENDING_CONTRACT",
+      "AWAITING_STOCK",
+      "PICKING",
+      "PARTIALLY_FULFILLED",
+      "PACKED",
+      "DELIVERY_FAILED",
+      "RETURN_REQUESTED",
+      "REFUNDED",
+      "PARTIALLY_REFUNDED",
+      "CLOSED",
+    ] as const) {
       expect(ORDER_STATUSES).toContain(status);
     }
   });
 
   it("has wording for every status group the BE sends, plus UNKNOWN", () => {
-    expect(ORDER_STATUS_GROUPS).toHaveLength(9);
+    // CustomerOrders.StatusGroup: AWAITING_CONTRACT and AWAITING_STOCK came with the rescope.
+    expect(ORDER_STATUS_GROUPS).toHaveLength(11);
     expect(Object.keys(ORDER_STATUS_GROUP_META).sort()).toEqual(
       [...ORDER_STATUS_GROUPS, "UNKNOWN"].sort(),
     );
@@ -31,35 +44,38 @@ describe("order lifecycle mirrors BE OrderStatus / CustomerOrders.StatusGroup", 
     expect(orderProgressOf("UNKNOWN")).toBeNull();
   });
 
-  // BE OrderStatus#customerMayCancelDirectly
-  it("offers cancellation from exactly DRAFT, PENDING_PAYMENT, CONFIRMED", () => {
-    expect(ORDER_STATUSES.filter(isOrderCancellable)).toEqual([
-      "DRAFT",
+  // BE OrderStatus#customerMayCancelDirectly: false for every status since the 4B rescope.
+  it("never offers a direct cancellation: an order runs under a signed contract", () => {
+    expect(ORDER_STATUSES.filter(isOrderCancellable)).toEqual([]);
+  });
+
+  // BE OrderStatus#canTransitionTo(CANCELLED): the customer asks Sales (202).
+  it("offers a cancellation request exactly where the BE may still cancel", () => {
+    expect(ORDER_STATUSES.filter(isCancellationRequestable)).toEqual([
+      "PENDING_CONTRACT",
       "PENDING_PAYMENT",
       "CONFIRMED",
+      "AWAITING_STOCK",
+      "IN_PRODUCTION",
+      "READY_TO_FULFILL",
+      "PICKING",
+      "ON_HOLD",
     ]);
   });
 
-  it.each([
-    "IN_PRODUCTION",
-    "IN_FULFILMENT",
-    "ON_HOLD",
-    "SHIPPED",
-    "DELIVERED",
-    "RETURNED",
-  ] as const)(
-    "does not offer cancellation from %s (released, shipped or closed: ask support)",
-    (status) => expect(isOrderCancellable(status)).toBe(false),
-  );
-
-  // BE OrderStatus#canTransitionTo(CANCELLED) minus customerMayCancelDirectly: the customer asks (202).
-  it("offers a cancellation request from exactly IN_PRODUCTION, READY_TO_FULFILL, IN_FULFILMENT, ON_HOLD", () => {
-    expect(ORDER_STATUSES.filter(isCancellationRequestable)).toEqual([
-      "IN_PRODUCTION",
-      "READY_TO_FULFILL",
-      "IN_FULFILMENT",
-      "ON_HOLD",
-    ]);
+  it("lets the BE's allowedActions decide over the status when it sends them (G3-2)", () => {
+    expect(allowedCancellation("CONFIRMED", { cancel: false, requestCancellation: true })).toBe(
+      "request",
+    );
+    expect(allowedCancellation("SHIPPED", { cancel: true, requestCancellation: false })).toBe(
+      "cancel",
+    );
+    expect(allowedCancellation("CONFIRMED", { cancel: false, requestCancellation: false })).toBe(
+      null,
+    );
+    // An older BE without them: the status decides.
+    expect(allowedCancellation("PICKING", undefined)).toBe("request");
+    expect(allowedCancellation("PACKED", null)).toBe(null);
   });
 
   it("never offers both: direct cancel and request are different answers of the BE", () => {
@@ -70,13 +86,36 @@ describe("order lifecycle mirrors BE OrderStatus / CustomerOrders.StatusGroup", 
   });
 
   it("offers neither from SHIPPED on: that is a return, not a cancellation (BR-031)", () => {
-    for (const status of ["SHIPPED", "DELIVERED", "COMPLETED", "CANCELLED", "RETURNED"] as const) {
+    for (const status of [
+      "PACKED",
+      "SHIPPED",
+      "DELIVERY_FAILED",
+      "DELIVERED",
+      "COMPLETED",
+      "CANCELLED",
+      "RETURNED",
+      "CLOSED",
+    ] as const) {
       expect(isOrderCancellable(status) || isCancellationRequestable(status)).toBe(false);
     }
   });
 
-  it("treats COMPLETED, CANCELLED, RETURNED as terminal", () => {
-    expect(ORDER_STATUSES.filter(isOrderTerminal)).toEqual(["COMPLETED", "CANCELLED", "RETURNED"]);
+  it("treats completed, closed, cancelled, returned and refunded orders as ended", () => {
+    expect(ORDER_STATUSES.filter(isOrderTerminal)).toEqual([
+      "RETURNED",
+      "REFUNDED",
+      "PARTIALLY_REFUNDED",
+      "COMPLETED",
+      "CANCELLED",
+      "CLOSED",
+    ]);
+  });
+
+  it("places the new groups on the stepper: awaiting the contract after the order, awaiting stock after payment", () => {
+    expect(orderProgressOf("AWAITING_CONTRACT")).toBe(1);
+    expect(orderProgressOf("AWAITING_STOCK")).toBe(2);
+    expect(ORDER_STATUS_GROUP_META.AWAITING_CONTRACT.label).toBe("Chờ ký hợp đồng");
+    expect(ORDER_STATUS_GROUP_META.AWAITING_STOCK.label).toBe("Đang chờ hàng");
   });
 
   it("gives every group a Vietnamese label, a semantic tone and a hint", () => {

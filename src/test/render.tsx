@@ -4,7 +4,6 @@ import { NuqsTestingAdapter, type OnUrlUpdateFunction } from "nuqs/adapters/test
 import type { ReactNode } from "react";
 
 import { useAuthStore } from "@/lib/auth/auth-store";
-import { useCartStore } from "@/lib/store/use-cart-store";
 
 /** Screens read the session from the auth store, like the app: sign in / out around a test. */
 export function signIn() {
@@ -23,10 +22,6 @@ export function signIn() {
 
 export function signOut() {
   useAuthStore.setState({ user: null, tokens: null, isAuthenticated: false });
-}
-
-export function resetCart() {
-  useCartStore.setState({ ownerId: null, lines: [] });
 }
 
 /** App providers for a screen test: a fresh query cache that never retries, and nuqs URL state. */

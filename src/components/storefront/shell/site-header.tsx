@@ -1,11 +1,10 @@
 import Link from "next/link";
-import { MessageCircle, ShoppingBag } from "lucide-react";
+import { MessageCircle } from "lucide-react";
 
 import { BRAND, STORE_ROUTES } from "@/constants";
 import { cn } from "@/lib/cn";
 
 import { HeaderAccountLink } from "@/features/auth/components/header-account-link";
-import { CartBadge } from "@/features/cart/components/cart-badge";
 import { NotificationBell } from "@/features/notification";
 import { ThemeToggle } from "@/components/storefront/theme-toggle";
 
@@ -51,13 +50,6 @@ export function SiteHeader() {
             <HeaderAccountLink className={cn(actionLink, "hidden sm:inline-flex")} />
             <NotificationBell />
             <ThemeToggle />
-            <Link href={STORE_ROUTES.cart} className={cn(actionLink, "text-ink-primary")}>
-              <span className="relative">
-                <ShoppingBag className="size-5" aria-hidden="true" />
-                <CartBadge />
-              </span>
-              <span className="sr-only sm:not-sr-only">Giỏ hàng</span>
-            </Link>
           </div>
         </div>
       </div>

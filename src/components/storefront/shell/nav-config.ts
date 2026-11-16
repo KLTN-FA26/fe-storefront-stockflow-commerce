@@ -18,7 +18,6 @@ export const utilityLinks: NavLink[] = [
 
 export const accountLinks: NavLink[] = [
   { href: STORE_ROUTES.account.home, label: "Tài khoản" },
-  { href: STORE_ROUTES.cart, label: "Giỏ hàng" },
   { href: STORE_ROUTES.chat.list, label: "Tư vấn" },
 ];
 
@@ -28,7 +27,6 @@ export const footerColumns: FooterColumn[] = [
     links: [
       { href: STORE_ROUTES.catalog.list, label: "Catalog" },
       { href: STORE_ROUTES.design.list, label: "Thiết kế riêng" },
-      { href: STORE_ROUTES.cart, label: "Giỏ hàng" },
     ],
   },
   {

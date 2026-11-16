@@ -61,9 +61,9 @@ describe("SiteHeader", () => {
     }
   });
 
-  it("links the cart with its accessible name", () => {
+  it("has no cart: the customer does not order on the portal (kltn-docs 14 BR-01)", () => {
     render(<SiteHeader />);
-    expect(screen.getByRole("link", { name: /Giỏ hàng/ })).toHaveAttribute("href", "/cart");
+    expect(screen.queryByRole("link", { name: /Giỏ hàng/ })).not.toBeInTheDocument();
   });
 });
 

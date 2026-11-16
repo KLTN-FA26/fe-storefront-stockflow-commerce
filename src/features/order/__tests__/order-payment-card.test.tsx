@@ -1,24 +1,32 @@
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/error";
+import { beOrderInstallments } from "@/lib/installments/__tests__/fixtures";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { OrderPaymentCard } from "../components/order-payment-card";
 import { orderDtoSchema } from "../schemas";
 import { beOrder, orderId } from "./fixtures";
 
-const orderWith = (over: Record<string, unknown>) => orderDtoSchema.parse({ ...beOrder, ...over });
-const instructions = {
-  orderId,
+const orderWith = (over: Record<string, unknown> = {}) =>
+  orderDtoSchema.parse({ ...beOrder, ...over });
+
+const transfer = {
+  installmentId: "6c7d8e9f-0000-4000-8000-000000000002",
+  contractNumber: "HD-20261108-000007-1",
   orderNumber: "SO-20260907-000431",
+  seq: 2,
+  name: "Thanh toán sau giao",
   bankName: "Vietcombank",
   accountNumber: "0071000888999",
   accountName: "CONG TY TNHH STOCKFLOW",
-  transferReference: "SO-20260907-000431",
-  amountDue: 150_000,
+  amountDue: 354_900,
   currency: "VND",
-  dueBy: "TO_CONFIRM",
+  reference: "HD-20261108-000007-1 DOT2",
+  dueDate: "2026-10-01",
 };
 
 beforeEach(() => signIn());
@@ -27,43 +35,77 @@ afterEach(() => {
   signOut();
 });
 
-describe("OrderPaymentCard transfer instructions", () => {
-  it("shows them while money is still due on the order", async () => {
-    const get = vi.spyOn(api, "get").mockResolvedValue({ data: instructions });
-    renderWithProviders(
-      <OrderPaymentCard
-        order={orderWith({
-          status: "PENDING_PAYMENT",
-          paymentTerm: "DEPOSIT",
-          payment: { status: "UNPAID", paidAmount: 0, depositRequired: 150_000 },
-        })}
-      />,
-    );
+describe("OrderPaymentCard", () => {
+  it("lists the contract's installments with what each still owes", async () => {
+    const get = vi.spyOn(api, "get").mockResolvedValue({ data: beOrderInstallments() });
+    renderWithProviders(<OrderPaymentCard order={orderWith()} />);
 
-    expect(await screen.findByText("0071000888999")).toBeInTheDocument();
-    expect(get).toHaveBeenCalledWith(
-      `/orders/me/${orderId}/transfer-instructions`,
+    const list = await screen.findByRole("list", { name: "Các đợt thanh toán" });
+    expect(get).toHaveBeenCalledWith(`/installments/me/orders/${orderId}`, expect.anything());
+    const rows = within(list).getAllByRole("listitem");
+    expect(rows).toHaveLength(2);
+    expect(within(rows[0]!).getByText("Đợt 1 · Đặt cọc")).toBeInTheDocument();
+    expect(within(rows[0]!).getByText("Đã thanh toán")).toBeInTheDocument();
+    // Overdue is a flag: the DUE installment past its day reads "Quá hạn".
+    expect(within(rows[1]!).getByText("Quá hạn")).toBeInTheDocument();
+    expect(screen.getByText("Còn phải thanh toán").nextElementSibling).toHaveTextContent(
+      /354\.900/,
+    );
+  });
+
+  it("offers transfer details only on an installment that still owes, asked when opened", async () => {
+    const get = vi
+      .spyOn(api, "get")
+      .mockImplementation(async (url: string) =>
+        url.endsWith("/transfer-instructions")
+          ? { data: transfer }
+          : { data: beOrderInstallments() },
+      );
+    const user = userEvent.setup();
+    renderWithProviders(<OrderPaymentCard order={orderWith()} />);
+
+    const buttons = await screen.findAllByRole("button", { name: "Xem thông tin chuyển khoản" });
+    // The paid deposit has none.
+    expect(buttons).toHaveLength(1);
+    expect(get).toHaveBeenCalledTimes(1);
+
+    await user.click(buttons[0]!);
+    expect(await screen.findByText("HD-20261108-000007-1 DOT2")).toBeInTheDocument();
+    expect(get).toHaveBeenLastCalledWith(
+      `/installments/me/${transfer.installmentId}/transfer-instructions`,
       expect.anything(),
     );
   });
 
-  it("neither asks nor shows anything for a paid order", () => {
-    const get = vi.spyOn(api, "get").mockResolvedValue({ data: instructions });
-    renderWithProviders(<OrderPaymentCard order={orderWith({})} />);
-    expect(get).not.toHaveBeenCalled();
-    expect(screen.queryByText("Thông tin chuyển khoản")).not.toBeInTheDocument();
+  it("says the schedule comes with the contract when the order has no installments yet", async () => {
+    vi.spyOn(api, "get").mockRejectedValue(
+      new ApiError(404, "INSTALLMENT_NOT_FOUND", "Order has no installments"),
+    );
+    renderWithProviders(<OrderPaymentCard order={orderWith()} />);
+
+    expect(
+      await screen.findByText(/sẽ hiển thị khi hợp đồng mua bán của đơn được ký/),
+    ).toBeInTheDocument();
   });
 
-  it("asks nothing for a credit order, which is paid after delivery", () => {
-    const get = vi.spyOn(api, "get").mockResolvedValue({ data: instructions });
-    renderWithProviders(
-      <OrderPaymentCard
-        order={orderWith({
-          paymentTerm: "CREDIT",
-          payment: { status: "ON_CREDIT", paidAmount: 0, creditTermDays: 30 },
-        })}
-      />,
+  it("shows nothing for an order cancelled before it had a contract", async () => {
+    vi.spyOn(api, "get").mockRejectedValue(
+      new ApiError(404, "INSTALLMENT_NOT_FOUND", "Order has no installments"),
     );
-    expect(get).not.toHaveBeenCalled();
+    const { container } = renderWithProviders(
+      <OrderPaymentCard order={orderWith({ status: "CANCELLED", statusGroup: "CANCELLED" })} />,
+    );
+    await vi.waitFor(() => expect(container).toBeEmptyDOMElement());
+  });
+
+  it("offers a retry when the schedule cannot be read", async () => {
+    vi.spyOn(api, "get")
+      .mockRejectedValueOnce(new ApiError(400, "UNSUPPORTED_PARAMETER", "bad id"))
+      .mockResolvedValue({ data: beOrderInstallments() });
+    const user = userEvent.setup();
+    renderWithProviders(<OrderPaymentCard order={orderWith()} />);
+
+    await user.click(await screen.findByRole("button", { name: /Thử lại/ }));
+    expect(await screen.findByRole("list", { name: "Các đợt thanh toán" })).toBeInTheDocument();
   });
 });

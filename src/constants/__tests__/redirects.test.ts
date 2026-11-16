@@ -38,4 +38,11 @@ describe("storefront redirects (next.config.ts)", () => {
     expect(redirectOf("/catalog/products")).toBeUndefined();
     expect(redirectOf("/search?q=hoodie")).toBeUndefined();
   });
+
+  it("sends the BE order link /orders/{uuid} to the customer's order page", () => {
+    const id = "0e380000-0000-4000-8000-000000000201";
+    expect(redirectOf(`/orders/${id}`)).toBe(`/account/orders/${id}`);
+    expect(redirectOf("/orders/not-a-uuid")).toBeUndefined();
+    expect(redirectOf(`/account/orders/${id}`)).toBeUndefined();
+  });
 });
