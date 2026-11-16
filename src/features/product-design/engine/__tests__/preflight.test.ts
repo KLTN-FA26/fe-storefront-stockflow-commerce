@@ -6,13 +6,17 @@ import type {
   DesignDocument,
   DesignElement,
   Hex,
+  ImageElement,
   Stroke,
   SurfaceContent,
 } from "../document/schema";
 import { elementOutline } from "../geometry/element";
-import { dpiTier, printDpi } from "../preflight/rules/resolution";
+import { polarWarp, warpStretch } from "../geometry/polar-warp";
+import { dpiTier, placedDpi, printDpi } from "../preflight/rules/resolution";
+import { VARIANT_OK } from "../preflight/rules/variant";
 import { runPreflight } from "../preflight/run";
 import type { PreflightInput, PreflightIssue, PreflightRuleId } from "../preflight/types";
+import { effectiveDpi } from "../geometry/units";
 import { createSurfaces, cupSector } from "../surfaces";
 import type { BagModel, CupModel, CustomizationTemplate, PrintAreaCode } from "../template/schema";
 import { bagM, cup12oz, cupBody, drawingEl, imageEl, sizer, textEl } from "./fixtures";
@@ -71,6 +75,7 @@ function input(
     sizer,
     assets: ASSETS,
     fontStatus: FONT_STATUS,
+    variant: VARIANT_OK,
     ...extra,
   };
 }
@@ -93,12 +98,16 @@ const withLowDpi = (dpi: number) =>
 const withText = (content: string, sizePt: number) => onFront(textEl("txt", { content, sizePt }));
 
 describe("runPreflight result", () => {
-  it("passes a clean design and reports the highest level", () => {
+  it("result is Fail when any issue is fail, else Pass — notes never change Pass", () => {
     expect(runPreflight(input(cleanDoc)).result).toBe("Pass");
     expect(runPreflight(input(cleanDoc)).issues).toEqual([]);
-    // minDpi 150: 200 meets it but is under the print file's 300 DPI
-    expect(runPreflight(input(withLowDpi(200), { minDpi: 150 })).result).toBe("Warning");
+
+    const noted = runPreflight(input(cleanDoc, { colorMode: "CMYK" }));
+    expect(noted.result).toBe("Pass");
+    expect(noted.issues.map((i) => i.level)).toEqual(["note"]);
+
     expect(runPreflight(input(withLowDpi(200))).result).toBe("Fail"); // minDpi 300
+    expect(runPreflight(input(withLowDpi(200), { colorMode: "CMYK" })).result).toBe("Fail");
   });
 
   it("fails a long single-line text that runs past the bleed", () => {
@@ -110,14 +119,8 @@ describe("runPreflight result", () => {
     );
   });
 
-  it("keeps CMYK as info without failing", () => {
-    const r = runPreflight(input(cleanDoc, { colorMode: "CMYK" }));
-    expect(r.result).toBe("Pass");
-    expect(r.issues[0]!.ruleId).toBe("CMYK_CONVERSION");
-  });
-
   it("is a Fail whenever any issue fails, whatever order the rules emit them in", () => {
-    // Crosses the safe line (a warning, emitted first) and is about 100 DPI (a fail, emitted after).
+    // Crosses the safe line (emitted first) and is about 100 DPI (emitted after): both fail.
     const doc = onFront(
       imageEl("img", {
         naturalWidthPx: 236,
@@ -127,10 +130,10 @@ describe("runPreflight result", () => {
     );
     const report = runPreflight(input(doc));
     expect(report.result).toBe("Fail");
-    expect(ruleIds(report.issues)).toEqual(["DPI_BELOW_MIN", "CROSSES_SAFE_AREA"]);
+    expect(ruleIds(report.issues)).toEqual(["CROSSES_SAFE_AREA", "DPI_BELOW_MIN"]);
   });
 
-  it("lists the most severe issues first", () => {
+  it("lists the fails before the notes", () => {
     const doc = onFront(
       imageEl("img", {
         naturalWidthPx: 236,
@@ -139,7 +142,7 @@ describe("runPreflight result", () => {
       }),
     );
     const report = runPreflight(input(doc, { colorMode: "CMYK", maxColors: 1 }));
-    expect(report.issues.map((i) => i.level)).toEqual(["fail", "warning", "warning", "info"]);
+    expect(report.issues.map((i) => i.level)).toEqual(["fail", "fail", "note", "note"]);
   });
 
   it("skips hidden elements: they are not printed", () => {
@@ -148,7 +151,7 @@ describe("runPreflight result", () => {
       textEl("ghost", { hidden: true, fontCode: "lobster", sizePt: 2 }),
       textEl("shown"),
     );
-    const r = runPreflight(input(doc, { allowedFontCodes: ["be-vietnam-pro"] }));
+    const r = runPreflight(input(doc));
     expect(r.issues).toEqual([]);
   });
 
@@ -178,9 +181,24 @@ describe("OUTSIDE_PRINT_AREA (BR-02)", () => {
     ]);
   });
 
-  it("fails an element that lies completely outside the trim box", () => {
-    // 2 × 2 mm inside the left bleed strip (u = -1.5 → flat x 0.5…2.5; trim starts at 3).
+  it("fails an element entirely beyond the bleed box", () => {
+    // 2 × 2 mm at u = -10: flat x -11…-9, the bleed box starts at 0.
     const doc = onFront(
+      imageEl("speck", {
+        widthMm: 2,
+        heightMm: 2,
+        naturalWidthPx: 400,
+        naturalHeightPx: 400,
+        placement: { u: -10, v: 140, rotationDeg: 0, scale: 1 },
+      }),
+    );
+    expect(ruleIds(runPreflight(input(doc)).issues)).toEqual(["OUTSIDE_PRINT_AREA"]);
+  });
+
+  it("element past print area + bleed fails OUTSIDE_PRINT_AREA; one inside the bleed only (text) fails CROSSES_SAFE_AREA, not OUTSIDE", () => {
+    // Inside the left bleed strip (u = -1.5 → flat x ≈ 1.5; trim starts at 3): nothing of it is in
+    // the trim, yet it is inside the bleed.
+    const speck = onFront(
       imageEl("speck", {
         widthMm: 2,
         heightMm: 2,
@@ -189,10 +207,23 @@ describe("OUTSIDE_PRINT_AREA (BR-02)", () => {
         placement: { u: -1.5, v: 140, rotationDeg: 0, scale: 1 },
       }),
     );
-    expect(ruleIds(runPreflight(input(doc)).issues)).toContain("OUTSIDE_PRINT_AREA");
+    expect(ruleIds(runPreflight(input(speck)).issues)).toEqual(["CROSSES_SAFE_AREA"]);
+
+    const word = (u: number) =>
+      onFront(
+        textEl("word", {
+          content: "A",
+          sizePt: 8,
+          placement: { u, v: 140, rotationDeg: 0, scale: 1 },
+        }),
+      );
+    const inBleed = runPreflight(input(word(-1.5)));
+    expect(ruleIds(inBleed.issues)).toEqual(["CROSSES_SAFE_AREA"]);
+    expect(inBleed.result).toBe("Fail");
+    expect(ruleIds(runPreflight(input(word(-10))).issues)).toEqual(["OUTSIDE_PRINT_AREA"]);
   });
 
-  it("does not fail an element that reaches into the bleed, it only warns about the cut", () => {
+  it("fails an element that reaches into the bleed as CROSSES_SAFE_AREA, not OUTSIDE_PRINT_AREA", () => {
     // 262 × 40 mm: 1 mm into the 3 mm bleed on each side, so no corner is inside the trim yet its
     // edges cross it.
     const doc = onFront(
@@ -205,7 +236,7 @@ describe("OUTSIDE_PRINT_AREA (BR-02)", () => {
     );
     const report = runPreflight(input(doc));
     expect(ruleIds(report.issues)).toEqual(["CROSSES_SAFE_AREA"]);
-    expect(report.result).toBe("Warning");
+    expect(report.result).toBe("Fail");
   });
 
   it("accepts a background that fills the bleed box, and tolerates float noise on its edges", () => {
@@ -271,53 +302,97 @@ describe("the cup's concave foot (BR-02)", () => {
     expect(cupIssues(logo)).toEqual(["OUTSIDE_PRINT_AREA"]);
   });
 
-  it("warns about an 80 mm logo cut at the trim, its corners still inside the safe area", () => {
+  it("fails an 80 mm logo cut at the trim, its corners still inside the safe area", () => {
     const logo = lowLogo(80, trimInnerMm - 0.2);
     expect(corners(logo)).toHaveLength(4);
     expect(cupIssues(logo)).toEqual(["CROSSES_SAFE_AREA"]);
   });
 
-  it("warns about a 160 mm logo whose bottom edge dips into the safe margin", () => {
+  it("fails a 160 mm logo whose bottom edge dips into the safe margin", () => {
     const logo = lowLogo(160, safeInnerMm - 1);
     expect(corners(logo)).toHaveLength(4);
     expect(cupIssues(logo)).toEqual(["CROSSES_SAFE_AREA"]);
   });
 
-  it("does not warn for the same logo once its bottom edge clears the safe line", () => {
+  it("does not fail the same logo once its bottom edge clears the safe line", () => {
     expect(cupIssues(lowLogo(160, safeInnerMm + 0.5))).toEqual([]);
   });
 });
 
 describe("CROSSES_SAFE_AREA", () => {
-  it("warns about an element inside the trim that enters the safe margin", () => {
+  const crosses = {
+    ruleId: "CROSSES_SAFE_AREA",
+    level: "fail",
+    message: "Phần tử vượt vùng an toàn, có thể bị xén khi cắt.",
+    surfaceCode: "FRONT",
+    elementId: "img",
+  } as const;
+
+  it("fails an element inside the trim that enters the safe margin", () => {
     // Left edge at u = 2: inside the trim, but the safe margin is 5 mm.
     const doc = onFront(imageEl("img", { placement: { u: 32, v: 140, rotationDeg: 0, scale: 1 } }));
-    expect(only(runPreflight(input(doc)).issues, "CROSSES_SAFE_AREA")).toEqual([
-      {
-        ruleId: "CROSSES_SAFE_AREA",
-        level: "warning",
-        message: "Phần tử vượt vùng an toàn, có thể bị xén khi cắt.",
-        surfaceCode: "FRONT",
-        elementId: "img",
-      },
-    ]);
+    expect(only(runPreflight(input(doc)).issues, "CROSSES_SAFE_AREA")).toEqual([crosses]);
   });
 
-  it("warns about an element that crosses the trim line into the bleed, without failing", () => {
+  it("text 1 mm past the safe line fails CROSSES_SAFE_AREA; image the same; background colour and pattern never do; a drawing never does", () => {
+    // Left edge of the 60 mm image at u = 2 (the safe line is at u = 5): 3 mm past it; at u = 6 clear.
+    const image = (leftU: number) =>
+      onFront(imageEl("img", { placement: { u: leftU + 30, v: 140, rotationDeg: 0, scale: 1 } }));
+    expect(ruleIds(runPreflight(input(image(4))).issues)).toEqual(["CROSSES_SAFE_AREA"]);
+    expect(runPreflight(input(image(6))).issues).toEqual([]);
+
+    // A one-letter text is centred on `u`, so its left edge is just under u.
+    const text = (u: number) =>
+      onFront(
+        textEl("txt", {
+          content: "A",
+          sizePt: 8,
+          placement: { u, v: 140, rotationDeg: 0, scale: 1 },
+        }),
+      );
+    expect(ruleIds(runPreflight(input(text(4.5))).issues)).toEqual(["CROSSES_SAFE_AREA"]);
+    expect(runPreflight(input(text(30))).issues).toEqual([]);
+
+    const solid = docOf({ FRONT: content([textEl("t")], { kind: "color", color: "#336699" }) });
+    expect(runPreflight(input(solid)).issues).toEqual([]);
+    const pattern = docOf({
+      FRONT: content([textEl("t")], {
+        kind: "pattern",
+        patternId: "dots",
+        colors: ["#336699", "#222222"],
+        scale: 1,
+        rotationDeg: 0,
+      }),
+    });
+    expect(runPreflight(input(pattern)).issues).toEqual([]);
+
+    // A drawing in the safe margin (3 mm in from the trim line) is not a safe-zone issue.
+    const drawing = onFront(
+      drawingEl("pen", {
+        strokes: [
+          {
+            mode: "draw",
+            color: "#000000",
+            sizeMm: 2,
+            points: [
+              [-1, 0, 0.5],
+              [1, 0, 0.5],
+            ],
+          },
+        ],
+        placement: { u: 3, v: 140, rotationDeg: 0, scale: 1 },
+      }),
+    );
+    expect(ruleIds(runPreflight(input(drawing)).issues)).toEqual([]);
+  });
+
+  it("fails an element that crosses the trim line into the bleed as CROSSES_SAFE_AREA", () => {
     // Left edge at u = -1 (flat x 2): past the trim line, still inside the 3 mm bleed, so it is cut
     // off at the trim but is not outside the print area.
     const doc = onFront(imageEl("img", { placement: { u: 29, v: 140, rotationDeg: 0, scale: 1 } }));
     const report = runPreflight(input(doc));
-    expect(report.issues).toEqual([
-      {
-        ruleId: "CROSSES_SAFE_AREA",
-        level: "warning",
-        message: "Phần tử vượt vùng an toàn, có thể bị xén khi cắt.",
-        surfaceCode: "FRONT",
-        elementId: "img",
-      },
-    ]);
-    expect(report.result).toBe("Warning");
+    expect(report.issues).toEqual([crosses]);
+    expect(report.result).toBe("Fail");
   });
 
   it("leaves an element already failed as outside the print area to that failure", () => {
@@ -327,12 +402,28 @@ describe("CROSSES_SAFE_AREA", () => {
     expect(ids).not.toContain("CROSSES_SAFE_AREA");
   });
 
-  it("does not warn for an element well inside the safe area", () => {
+  it("does not fail an element well inside the safe area", () => {
     expect(ruleIds(runPreflight(input(cleanDoc)).issues)).not.toContain("CROSSES_SAFE_AREA");
   });
 });
 
-describe("DPI_BELOW_MIN and DPI_LOW (BR-DSG-001)", () => {
+describe("DPI_BELOW_MIN (BR-DSG-001)", () => {
+  it("DPI exactly minDpi passes; minDpi - 1 fails with DPI_BELOW_MIN; no DPI_LOW exists", () => {
+    // minDpi 400: whole pixels put 400 at 400.0 on the short side, and 399 a hair under it.
+    const exact = runPreflight(input(withLowDpi(400), { minDpi: 400 }));
+    expect(exact.issues).toEqual([]);
+    expect(exact.result).toBe("Pass");
+
+    const short = runPreflight(input(withLowDpi(399), { minDpi: 400 }));
+    expect(ruleIds(short.issues)).toEqual(["DPI_BELOW_MIN"]);
+    expect(short.result).toBe("Fail");
+
+    // minDpi 150: 200 DPI is under the print file's 300 but meets the minimum, so nothing is raised.
+    expect(runPreflight(input(withLowDpi(200), { minDpi: 150 })).issues).toEqual([]);
+    expect(runPreflight(input(withLowDpi(299), { minDpi: 150 })).issues).toEqual([]);
+    expect(dpiTier(299, 150)).toBe("ok");
+  });
+
   it("fails below minDpi, reporting the rounded DPI", () => {
     const report = runPreflight(input(withLowDpi(200)));
     expect(only(report.issues, "DPI_BELOW_MIN")).toEqual([
@@ -344,39 +435,13 @@ describe("DPI_BELOW_MIN and DPI_LOW (BR-DSG-001)", () => {
         elementId: "img",
       },
     ]);
-    expect(ruleIds(report.issues)).not.toContain("DPI_LOW");
   });
 
-  it("warns from minDpi up to the print file's 300 DPI, and not from there", () => {
-    const report = runPreflight(input(withLowDpi(200), { minDpi: 150 }));
-    expect(only(report.issues, "DPI_LOW")).toEqual([
-      {
-        ruleId: "DPI_LOW",
-        level: "warning",
-        message: "Ảnh đạt 200 DPI, bản in có thể hơi mờ.",
-        surfaceCode: "FRONT",
-        elementId: "img",
-      },
-    ]);
-    expect(ruleIds(report.issues)).not.toContain("DPI_BELOW_MIN");
-
-    expect(ruleIds(runPreflight(input(withLowDpi(299), { minDpi: 150 })).issues)).toContain(
-      "DPI_LOW",
-    );
-    // 301, not 300: whole pixels put a 300 DPI request at 299.7 on its short side
-    expect(runPreflight(input(withLowDpi(301), { minDpi: 150 })).issues).toEqual([]);
-  });
-
-  it("has no low band once minDpi is the print DPI or more", () => {
-    // minDpi 300: 1200 px over 101.6 mm = exactly 300 DPI is fine, 320 too
+  it("passes 300 DPI at the default minDpi", () => {
+    // 1200 px over 101.6 mm = exactly 300 DPI is fine, 320 too
     const exact = onFront(imageEl("img", { widthMm: 101.6, heightMm: 67.7333333 }));
     expect(runPreflight(input(exact)).issues).toEqual([]);
     expect(runPreflight(input(withLowDpi(320))).issues).toEqual([]);
-    // minDpi 400: the print file is 400 DPI, so 399 fails and 400 passes
-    expect(ruleIds(runPreflight(input(withLowDpi(399), { minDpi: 400 })).issues)).toEqual([
-      "DPI_BELOW_MIN",
-    ]);
-    expect(runPreflight(input(withLowDpi(400), { minDpi: 400 })).issues).toEqual([]);
   });
 
   it("prints at max(minDpi, 300)", () => {
@@ -384,8 +449,7 @@ describe("DPI_BELOW_MIN and DPI_LOW (BR-DSG-001)", () => {
     expect(printDpi(300)).toBe(300);
     expect(printDpi(400)).toBe(400);
     expect(dpiTier(149, 150)).toBe("below-min");
-    expect(dpiTier(150, 150)).toBe("low");
-    expect(dpiTier(300, 150)).toBe("ok");
+    expect(dpiTier(150, 150)).toBe("ok");
   });
 
   it("scales the placed size, so enlarging an image lowers its DPI", () => {
@@ -421,31 +485,17 @@ describe("FONT_NOT_ALLOWED (BR-DSG-001)", () => {
     elementId,
   });
 
-  it("fails a font outside the template's allowed list", () => {
+  it('FONT_NOT_ALLOWED fails only when fontStatus is "error"; a font outside allowedFontCodes passes', () => {
     const doc = onFront(textEl("txt", { fontCode: "lobster" }));
-    const report = runPreflight(input(doc, { allowedFontCodes: ["be-vietnam-pro"] }));
-    expect(only(report.issues, "FONT_NOT_ALLOWED")).toEqual([issue("FRONT", "txt")]);
-    expect(report.result).toBe("Fail");
-  });
-
-  it("accepts every font when the template sets no list", () => {
-    const doc = onFront(textEl("txt", { fontCode: "lobster" }));
+    expect(runPreflight(input(doc, { allowedFontCodes: ["be-vietnam-pro"] })).issues).toEqual([]);
     expect(runPreflight(input(doc, { allowedFontCodes: null })).issues).toEqual([]);
-  });
-
-  it("treats an empty allowed list as no restriction, like null", () => {
-    const doc = onFront(
-      textEl("a", { fontCode: "lobster" }),
-      textEl("b", { fontCode: "be-vietnam-pro" }),
-    );
     expect(runPreflight(input(doc, { allowedFontCodes: [] })).issues).toEqual([]);
-  });
 
-  it("accepts a listed font", () => {
-    const doc = onFront(textEl("txt"));
-    expect(
-      runPreflight(input(doc, { allowedFontCodes: ["be-vietnam-pro", "lobster"] })).issues,
-    ).toEqual([]);
+    const failed = runPreflight(
+      input(doc, { allowedFontCodes: ["be-vietnam-pro"] }, { fontStatus: { lobster: "error" } }),
+    );
+    expect(only(failed.issues, "FONT_NOT_ALLOWED")).toEqual([issue("FRONT", "txt")]);
+    expect(failed.result).toBe("Fail");
   });
 
   it("fails a font that failed to load, but not one that is still loading", () => {
@@ -540,30 +590,48 @@ describe("EMPTY_DESIGN", () => {
     expect(runPreflight(input(docOf({ FRONT: content([]) }))).issues).toEqual([empty]);
   });
 
-  it("counts only visible elements", () => {
+  it("fails a design whose only elements are hidden", () => {
     const doc = onFront(textEl("ghost", { hidden: true }));
     expect(runPreflight(input(doc)).issues).toEqual([empty]);
   });
 
-  it("is satisfied by an element on any surface", () => {
-    const doc = docOf({ BACK: content([textEl("t")]) });
-    expect(ruleIds(runPreflight(input(doc)).issues)).not.toContain("EMPTY_DESIGN");
-  });
-
-  it("is satisfied by a background on any surface", () => {
+  it("fails a design with only a background colour or pattern (docs 12 §3)", () => {
     const solid = docOf({ LEFT: content([], { kind: "color", color: "#336699" }) });
-    expect(ruleIds(runPreflight(input(solid)).issues)).not.toContain("EMPTY_DESIGN");
+    expect(runPreflight(input(solid)).issues).toEqual([empty]);
 
     const pattern = docOf({
       FRONT: content([], {
         kind: "pattern",
         patternId: "dots",
-        colors: ["#336699", "#FFFFFF"],
+        colors: ["#336699", "#222222"],
         scale: 1,
         rotationDeg: 0,
       }),
     });
-    expect(ruleIds(runPreflight(input(pattern)).issues)).not.toContain("EMPTY_DESIGN");
+    expect(runPreflight(input(pattern)).issues).toEqual([empty]);
+  });
+
+  it("is satisfied by one text on any surface", () => {
+    const doc = docOf({ BACK: content([textEl("t")]) });
+    expect(ruleIds(runPreflight(input(doc)).issues)).not.toContain("EMPTY_DESIGN");
+  });
+
+  it("is satisfied by one drawing", () => {
+    const pen = drawingEl("pen", {
+      strokes: [
+        {
+          mode: "draw",
+          color: "#000000",
+          sizeMm: 2,
+          points: [
+            [-1, 0, 0.5],
+            [1, 0, 0.5],
+          ],
+        },
+      ],
+      placement: { u: 130, v: 140, rotationDeg: 0, scale: 1 },
+    });
+    expect(ruleIds(runPreflight(input(onFront(pen))).issues)).not.toContain("EMPTY_DESIGN");
   });
 });
 
@@ -572,13 +640,13 @@ describe("ON_SEAM", () => {
   const small = (u: number) =>
     textEl("mark", { content: "A", sizePt: 8, placement: { ...cupPlacement, u } });
 
-  it("warns about an element on the glue flap, which also crosses the safe line", () => {
+  it("text on the cup seam fails ON_SEAM; a drawing on the seam does not", () => {
     const seamU = (sweepRad + seamRad / 2) * midRadiusMm; // the flap starts at u = sweepRad × mid
     const { issues } = runPreflight(cupInput(small(seamU)));
     expect(only(issues, "ON_SEAM")).toEqual([
       {
         ruleId: "ON_SEAM",
-        level: "warning",
+        level: "fail",
         message: "Phần tử nằm trên mép dán của ly và sẽ bị che.",
         surfaceCode: "BODY",
         elementId: "mark",
@@ -586,6 +654,22 @@ describe("ON_SEAM", () => {
     ]);
     // The safe area stops at the seam, so the flap crosses the safe line too.
     expect(ruleIds(issues)).toEqual(["CROSSES_SAFE_AREA", "ON_SEAM"]);
+
+    const pen = drawingEl("pen", {
+      strokes: [
+        {
+          mode: "draw",
+          color: "#000000",
+          sizeMm: 2,
+          points: [
+            [-1, 0, 0.5],
+            [1, 0, 0.5],
+          ],
+        },
+      ],
+      placement: { ...cupPlacement, u: seamU },
+    });
+    expect(ruleIds(runPreflight(cupInput(pen)).issues)).not.toContain("ON_SEAM");
   });
 
   it("does not warn for an element on the front of the cup", () => {
@@ -599,9 +683,15 @@ describe("ON_SEAM", () => {
 });
 
 describe("TOO_THIN", () => {
+  it("is a note", () => {
+    const report = runPreflight(input(onFront(textEl("txt", { sizePt: 5.5 }))));
+    expect(report.issues.map((i) => i.level)).toEqual(["note"]);
+    expect(report.result).toBe("Pass");
+  });
+
   const thin = (elementId: string): PreflightIssue => ({
     ruleId: "TOO_THIN",
-    level: "warning",
+    level: "note",
     message: "Nét hoặc chữ quá mảnh để in rõ.",
     surfaceCode: "FRONT",
     elementId,
@@ -619,7 +709,7 @@ describe("TOO_THIN", () => {
   const thinIssues = (el: DesignElement) =>
     only(runPreflight(input(onFront(el))).issues, "TOO_THIN");
 
-  it("warns about a stroke thinner than 0.25 mm", () => {
+  it("adds a note about a stroke thinner than 0.25 mm", () => {
     expect(thinIssues(drawingEl("pen", { strokes: [stroke(0.2)] }))).toEqual([thin("pen")]);
     expect(thinIssues(drawingEl("pen", { strokes: [stroke(0.25)] }))).toEqual([]);
   });
@@ -633,13 +723,13 @@ describe("TOO_THIN", () => {
     expect(thinIssues(drawingEl("pen", { strokes: [stroke(0.1, { mode: "erase" })] }))).toEqual([]);
   });
 
-  it("warns about a text outline thinner than 0.25 mm", () => {
+  it("adds a note about a text outline thinner than 0.25 mm", () => {
     const outlined = (widthMm: number) => textEl("txt", { outline: { color: "#112233", widthMm } });
     expect(thinIssues(outlined(0.2))).toEqual([thin("txt")]);
     expect(thinIssues(outlined(0.3))).toEqual([]);
   });
 
-  it("warns about text smaller than 6 pt", () => {
+  it("adds a note about text smaller than 6 pt", () => {
     expect(thinIssues(textEl("txt", { sizePt: 5.5 }))).toEqual([thin("txt")]);
     expect(thinIssues(textEl("txt", { sizePt: 6 }))).toEqual([]);
   });
@@ -662,7 +752,7 @@ describe("TOO_THIN", () => {
 describe("WHITE_ON_KRAFT", () => {
   const white = (surfaceCode: PrintAreaCode, elementId?: string): PreflightIssue => ({
     ruleId: "WHITE_ON_KRAFT",
-    level: "warning",
+    level: "note",
     message: "Giấy kraft không in được màu trắng.",
     surfaceCode,
     ...(elementId === undefined ? {} : { elementId }),
@@ -672,16 +762,16 @@ describe("WHITE_ON_KRAFT", () => {
   const pen = (color: Hex) =>
     drawingEl("pen", { strokes: [{ mode: "draw", color, sizeMm: 2, points: [[0, 0, 0.5]] }] });
 
-  it("warns about white text on kraft-brown paper", () => {
+  it("adds a note about white text on kraft-brown paper", () => {
     expect(whiteIssues(textEl("txt", { color: "#FFFFFF" }))).toEqual([white("FRONT", "txt")]);
   });
 
-  it("warns about a white text outline", () => {
+  it("adds a note about a white text outline", () => {
     const el = textEl("txt", { color: "#000000", outline: { color: "#FFFFFF", widthMm: 1 } });
     expect(whiteIssues(el)).toEqual([white("FRONT", "txt")]);
   });
 
-  it("warns about a near-white stroke, but not an erase stroke", () => {
+  it("adds a note about a near-white stroke, but not an erase stroke", () => {
     expect(whiteIssues(pen("#F8F8F8"))).toEqual([white("FRONT", "pen")]);
     const eraser = drawingEl("pen", {
       strokes: [{ mode: "erase", color: "#FFFFFF", sizeMm: 2, points: [[0, 0, 0.5]] }],
@@ -695,7 +785,7 @@ describe("WHITE_ON_KRAFT", () => {
     expect(whiteIssues(textEl("txt", { color: "#0000FF" }))).toEqual([]);
   });
 
-  it("warns about a white background as a surface-level issue", () => {
+  it("adds a note about a white background as a surface-level issue", () => {
     const solid = docOf({ FRONT: content([textEl("t")], { kind: "color", color: "#FFFFFF" }) });
     expect(only(runPreflight(input(solid)).issues, "WHITE_ON_KRAFT")).toEqual([white("FRONT")]);
 
@@ -734,14 +824,14 @@ describe("WHITE_ON_KRAFT", () => {
 describe("TOO_MANY_COLORS", () => {
   const tooMany = (surfaceCode: PrintAreaCode, maxColors: number): PreflightIssue => ({
     ruleId: "TOO_MANY_COLORS",
-    level: "warning",
+    level: "note",
     message: `Thiết kế dùng nhiều màu hơn mức cho phép (${maxColors}).`,
     surfaceCode,
   });
   const run = (doc: DesignDocument, maxColors: number | null) =>
     only(runPreflight(input(doc, { maxColors })).issues, "TOO_MANY_COLORS");
 
-  it("warns when distinct solid colours exceed maxColors", () => {
+  it("adds a note when distinct solid colours exceed maxColors", () => {
     const doc = docOf({
       FRONT: content([textEl("a", { color: "#111111" }), textEl("b", { color: "#C0392B" })], {
         kind: "color",
@@ -795,7 +885,7 @@ describe("TOO_MANY_COLORS", () => {
     expect(run(doc, 1)).toEqual([tooMany("FRONT", 1), tooMany("BACK", 1)]);
   });
 
-  it("warns about any image when maxColors is set", () => {
+  it("adds a note about any image when maxColors is set", () => {
     const doc = onFront(imageEl("img"));
     expect(run(doc, 4)).toEqual([tooMany("FRONT", 4)]);
   });
@@ -812,7 +902,7 @@ describe("CMYK_CONVERSION (BR-07)", () => {
     expect(report.issues).toEqual([
       {
         ruleId: "CMYK_CONVERSION",
-        level: "info",
+        level: "note",
         message: "Màu sẽ được chuyển sang CMYK khi in, có thể nhạt hơn trên màn hình.",
       },
     ]);
@@ -822,8 +912,116 @@ describe("CMYK_CONVERSION (BR-07)", () => {
     expect(ruleIds(runPreflight(input(cleanDoc)).issues)).not.toContain("CMYK_CONVERSION");
   });
 
-  it("does not hide a failure behind the info issue", () => {
+  it("does not hide a failure behind the note", () => {
     const report = runPreflight(input(withLowDpi(100), { colorMode: "CMYK" }));
     expect(report.result).toBe("Fail");
+  });
+});
+
+describe("variant rules", () => {
+  it('WHITE_ON_KRAFT, TOO_MANY_COLORS, TOO_THIN, CMYK_CONVERSION are level "note"', () => {
+    const doc = docOf({
+      FRONT: content([textEl("t", { color: "#FFFFFF", sizePt: 5 })], {
+        kind: "color",
+        color: "#FFFFFF",
+      }),
+    });
+    const report = runPreflight(input(doc, { colorMode: "CMYK", maxColors: 1 }));
+    const noted = ["WHITE_ON_KRAFT", "TOO_THIN", "CMYK_CONVERSION"] as const;
+    for (const ruleId of noted) {
+      expect(only(report.issues, ruleId).length).toBeGreaterThan(0);
+      expect(only(report.issues, ruleId).every((i) => i.level === "note")).toBe(true);
+    }
+    const crowded = runPreflight(input(onFront(imageEl("img")), { maxColors: 4 }));
+    expect(only(crowded.issues, "TOO_MANY_COLORS").map((i) => i.level)).toEqual(["note"]);
+    expect(report.result).toBe("Pass");
+  });
+
+  it("variant { usable: false } adds VARIANT_UNAVAILABLE fail; { hasCartonSpec: false } adds NO_CARTON_SPEC fail; both carry no elementId", () => {
+    const unusable = runPreflight(
+      input(cleanDoc, {}, { variant: { ...VARIANT_OK, usable: false } }),
+    );
+    expect(unusable.issues).toEqual([
+      {
+        ruleId: "VARIANT_UNAVAILABLE",
+        level: "fail",
+        message: "Quy cách này hiện không còn nhận thiết kế.",
+      },
+    ]);
+    expect(unusable.result).toBe("Fail");
+
+    const noSpec = runPreflight(
+      input(cleanDoc, {}, { variant: { ...VARIANT_OK, hasCartonSpec: false } }),
+    );
+    expect(noSpec.issues).toEqual([
+      {
+        ruleId: "NO_CARTON_SPEC",
+        level: "fail",
+        message: "Quy cách chưa có quy cách thùng, chưa gửi duyệt được.",
+      },
+    ]);
+    expect(noSpec.result).toBe("Fail");
+
+    const both = runPreflight(
+      input(cleanDoc, {}, { variant: { usable: false, hasCartonSpec: false } }),
+    );
+    expect(ruleIds(both.issues)).toEqual(["VARIANT_UNAVAILABLE", "NO_CARTON_SPEC"]);
+    expect(both.issues.every((i) => i.elementId === undefined)).toBe(true);
+    expect(runPreflight(input(cleanDoc)).issues).toEqual([]);
+  });
+});
+
+describe("DPI of a wrapped image (the outer edge is stretched)", () => {
+  const BOX_W = 60;
+  const BOX_H = 40;
+  const wrapPlacement = { ...cupPlacement, scale: 1 };
+  // `dpi` over the 60 × 40 mm frame, whole pixels.
+  const cupImage = (dpi: number, overrides: Partial<ImageElement> = {}) =>
+    imageEl("img", {
+      naturalWidthPx: Math.round((dpi * BOX_W) / 25.4),
+      naturalHeightPx: Math.round((dpi * BOX_H) / 25.4),
+      placement: wrapPlacement,
+      ...overrides,
+    });
+  const stretchOf = (el: ImageElement) =>
+    warpStretch(
+      polarWarp(el, cupBody, { x: -BOX_W / 2, y: -BOX_H / 2, width: BOX_W, height: BOX_H })!,
+    );
+  const cupDpiIssues = (el: ImageElement) =>
+    only(
+      runPreflight(input(docOf({ BODY: content([el]) }, cup12oz), cup12oz)).issues,
+      "DPI_BELOW_MIN",
+    );
+
+  it("divides the horizontal DPI by warpStretch when wrapped on the cup", () => {
+    const el = cupImage(320, { wrap: true });
+    const stretch = stretchOf(el);
+    expect(stretch).toBeGreaterThan(1.07);
+    const horizontal = effectiveDpi(el.naturalWidthPx, BOX_W) / stretch;
+    expect(placedDpi(el, cupBody)).toBeCloseTo(horizontal, 9);
+    expect(placedDpi(el, cupBody)).toBeLessThan(placedDpi(el));
+  });
+
+  it("fails a wrapped image that the stretch pushes under minDpi; the unwrapped one passes", () => {
+    const wrapped = cupImage(320, { wrap: true });
+    expect(cupDpiIssues(wrapped)).toEqual([
+      expect.objectContaining({ ruleId: "DPI_BELOW_MIN", surfaceCode: "BODY", elementId: "img" }),
+    ]);
+    expect(cupDpiIssues(cupImage(320))).toEqual([]);
+  });
+
+  it("reports the same number the badge shows (rounded, stretch included)", () => {
+    const wrapped = cupImage(320, { wrap: true });
+    const [issue] = cupDpiIssues(wrapped);
+    expect(issue!.message).toBe(
+      `Ảnh chỉ đạt ${Math.round(placedDpi(wrapped, cupBody))} DPI, thấp hơn mức tối thiểu 300 DPI.`,
+    );
+  });
+
+  it("leaves an unwrapped image and any image on a bag unchanged", () => {
+    const flat = cupImage(320);
+    expect(placedDpi(flat, cupBody)).toBe(placedDpi(flat));
+    const onBag = imageEl("img", { wrap: true });
+    expect(placedDpi(onBag, createSurfaces(bagM).byCode.FRONT!)).toBe(placedDpi(onBag));
   });
 });

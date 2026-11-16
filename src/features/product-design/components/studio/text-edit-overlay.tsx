@@ -91,7 +91,7 @@ function TextEditor({ element, cssPxPerMm: k, bounds, onClose }: EditorProps) {
       wrap="off"
       spellCheck={false}
       onChange={(event) => {
-        // At most MAX_TEXT_CHARS code points; the Properties panel says so once it is full.
+        // At most MAX_TEXT_CHARS code points; the context bar says so once it is full.
         const content = clipTextContent(event.target.value);
         patchElement(editor, { code, surface, element }, { content }, session);
       }}

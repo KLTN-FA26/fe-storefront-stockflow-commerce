@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { MessageCircle, RefreshCw } from "lucide-react";
+import { RefreshCw, X } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
 import { Alert, EmptyState, Skeleton } from "@/components/shared";
@@ -66,47 +66,33 @@ export function DesignLoadError({
   );
 }
 
-/** While a customer cannot start a design (P1 not shipped), Sales designs for them. */
-export const SALES_DESIGNS_FOR_YOU =
-  "Sales của StockFlow lên thiết kế theo yêu cầu của bạn. Nhắn Sales sản phẩm và logo bạn muốn in; bản thiết kế sẽ hiện trong “Thiết kế của tôi” để bạn xem và xác nhận.";
-
-/** "Nhắn Sales" (the Sales chat) and a way back, for the states that send a design request to Sales. */
-export function AskSalesActions({ back }: { back: { href: string; label: string } }) {
+/** Why "Tạo bản sửa" failed; the customer can put it away (the list's next action does too). */
+export function RevisionError({ error, onDismiss }: { error: unknown; onDismiss: () => void }) {
   return (
-    <div className="flex flex-wrap justify-center gap-3">
-      <Button asChild className="min-h-11 rounded-[var(--r-md)] px-5">
-        <Link href={STORE_ROUTES.chat.list}>
-          <MessageCircle aria-hidden className="size-4" />
-          Nhắn Sales
-        </Link>
-      </Button>
-      <Button asChild variant="outline" className="min-h-11 rounded-[var(--r-md)] px-5">
-        <Link href={back.href}>{back.label}</Link>
+    <div className="mb-4 flex items-start gap-2">
+      <Alert tone="danger" className="flex-1">
+        {describeDesignError(error)}
+      </Alert>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="min-h-11 min-w-11 rounded-[var(--r-md)]"
+        aria-label="Đóng thông báo"
+        onClick={onDismiss}
+      >
+        <X aria-hidden className="size-4" />
       </Button>
     </div>
   );
 }
 
-/**
- * The customer has no design yet: with `selfService` they start one from a product; without it
- * (the BE has no P1) Sales designs for them, so the way in is the Sales chat.
- */
-export function NoDesignsYet({ selfService }: { selfService: boolean }) {
-  if (!selfService) {
-    return (
-      <EmptyState
-        title="Bạn chưa có thiết kế nào"
-        description={SALES_DESIGNS_FOR_YOU}
-        action={
-          <AskSalesActions back={{ href: STORE_ROUTES.catalog.list, label: "Xem sản phẩm" }} />
-        }
-      />
-    );
-  }
+/** The customer has no design yet: a way to a product they can print on. */
+export function NoDesignsYet() {
   return (
     <EmptyState
       title="Bạn chưa có thiết kế nào"
-      description="Chọn một sản phẩm in được và bấm “Bắt đầu thiết kế” để tạo bản thiết kế đầu tiên."
+      description="Chọn một sản phẩm in được và bấm “Thiết kế” để tạo bản thiết kế đầu tiên."
       action={
         <Button asChild className="min-h-11 rounded-[var(--r-md)] px-5">
           <Link href={STORE_ROUTES.catalog.list}>Xem sản phẩm</Link>
@@ -129,7 +115,7 @@ export function NoDesignsInTab({ onShowAll }: { onShowAll: () => void }) {
           className="min-h-11 rounded-[var(--r-md)] px-5"
           onClick={onShowAll}
         >
-          Xem tất cả thiết kế
+          Xem tất cả
         </Button>
       }
     />

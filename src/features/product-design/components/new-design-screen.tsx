@@ -1,112 +1,111 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useRef } from "react";
 
 import { STORE_ROUTES } from "@/constants";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
-import { useIsMock } from "@/providers/app-providers";
 
-import { designCapabilities } from "../capabilities";
-import { TEMPLATE_NOT_FOUND_MESSAGE, describeDesignError, isDesignApiUnavailable } from "../errors";
+import { describeDesignError, isProjectRefusal } from "../errors";
 import { useCreateDesign } from "../mutations";
-import { useCustomization } from "../queries";
-import { defaultDesignName } from "../selectors";
-import type { CreateDesignInput } from "../types";
+import { useDraftCount, usePrintConfig } from "../queries";
+import { defaultDesignName, isPrintConfigUsable } from "../selectors";
+import type { Design } from "../types";
 import {
+  LauncherDraftLimit,
   LauncherError,
   LauncherFrame,
   LauncherLoading,
+  LauncherNoPrintConfig,
   LauncherSignIn,
-  LauncherUnavailable,
 } from "./launcher-states";
-import { TemplateChoice, type Template } from "./template-choice";
-
-const createRequest = (productId: string, template: Template): CreateDesignInput => ({
-  productId,
-  sku: template.sku,
-  templateCode: template.code,
-  name: defaultDesignName(template.name, new Date()),
-});
 
 /**
- * `/design/new?product=&sku=`: reads the templates of the product (P2), picks the one of the SKU,
- * creates the design (P1) and opens its studio. It asks only when there is more than one template.
- * P1 and P2 are proposed endpoints, so nothing is called until `selfService` says the BE has them.
+ * `/design/new?product=&sku=` (spec 2026-11-09 §6.2), checked in order: signed in; (the desktop
+ * gate sits in the layout, so a phone never gets here); the variant has a usable print
+ * configuration (`isPrintConfigUsable`); fewer than 50 drafts; then create the draft and open its
+ * studio.
  */
-export function NewDesignScreen({ product, sku }: { product: string; sku: string | null }) {
+export function NewDesignScreen({ product, sku }: { product: string; sku: string }) {
   const { replace } = useRouter();
+  // `?project=` makes the new design join that project (a project page's "Tạo bản mới"); the route
+  // reads only `product` and `sku`, so the screen reads this one itself.
+  const projectId = useSearchParams()?.get("project")?.trim() || undefined;
   const signedIn = useSignedIn();
-  const { selfService } = designCapabilities(useIsMock());
-  const customization = useCustomization(product, signedIn === true && selfService);
-  const { mutate, data: created, error: createError, isPending: creating } = useCreateDesign();
-  const [picked, setPicked] = useState<string>();
-  const started = useRef(false);
+  const config = usePrintConfig(product, sku, signedIn === true);
+  const printable = config.data && isPrintConfigUsable(config.data) ? config.data : null;
+  const count = useDraftCount(printable !== null);
+  const create = useCreateDesign();
+  // The in-flight create of this visit, by link: a re-run effect (StrictMode) reuses it.
+  const attempt = useRef<{ key: string; promise: Promise<Design> } | null>(null);
+  // A create that lands after the customer left the launcher opens nothing.
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  const key = `${product}+${sku}+${projectId ?? ""}`;
+  const limit = count.data?.limit;
+  const full = count.data !== undefined && count.data.drafts >= count.data.limit;
+  const { mutateAsync } = create;
+  const name = printable ? defaultDesignName(printable.product.title, printable.sku) : null;
+  // Decided before the create starts: the create itself fills the 50th slot and refreshes the count.
+  const ready = name !== null && count.data !== undefined && !full;
+
+  const start = useCallback(
+    (force: boolean) => {
+      if (name === null) return;
+      if (!force && attempt.current?.key === key) return;
+      const promise = mutateAsync({ productSlug: product, sku, name, projectId });
+      attempt.current = { key, promise };
+      promise.then(
+        (design) => {
+          if (mounted.current) replace(STORE_ROUTES.design.detail(design.id));
+        },
+        () => undefined, // shown from the mutation's error, with a retry
+      );
+    },
+    [key, name, mutateAsync, product, sku, projectId, replace],
+  );
+
+  useEffect(() => {
+    if (ready) start(false);
+  }, [ready, start]);
 
   const productHref = STORE_ROUTES.catalog.detail(product);
-  const productId = customization.data?.productId;
-  const templates = (customization.data?.templates ?? []).filter(
-    (template) => sku === null || template.sku === sku,
-  );
-  const chosen = templates.find((template) => template.code === picked) ?? templates[0];
-  const start = () => {
-    if (productId && chosen) mutate(createRequest(productId, chosen));
-  };
-
-  // One template: there is nothing to ask, so start straight away (once, however often this re-renders).
-  const only = templates.length === 1 ? templates[0] : undefined;
-  useEffect(() => {
-    if (!only || !productId || started.current) return;
-    started.current = true;
-    mutate(createRequest(productId, only));
-  }, [only, productId, mutate]);
-
-  useEffect(() => {
-    if (created) replace(STORE_ROUTES.design.detail(created.id));
-  }, [created, replace]);
-
+  // Only a read with no answer yet stops the launcher: a failed re-read keeps what it answered.
+  const configFailed = config.isError && config.data === undefined;
+  const countFailed = count.isError && count.data === undefined;
   const body = (() => {
-    const back = { href: productHref, label: "Quay lại sản phẩm" };
-    // Without P1 signing in would not let the customer start either: Sales is the way in.
-    if (!selfService) return <LauncherUnavailable back={back} />;
     if (signedIn === undefined) return <LauncherLoading label="Đang chuẩn bị thiết kế…" />;
-    if (!signedIn) return <LauncherSignIn from={STORE_ROUTES.design.newFor(product, sku)} />;
-    if (customization.isPending) return <LauncherLoading label="Đang tải mẫu thiết kế…" />;
-    const error = createError ?? customization.error;
-    if (isDesignApiUnavailable(error)) return <LauncherUnavailable back={back} />;
-    if (error) {
+    if (!signedIn)
+      return <LauncherSignIn from={STORE_ROUTES.design.newFor(product, sku, projectId)} />;
+    if (create.isError || (create.isIdle && (configFailed || countFailed))) {
+      const retry = create.isError
+        ? () => start(true)
+        : () => void (configFailed ? config.refetch() : count.refetch());
+      // The project refused the design (full, closed): trying again cannot help, the page can.
+      const refused = create.isError && projectId !== undefined && isProjectRefusal(create.error);
       return (
         <LauncherError
           title="Không bắt đầu được thiết kế"
-          message={describeDesignError(error)}
-          onRetry={createError ? start : () => void customization.refetch()}
-          retrying={creating || customization.isFetching}
-          backHref={productHref}
+          message={describeDesignError(create.error ?? (configFailed ? config.error : count.error))}
+          {...(refused ? {} : { onRetry: retry })}
+          retrying={create.isPending || config.isFetching || count.isFetching}
+          backHref={refused ? STORE_ROUTES.design.project(projectId) : productHref}
+          {...(refused ? { backLabel: "Về dự án" } : {})}
         />
       );
     }
-    if (created) return <LauncherLoading label="Đang mở trình thiết kế…" />;
-    if (!chosen) {
-      return (
-        <LauncherError
-          title="Không bắt đầu được thiết kế"
-          message={TEMPLATE_NOT_FOUND_MESSAGE}
-          backHref={productHref}
-        />
-      );
+    if (config.isPending) return <LauncherLoading label="Đang kiểm tra quy cách…" />;
+    if (printable === null) {
+      return <LauncherNoPrintConfig backHref={productHref} unavailable={config.data !== null} />;
     }
-    if (templates.length > 1) {
-      return (
-        <TemplateChoice
-          templates={templates}
-          value={chosen.code}
-          onChange={setPicked}
-          onStart={start}
-          starting={creating}
-          showSku={sku === null}
-        />
-      );
-    }
+    if (create.isIdle && full && limit !== undefined) return <LauncherDraftLimit limit={limit} />;
+    if (create.isSuccess) return <LauncherLoading label="Đang mở trình thiết kế…" />;
     return <LauncherLoading label="Đang tạo thiết kế…" />;
   })();
 

@@ -1,4 +1,5 @@
-import { isWebGLAvailable, printUnderlay, ProductViewer } from "../../engine";
+import { isWebGLAvailable, printUnderlay, ProductViewer, type Model3dRef } from "../../engine";
+import { within } from "./deadline";
 import { blobBytes, canvasOf, EXPORT_MESSAGES, ExportError, pngOf } from "./export-canvas";
 import type { StudioServices } from "./studio-context";
 import { materialOf, paintSurface } from "./studio-paint";
@@ -7,8 +8,26 @@ import { IDLE_TEXTURE_PX } from "./use-surface-renderer";
 /** What the preview export uses of a 3D viewer. */
 export type PreviewViewer = Pick<
   ProductViewer,
-  "setModel" | "setSurfaceTexture" | "resetView" | "screenshot" | "dispose"
+  "setModel" | "setSurfaceTexture" | "resetView" | "screenshot" | "dispose" | "whenModelReady"
 >;
+
+/**
+ * How long a capture waits for the `.glb` model to replace the code-built one: past it, the
+ * code-built model is photographed (a slow or failed file must not hold up a submission).
+ */
+export const MODEL_WAIT_MS = 15_000;
+
+/**
+ * Waits until the viewer's `.glb` is in or failed, `MODEL_WAIT_MS` at most; no file, no wait. An
+ * abort ends the wait at once (a rejection with the signal's reason).
+ */
+async function modelSettled(
+  viewer: Pick<PreviewViewer, "whenModelReady">,
+  model3d: Model3dRef | null | undefined,
+  signal?: AbortSignal,
+) {
+  if (model3d) await within(viewer.whenModelReady(), MODEL_WAIT_MS, undefined, signal);
+}
 
 export type PreviewDeps = Pick<
   StudioServices,
@@ -23,6 +42,11 @@ export type PreviewDeps = Pick<
   | "livePreview"
   | "viewerRef"
 > & {
+  /**
+   * The print configuration's `.glb` (`printConfig.model3d`): the viewers show it, and a capture
+   * waits for it. Absent or null: the code-built model, nothing to wait for.
+   */
+  model3d?: Model3dRef | null;
   /**
    * A 3D viewer drawing into `canvas`, which is not on screen; `null` where there is no WebGL.
    * Test seam (default: a `ProductViewer` once WebGL is probed).
@@ -48,14 +72,14 @@ function loseContext(canvas: HTMLCanvasElement) {
  * document like the on-screen one (at the sharp texture size), screenshot at its home angle, then
  * disposed with its WebGL context. `null` where there is no WebGL.
  */
-async function offscreenPreview(deps: PreviewDeps, size: number) {
+async function offscreenPreview(deps: PreviewDeps, size: number, signal?: AbortSignal) {
   const { template, surfaces } = deps;
   const canvas = canvasOf(size, size);
   const viewer = (deps.offscreenViewer ?? defaultOffscreenViewer)(canvas);
   if (viewer === null) return null;
   const textures: HTMLCanvasElement[] = [];
   try {
-    viewer.setModel(template, surfaces);
+    viewer.setModel(template, surfaces, deps.model3d ?? null);
     const underlay = printUnderlay(materialOf(template));
     for (const code of surfaces.order) {
       const surface = surfaces.byCode[code];
@@ -63,16 +87,12 @@ async function offscreenPreview(deps: PreviewDeps, size: number) {
       const texture = document.createElement("canvas");
       textures.push(texture);
       const { width, height } = surface.flatBounds;
-      paintSurface(
-        texture,
-        deps,
-        code,
-        "texture",
-        IDLE_TEXTURE_PX / Math.max(width, height),
+      paintSurface(texture, deps, code, "texture", IDLE_TEXTURE_PX / Math.max(width, height), {
         underlay,
-      );
+      });
       viewer.setSurfaceTexture(code, texture);
     }
+    await modelSettled(viewer, deps.model3d, signal);
     viewer.resetView();
     return await blobBytes(await viewer.screenshot({ width: size, height: size }));
   } finally {
@@ -101,18 +121,25 @@ async function flatPreview(deps: PreviewDeps, size: number) {
 /**
  * The customer preview, `size` × `size` px PNG: the 3D model at its home angle, from the viewer on
  * screen or else from a short-lived offscreen one (when the preview fell back to its flat view); the
- * flat front only where there is no WebGL, or the 3D render fails.
+ * flat front only where there is no WebGL, or the 3D render fails. An abort of `signal` ends the
+ * wait for the model at once, disposes the offscreen viewer and rejects with the signal's reason.
  */
-export async function exportPreview(deps: PreviewDeps, size: number): Promise<Uint8Array> {
+export async function exportPreview(
+  deps: PreviewDeps,
+  size: number,
+  signal?: AbortSignal,
+): Promise<Uint8Array> {
   const viewer = deps.viewerRef.current;
   try {
     if (viewer) {
+      await modelSettled(viewer, deps.model3d, signal);
       viewer.resetView();
       return await blobBytes(await viewer.screenshot({ width: size, height: size }));
     }
-    const offscreen = await offscreenPreview(deps, size);
+    const offscreen = await offscreenPreview(deps, size, signal);
     if (offscreen) return offscreen;
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) throw error; // cancelled: nothing to draw
     // A failed render or a lost context: the flat preview stands in, as on screen.
   }
   return flatPreview(deps, size);

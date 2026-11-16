@@ -1,7 +1,9 @@
 import type { Hex, PatternId, Stroke } from "../document/schema";
 import type { Mat2D } from "../geometry/affine";
+import type { PolarWarp } from "../geometry/polar-warp";
 import type { PathCmd, RectMm } from "../geometry/types";
 import type { Guide } from "../surfaces/types";
+import type { ArcGlyph } from "./arc-text";
 import type { TextLayout } from "./text-layout";
 
 /**
@@ -10,14 +12,14 @@ import type { TextLayout } from "./text-layout";
  */
 export type ComposeTarget = "editor" | "texture" | "preview" | "print";
 
-/**
- * A slice of a wrapped element: the source columns `[srcX, srcX + srcWidth)` (local mm, before
- * `scale`) drawn through `matrix`, which maps element-local to flat coordinates.
- */
-export type Strip = { srcX: number; srcWidth: number; matrix: Mat2D };
+/** A picture drawn rigidly into its local `box` through `matrix`. */
+export type ImageOp = Extract<DrawOp, { op: "image" }>;
 
-/** The ops of an element that can be sliced into strips. */
-export type WarpableOp = Extract<DrawOp, { op: "image" | "text" }>;
+/** Text lines drawn rigidly through `matrix`. */
+export type TextOp = Extract<DrawOp, { op: "text" }>;
+
+/** A wrapped image, remapped through its polar warp. */
+export type WarpedImageOp = Extract<DrawOp, { op: "warpedImage" }>;
 
 /**
  * One drawing instruction in flat mm. `compose` emits these and the executor replays them onto a
@@ -46,6 +48,21 @@ export type DrawOp =
       opacity: number;
     }
   | { op: "drawing"; id: string; matrix: Mat2D; box: RectMm; strokes: Stroke[]; opacity: number }
-  | { op: "warped"; source: WarpableOp; strips: Strip[] }
+  /**
+   * A wrapped text as vector glyphs along the arc (spec §5.2): `source` is its rigid op, which
+   * gives the style; each glyph carries its own place.
+   */
+  | { op: "arcText"; source: TextOp; glyphs: ArcGlyph[] }
+  /**
+   * A wrapped image, remapped exactly through `warp` (spec §5.1); `source` is its rigid op, `id` its
+   * element's (one cache entry each), `sheetRadiiMm` the radii about the apex the bleed spans.
+   */
+  | {
+      op: "warpedImage";
+      id: string;
+      source: ImageOp;
+      warp: PolarWarp;
+      sheetRadiiMm: [inner: number, outer: number];
+    }
   | { op: "multiply"; path: PathCmd[]; color: Hex }
   | { op: "guides"; guides: Guide[]; shadeOutside: PathCmd[] };

@@ -1,26 +1,36 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error";
+import { seedMockCatalog } from "@/lib/api/mock-fixtures/catalog";
+import { MOCK_BLOCKED_SKU, printConfigFor } from "@/lib/api/mock-fixtures/design-print-configs";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
-import { PROPOSED_ENDPOINTS_LIVE } from "../capabilities";
-import { NewDesignScreen } from "../components/new-design-screen";
-import { fakeDesignBackend, mockStudio } from "./design-backend";
-import { beCustomization, beDraft, beTemplate, ids } from "./fixtures";
+import { createProject, getDesign } from "../api";
 
-const env = vi.hoisted(() => ({ isMock: true, replace: vi.fn() }));
+import { NewDesignScreen } from "../components/new-design-screen";
+import { designKeys } from "../queries";
+import { designBackend } from "./design-backend";
+
+// The mock adapter adds latency per request; give multi-request flows headroom under load.
+const WAIT = { timeout: 5000 };
+
+const env = vi.hoisted(() => ({ replace: vi.fn(), search: new URLSearchParams() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: env.replace, push: vi.fn() }),
+  useSearchParams: () => env.search,
 }));
-vi.mock("@/providers/app-providers", () => ({ useIsMock: () => env.isMock }));
+// Mock mode counts every caller as signed in; the real session is what these tests drive.
+vi.mock("@/providers/app-providers", () => ({
+  useIsMock: () => false,
+  useIsDesignMock: () => false,
+}));
 
 beforeEach(() => {
-  env.isMock = true;
   env.replace.mockReset();
+  env.search = new URLSearchParams();
   signIn();
 });
 afterEach(() => {
@@ -30,234 +40,208 @@ afterEach(() => {
 
 const CUP = "ly-giay-2-lop-12oz";
 const CUP_SKU = "CUP-PAPER-12OZ-WHT";
-const DAY_MONTH = / – \d{2}\/\d{2}$/;
-
-const created = (overrides: Record<string, unknown> = {}) => ({
-  data: beDraft({ id: ids.design, ...overrides }),
-});
-
-/** The P2 answer for the cup, with a second template for the same SKU. */
-const twoTemplates = beCustomization({
-  templates: [
-    beTemplate(),
-    beTemplate({
-      code: "CUP12-RIM",
-      templateId: "tpl-cup12-rim",
-      name: "Ly giấy 12oz – in miệng ly",
-    }),
-  ],
-});
+const NAME = "Ly giấy 2 lớp 12oz · CUP-PAPER-12OZ-WHT";
+// What the BE wants beside the slug and SKU: the product's id and the template's code, read from
+// the product's customization (F-12).
+const CUP_PRODUCT_ID = seedMockCatalog().find((product) => product.slug === CUP)!.productId;
+const CUP_TEMPLATE = printConfigFor(CUP, CUP_SKU)!.template.code;
 
 describe("NewDesignScreen", () => {
-  it("creates a design from the PDP link and opens the studio", async () => {
-    const { post } = fakeDesignBackend(mockStudio());
+  it("creates the design named after the product and variant, and opens its studio", async () => {
+    const { post } = await designBackend();
     renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
 
-    await waitFor(() =>
-      expect(env.replace).toHaveBeenCalledWith(expect.stringMatching(/^\/design\/.+/)),
+    await waitFor(
+      () => expect(env.replace).toHaveBeenCalledWith(expect.stringMatching(/^\/design\/.+/)),
+      WAIT,
     );
     expect(post).toHaveBeenCalledTimes(1);
     expect(post).toHaveBeenCalledWith("/designs/mine", {
-      productId: expect.any(String),
+      productId: CUP_PRODUCT_ID,
       sku: CUP_SKU,
-      templateCode: "CUP12-BODY",
-      name: expect.stringMatching(DAY_MONTH),
-    });
-    expect(post.mock.calls[0]?.[1]).toMatchObject({
-      name: expect.stringContaining("Ly giấy 12oz"),
+      templateCode: CUP_TEMPLATE,
+      name: NAME,
     });
     expect(env.replace).toHaveBeenCalledTimes(1);
   });
 
-  it("opens the studio of the design the BE created", async () => {
-    fakeDesignBackend(mockStudio());
+  it("creates the design inside the project named by ?project=", async () => {
+    const { post } = await designBackend();
+    const project = await createProject({ name: "Bộ ly" });
+    env.search = new URLSearchParams({ project: project.id });
     renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
-    await waitFor(() => expect(env.replace).toHaveBeenCalled());
 
-    const id = String(env.replace.mock.calls[0]?.[0]).replace("/design/", "");
-    const stored = await api.get(`/designs/${id}`);
-    expect(stored.data).toMatchObject({ sku: CUP_SKU, templateCode: "CUP12-BODY" });
+    await waitFor(() => expect(env.replace).toHaveBeenCalledTimes(1), WAIT);
+    expect(post).toHaveBeenCalledWith("/designs/mine", {
+      productId: CUP_PRODUCT_ID,
+      sku: CUP_SKU,
+      templateCode: CUP_TEMPLATE,
+      name: NAME,
+      projectId: project.id,
+    });
+    const opened = env.replace.mock.calls[0]?.[0] as string;
+    const created = await getDesign(opened.replace("/design/", ""));
+    expect(created.project?.id).toBe(project.id);
   });
 
-  it("creates one design even when React runs the effects twice", async () => {
-    const { post } = fakeDesignBackend(mockStudio());
+  it("brings a visitor back to the link with the project in it", async () => {
+    signOut();
+    await designBackend();
+    env.search = new URLSearchParams({ project: "p-1" });
+    renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
+    const next = encodeURIComponent(`/design/new?product=${CUP}&sku=${CUP_SKU}&project=p-1`);
+    expect(await screen.findByRole("link", { name: "Đăng nhập" }, WAIT)).toHaveAttribute(
+      "href",
+      `/login?next=${next}`,
+    );
+  });
+
+  it("creates one design when React runs the effects twice (StrictMode)", async () => {
+    const { post } = await designBackend();
     renderWithProviders(
       <StrictMode>
         <NewDesignScreen product={CUP} sku={CUP_SKU} />
       </StrictMode>,
     );
 
-    await waitFor(() => expect(env.replace).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(env.replace).toHaveBeenCalledTimes(1), WAIT);
     expect(post).toHaveBeenCalledTimes(1);
   });
 
-  it("calls nothing and sends the customer to Sales when the BE has not shipped self-service design", async () => {
-    env.isMock = false;
-    const { get, post } = fakeDesignBackend(mockStudio());
+  it("asks a visitor to sign in, brings them back, and creates nothing", async () => {
+    signOut();
+    const { post, get } = await designBackend();
     renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
 
-    expect(await screen.findByText("Thiết kế trực tuyến chưa mở")).toBeInTheDocument();
-    expect(screen.getByText(/Sales của StockFlow lên thiết kế theo yêu cầu của bạn/)).toBeVisible();
-    expect(screen.getByRole("link", { name: "Nhắn Sales" })).toHaveAttribute("href", "/chat");
-    expect(screen.getByRole("link", { name: "Quay lại sản phẩm" })).toHaveAttribute(
+    expect(
+      await screen.findByText("Đăng nhập để bắt đầu thiết kế", undefined, WAIT),
+    ).toBeInTheDocument();
+    const next = encodeURIComponent(`/design/new?product=${CUP}&sku=${CUP_SKU}`);
+    expect(screen.getByRole("link", { name: "Đăng nhập" })).toHaveAttribute(
       "href",
-      `/catalog/products/${CUP}`,
+      `/login?next=${next}`,
     );
     expect(get).not.toHaveBeenCalled();
     expect(post).not.toHaveBeenCalled();
-    expect(env.replace).not.toHaveBeenCalled();
   });
 
-  it("sends a signed-out visitor to Sales too, as signing in would not let them start", async () => {
-    env.isMock = false;
-    signOut();
+  it("says a variant without a print configuration takes no design, and offers Sales", async () => {
+    const { post } = await designBackend();
+    renderWithProviders(<NewDesignScreen product="tui-giay-kraft" sku="BAG-KRAFT-L" />);
+
+    expect(
+      await screen.findByText("Quy cách này chưa nhận thiết kế.", undefined, WAIT),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Chat với Sale" })).toHaveAttribute("href", "/chat");
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("says a blocked variant takes no design either", async () => {
+    const { post } = await designBackend();
+    renderWithProviders(<NewDesignScreen product="ly-giay-kraft-16oz" sku={MOCK_BLOCKED_SKU} />);
+
+    // The BE lists no blocked variant (F-22): it reads as one without a template.
+    expect(
+      await screen.findByText("Quy cách này chưa nhận thiết kế.", undefined, WAIT),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Chat với Sale" })).toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("says a variant of a product that is no longer published takes no design: it is not listed either (F-22)", async () => {
+    const { post } = await designBackend({
+      printConfigFor: (slug, sku) => {
+        const config = printConfigFor(slug, sku);
+        return config && { ...config, product: { ...config.product, status: "ARCHIVED" } };
+      },
+    });
     renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
 
-    expect(await screen.findByText("Thiết kế trực tuyến chưa mở")).toBeInTheDocument();
-    expect(screen.queryByText("Đăng nhập để bắt đầu thiết kế")).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("Quy cách này chưa nhận thiết kế.", undefined, WAIT),
+    ).toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
   });
 
-  it("asks a visitor to sign in once the BE serves self-service, and brings them back", async () => {
-    // The real BE with P1 shipped (mock mode counts every caller as signed in).
-    env.isMock = false;
-    PROPOSED_ENDPOINTS_LIVE.selfService = true;
-    try {
-      signOut();
-      const { get, post } = fakeDesignBackend(mockStudio());
-      renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
-
-      expect(await screen.findByText("Đăng nhập để bắt đầu thiết kế")).toBeInTheDocument();
-      const next = encodeURIComponent(`/design/new?product=${CUP}&sku=${CUP_SKU}`);
-      expect(screen.getByRole("link", { name: "Đăng nhập" })).toHaveAttribute(
-        "href",
-        `/login?next=${next}`,
-      );
-      expect(get).not.toHaveBeenCalled();
-      expect(post).not.toHaveBeenCalled();
-    } finally {
-      PROPOSED_ENDPOINTS_LIVE.selfService = false;
+  it("stops at 50 drafts with a link to the designs of the customer", async () => {
+    const { store, post } = await designBackend();
+    for (let i = 0; i < 48; i += 1) {
+      await store.create({ productSlug: CUP, sku: CUP_SKU, name: `Ly ${i}` });
     }
-  });
-
-  describe("a variant with several templates", () => {
-    beforeEach(() => {
-      vi.spyOn(api, "get").mockResolvedValue({ data: twoTemplates });
-      vi.spyOn(api, "post").mockResolvedValue(created());
-    });
-
-    it("asks which one before creating anything", async () => {
-      renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
-
-      const group = await screen.findByRole("group", { name: "Chọn mẫu thiết kế" });
-      expect(group).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Ly giấy 12oz – in thân ly" })).toBeInTheDocument();
-      expect(api.post).not.toHaveBeenCalled();
-
-      await userEvent.click(screen.getByRole("button", { name: "Ly giấy 12oz – in miệng ly" }));
-      await userEvent.click(screen.getByRole("button", { name: "Bắt đầu thiết kế" }));
-
-      expect(api.post).toHaveBeenCalledWith("/designs/mine", {
-        productId: ids.product,
-        sku: CUP_SKU,
-        templateCode: "CUP12-RIM",
-        name: expect.stringContaining("in miệng ly"),
-      });
-      await waitFor(() => expect(env.replace).toHaveBeenCalledWith(`/design/${ids.design}`));
-    });
-
-    it("starts with the first template when the customer just confirms", async () => {
-      renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
-      await userEvent.click(await screen.findByRole("button", { name: "Bắt đầu thiết kế" }));
-      expect(api.post).toHaveBeenCalledWith(
-        "/designs/mine",
-        expect.objectContaining({ templateCode: "CUP12-BODY" }),
-      );
-    });
-  });
-
-  it("offers every template of the product, naming the SKU, when the link carries none", async () => {
-    const { post } = fakeDesignBackend(mockStudio());
-    renderWithProviders(<NewDesignScreen product="tui-giay-kraft" sku={null} />);
-
-    await userEvent.click(
-      await screen.findByRole("button", { name: /Túi kraft size L.*BAG-KRAFT-L/ }),
-    );
-    expect(
-      screen.getByRole("button", { name: /Túi kraft size M.*BAG-KRAFT-M/ }),
-    ).toBeInTheDocument();
-    expect(post).not.toHaveBeenCalled();
-
-    await userEvent.click(screen.getByRole("button", { name: "Bắt đầu thiết kế" }));
-    await waitFor(() => expect(env.replace).toHaveBeenCalled());
-    expect(post).toHaveBeenCalledWith(
-      "/designs/mine",
-      expect.objectContaining({ sku: "BAG-KRAFT-L", templateCode: "BAGL-4F" }),
-    );
-  });
-
-  it("says a variant has no template instead of creating a design from another one", async () => {
-    const { post } = fakeDesignBackend(mockStudio());
-    renderWithProviders(<NewDesignScreen product={CUP} sku="CUP-NOT-A-VARIANT" />);
-
-    expect(await screen.findByText("Phiên bản này chưa có mẫu thiết kế.")).toBeInTheDocument();
-    expect(post).not.toHaveBeenCalled();
-  });
-
-  it("explains a product that cannot be customized", async () => {
-    fakeDesignBackend(mockStudio());
-    renderWithProviders(<NewDesignScreen product="hop-giay-mang-di-m" sku="BOX-TAKEAWAY-M" />);
-
-    expect(await screen.findByText(/Sản phẩm này không hỗ trợ thiết kế\./)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Bắt đầu thiết kế" })).not.toBeInTheDocument();
-  });
-
-  it("says a product is missing, and falls back to the unavailable state for an unshipped route", async () => {
-    fakeDesignBackend(mockStudio());
-    const { unmount } = renderWithProviders(<NewDesignScreen product="khong-ton-tai" sku={null} />);
-    expect(
-      await screen.findByText(/Không tìm thấy thiết kế hoặc sản phẩm này\./),
-    ).toBeInTheDocument();
-    unmount();
-
-    vi.mocked(api.get).mockRejectedValue(
-      new ApiError(404, "DESIGN_API_UNAVAILABLE", "The design API is not available"),
-    );
-    renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
-    expect(await screen.findByText("Thiết kế trực tuyến chưa mở")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Nhắn Sales" })).toHaveAttribute("href", "/chat");
-  });
-
-  it("shows why the BE refused to create the design, and retries on request", async () => {
-    vi.spyOn(api, "get").mockResolvedValue({ data: beCustomization() });
-    const post = vi
-      .spyOn(api, "post")
-      .mockRejectedValueOnce(
-        new ApiError(422, "TEMPLATE_NOT_FOUND", "no such template", undefined, "corr-7"),
-      )
-      .mockResolvedValueOnce(created());
     renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
 
-    expect(await screen.findByText(/Phiên bản này chưa có mẫu thiết kế\./)).toBeInTheDocument();
-    expect(screen.getByText(/Mã tra cứu: corr-7/)).toBeInTheDocument();
+    expect(await screen.findByText("Bạn đã có 50 bản nháp", undefined, WAIT)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Thiết kế của tôi" })).toHaveAttribute(
+      "href",
+      "/design",
+    );
+    expect(post).not.toHaveBeenCalled();
     expect(env.replace).not.toHaveBeenCalled();
-
-    await userEvent.click(screen.getByRole("button", { name: /Thử lại/ }));
-
-    await waitFor(() => expect(env.replace).toHaveBeenCalledWith(`/design/${ids.design}`));
-    expect(post).toHaveBeenCalledTimes(2);
-    expect(post.mock.calls[1]?.[1]).toEqual(post.mock.calls[0]?.[1]);
   });
 
-  it("retries a failed template load", async () => {
-    const get = vi
-      .spyOn(api, "get")
-      .mockRejectedValueOnce(new ApiError(403, "FORBIDDEN", "no"))
-      .mockResolvedValue({ data: beCustomization() });
-    vi.spyOn(api, "post").mockResolvedValue(created());
+  it("does not flash the limit screen when the create itself makes the 50th draft", async () => {
+    const { store } = await designBackend();
+    for (let i = 0; i < 47; i += 1) {
+      await store.create({ productSlug: CUP, sku: CUP_SKU, name: `Ly ${i}` });
+    }
     renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
 
-    await userEvent.click(await screen.findByRole("button", { name: /Thử lại/ }));
-    await waitFor(() => expect(env.replace).toHaveBeenCalledWith(`/design/${ids.design}`));
-    expect(get).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(env.replace).toHaveBeenCalledTimes(1), WAIT);
+    expect(screen.queryByText("Bạn đã có 50 bản nháp")).not.toBeInTheDocument();
+  });
+
+  it("shows why the BE refused, and retries on request", async () => {
+    const { post } = await designBackend();
+    post.mockRejectedValueOnce(new ApiError(500, "SERVER_ERROR", "boom"));
+    renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
+
+    const retry = await screen.findByRole("button", { name: /Thử lại/ }, WAIT);
+    expect(screen.getByText("Không bắt đầu được thiết kế")).toBeInTheDocument();
+    expect(
+      screen.getByText("Hệ thống đang gặp sự cố. Vui lòng thử lại sau ít phút."),
+    ).toBeInTheDocument();
+    await userEvent.click(retry);
+    await waitFor(() => expect(env.replace).toHaveBeenCalledTimes(1), WAIT);
+    expect(post).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps its screen when a background re-read fails while it has the answer (L10)", async () => {
+    const { store, get } = await designBackend();
+    for (let i = 0; i < 48; i += 1) {
+      await store.create({ productSlug: CUP, sku: CUP_SKU, name: `Ly ${i}` });
+    }
+    const { client } = renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
+    expect(await screen.findByText("Bạn đã có 50 bản nháp", undefined, WAIT)).toBeInTheDocument();
+
+    // A refusal is not retried by itself: the re-read fails at once.
+    get.mockRejectedValueOnce(new ApiError(403, "FORBIDDEN", "x"));
+    await act(() => client.refetchQueries({ queryKey: designKeys.draftCount() }));
+
+    expect(client.getQueryState(designKeys.draftCount())?.status).toBe("error");
+    expect(screen.getByText("Bạn đã có 50 bản nháp")).toBeInTheDocument();
+    expect(screen.queryByText("Không bắt đầu được thiết kế")).not.toBeInTheDocument();
+  });
+
+  it("does not open the studio once the customer has left the launcher (L12)", async () => {
+    const { post } = await designBackend();
+    const { client, unmount } = renderWithProviders(
+      <NewDesignScreen product={CUP} sku={CUP_SKU} />,
+    );
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1), WAIT);
+
+    unmount();
+    await waitFor(
+      () =>
+        expect(
+          client
+            .getMutationCache()
+            .getAll()
+            .map((m) => m.state.status),
+        ).toEqual(["success"]),
+      WAIT,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(env.replace).not.toHaveBeenCalled();
   });
 });

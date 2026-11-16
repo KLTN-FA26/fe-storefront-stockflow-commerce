@@ -3,7 +3,7 @@ import type { ElementSizer } from "../geometry/element";
 import type { PrintSurface, SurfaceSet } from "../surfaces/types";
 import type { CustomizationTemplate, PrintAreaCode } from "../template/schema";
 
-/** Spec §8. Fail blocks confirming (BR-01), warning needs the customer's risk confirmation, info is advice. */
+/** Spec §7 (Module 12 part A). A `fail` blocks submitting for review; a `note` is advice and never blocks. */
 export type PreflightRuleId =
   | "OUTSIDE_PRINT_AREA"
   | "DPI_BELOW_MIN"
@@ -11,19 +11,20 @@ export type PreflightRuleId =
   | "ASSET_INVALID"
   | "EMPTY_DESIGN"
   | "CROSSES_SAFE_AREA"
-  | "DPI_LOW"
   | "ON_SEAM"
   | "TOO_THIN"
   | "WHITE_ON_KRAFT"
   | "TOO_MANY_COLORS"
-  | "CMYK_CONVERSION";
+  | "CMYK_CONVERSION"
+  | "VARIANT_UNAVAILABLE"
+  | "NO_CARTON_SPEC";
 
-export type PreflightLevel = "fail" | "warning" | "info";
+export type PreflightLevel = "fail" | "note";
 
 /**
  * One finding. `surfaceCode` and `elementId` let the panel locate it: element rules carry both,
  * surface rules (background colour, colour count) only the surface, and the document-level
- * `EMPTY_DESIGN` and `CMYK_CONVERSION` neither.
+ * `EMPTY_DESIGN`, `CMYK_CONVERSION` and the variant rules neither.
  */
 export type PreflightIssue = {
   ruleId: PreflightRuleId;
@@ -34,7 +35,7 @@ export type PreflightIssue = {
 };
 
 export type PreflightReport = {
-  result: "Pass" | "Warning" | "Fail";
+  result: "Pass" | "Fail";
   issues: PreflightIssue[];
 };
 
@@ -45,6 +46,13 @@ export type PreflightAsset = {
   status: "ready" | "error";
 };
 
+/** What the engine knows about the chosen variant's print configuration (docs 12 BR-05, B25). */
+export type PreflightVariant = {
+  /** The variant is `ACTIVE` and its product still takes designs. */
+  usable: boolean;
+  hasCartonSpec: boolean;
+};
+
 export type PreflightInput = {
   document: DesignDocument;
   template: CustomizationTemplate;
@@ -53,6 +61,7 @@ export type PreflightInput = {
   assets: Readonly<Record<string, PreflightAsset>>;
   /** Load state per `fontCode`; a font with no entry has not been requested and is not an error. */
   fontStatus: Readonly<Record<string, "ready" | "loading" | "error">>;
+  variant: PreflightVariant;
 };
 
 /** One print surface of the design as the per-surface rules see it. */

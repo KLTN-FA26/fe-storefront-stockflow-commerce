@@ -11,33 +11,40 @@ export const STUDIO_ANNOUNCEMENTS = {
   elementRemoved: "Đã xoá phần tử",
   copiedTo: (face: string) => `Đã sao chép sang ${face}`,
   saved: "Đã lưu",
-  reviewRequested: "Đã gửi QC kiểm tra",
-  finalized: "Đã chốt thiết kế",
-  confirmed: "Đã xác nhận thiết kế",
-  snapshotCopied: "Đã sao chép mã bản chốt",
-  snapshotSelected: "Không sao chép được. Mã đã được chọn để bạn sao chép.",
-  preflight: (fails: number, warnings: number) => `Kiểm tra: ${fails} lỗi, ${warnings} cảnh báo`,
+  submitted: "Đã gửi duyệt",
+  revisionCreated: "Đã tạo bản sửa",
 } as const;
 
 type Announcement = { text: string; id: number };
+/** The latest routine message, and the latest urgent one (an error the user must hear). */
+type Announcements = { polite: Announcement | null; urgent: Announcement | null };
 
-/** `announce(message)` for `StudioServices`, and the latest announcement for `StudioAnnouncer`. */
+/** `announce(message)` for `StudioServices`, and the latest announcements for `StudioAnnouncer`. */
 export function useStudioAnnouncer() {
-  const [announcement, setAnnouncement] = useState<Announcement | null>(null);
-  const announce = useCallback((text: string) => {
-    setAnnouncement((prev) => ({ text, id: (prev?.id ?? 0) + 1 }));
+  const [announcement, setAnnouncement] = useState<Announcements>({ polite: null, urgent: null });
+  const announce = useCallback((text: string, options?: { urgent?: boolean }) => {
+    const key = options?.urgent ? "urgent" : "polite";
+    setAnnouncement((prev) => ({ ...prev, [key]: { text, id: (prev[key]?.id ?? 0) + 1 } }));
   }, []);
   return { announcement, announce };
 }
 
 /**
- * The studio's one polite live region. Each announcement is a new node (keyed by its id), so the
- * same words said twice are read twice.
+ * The studio's live regions: a polite one for routine news ("Đã lưu") and an assertive one for
+ * errors, so a later "Đã lưu" cannot replace an error before it is read. Each announcement is a
+ * new node (keyed by its id), so the same words said twice are read twice. The assertive region
+ * is not `role="alert"`, so it never doubles an alert the screen itself shows.
  */
-export function StudioAnnouncer({ announcement }: { announcement: Announcement | null }) {
+export function StudioAnnouncer({ announcement }: { announcement: Announcements }) {
+  const { polite, urgent } = announcement;
   return (
-    <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
-      {announcement ? <span key={announcement.id}>{announcement.text}</span> : null}
-    </div>
+    <>
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {polite ? <span key={polite.id}>{polite.text}</span> : null}
+      </div>
+      <div aria-live="assertive" aria-atomic="true" className="sr-only">
+        {urgent ? <span key={urgent.id}>{urgent.text}</span> : null}
+      </div>
+    </>
   );
 }

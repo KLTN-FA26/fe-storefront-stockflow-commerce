@@ -17,7 +17,7 @@ import { faceOf, facesKey, fontSet, useFaceStates } from "./use-font-status";
  * The faces the document's text uses, as `facesKey` lists them. The style is the one the layout
  * asks for (italic only where the family ships it).
  */
-function documentFacesKey(document: DesignDocument, fonts: FontRegistry): string {
+export function documentFacesKey(document: DesignDocument, fonts: FontRegistry): string {
   const faces = [];
   for (const code of printAreaCodeSchema.options) {
     for (const el of document.surfaces[code]?.elements ?? []) {

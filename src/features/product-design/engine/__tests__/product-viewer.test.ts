@@ -1,7 +1,11 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import {
   BackSide,
   BufferGeometry,
   Color,
+  type DirectionalLight,
   DoubleSide,
   FrontSide,
   Material,
@@ -10,12 +14,15 @@ import {
   MeshPhysicalMaterial,
   MeshStandardMaterial,
   NeutralToneMapping,
+  type Object3D,
   PlaneGeometry,
   PMREMGenerator,
   SRGBColorSpace,
+  Spherical,
   Texture,
   Vector3,
   type CanvasTexture,
+  type Group,
   type Scene,
   type WebGLRenderer,
   type WebGLRenderTarget,
@@ -23,10 +30,13 @@ import {
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { loadGlb, Model3dError, type Model3dRef } from "../model3d";
 import { createSurfaces, cupSector } from "../surfaces";
 import type { CupModel, CustomizationTemplate } from "../template/schema";
 import { createMaterials, printUnderlay } from "../viewer3d/materials";
+import type { LoadModel3d, Model3dState } from "../viewer3d/model3d-swap";
 import { ProductViewer, type ViewerOptions } from "../viewer3d/product-viewer";
+import { buildModelScene } from "../viewer3d/scene-parts";
 import { isWebGLAvailable } from "../viewer3d/webgl";
 import { bagM, cup12oz } from "./fixtures";
 
@@ -536,7 +546,11 @@ describe("ProductViewer", () => {
       const frames = stubFrames();
       const { viewer, renderer, canvas } = setup();
       const scene = viewer["scene"];
-      const lights = () => scene.children.filter((child) => "isLight" in child);
+      const lights = () => {
+        const found: Object3D[] = [];
+        scene.traverse((child) => "isLight" in child && found.push(child));
+        return found;
+      };
       const before = lights();
       expect(before).toHaveLength(2);
 
@@ -591,6 +605,55 @@ describe("ProductViewer", () => {
     viewer.resetView();
     expect(position.z - target.z).toBeCloseTo(front, 6);
     expect(Math.abs(position.x - target.x)).toBeLessThan(1e-6);
+  });
+
+  describe("light that follows the viewer", () => {
+    it("turns the environment to the camera's azimuth after each controls change", () => {
+      const { viewer } = setup();
+      viewer.setModel(cup12oz, createSurfaces(cup12oz));
+      const scene = viewer["scene"];
+      const controls = viewer["controls"];
+      expect(scene.environmentRotation.y).toBeCloseTo(0);
+
+      viewer.focusSurface("RIGHT");
+      expect(scene.environmentRotation.y).toBeCloseTo(Math.PI / 2);
+
+      // A change event alone (the camera moved by the controls) also turns it.
+      controls.object.position.set(-1, 0, 0).add(controls.target);
+      controls.dispatchEvent({ type: "change" });
+      expect(scene.environmentRotation.y).toBeCloseTo(-Math.PI / 2);
+
+      viewer.resetView();
+      expect(scene.environmentRotation.y).toBeCloseTo(0);
+    });
+
+    it("renders after a controls change", () => {
+      const frames = stubFrames();
+      const { viewer, renderer } = setup();
+      viewer.setModel(cup12oz, createSurfaces(cup12oz));
+      frames.flush();
+      renderer.render.mockClear();
+      viewer["controls"].dispatchEvent({ type: "change" });
+      frames.flush();
+      expect(renderer.render).toHaveBeenCalledTimes(1);
+    });
+
+    it("hangs the key light on the camera, which is in the scene, when there is no environment", () => {
+      const { viewer } = setup({ environment: false });
+      const camera = viewer["camera"];
+      expect(camera.parent).toBe(viewer["scene"]);
+      const key = camera.children.find((child) => "isDirectionalLight" in child);
+      expect(key).toBeDefined();
+      expect((key as DirectionalLight).target.parent).toBe(camera);
+    });
+
+    it("takes the key light and the camera out of the scene on dispose", () => {
+      const { viewer } = setup({ environment: false });
+      const camera = viewer["camera"];
+      viewer["lighting"].dispose();
+      expect(camera.children).toHaveLength(0);
+      expect(camera.parent).toBeNull();
+    });
   });
 
   it("limits the orbit as specified", () => {
@@ -741,5 +804,447 @@ describe("ProductViewer", () => {
     expect(renderer.render).not.toHaveBeenCalled();
     expect(() => viewer.dispose()).not.toThrow();
     expect(renderer.dispose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ProductViewer with a .glb model", () => {
+  const SAMPLE = path.resolve(process.cwd(), "public/models/sample-cup-12oz.glb");
+  const ref: Model3dRef = {
+    url: "/models/sample-cup-12oz.glb",
+    surfaces: [{ printAreaCode: "BODY", meshName: "print:BODY" }],
+  };
+  const surfaces = createSurfaces(cup12oz);
+  const later = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  /** The sample file through the real loader, from the bytes of a fresh ArrayBuffer each time. */
+  function loadSample(): Promise<Group> {
+    const file = readFileSync(SAMPLE);
+    // jsdom's ArrayBuffer is not Node's, and GLTFLoader tells bytes from JSON by `instanceof`.
+    const bytes = new ArrayBuffer(file.byteLength);
+    new Uint8Array(bytes).set(file);
+    return loadGlb(bytes);
+  }
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    let reject!: (error: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  /** A viewer whose loader the test settles by hand; `events` records the `model3d` states. */
+  function setupLoading() {
+    const gates: ReturnType<typeof deferred<Group>>[] = [];
+    const signals: (AbortSignal | undefined)[] = [];
+    const loadModel3d = vi.fn<LoadModel3d>((_source, opts) => {
+      const gate = deferred<Group>();
+      gates.push(gate);
+      signals.push(opts?.signal);
+      return gate.promise;
+    });
+    const harness = setup({ loadModel3d });
+    const events: Model3dState[] = [];
+    harness.viewer.on("model3d", (state) => events.push(state));
+    return { ...harness, gates, signals, events, loadModel3d };
+  }
+
+  const printMeshOf = (viewer: ProductViewer) =>
+    viewer["printMeshes"].find(({ code }) => code === "BODY")?.mesh;
+
+  let warn: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  });
+
+  it("shows the parametric model at once, emits loading, then swaps the meshes when the file is ready", async () => {
+    const { viewer, gates, events, loadModel3d } = setupLoading();
+    const texture = document.createElement("canvas");
+    viewer.setSurfaceTexture("BODY", texture);
+    viewer.setModel(cup12oz, surfaces, ref);
+
+    expect(events).toEqual([{ status: "loading" }]);
+    expect(loadModel3d).toHaveBeenCalledWith(
+      ref.url,
+      expect.objectContaining({ signal: expect.anything() }),
+    );
+    const parametric = viewer["model"];
+    expect(parametric?.getObjectByName("body")).toBeDefined();
+    const ready = viewer.whenModelReady();
+
+    gates[0]!.resolve(await loadSample());
+    await ready;
+
+    expect(events).toEqual([{ status: "loading" }, { status: "ready" }]);
+    const group = viewer["model"];
+    expect(group).not.toBe(parametric);
+    expect(group?.getObjectByName("body")).toBeUndefined();
+    const printed = printMeshOf(viewer);
+    expect(printed?.name).toBe("print:BODY");
+    expect(viewer["modelMeshes"]).toContain(printed);
+    expect(printed?.geometry.getAttribute("uv")).toBeDefined();
+    // The canvas set before the swap is on the new print mesh.
+    expect(printed?.material).toBe(viewer["printMaterials"].get("BODY"));
+    expect((printed?.material as MeshStandardMaterial).map?.image).toBe(texture);
+    expect(viewer["scene"].children).toContain(group);
+    expect(viewer["scene"].children).not.toContain(parametric);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("works end to end with the real loader on the sample file", async () => {
+    const { viewer } = setup({ loadModel3d: () => loadSample() });
+    const events: Model3dState[] = [];
+    viewer.on("model3d", (state) => events.push(state));
+    viewer.setModel(cup12oz, surfaces, ref);
+    await viewer.whenModelReady();
+    expect(events.map((e) => e.status)).toEqual(["loading", "ready"]);
+  });
+
+  it("emits no model3d event without a model3d", async () => {
+    const { viewer, loadModel3d, events } = setupLoading();
+    viewer.setModel(cup12oz, surfaces);
+    viewer.setModel(cup12oz, surfaces, null);
+    await viewer.whenModelReady();
+    expect(events).toEqual([]);
+    expect(loadModel3d).not.toHaveBeenCalled();
+  });
+
+  it("keeps the parametric model and emits failed with the code when the load fails", async () => {
+    const { viewer, gates, events } = setupLoading();
+    viewer.setModel(cup12oz, surfaces, ref);
+    const parametric = viewer["model"];
+    const ready = viewer.whenModelReady();
+    gates[0]!.reject(new Model3dError("LOAD_FAILED", "HTTP 404"));
+    await expect(ready).resolves.toBeUndefined();
+
+    expect(events).toEqual([{ status: "loading" }, { status: "failed", code: "LOAD_FAILED" }]);
+    expect(viewer["model"]).toBe(parametric);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toContain("LOAD_FAILED");
+    expect(warn.mock.calls[0]?.[0]).toContain("HTTP 404");
+  });
+
+  it("treats an exception that is not a Model3dError as LOAD_FAILED", async () => {
+    const { viewer, gates, events } = setupLoading();
+    viewer.setModel(cup12oz, surfaces, ref);
+    gates[0]!.reject(new TypeError("boom"));
+    await viewer.whenModelReady();
+    expect(events.at(-1)).toEqual({ status: "failed", code: "LOAD_FAILED" });
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the parametric model when the file has no mesh for a print area of the template", async () => {
+    const { viewer, gates, events } = setupLoading();
+    const missing: Model3dRef = {
+      url: ref.url,
+      surfaces: [{ printAreaCode: "BODY", meshName: "print:Cup_Body" }],
+    };
+    viewer.setModel(cup12oz, surfaces, missing);
+    const parametric = viewer["model"];
+    const tree = await loadSample();
+    const dispose = vi.spyOn(BufferGeometry.prototype, "dispose");
+    gates[0]!.resolve(tree);
+    await viewer.whenModelReady();
+
+    expect(events.at(-1)?.status).toBe("failed");
+    expect(events.at(-1)?.code).toBe("MESH_MISSING");
+    expect(viewer["model"]).toBe(parametric);
+    expect(dispose).toHaveBeenCalled(); // the rejected tree is freed
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("aborts the load on dispose and frees a file that arrives late", async () => {
+    const { viewer, gates, signals, events } = setupLoading();
+    viewer.setModel(cup12oz, surfaces, ref);
+    const ready = viewer.whenModelReady();
+    viewer.dispose();
+    expect(signals[0]?.aborted).toBe(true);
+    await expect(ready).resolves.toBeUndefined();
+
+    const tree = await loadSample();
+    const dispose = vi.spyOn(BufferGeometry.prototype, "dispose");
+    gates[0]!.resolve(tree);
+    await later();
+    expect(dispose).toHaveBeenCalled();
+    expect(events).toEqual([{ status: "loading" }]);
+  });
+
+  it("lets only the later of two setModel calls take effect", async () => {
+    const { viewer, gates, signals, events } = setupLoading();
+    viewer.setModel(cup12oz, surfaces, ref);
+    const first = viewer.whenModelReady();
+    viewer.setModel(cup12oz, surfaces, ref);
+    const second = viewer.whenModelReady();
+    expect(signals.map((signal) => signal?.aborted)).toEqual([true, false]);
+    await expect(first).resolves.toBeUndefined(); // an earlier promise does not hang
+
+    const [staleTree, freshTree] = [await loadSample(), await loadSample()];
+    const parametric = viewer["model"];
+    const geometryDispose = vi.spyOn(BufferGeometry.prototype, "dispose");
+    gates[0]!.resolve(staleTree);
+    await later();
+    staleTree.traverse((object) => {
+      if (object instanceof Mesh) expect(geometryDispose.mock.contexts).toContain(object.geometry);
+    });
+    expect(viewer["model"]).toBe(parametric);
+    expect(events).toEqual([{ status: "loading" }, { status: "loading" }]);
+
+    gates[1]!.resolve(freshTree);
+    await second;
+    expect(events).toEqual([{ status: "loading" }, { status: "loading" }, { status: "ready" }]);
+    expect(viewer["model"]?.children).toContain(freshTree);
+  });
+
+  it("drops and frees a file that arrives after clearModel, and emits nothing for it", async () => {
+    const { viewer, gates, events } = setupLoading();
+    viewer.setModel(cup12oz, surfaces, ref);
+    const ready = viewer.whenModelReady();
+    viewer["clearModel"]();
+    await expect(ready).resolves.toBeUndefined();
+    expect(viewer["model"]).toBeNull();
+
+    const tree = await loadSample();
+    const dispose = vi.spyOn(BufferGeometry.prototype, "dispose");
+    gates[0]!.resolve(tree);
+    await later();
+    expect(dispose).toHaveBeenCalled();
+    expect(viewer["model"]).toBeNull();
+    expect(events).toEqual([{ status: "loading" }]);
+  });
+
+  it("does not report a stale failure as the new model's", async () => {
+    const { viewer, gates, events } = setupLoading();
+    viewer.setModel(cup12oz, surfaces, ref);
+    viewer.setModel(cup12oz, surfaces, ref);
+    gates[0]!.reject(new Model3dError("LOAD_FAILED", "late"));
+    await later();
+    expect(events).toEqual([{ status: "loading" }, { status: "loading" }]);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("is silent when the loader itself reports ABORTED", async () => {
+    const { viewer, gates, events } = setupLoading();
+    viewer.setModel(cup12oz, surfaces, ref);
+    gates[0]!.reject(new Model3dError("ABORTED", "aborted"));
+    await viewer.whenModelReady();
+    expect(events).toEqual([{ status: "loading" }]);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("answers whenModelReady for the latest setModel, and at once without a file", async () => {
+    const { viewer } = setupLoading();
+    await expect(viewer.whenModelReady()).resolves.toBeUndefined();
+    viewer.setModel(cup12oz, surfaces, ref);
+    let settled = false;
+    void viewer.whenModelReady().then(() => (settled = true));
+    await later();
+    expect(settled).toBe(false);
+
+    viewer.setModel(cup12oz, surfaces); // no file now
+    await expect(viewer.whenModelReady()).resolves.toBeUndefined();
+    expect(settled).toBe(true);
+  });
+
+  it("keeps the angle and distance the user chose when the file comes in", async () => {
+    const { viewer, gates } = setupLoading();
+    viewer.setModel(cup12oz, surfaces, ref);
+    viewer.focusSurface("RIGHT");
+    const { camera, controls } = { camera: viewer["camera"], controls: viewer["controls"] };
+    camera.position.sub(controls.target).multiplyScalar(0.8).add(controls.target);
+    const offset = () =>
+      new Spherical().setFromVector3(camera.position.clone().sub(controls.target));
+    const before = offset();
+
+    gates[0]!.resolve(await loadSample());
+    await viewer.whenModelReady();
+
+    const after = offset();
+    expect(after.theta).toBeCloseTo(before.theta, 4);
+    expect(after.phi).toBeCloseTo(before.phi, 4);
+    expect(after.radius).toBeCloseTo(before.radius, 1);
+  });
+
+  it("re-frames target and distance, but keeps the angles, when the real box is much bigger", () => {
+    const { viewer } = setup();
+    viewer.setModel(cup12oz, surfaces);
+    viewer.focusSurface("BACK");
+    const { camera, controls } = { camera: viewer["camera"], controls: viewer["controls"] };
+    const offset = () =>
+      new Spherical().setFromVector3(camera.position.clone().sub(controls.target));
+    const homeDistance = () => controls.position0.distanceTo(controls.target0);
+    const before = offset();
+    const ratio = before.radius / homeDistance();
+    const targetBefore = controls.target.clone();
+
+    const model = cup12oz.model as CupModel;
+    const bigger: CupModel = { ...model, heightMm: model.heightMm * 1.5 };
+    viewer["attachScene"](
+      buildModelScene(bigger, createSurfaces({ ...cup12oz, model: bigger })),
+      bigger.heightMm,
+      true,
+    );
+
+    const after = offset();
+    expect(after.theta).toBeCloseTo(before.theta, 4);
+    expect(after.phi).toBeCloseTo(before.phi, 4);
+    expect(controls.target.y).toBeGreaterThan(targetBefore.y + 1);
+    expect(after.radius / homeDistance()).toBeCloseTo(ratio, 3);
+  });
+
+  it("exports the swapped scene in a screenshot", async () => {
+    const { viewer, renderer, canvas, gates } = setupLoading();
+    canvas.toBlob = (callback) => callback(new Blob(["png"], { type: "image/png" }));
+    viewer.setModel(cup12oz, surfaces, ref);
+    gates[0]!.resolve(await loadSample());
+    await viewer.whenModelReady();
+    renderer.render.mockClear();
+
+    await viewer.screenshot({ width: 64, height: 64 });
+    const scene = renderer.render.mock.calls[0]![0] as Scene;
+    expect(scene.getObjectByName("print:BODY")).toBeInstanceOf(Mesh);
+    expect(scene.getObjectByName("body")).toBeUndefined();
+  });
+
+  it("frees the loaded file's materials and geometry when the model is replaced", async () => {
+    const { viewer, gates } = setupLoading();
+    viewer.setModel(cup12oz, surfaces, ref);
+    gates[0]!.resolve(await loadSample());
+    await viewer.whenModelReady();
+    const geometry = vi.spyOn(BufferGeometry.prototype, "dispose");
+    const material = vi.spyOn(Material.prototype, "dispose");
+    viewer.setModel(cup12oz, surfaces);
+    expect(geometry).toHaveBeenCalled();
+    expect(material).toHaveBeenCalled();
+  });
+
+  it("is not stopped by a model3d listener that throws: the load, the swap and whenModelReady go on", async () => {
+    const { viewer, gates, loadModel3d } = setupLoading();
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const seen: Model3dState[] = [];
+    viewer.on("model3d", () => {
+      throw new Error("listener");
+    });
+    viewer.on("model3d", (state) => seen.push(state));
+
+    expect(() => viewer.setModel(cup12oz, surfaces, ref)).not.toThrow();
+    expect(loadModel3d).toHaveBeenCalledTimes(1);
+    expect(seen).toEqual([{ status: "loading" }]); // the listener after the throwing one
+    const before = viewer["model"];
+    gates[0]!.resolve(await loadSample());
+    await expect(viewer.whenModelReady()).resolves.toBeUndefined();
+    expect(viewer["model"]).not.toBe(before);
+    expect(seen.map((s) => s.status)).toEqual(["loading", "ready"]);
+    expect(error).toHaveBeenCalled();
+  });
+
+  it("treats a throwing error or contextlost listener the same way", () => {
+    const { viewer, canvas } = setup();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const lost = vi.fn();
+    viewer.on("contextlost", () => {
+      throw new Error("listener");
+    });
+    viewer.on("contextlost", lost);
+    canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+    expect(() =>
+      canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true })),
+    ).not.toThrow();
+    expect(lost).toHaveBeenCalledTimes(1);
+  });
+
+  it("hits the file's own print mesh, and no print area where another mesh of the file is nearer", async () => {
+    const { viewer, canvas, gates } = setupLoading();
+    canvas.getBoundingClientRect = () => flatRect(100, 100);
+    viewer.setModel(cup12oz, surfaces, ref);
+    gates[0]!.resolve(await loadSample());
+    await viewer.whenModelReady();
+
+    const [printed] = viewer["printMeshes"];
+    expect(printed?.mesh.name).toBe("print:BODY");
+    expect(viewer["model"]?.getObjectByName("print:BODY")).toBe(printed?.mesh);
+    const raycast = vi.spyOn(viewer["raycaster"], "intersectObjects");
+    expect(viewer.pick(50, 50)?.surfaceCode).toBe("BODY");
+    expect(raycast.mock.results[0]?.value[0].object).toBe(printed?.mesh);
+
+    // The front of the file's rim: a mesh that is not a print mesh, nearest on that ray.
+    const rim = viewer["model"]?.getObjectByName("rim") as Mesh;
+    rim.updateWorldMatrix(true, false);
+    const positions = rim.geometry.getAttribute("position");
+    let front = new Vector3().fromBufferAttribute(positions, 0).applyMatrix4(rim.matrixWorld);
+    for (let i = 1; i < positions.count; i++) {
+      const point = new Vector3().fromBufferAttribute(positions, i).applyMatrix4(rim.matrixWorld);
+      if (point.z > front.z) front = point;
+    }
+    const camera = viewer["camera"];
+    camera.updateMatrixWorld();
+    const ndc = front.clone().project(camera);
+    const [x, y] = [((ndc.x + 1) / 2) * 100, ((1 - ndc.y) / 2) * 100];
+    expect(viewer.pick(x, y)).toBeNull();
+    expect(raycast.mock.results.at(-1)?.value[0].object).toBe(rim);
+  });
+
+  it("frees the parametric scene once on swap and leaves the artwork texture alone", async () => {
+    const { viewer, gates } = setupLoading();
+    viewer.setSurfaceTexture("BODY", document.createElement("canvas"));
+    viewer.setModel(cup12oz, surfaces, ref);
+    const geometries = viewer["modelMeshes"].map((mesh) => mesh.geometry);
+    const materials = viewer["materials"]!;
+    const bundleDispose = vi.spyOn(materials, "dispose");
+    const artwork = viewer["textures"].get("BODY")!.texture;
+    const geometryDispose = vi.spyOn(BufferGeometry.prototype, "dispose");
+    const textureDispose = vi.spyOn(Texture.prototype, "dispose");
+
+    gates[0]!.resolve(await loadSample());
+    await viewer.whenModelReady();
+
+    for (const geometry of geometries) {
+      expect(geometryDispose.mock.contexts.filter((c) => c === geometry)).toHaveLength(1);
+    }
+    expect(bundleDispose).toHaveBeenCalledTimes(1);
+    expect(textureDispose.mock.contexts).not.toContain(artwork);
+  });
+
+  it("puts a texture set after the swap on the file's print mesh", async () => {
+    const { viewer, gates } = setupLoading();
+    viewer.setModel(cup12oz, surfaces, ref);
+    gates[0]!.resolve(await loadSample());
+    await viewer.whenModelReady();
+    const canvas = document.createElement("canvas");
+    viewer.setSurfaceTexture("BODY", canvas);
+    const printed = viewer["printMeshes"][0]?.mesh;
+    expect(printed?.name).toBe("print:BODY");
+    expect((printed?.material as MeshStandardMaterial).map?.image).toBe(canvas);
+  });
+
+  it("keeps the parametric model, and fails with LOAD_FAILED, when the swap throws midway", async () => {
+    const { viewer, gates, events } = setupLoading();
+    viewer.setSurfaceTexture("BODY", document.createElement("canvas"));
+    viewer.setModel(cup12oz, surfaces, ref);
+    const parametric = viewer["model"];
+    const meshes = viewer["modelMeshes"];
+    const camera = viewer["camera"];
+    const position = camera.position.clone();
+    const near = camera.near;
+    const geometryDispose = vi.spyOn(BufferGeometry.prototype, "dispose");
+    const parametricGeometries = meshes.map((mesh) => mesh.geometry);
+    vi.spyOn(OrbitControls.prototype, "update").mockImplementationOnce(() => {
+      throw new Error("update failed");
+    });
+
+    gates[0]!.resolve(await loadSample());
+    await viewer.whenModelReady();
+
+    expect(events.at(-1)).toEqual({ status: "failed", code: "LOAD_FAILED" });
+    expect(viewer["model"]).toBe(parametric);
+    expect(viewer["scene"].children).toContain(parametric);
+    expect(viewer["modelMeshes"]).toBe(meshes);
+    expect(viewer["printMaterials"].get("BODY")).toBeDefined();
+    expect(camera.position.distanceTo(position)).toBeLessThan(1e-6);
+    expect(camera.near).toBe(near);
+    for (const geometry of parametricGeometries) {
+      expect(geometryDispose.mock.contexts).not.toContain(geometry);
+    }
   });
 });

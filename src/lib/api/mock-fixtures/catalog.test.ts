@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { availabilityOf, createMockCatalog, seedMockCatalog, type MockResult } from "./catalog";
-import { MOCK_DESIGN_TEMPLATES } from "./design-templates";
+import { MOCK_PRINT_CONFIGS } from "./design-print-configs";
 
 const catalog = () => createMockCatalog(seedMockCatalog());
 const dataOf = (result: MockResult) => (result.data as { data: unknown }).data;
@@ -209,12 +209,12 @@ describe("mock catalogue tells customizable products from standard ones", () => 
     expect(c.kindOf("khong-ton-tai")).toBeUndefined();
   });
 
-  it("is CUSTOMIZABLE exactly where a SKU has a design template", () => {
+  it("is CUSTOMIZABLE exactly where a SKU has a print configuration", () => {
     const c = catalog();
     for (const product of seedMockCatalog()) {
-      const hasTemplate = product.variants.some((v) => v.sku in MOCK_DESIGN_TEMPLATES);
+      const hasConfig = product.variants.some((v) => v.sku in MOCK_PRINT_CONFIGS);
       expect(c.kindOf(product.slug)?.kind, product.slug).toBe(
-        hasTemplate ? "CUSTOMIZABLE" : "STANDARD",
+        hasConfig ? "CUSTOMIZABLE" : "STANDARD",
       );
     }
   });

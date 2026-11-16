@@ -1,433 +1,711 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "./client";
 import { ApiError } from "./error";
-import { activateMockAdapter } from "./mock-adapter";
-import { MOCK_QC_DELAY_MS, registerDesignMockRoutes } from "./mock-design";
-import { createMockCatalog, seedMockCatalog } from "./mock-fixtures/catalog";
-import { MOCK_DESIGN_IDS, createMockDesignStudio } from "./mock-fixtures/designs";
+import { __resetMockAdapterForTests, activateMockAdapter } from "./mock-adapter";
+import { registerDesignMockRoutes } from "./mock-design";
+import { seedMockCatalog } from "./mock-fixtures/catalog";
+import {
+  MOCK_SKU_WITHOUT_PRINT_CONFIG,
+  printConfigFor,
+} from "./mock-fixtures/design-print-configs";
+import type {
+  DesignAssetDto,
+  DesignDocumentRecordDto,
+  DesignDto,
+} from "./mock-fixtures/design-rows";
+import { MOCK_DESIGN_IDS } from "./mock-fixtures/design-seed";
+import { createMemoryStorage } from "./mock-fixtures/design-storage";
+import { createDesignMockStore } from "./mock-fixtures/design-store";
 
-// Through the real axios client, mock adapter and route table: what the screens get with USE_MOCK=true.
-// The store's rules are tested in mock-fixtures/designs.test.ts; here the routes are what is checked:
-// path, method, body, query, multipart and header reach the right store method.
+// Through the real axios client, mock adapter and route table: what the screens get. The store's
+// rules are tested in mock-fixtures/design-store.test.ts; here each path of spec §4.2/§4.3 must
+// reach its store method with its path params, query, JSON body or multipart parts.
+
+const uuid = (n: number) => `5e5e0000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
+const CUP12 = { productSlug: "ly-giay-2-lop-12oz", sku: "CUP-PAPER-12OZ-WHT" };
+
+/** A design as the BE answers it (`DesignDraftResponse`): nulls are left out. */
 interface Draft {
   id: string;
+  name: string;
   status: string;
   version: number;
-  ownerUserId: string;
-  customerId: string;
+  productSlug: string;
+  productName?: string;
   sku: string;
-  templateCode: string;
-  productSlug?: string;
-  currentArtifactId?: string;
-  technicalReviewPassed: boolean;
-  reviewNotes?: string;
-  reviewRequestedAt?: string;
+  variantName?: string;
+  templateCode?: string;
+  projectId?: string;
   parentSnapshotId?: string;
+  reviewRequestedAt?: string;
+  reviewedAt?: string;
+  reviewNotes?: string;
 }
-interface Stored {
-  assetId: string;
-  artifactId: string;
-  role: string;
-  widthPx: number;
-  heightPx: number;
-  originalName: string;
-  contentType: string;
-  sizeBytes: number;
-}
+
+/** The body the BE wants to start a design on CUP12: the product's id and the template's code. */
+const startBody = (name: string, projectId?: string) => ({
+  productId: seedMockCatalog().find((p) => p.slug === CUP12.productSlug)!.productId,
+  sku: CUP12.sku,
+  templateCode: printConfigFor(CUP12.productSlug, CUP12.sku)!.template.code,
+  name,
+  ...(projectId ? { projectId } : {}),
+});
+
 interface Page<T> {
   items: T[];
   page: number;
   size: number;
   totalElements: number;
 }
-interface Snapshot {
-  id: string;
-  draftId: string;
-  artifactId: string;
-  artifacts: Array<{ role: string }>;
+
+const png = (bytes = 64) =>
+  new File([new Uint8Array(bytes).fill(7)], "logo.png", { type: "image/png" });
+
+const multipart = { headers: { "Content-Type": "multipart/form-data" } };
+
+async function codeOf(request: Promise<unknown>) {
+  const error = await request.catch((err: unknown) => err);
+  expect(error).toBeInstanceOf(ApiError);
+  return { status: (error as ApiError).status, code: (error as ApiError).code };
 }
 
-const uuid = (n: number) => `5e5e0000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
-const USER = uuid(0xa);
-const CUSTOMER = uuid(0xb);
-const CUP = seedMockCatalog().find((p) => p.slug === "ly-giay-2-lop-12oz")!;
-const LID = seedMockCatalog().find((p) => p.slug === "nap-ly-90mm")!;
-const QC_NOTES = "Mock QC: đạt kỹ thuật";
-
-const png = (bytes: number, name = "logo.png") =>
-  new File([new Uint8Array(bytes).fill(7)], name, { type: "image/png" });
-
-/** The client's own `multipart()`: a FormData body, the JSON default overridden, the key in a header. */
-function post<T>(
-  url: string,
-  file: File,
-  headers: Record<string, string>,
-  params?: Record<string, string>,
-) {
-  const body = new FormData();
-  body.append("file", file, file.name);
-  return api.post<T>(url, body, {
-    headers: { "Content-Type": "multipart/form-data", ...headers },
-    ...(params ? { params } : {}),
-  });
-}
-
-const studio = () =>
-  createMockDesignStudio({
-    userId: USER,
-    customerId: CUSTOMER,
-    catalogKindOf: createMockCatalog(seedMockCatalog()).kindOf,
-    newId: () => uuid(0x1000 + n++),
-    readImageSize: async () => ({ width: 1200, height: 800 }),
-    toUrl: (blob) => `blob:mock/${blob.size}`,
-  });
-
-const originalAdapter = api.defaults.adapter;
-const scheduled: Array<{ run: () => void; delayMs: number }> = [];
-let n = 0;
-
-beforeAll(async () => {
+// Each test starts from a page that just activated the full mock: its own route table and stores.
+beforeEach(async () => {
   vi.spyOn(console, "info").mockImplementation(() => {});
+  // The probe's "no handler", and the design mock keeping its data in memory (no IndexedDB here).
+  vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.spyOn(Math, "random").mockReturnValue(0.06); // no simulated 5% error, shortest latency
   activateMockAdapter();
   // The adapter looks a route up only after `registerAllMockRoutes()` ran: an unknown path settles
-  // once it has, so the routes registered below replace the default ones and are not overwritten.
-  vi.spyOn(console, "warn").mockImplementationOnce(() => {});
+  // once it has, so routes registered later replace the default ones and are not overwritten.
   await api.get("/routes-ready-probe").catch(() => undefined);
-
-  registerDesignMockRoutes(studio(), {
-    schedule: (run, delayMs) => scheduled.push({ run, delayMs }),
-  });
 });
-afterAll(() => {
+
+afterEach(() => {
+  __resetMockAdapterForTests();
   vi.restoreAllMocks();
-  if (originalAdapter) api.defaults.adapter = originalAdapter;
 });
 
-async function startDesign(name = "Ly quán Nhà Mình"): Promise<Draft> {
-  const { data } = await api.post<Draft>("/designs/mine", {
-    productId: CUP.productId,
-    sku: "CUP-PAPER-12OZ-WHT",
-    templateCode: "CUP12-BODY",
-    name,
-  });
-  return data;
-}
+it("the app's route table serves the design mock (seeded, memory storage in tests)", async () => {
+  // The count is `totalElements` of a one-row page of DRAFTs: the BE has no draft-count route.
+  const { data } = await api.get("/designs", { params: { status: "DRAFT", size: 1 } });
+  expect(data).toMatchObject({ totalElements: 2, size: 1 });
+});
 
-/** The newest scheduled mock-QC answer, run now instead of after its delay. */
-function runScheduled() {
-  const next = scheduled.pop();
-  expect(next, "a mock QC answer was scheduled").toBeDefined();
-  next?.run();
-}
-
-describe("mock design routes", () => {
-  it("starts a design with POST /designs/mine and stores its empty document", async () => {
-    const draft = await startDesign();
-    expect(draft).toMatchObject({
-      status: "DRAFT",
-      version: 0,
-      ownerUserId: USER,
-      customerId: CUSTOMER,
-      productSlug: "ly-giay-2-lop-12oz",
-      sku: "CUP-PAPER-12OZ-WHT",
-      templateCode: "CUP12-BODY",
+describe("design mock routes", () => {
+  // A fresh seeded store behind the design routes for every test.
+  beforeEach(async () => {
+    let ids = 0;
+    const store = await createDesignMockStore({
+      storage: createMemoryStorage(),
+      newId: () => uuid(0x1000 + ids++),
+      readImageSize: async () => ({ widthPx: 1200, heightPx: 800 }),
+      toUrl: (key) => `blob:test/${key}`,
     });
+    registerDesignMockRoutes(store);
+  });
 
-    const { data: record } = await api.get<{ designId: string; version: number; document: object }>(
-      `/designs/${draft.id}/document`,
-    );
-    expect(record).toMatchObject({
-      designId: draft.id,
-      version: 0,
-      document: {
-        schemaVersion: 1,
-        templateCode: "CUP12-BODY",
-        surfaces: { BODY: { elements: [] } },
-      },
+  it("GET /designs with status, page and size in the BE's shape; ARCHIVED is a 400; unknown id → 404", async () => {
+    const { data: page } = await api.get<Page<Draft>>("/designs", {
+      params: { status: "DRAFT", page: 0, size: 1 },
     });
-  });
+    expect(page).toMatchObject({ page: 0, size: 1, totalElements: 2 });
+    expect(page.items.map((d) => d.status)).toEqual(["DRAFT"]);
+    // The BE's names, no null, no createdAt, no embedded project.
+    const [first] = page.items;
+    expect(first).toMatchObject({ productSlug: expect.any(String), sku: expect.any(String) });
+    expect(first).not.toHaveProperty("createdAt");
+    expect(first).not.toHaveProperty("project");
+    expect(Object.values(first!)).not.toContain(null);
+    // The status is read in any case, as the BE does.
+    const lower = await api.get<Page<Draft>>("/designs", { params: { status: "draft", size: 1 } });
+    expect(lower.data.totalElements).toBe(2);
 
-  it("answers a refusal as an ApiError with the BE's code", async () => {
-    await expect(
-      api.post("/designs/mine", {
-        productId: LID.productId,
-        sku: "LID-90MM-BLK",
-        templateCode: "X",
-        name: "Nắp",
-      }),
-    ).rejects.toMatchObject({ status: 409, code: "PRODUCT_NOT_CUSTOMIZABLE" });
-    await expect(api.get("/designs/not-a-design")).rejects.toBeInstanceOf(ApiError);
-  });
-
-  it("serves the customization templates of a product, beside the catalogue's own product route", async () => {
-    const [custom, detail, standard] = await Promise.all([
-      api.get<{ productId: string; kind: string; templates: Array<{ code: string; sku: string }> }>(
-        "/catalog/products/ly-giay-2-lop-12oz/customization",
-      ),
-      api.get<{ slug: string; kind: string }>("/catalog/products/ly-giay-2-lop-12oz"),
-      api.get("/catalog/products/nap-ly-90mm/customization").catch((error: unknown) => error),
-    ]);
-    expect(custom.data).toMatchObject({
-      productId: CUP.productId,
-      kind: "CUSTOMIZABLE",
-      templates: [{ code: "CUP12-BODY", sku: "CUP-PAPER-12OZ-WHT" }],
-    });
-    expect(detail.data).toMatchObject({ slug: "ly-giay-2-lop-12oz", kind: "CUSTOMIZABLE" });
-    expect(standard).toMatchObject({ status: 409, code: "PRODUCT_NOT_CUSTOMIZABLE" });
-  });
-
-  it("lists the caller's designs, filtered by status, page by page and newest first", async () => {
-    const [approved, firstPage, all] = await Promise.all([
-      api.get<Page<Draft>>("/designs", { params: { status: "APPROVED" } }),
-      api.get<Page<Draft>>("/designs", { params: { page: 0, size: 1 } }),
-      api.get<Page<Draft>>("/designs", { params: { size: 200 } }),
-    ]);
-    expect(approved.data.items.map((d) => d.id)).toEqual([MOCK_DESIGN_IDS.approvedCup]);
-    expect(firstPage.data).toMatchObject({ page: 0, size: 1 });
-    expect(firstPage.data.items).toHaveLength(1);
-    expect(firstPage.data.totalElements).toBe(all.data.totalElements);
-    expect(all.data.items.map((d) => d.id)).not.toContain(MOCK_DESIGN_IDS.foreign);
-    await expect(api.get("/designs", { params: { status: "NOPE" } })).rejects.toMatchObject({
+    expect(await codeOf(api.get("/designs", { params: { status: "ARCHIVED" } }))).toEqual({
       status: 400,
       code: "UNSUPPORTED_PARAMETER",
     });
-  });
-
-  it("stores a customer image from a multipart upload and replays it for the same key", async () => {
-    const { id } = await startDesign();
-    const url = `/designs/${id}/assets`;
-
-    const first = await post<Stored>(url, png(64), { "Idempotency-Key": "asset-1" });
-    expect(first.status).toBe(201);
-    expect(first.data).toMatchObject({
-      widthPx: 1200,
-      heightPx: 800,
-      originalName: "logo.png",
-      contentType: "image/png",
-      sizeBytes: 64,
+    expect(await codeOf(api.get("/designs", { params: { status: "NOPE" } }))).toEqual({
+      status: 400,
+      code: "UNSUPPORTED_PARAMETER",
     });
 
-    // The key is read case-insensitively: a lower-case header is the same request.
-    const replay = await post<Stored>(url, png(64), { "idempotency-key": "asset-1" });
-    expect(replay.data.assetId).toBe(first.data.assetId);
-    await expect(post(url, png(65), { "Idempotency-Key": "asset-1" })).rejects.toMatchObject({
-      status: 422,
-      code: "IDEMPOTENCY_KEY_REUSED",
+    expect(await codeOf(api.get(`/designs/${uuid(0xbad)}`))).toEqual({
+      status: 404,
+      code: "NOT_FOUND",
     });
-
-    const [list, link] = await Promise.all([
-      api.get<Stored[]>(url),
-      api.get<{ url: string; expiresAt: string }>(`${url}/${first.data.assetId}/download-url`),
-    ]);
-    expect(list.data.map((a) => a.assetId)).toEqual([first.data.assetId]);
-    expect(link.data.url).toBe("blob:mock/64");
+    expect(await codeOf(api.get(`/designs/${uuid(0xbad)}/history`))).toEqual({
+      status: 404,
+      code: "NOT_FOUND",
+    });
   });
 
-  it("refuses a multipart request without a file part", async () => {
-    const { id } = await startDesign();
-    await expect(api.post(`/designs/${id}/assets`, { note: "no file" })).rejects.toMatchObject({
+  it("POST /designs/mine, GET /designs/:id, PUT /designs/:id/name, GET /designs/:id/history", async () => {
+    const created = await api.post<Draft>("/designs/mine", startBody("Ly quán"));
+    expect(created.status).toBe(201);
+    expect(created.data).toMatchObject({
+      status: "DRAFT",
+      version: 0,
+      productSlug: CUP12.productSlug,
+      sku: CUP12.sku,
+      templateCode: "CUP12-BODY",
+    });
+    const { id } = created.data;
+
+    expect((await api.get<Draft>(`/designs/${id}`)).data).toEqual(created.data);
+    const renamed = await api.put<Draft>(`/designs/${id}/name`, { version: 0, name: "Ly mới" });
+    expect(renamed.status).toBe(200);
+    expect(renamed.data).toMatchObject({ id, name: "Ly mới", version: 1 });
+    const { data: history } = await api.get<Page<{ decision: string; notes?: string }>>(
+      `/designs/${id}/history`,
+    );
+    expect(history).toMatchObject({ page: 0, totalElements: 1, hasNext: false });
+    expect(history.items.map((row) => row.decision)).toEqual(["CREATED"]);
+    expect(history.items[0]).not.toHaveProperty("notes"); // a null is left out
+
+    // The BE's refusals: a stale version is CONFLICT, a template the SKU has not is 404.
+    expect(await codeOf(api.put(`/designs/${id}/name`, { version: 0, name: "Lại" }))).toEqual({
+      status: 409,
+      code: "CONFLICT",
+    });
+    expect(
+      await codeOf(api.post("/designs/mine", { ...startBody("Ly"), templateCode: "NOPE" })),
+    ).toEqual({ status: 404, code: "PRINT_CONFIG_NOT_FOUND" });
+    expect(await codeOf(api.post("/designs/mine", { ...startBody("Ly"), name: " " }))).toEqual({
       status: 400,
       code: "VALIDATION_FAILED",
     });
-    const body = new FormData();
-    body.append("other", "x");
-    await expect(
-      api.post(`/designs/${id}/artifacts`, body, {
-        headers: { "Content-Type": "multipart/form-data" },
-      }),
-    ).rejects.toMatchObject({ status: 400, code: "VALIDATION_FAILED" });
   });
 
-  it("stores an artifact under the role of `params.role`, CUSTOMER_PREVIEW by default", async () => {
-    const { id } = await startDesign();
-    const url = `/designs/${id}/artifacts`;
-
-    const print = await post<Stored>(
-      url,
-      png(32, "print.png"),
-      { "Idempotency-Key": "print-1" },
-      { role: "PRINT_READY" },
-    );
-    const preview = await post<Stored>(url, png(48, "preview.png"), {
-      "Idempotency-Key": "prev-1",
-    });
-    expect(print.data).toMatchObject({ role: "PRINT_READY", originalName: "print.png" });
-    expect(preview.data).toMatchObject({ role: "CUSTOMER_PREVIEW", originalName: "preview.png" });
-    await expect(
-      post(url, png(8), { "Idempotency-Key": "bad-1" }, { role: "NOT_A_ROLE" }),
-    ).rejects.toMatchObject({ status: 400, code: "UNSUPPORTED_PARAMETER" });
-
-    const [design, list, link] = await Promise.all([
-      api.get<Draft>(`/designs/${id}`),
-      api.get<Stored[]>(url),
-      api.get<{ url: string }>(`${url}/${preview.data.artifactId}/download-url`),
+  it("history is newest first and paged; GET /designs/:id/snapshot answers an approved design only", async () => {
+    const id = MOCK_DESIGN_IDS.returned;
+    const { data: all } = await api.get<Page<{ decision: string }>>(`/designs/${id}/history`);
+    expect(all.items.map((row) => row.decision)).toEqual([
+      "RETURNED",
+      "SUBMITTED_FOR_REVIEW",
+      "CREATED",
     ]);
-    // Only the preview becomes the design's current artifact; each upload moved the version.
-    expect(design.data).toMatchObject({
-      currentArtifactId: preview.data.artifactId,
-      version: 2,
+    const { data: second } = await api.get<Page<{ decision: string }>>(`/designs/${id}/history`, {
+      params: { page: 1, size: 2 },
     });
-    expect(list.data.map((a) => a.role)).toEqual(["CUSTOMER_PREVIEW", "PRINT_READY"]);
-    expect(link.data.url).toBe("blob:mock/48");
+    expect(second).toMatchObject({ page: 1, size: 2, totalElements: 3, hasNext: false });
+    expect(second.items.map((row) => row.decision)).toEqual(["CREATED"]);
+
+    expect(await codeOf(api.get(`/designs/${id}/snapshot`))).toEqual({
+      status: 404,
+      code: "NOT_FOUND",
+    });
+    const { data: snapshot } = await api.get<{ id: string; checksum: string; customerSku: string }>(
+      `/designs/${MOCK_DESIGN_IDS.approved}/snapshot`,
+    );
+    expect(snapshot).toMatchObject({
+      id: MOCK_DESIGN_IDS.approvedSnapshot,
+      checksum: expect.any(String),
+      customerSku: expect.any(String),
+    });
   });
 
-  it("walks a design from review to a confirmed snapshot and a new version", async () => {
-    const { id } = await startDesign();
-    const preview = await post<Stored>(
-      `/designs/${id}/artifacts`,
-      png(48, "preview.png"),
-      { "Idempotency-Key": "walk-1" },
-      { role: "CUSTOMER_PREVIEW" },
+  it("GET /designs/:id/template answers the design's template in the BE's shape: active, no hasCartonSpec, the .glb when it has one", async () => {
+    const { data } = await api.get<Record<string, unknown>>(
+      `/designs/${MOCK_DESIGN_IDS.draft}/template`,
     );
+    expect(data).toMatchObject({ active: true, code: expect.any(String), sku: expect.any(String) });
+    expect(data).not.toHaveProperty("hasCartonSpec");
+    expect(Object.values(data)).not.toContain(null); // a null is left out, never sent
 
-    // P5: the customer asks QC to look; the mock QC (mock-only) answers after 2 s.
-    const requested = await api.post<Draft>(`/designs/${id}/technical-review-requests`, {
-      version: 1,
-    });
-    expect(requested.data).toMatchObject({ version: 2, technicalReviewPassed: false });
-    expect(requested.data.reviewRequestedAt).toBeTruthy();
-    expect(scheduled.at(-1)?.delayMs).toBe(2000);
-    runScheduled();
-
-    const reviewed = await api.get<Draft>(`/designs/${id}`);
-    expect(reviewed.data).toMatchObject({
-      version: 3,
-      technicalReviewPassed: true,
-      reviewNotes: QC_NOTES,
-    });
-
-    const submitted = await api.post<Draft>(`/designs/${id}/confirmation-requests`, { version: 3 });
-    expect(submitted.data.status).toBe("SUBMITTED");
-    const confirmed = await api.post<Snapshot>(`/designs/${id}/confirmations`, {
-      version: 4,
-      artifactId: preview.data.artifactId,
-    });
-    expect(confirmed.data).toMatchObject({ draftId: id, artifactId: preview.data.artifactId });
-    expect(confirmed.data.artifacts.map((a) => a.role)).toEqual(["CUSTOMER_PREVIEW"]);
-
-    const [snapshot, history] = await Promise.all([
-      api.get<Snapshot>(`/designs/${id}/snapshot`),
-      api.get<Page<{ decision: string }>>(`/designs/${id}/history`),
-    ]);
-    expect(snapshot.data.id).toBe(confirmed.data.id);
-    expect(history.data.items.map((d) => d.decision)).toEqual([
-      "CUSTOMER_CONFIRMED",
-      "SENT_TO_CUSTOMER",
-      "TECHNICAL_ACCEPTED",
-      "TECHNICAL_REVIEW_REQUESTED",
-    ]);
-
-    const fork = await api.post<Draft>(`/designs/${id}/revisions`);
-    expect(fork.data).toMatchObject({
-      status: "DRAFT",
-      version: 0,
-      parentSnapshotId: confirmed.data.id,
-    });
-    const { data: record } = await api.get<{ designId: string }>(
-      `/designs/${fork.data.id}/document`,
+    // CUP12 is the one variant with a `.glb`: its design's template carries it.
+    const made = await api.post<Draft>("/designs/mine", startBody("Ly 3D"));
+    const { data: withGlb } = await api.get<{ model3d?: { url: string; surfaces: unknown[] } }>(
+      `/designs/${made.data.id}/template`,
     );
-    expect(record.designId).toBe(fork.data.id);
-  }, 15_000);
-
-  it("moves a pending confirmation back to DRAFT through change-requests and withdrawals", async () => {
-    const { id } = await startDesign();
-    await post(`/designs/${id}/artifacts`, png(16), { "Idempotency-Key": "chg-1" });
-    await api.post(`/designs/${id}/technical-review-requests`, { version: 1 });
-    runScheduled();
-    await api.post(`/designs/${id}/confirmation-requests`, { version: 3 });
-
-    const changed = await api.post<Draft>(`/designs/${id}/change-requests`, {
-      version: 4,
-      reason: "Đổi màu nền sang kem",
+    expect(withGlb.model3d).toMatchObject({ surfaces: [{ printAreaCode: "BODY" }] });
+    expect(await codeOf(api.get(`/designs/${uuid(0xbad)}/template`))).toEqual({
+      status: 404,
+      code: "NOT_FOUND",
     });
-    expect(changed.data).toMatchObject({
-      status: "DRAFT",
-      technicalReviewPassed: false,
-      reviewNotes: "Đổi màu nền sang kem",
+  });
+
+  it("GET /catalog/products/:slug/customization lists a template per usable variant, nulls left out", async () => {
+    const { data } = await api.get<{
+      productId: string;
+      templates: Array<{ sku: string; code: string; hasCartonSpec: boolean; maxColors?: number }>;
+    }>(`/catalog/products/${CUP12.productSlug}/customization`);
+    expect(data.productId).toBe(startBody("x").productId);
+    expect(data.templates.map((t) => t.sku)).toContain(CUP12.sku);
+    for (const template of data.templates) {
+      expect(template).toMatchObject({
+        code: expect.any(String),
+        hasCartonSpec: expect.any(Boolean),
+      });
+      expect(template).not.toHaveProperty("maxColors"); // null in the fixture, omitted on the wire
+    }
+    // Each template carries its own `.glb`, and only the variant that has one.
+    const withGlb = data.templates.filter((t) => "model3d" in t);
+    expect(withGlb.map((t) => t.sku)).toEqual(["CUP-PAPER-12OZ-WHT"]);
+    // A STANDARD product cannot be customized; a product the BE does not know is not found.
+    expect(await codeOf(api.get("/catalog/products/nap-ly-90mm/customization"))).toEqual({
+      status: 409,
+      code: "PRODUCT_NOT_CUSTOMIZABLE",
     });
-    // A withdrawal needs a pending confirmation: this one was just taken back.
-    await expect(
-      api.post(`/designs/${id}/confirmation-withdrawals`, {
-        version: changed.data.version,
-        reason: "Rút lại",
-      }),
-    ).rejects.toMatchObject({ status: 409, code: "CONFLICT" });
-  }, 15_000);
+  });
 
-  it("revises the specification, which cancels a review the mock QC has not answered yet", async () => {
-    const { id } = await startDesign();
-    await post(`/designs/${id}/artifacts`, png(16), { "Idempotency-Key": "stale-1" });
-    await api.post(`/designs/${id}/technical-review-requests`, { version: 1 });
-    expect(scheduled.at(-1)?.delayMs).toBe(2000);
+  it("answers a product the mock catalogue does not know with the default configuration for the sku hint (design-only mock over the real catalogue)", async () => {
+    const answer = async (slug: string, sku?: string) =>
+      (
+        await api.get<{ productId: string; templates: Array<{ sku: string; code: string }> }>(
+          `/catalog/products/${slug}/customization`,
+          sku ? { params: { sku } } : {},
+        )
+      ).data;
 
-    const revised = await api.put<Draft>(`/designs/${id}/specification`, {
-      version: 2,
-      spec: "Thêm logo ở mặt trước",
+    const cup = await answer("ly-thuc-te", "REAL-CUP-1");
+    expect(cup.templates).toMatchObject([{ sku: "REAL-CUP-1", code: "PET500-BODY" }]);
+    expect((await answer("tui-thuc-te", "REAL-BAG-1")).templates[0]?.code).toBe("BAGM-4F");
+    expect((await answer("ly-thuc-te")).templates).toEqual([]); // no hint, nothing to list
+
+    // A design can then be started on it, as before, under the id the read named.
+    const created = await api.post<Draft>("/designs/mine", {
+      productId: cup.productId,
+      sku: "REAL-CUP-1",
+      templateCode: "PET500-BODY",
+      name: "Ly thật",
     });
-    expect(revised.data.version).toBe(3);
+    expect(created.data).toMatchObject({ productSlug: "ly-thuc-te", sku: "REAL-CUP-1" });
+  });
 
-    // The QC answer arrives for a design that has changed since the request: it must not pass it.
-    runScheduled();
-    const { data } = await api.get<Draft>(`/designs/${id}`);
-    expect(data).toMatchObject({ version: 3, technicalReviewPassed: false });
-    expect(data.reviewRequestedAt).toBeUndefined();
-  }, 15_000);
+  it("GET and PUT /designs/:id/document", async () => {
+    const id = MOCK_DESIGN_IDS.draft;
+    const { data: record } = await api.get<DesignDocumentRecordDto>(`/designs/${id}/document`);
+    expect(record.designId).toBe(id);
 
-  it("saves and reads the design document at the draft's version", async () => {
-    const { id } = await startDesign();
-    const { data: record } = await api.get<{
-      version: number;
-      document: { surfaces: Record<string, unknown> };
-    }>(`/designs/${id}/document`);
-
-    const saved = await api.put<{ version: number; checksum: string }>(`/designs/${id}/document`, {
+    const { data: saved } = await api.put<DesignDocumentRecordDto>(`/designs/${id}/document`, {
       version: record.version,
       document: record.document,
     });
-    expect(saved.data.version).toBe(1);
-    await expect(
-      api.put(`/designs/${id}/document`, { version: 0, document: record.document }),
-    ).rejects.toMatchObject({ status: 409, code: "CONFLICT" });
-    expect(saved.data.checksum).toMatch(/^[0-9a-f]{64}$/);
+    expect(saved.version).toBe(record.version + 1);
+    expect(
+      await codeOf(
+        api.put(`/designs/${id}/document`, { version: record.version, document: record.document }),
+      ),
+    ).toEqual({ status: 409, code: "CONFLICT" });
+  });
 
-    // A document that is not this design's is a validation error on `document`, like any other 400.
-    await expect(
-      api.put(`/designs/${id}/document`, {
-        version: saved.data.version,
-        document: { ...record.document, templateCode: "CUP12-LOGO" },
-      }),
-    ).rejects.toMatchObject({
-      status: 400,
-      code: "VALIDATION_FAILED",
-      fieldErrors: { document: expect.any(String) },
+  it("PUT /designs/:id/document answers a layout over 1,000,000 bytes with 413 REQUEST_BODY_TOO_LARGE and a message only", async () => {
+    const id = MOCK_DESIGN_IDS.draft;
+    const { data: record } = await api.get<DesignDocumentRecordDto>(`/designs/${id}/document`);
+    const error = await api
+      .put(`/designs/${id}/document`, {
+        version: record.version,
+        document: { ...record.document, padding: "x".repeat(1_000_001) },
+      })
+      .then(
+        () => {
+          throw new Error("a refusal was expected");
+        },
+        (err: unknown) => err as ApiError,
+      );
+    expect(error).toMatchObject({
+      status: 413,
+      code: "REQUEST_BODY_TOO_LARGE",
+      details: undefined,
     });
   });
 
-  // Last: it replaces the routes with ones that keep the default scheduler.
-  it("waits on a plain 2 s timer when no scheduler is injected", async () => {
-    registerDesignMockRoutes(studio());
-    const realSetTimeout = globalThis.setTimeout;
-    const timer = vi
-      .spyOn(globalThis, "setTimeout")
-      .mockImplementation((handler, timeout, ...args) =>
-        // The mock QC's own timer is held back so the test runs it, not the clock.
-        timeout === MOCK_QC_DELAY_MS
-          ? (0 as unknown as ReturnType<typeof setTimeout>)
-          : realSetTimeout(handler, timeout, ...args),
+  it("POST /designs/:id/assets (multipart file, Idempotency-Key), GET assets and its link", async () => {
+    const id = MOCK_DESIGN_IDS.draft;
+    const send = () => {
+      const body = new FormData();
+      body.append("file", png(), "logo.png");
+      return api.post<DesignAssetDto>(`/designs/${id}/assets`, body, {
+        headers: { ...multipart.headers, "Idempotency-Key": "upload-1" },
+      });
+    };
+
+    const uploaded = await send();
+    expect(uploaded.status).toBe(201);
+    expect(uploaded.data).toMatchObject({ designId: id, originalName: "logo.png", widthPx: 1200 });
+    // The same key answers the first upload again instead of storing a second copy.
+    expect((await send()).data).toEqual(uploaded.data);
+
+    const { data: assets } = await api.get<DesignAssetDto[]>(`/designs/${id}/assets`);
+    expect(assets.filter((a) => a.assetId === uploaded.data.assetId)).toHaveLength(1);
+    const { data: link } = await api.get(
+      `/designs/${id}/assets/${uploaded.data.assetId}/download-url`,
+    );
+    expect(link).toEqual({
+      url: `blob:test/asset/${uploaded.data.assetId}`,
+      expiresAt: expect.any(String),
+    });
+    // A file the BE refuses is a 415 or 413 carrying only a message.
+    expect(await codeOf(api.post(`/designs/${id}/assets`, new FormData(), multipart))).toEqual({
+      status: 415,
+      code: "UNSUPPORTED_MEDIA_TYPE",
+    });
+  });
+
+  it("POST /designs/:id/assets takes a file part of another realm (duck-typed, not `instanceof Blob`)", async () => {
+    const id = MOCK_DESIGN_IDS.draft;
+    const bytes = new Uint8Array(64).fill(7);
+    const foreign = {
+      name: "logo.png",
+      type: "image/png",
+      size: bytes.length,
+      arrayBuffer: async () => bytes.buffer,
+    };
+    const form = { get: (name: string) => (name === "file" ? foreign : null) };
+
+    // Handed to the adapter as is, like a FormData axios does not know.
+    const uploaded = await api.post<DesignAssetDto>(`/designs/${id}/assets`, form, {
+      transformRequest: [(body: unknown) => body],
+    });
+
+    expect(uploaded.status).toBe(201);
+    expect(uploaded.data).toMatchObject({ designId: id, originalName: "logo.png", sizeBytes: 64 });
+  });
+
+  it("the BE's flow: POST …/preflight-failures by rule, then artifacts one by one, the request for review, the files, a link, and the reviewer simulation", async () => {
+    const id = MOCK_DESIGN_IDS.draft;
+    const { data: design } = await api.get<Draft>(`/designs/${id}`);
+
+    // The studio's own refusal on the record: findings by `rule`, any message ignored.
+    const failure = await api.post<{ decision: string; notes?: string; version: number }>(
+      `/designs/${id}/preflight-failures`,
+      {
+        version: design.version,
+        issues: [{ rule: "ON_SEAM", surfaceCode: "BODY", elementId: "t" }],
+      },
+    );
+    expect(failure.status).toBe(201);
+    expect(failure.data).toMatchObject({ decision: "PREFLIGHT_FAILED", version: design.version });
+    expect(
+      await codeOf(api.post(`/designs/${id}/preflight-failures`, { version: 0, issues: [] })),
+    ).toEqual({ status: 400, code: "VALIDATION_FAILED" });
+
+    const { data: record } = await api.get<DesignDocumentRecordDto>(`/designs/${id}/document`);
+    const upload = (role: string, file: File, documentChecksum = record.checksum) => {
+      const body = new FormData();
+      body.append("file", file, file.name);
+      return api.post<Record<string, unknown>>(`/designs/${id}/artifacts`, body, {
+        ...multipart,
+        headers: { ...multipart.headers, "Idempotency-Key": `key-${role}` },
+        params: { role, documentChecksum },
+      });
+    };
+    const pdf = (name: string) => new File(["%PDF"], name, { type: "application/pdf" });
+
+    // Nothing to send yet: the files are missing.
+    const missing = await api
+      .post(`/designs/${id}/technical-review-requests`, { version: design.version })
+      .then(
+        () => {
+          throw new Error("a refusal was expected");
+        },
+        (err: unknown) => err as ApiError,
       );
+    expect(missing).toMatchObject({ status: 409, code: "DESIGN_FILES_OUTDATED" });
+    expect(missing.details).toEqual({
+      roles: ["CUSTOMER_PREVIEW", "PRINT_READY", "TECHNICAL_SPEC"],
+    });
 
-    const { id } = await startDesign();
-    await post(`/designs/${id}/artifacts`, png(16), { "Idempotency-Key": "plain-1" });
-    await api.post(`/designs/${id}/technical-review-requests`, { version: 1 });
-    const qc = timer.mock.calls.find(([, timeout]) => timeout === MOCK_QC_DELAY_MS);
-    expect(MOCK_QC_DELAY_MS).toBe(2000);
-    expect(qc).toBeDefined();
-    timer.mockRestore();
+    const preview = await upload("CUSTOMER_PREVIEW", png());
+    expect(preview.status).toBe(201);
+    expect(preview.data).toMatchObject({
+      role: "CUSTOMER_PREVIEW",
+      documentChecksum: record.checksum,
+      checksum: expect.any(String),
+    });
+    // The same key and bytes answer the first artifact; other bytes under it are refused.
+    expect((await upload("CUSTOMER_PREVIEW", png())).data).toEqual(preview.data);
+    expect(
+      await codeOf(upload("CUSTOMER_PREVIEW", new File(["other"], "o.png", { type: "image/png" }))),
+    ).toEqual({ status: 422, code: "IDEMPOTENCY_KEY_REUSED" });
+    await upload("PRINT_READY", pdf("print-ready.pdf"));
+    await upload("TECHNICAL_SPEC", pdf("technical-spec.pdf"));
 
-    (qc?.[0] as () => void)();
-    const { data } = await api.get<Draft>(`/designs/${id}`);
-    expect(data).toMatchObject({ technicalReviewPassed: true, reviewNotes: QC_NOTES });
-  }, 15_000);
+    // Each upload moved the version on (three of them, the replay none).
+    const { data: after } = await api.get<Draft>(`/designs/${id}`);
+    expect(after.version).toBe(design.version + 3);
+    expect(
+      await codeOf(
+        api.post(`/designs/${id}/technical-review-requests`, { version: design.version }),
+      ),
+    ).toEqual({ status: 409, code: "CONFLICT" });
+
+    const submitted = await api.post<Draft>(`/designs/${id}/technical-review-requests`, {
+      version: after.version,
+    });
+    expect(submitted.status).toBe(200);
+    expect(submitted.data).toMatchObject({ status: "PENDING_REVIEW", version: after.version + 1 });
+    expect(
+      await codeOf(
+        api.post(`/designs/${id}/technical-review-requests`, { version: after.version + 1 }),
+      ),
+    ).toEqual({ status: 409, code: "DESIGN_NOT_DRAFT" });
+
+    const { data: listed } = await api.get<Array<{ artifactId: string; role: string }>>(
+      `/designs/${id}/artifacts`,
+    );
+    expect(listed.map((f) => f.role).toSorted()).toEqual([
+      "CUSTOMER_PREVIEW",
+      "PRINT_READY",
+      "TECHNICAL_SPEC",
+    ]);
+    const { data: link } = await api.get(
+      `/designs/${id}/artifacts/${listed[0]!.artifactId}/download-url`,
+    );
+    expect(link).toEqual({
+      url: expect.stringContaining("blob:test/"),
+      expiresAt: expect.any(String),
+    });
+
+    // The reviewer simulation returns what was just submitted.
+    const { data: returned } = await api.post<DesignDto>(`/__mock/designs/${id}/return`, {
+      reason: "Logo bị mờ",
+    });
+    expect(returned).toMatchObject({ status: "DRAFT", lastReturn: { reason: "Logo bị mờ" } });
+  });
+
+  it("the request for review is refused as the BE does: its own preflight with findings (nothing sent twice), a print file that is not a PDF, files drawn from another layout", async () => {
+    const created = await api.post<Draft>("/designs/mine", startBody("Ly trống"));
+    const id = created.data.id;
+    const { data: record } = await api.get<DesignDocumentRecordDto>(`/designs/${id}/document`);
+    const upload = async (role: string, file: File, documentChecksum = record.checksum) => {
+      const body = new FormData();
+      body.append("file", file, file.name);
+      await api.post(`/designs/${id}/artifacts`, body, {
+        ...multipart,
+        params: { role, documentChecksum },
+      });
+    };
+    const pdf = (name: string) => new File(["%PDF"], name, { type: "application/pdf" });
+    await upload("CUSTOMER_PREVIEW", png());
+    await upload("PRINT_READY", pdf("p.pdf"));
+    await upload("TECHNICAL_SPEC", pdf("s.pdf"));
+    const { data: now } = await api.get<Draft>(`/designs/${id}`);
+
+    // An empty layout: the BE's preflight refuses it, and writes that on the history itself.
+    const refused = await api
+      .post(`/designs/${id}/technical-review-requests`, { version: now.version })
+      .then(
+        () => {
+          throw new Error("a refusal was expected");
+        },
+        (err: unknown) => err as ApiError,
+      );
+    expect(refused).toMatchObject({ status: 422, code: "DESIGN_PREFLIGHT_FAILED" });
+    expect(refused.details).toEqual({
+      issues: [expect.objectContaining({ rule: "EMPTY_DESIGN", message: expect.any(String) })],
+    });
+    const { data: history } = await api.get<Page<{ decision: string; notes?: string }>>(
+      `/designs/${id}/history`,
+    );
+    expect(history.items[0]).toMatchObject({ decision: "PREFLIGHT_FAILED", notes: "EMPTY_DESIGN" });
+    expect((await api.get<Draft>(`/designs/${id}`)).data.version).toBe(now.version); // did not move
+
+    // A print file that is not a PDF (on a layout that passes).
+    const ready = MOCK_DESIGN_IDS.draft;
+    const doc = (await api.get<DesignDocumentRecordDto>(`/designs/${ready}/document`)).data;
+    const send = (role: string, file: File) => {
+      const body = new FormData();
+      body.append("file", file, file.name);
+      return api.post(`/designs/${ready}/artifacts`, body, {
+        ...multipart,
+        params: { role, documentChecksum: doc.checksum },
+      });
+    };
+    await send("CUSTOMER_PREVIEW", png());
+    await send("PRINT_READY", png());
+    await send("TECHNICAL_SPEC", pdf("s.pdf"));
+    const notPdf = await api
+      .post(`/designs/${ready}/technical-review-requests`, {
+        version: (await api.get<Draft>(`/designs/${ready}`)).data.version,
+      })
+      .then(
+        () => {
+          throw new Error("a refusal was expected");
+        },
+        (err: unknown) => err as ApiError,
+      );
+    expect(notPdf).toMatchObject({ status: 422, code: "DESIGN_PREFLIGHT_FAILED" });
+    expect(notPdf.details).toEqual({
+      issues: [expect.objectContaining({ rule: "PRINT_FILE_INVALID" })],
+    });
+  });
+
+  it("refuses an artifact with an unknown role or a malformed layout checksum", async () => {
+    const id = MOCK_DESIGN_IDS.draft;
+    const stale = "a".repeat(64);
+    const body = new FormData();
+    body.append("file", png(), "preview.png");
+    await api.post(`/designs/${id}/artifacts`, body, {
+      ...multipart,
+      params: { role: "CUSTOMER_PREVIEW", documentChecksum: stale },
+    });
+    expect(
+      await codeOf(
+        api.post(`/designs/${id}/artifacts`, new FormData(), {
+          ...multipart,
+          params: { role: "NOT_A_ROLE" },
+        }),
+      ),
+    ).toEqual({ status: 400, code: "VALIDATION_FAILED" });
+    expect(
+      await codeOf(
+        api.post(`/designs/${id}/artifacts`, body, {
+          ...multipart,
+          params: { role: "PRINT_READY", documentChecksum: "not-a-checksum" },
+        }),
+      ),
+    ).toEqual({ status: 400, code: "VALIDATION_FAILED" });
+  });
+
+  it("GET …/snapshot of an approved design lists its frozen files and the bundle's checksum; an approved file that lost its bytes fails the integrity check", async () => {
+    const { data: snapshot } = await api.get<{
+      checksum: string;
+      customerSku: string;
+      artifacts: Array<{ artifactId: string; role: string; originalName: string }>;
+    }>(`/designs/${MOCK_DESIGN_IDS.approved}/snapshot`);
+    expect(snapshot.artifacts.map((a) => a.role)).toEqual([
+      "CUSTOMER_PREVIEW",
+      "PRINT_READY",
+      "TECHNICAL_SPEC",
+    ]);
+    const print = snapshot.artifacts[1]!;
+    const link = `/designs/${MOCK_DESIGN_IDS.approved}/artifacts/${print.artifactId}/download-url`;
+    expect((await api.get<{ url: string }>(link)).data.url).toBeTruthy();
+  });
+
+  it("POST /__mock/designs/:id/approve, POST /designs/:id/revisions, POST /designs/:id/archive", async () => {
+    const { data: approved } = await api.post<DesignDto>(
+      `/__mock/designs/${MOCK_DESIGN_IDS.pending}/approve`,
+    );
+    expect(approved).toMatchObject({ id: MOCK_DESIGN_IDS.pending, status: "APPROVED" });
+
+    // A revision of a design that is not approved is a plain CONFLICT in the BE.
+    expect(await codeOf(api.post(`/designs/${MOCK_DESIGN_IDS.draft}/revisions`))).toEqual({
+      status: 409,
+      code: "CONFLICT",
+    });
+    const revised = await api.post<Draft>(`/designs/${approved.id}/revisions`);
+    expect(revised.status).toBe(200);
+    expect(revised.data).toMatchObject({
+      status: "DRAFT",
+      parentSnapshotId: approved.approval!.snapshotId,
+    });
+
+    const { data: removed } = await api.post<Draft>(`/designs/${revised.data.id}/archive`, {
+      version: revised.data.version,
+    });
+    expect(removed.status).toBe("ARCHIVED");
+    expect(await codeOf(api.get(`/designs/${revised.data.id}`))).toEqual({
+      status: 404,
+      code: "NOT_FOUND",
+    });
+  });
+
+  it("the reviewer simulation routes of a round: the open rounds, the failure switch and approve-all", async () => {
+    const { data: none } = await api.get<{ rounds: unknown[] }>("/__mock/design-rounds");
+    expect(none.rounds).toEqual([]);
+
+    const pending = MOCK_DESIGN_IDS.pending;
+    const on = await api.post(`/__mock/designs/${pending}/fail-next-approval`, { enabled: true });
+    expect(on.data).toEqual({ designId: pending, failNext: true });
+    expect(await codeOf(api.post(`/__mock/designs/${pending}/approve`))).toEqual({
+      status: 409,
+      code: "APPROVAL_FAILED",
+    });
+    // The switch went with that failure: the next approval is the design's own.
+    const { data: approved } = await api.post<DesignDto>(`/__mock/designs/${pending}/approve`);
+    expect(approved.status).toBe("APPROVED");
+
+    expect(await codeOf(api.post(`/__mock/design-rounds/${uuid(9)}/approve-all`))).toEqual({
+      status: 404,
+      code: "NOT_FOUND",
+    });
+  });
+
+  it("the /design-projects routes, in the BE's contract: create, list, read, put, add, remove, history, archive", async () => {
+    const created = (await api.post("/design-projects", { name: "Quán Hoa", description: "Bộ" }))
+      .data;
+    // `DesignProjectResponse`: designs and an image count, no designCount or open round.
+    expect(created).toMatchObject({
+      status: "ACTIVE",
+      version: 0,
+      designs: [],
+      assetCount: 0,
+    });
+    const base = `/design-projects/${created.id}`;
+
+    const list = (
+      await api.get("/design-projects", { params: { status: "ACTIVE", page: 0, size: 5 } })
+    ).data as Page<{ id: string; designCount: number }>;
+    expect(list.items.map((p) => p.id)).toEqual([created.id]);
+    expect(list.items[0]?.designCount).toBe(0);
+    expect((await api.get(base)).data).toEqual(created);
+    // PUT takes the whole of it: a name is required, and it moves the version on.
+    expect(await codeOf(api.put(base, { version: 0 }))).toMatchObject({ status: 400 });
+    expect((await api.put(base, { name: "Quán Hoa 2", version: 0 })).data).toMatchObject({
+      name: "Quán Hoa 2",
+      version: 1,
+    });
+
+    const design = (await api.post("/designs/mine", startBody("Ly"))).data as Draft;
+    // Add and remove answer the project (F-31), designs in it (F-30).
+    const added = (await api.post(`${base}/designs`, { designId: design.id })).data as {
+      designs: Array<{ id: string }>;
+    };
+    expect(added.designs.map((d) => d.id)).toEqual([design.id]);
+    expect(await codeOf(api.get(`${base}/designs`))).toMatchObject({ status: 404 }); // no such route
+    const inProject = (await api.post("/designs/mine", startBody("Ly 2", created.id)))
+      .data as Draft;
+    expect(inProject.projectId).toBe(created.id);
+
+    expect(await codeOf(api.post(`${base}/archive`, { version: 0 }))).toEqual({
+      status: 409,
+      code: "CONFLICT",
+    });
+    const removed = (await api.delete(`${base}/designs/${design.id}`)).data as {
+      designs: Array<{ id: string }>;
+    };
+    expect(removed.designs.map((d) => d.id)).toEqual([inProject.id]);
+    expect(await codeOf(api.delete(`${base}/designs/${design.id}`))).toEqual({
+      status: 404,
+      code: "NOT_FOUND",
+    });
+    expect((await api.delete(`${base}/designs/${inProject.id}`)).status).toBe(200);
+    expect((await api.post(`${base}/archive`, { version: 1 })).data).toMatchObject({
+      status: "ARCHIVED",
+      version: 2,
+    });
+    // The history is a page, newest first (F-16).
+    const history = (await api.get(`${base}/history`, { params: { page: 0, size: 20 } }))
+      .data as Page<{ event: string }>;
+    expect(history.items.map((e) => e.event)).toEqual(["PROJECT_ARCHIVED", "PROJECT_CREATED"]);
+    expect(await codeOf(api.get("/design-projects/unknown"))).toEqual({
+      status: 404,
+      code: "NOT_FOUND",
+    });
+  });
+
+  it("has no print-config route any more; a variant without a template is simply not listed; POST /__mock/reset", async () => {
+    expect(
+      await codeOf(
+        api.get(`/catalog/products/${CUP12.productSlug}/variants/${CUP12.sku}/print-config`),
+      ),
+    ).toEqual({ status: 404, code: "HTTP_404" }); // no route at all
+    const { data } = await api.get<{ templates: Array<{ sku: string }> }>(
+      "/catalog/products/tui-giay-kraft/customization",
+    );
+    expect(data.templates.map((t) => t.sku)).not.toContain(MOCK_SKU_WITHOUT_PRINT_CONFIG);
+
+    const { data: created } = await api.post<Draft>("/designs/mine", startBody("Ly"));
+    expect((await api.post("/__mock/reset")).status).toBe(200);
+    const { data: page } = await api.get<Page<Draft>>("/designs");
+    expect(page.totalElements).toBe(4);
+    expect(await codeOf(api.get(`/designs/${created.id}`))).toEqual({
+      status: 404,
+      code: "NOT_FOUND",
+    });
+  });
 });

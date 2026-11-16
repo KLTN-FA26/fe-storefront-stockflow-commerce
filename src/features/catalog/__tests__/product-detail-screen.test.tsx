@@ -135,27 +135,38 @@ describe("ProductDetailScreen — no price, no cart (kltn-docs 13 BR-04, 14 BR-0
   });
 });
 
+/** The product page composes the design feature's entry through this prop (catalog never imports design). */
+const renderEntry = (sku: string) => <p>{`design entry for ${sku}`}</p>;
+
 describe("ProductDetailScreen design entry (kltn-docs 12, 13 §4)", () => {
-  it("offers 'Bắt đầu thiết kế' for a customizable product, for the chosen SKU", async () => {
-    renderWithProviders(<ProductDetailScreen slug="ly-giay-2-lop-8oz" />);
-    await ready("Ly giấy 2 lớp 8oz");
-    expect(screen.getByRole("link", { name: "Bắt đầu thiết kế" })).toHaveAttribute(
-      "href",
-      "/design/new?product=ly-giay-2-lop-8oz&sku=CUP-PAPER-8OZ-WHT",
+  it("renders the design entry of a customizable product for the chosen SKU, beside Sales", async () => {
+    renderWithProviders(
+      <ProductDetailScreen slug="ly-giay-2-lop-8oz" renderDesignEntry={renderEntry} />,
     );
+    expect(await ready("Ly giấy 2 lớp 8oz")).toHaveAttribute("href", "/chat");
+    expect(screen.getByText("design entry for CUP-PAPER-8OZ-WHT")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "CUP-PAPER-8OZ-KRAFT" }));
-    expect(screen.getByRole("link", { name: "Bắt đầu thiết kế" })).toHaveAttribute(
-      "href",
-      "/design/new?product=ly-giay-2-lop-8oz&sku=CUP-PAPER-8OZ-KRAFT",
-    );
+    expect(screen.getByText("design entry for CUP-PAPER-8OZ-KRAFT")).toBeInTheDocument();
     // A design is quoted from the approved design (13 §4 step 1), never put in a basket.
     expect(screen.getByText(/gửi yêu cầu báo giá/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Thêm vào giỏ/ })).not.toBeInTheDocument();
   });
 
-  it("offers no design entry while the BE does not say the product is customizable", async () => {
+  it("renders no design entry for a standard product", async () => {
+    renderWithProviders(
+      <ProductDetailScreen slug="hop-giay-mang-di-m" renderDesignEntry={renderEntry} />,
+    );
+    await screen.findByRole("link", { name: "Chat với Sale" });
+    expect(screen.queryByText(/design entry for/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Giá không hiển thị trên sàn/)).toBeInTheDocument();
+  });
+
+  it("renders no design entry while the BE does not say the product is customizable", async () => {
     readProductsAsStockGoods();
-    renderWithProviders(<ProductDetailScreen slug="ly-giay-2-lop-8oz" />);
+    renderWithProviders(
+      <ProductDetailScreen slug="ly-giay-2-lop-8oz" renderDesignEntry={renderEntry} />,
+    );
     await ready("Ly giấy 2 lớp 8oz");
-    expect(screen.queryByRole("link", { name: "Bắt đầu thiết kế" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/design entry for/)).not.toBeInTheDocument();
   });
 });

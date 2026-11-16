@@ -1,43 +1,41 @@
 "use client";
 
-import { History } from "lucide-react";
-
 import { Skeleton } from "@/components/shared";
 
 import { describeDesignError } from "../../errors";
 import { useDesignHistory } from "../../queries";
-import { decisionView } from "../../selectors";
+import { eventView } from "../../selectors";
 
-/** The design's decisions, newest first: who moved it on and when (`GET /designs/{id}/history`). */
+/**
+ * The design's history (docs 12 §5.3), newest first: created, submitted, returned with its reason,
+ * the checks that failed, approved. Only the notes written for the customer are shown.
+ */
 export function DecisionHistory({ designId }: { designId: string }) {
   const history = useDesignHistory(designId);
-  const items = history.data?.items.toSorted((a, b) => Date.parse(b.at) - Date.parse(a.at)) ?? [];
+  // The server lists events oldest first: the newest is read first here.
+  const events = history.data?.toReversed() ?? [];
 
   return (
     <section aria-label="Lịch sử thiết kế" className="flex flex-col gap-3">
-      <h2 className="text-ink-primary flex items-center gap-1.5 text-sm font-semibold">
-        <History aria-hidden className="size-4" />
-        Lịch sử
-      </h2>
       {history.isPending ? (
         <Skeleton className="h-16 rounded-[var(--r-md)]" />
       ) : history.error ? (
         <p className="text-danger text-sm">{describeDesignError(history.error)}</p>
-      ) : items.length === 0 ? (
+      ) : events.length === 0 ? (
         <p className="text-ink-secondary text-sm">Chưa có bước nào.</p>
       ) : (
         <ol className="border-border-default flex flex-col gap-3 border-l pl-4">
-          {items.map((item) => {
-            const { label, notes, atLabel } = decisionView(item);
+          {events.map((event, i) => {
+            const { label, note, atLabel } = eventView(event);
             return (
-              <li key={`${item.version}-${item.decision}-${item.at}`} className="flex flex-col">
+              <li key={`${event.version}-${event.type}-${i}`} className="flex flex-col">
                 <span className="text-ink-primary text-sm font-medium">{label}</span>
                 {atLabel ? (
                   <span className="text-ink-tertiary text-xs tabular-nums">{atLabel}</span>
                 ) : null}
-                {notes ? (
+                {note ? (
                   <span className="text-ink-secondary mt-1 text-sm whitespace-pre-line">
-                    {notes}
+                    {note}
                   </span>
                 ) : null}
               </li>

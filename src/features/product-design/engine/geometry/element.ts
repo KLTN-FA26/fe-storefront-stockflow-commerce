@@ -99,7 +99,7 @@ function uPerFlatMm(surface: PrintSurface, u: number, v: number): number {
  * `R_el = Rt − v` the radius at the element's `v` (Rm = mid radius), so `localX` mm of the element
  * cover the same arc length at every radius. On rect surfaces it is `u + localX · scale`.
  *
- * The compositor's `warpStrips` and `elementOutline` both place wrapped elements with this.
+ * The compositor's `arcGlyphs` and `elementOutline` both place wrapped elements with this.
  */
 export function arcOffsetU(surface: PrintSurface, placement: Placement, localX: number): number {
   const { u, v, scale: s } = placement;
@@ -117,21 +117,21 @@ export function isWrapped(el: DesignElement, surface: PrintSurface): boolean {
 }
 
 /**
- * Local → flat matrix of the strip of a wrapped element whose source column is centred at local
- * `xc`: `translate(toFlat(u_i, v)) · rotate(upright_i) · scale(scale · flip) · translate(−xc, 0)`
- * with `u_i = arcOffsetU(…, ±xc)`. The strip centre `matrix · (xc, 0)` is `toFlat(u_i, v)`, so every
- * strip centre sits on the element's radius and each strip is turned to its own upright; together
- * the strips follow the arc.
+ * Local → flat matrix of the narrow column of a wrapped element centred at local `xc` (a glyph of
+ * a wrapped text, a sample of its outline): `translate(toFlat(u_i, v)) · rotate(upright_i) ·
+ * scale(scale · flip) · translate(−xc, 0)` with `u_i = arcOffsetU(…, ±xc)`. The column centre
+ * `matrix · (xc, 0)` is `toFlat(u_i, v)`, so every column centre sits on the element's radius and
+ * each column is turned to its own upright; together the columns follow the arc.
  *
- * A flipped element is the rigid flipped image bent along the arc: with `flip.x` the column at `xc`
- * is placed where the unflipped element's column at `−xc` sits (`u_i` uses `−xc`) and is mirrored
- * within its strip (negative x scale); `flip.y` negates the y scale. The outline is unaffected,
- * because the element's box is centred on the origin and so is mirror-symmetric.
+ * A flipped element is the rigid flipped element bent along the arc: with `flip.x` the column at
+ * `xc` is placed where the unflipped element's column at `−xc` sits (`u_i` uses `−xc`) and is
+ * mirrored about its own centre (negative x scale); `flip.y` negates the y scale. The outline is
+ * unaffected, because the element's box is centred on the origin and so is mirror-symmetric.
  *
- * `rotationDeg` is ignored: a rotated strip band would shear and collapse, because the strips are
- * laid out along the circumference. A wrapped element on the cup always reads horizontally.
+ * `rotationDeg` is ignored: a rotated band of columns would shear and collapse, because the columns
+ * are laid out along the circumference. A wrapped element on the cup always reads horizontally.
  */
-export function wrapStripMatrix(
+export function wrapColumnMatrix(
   placement: Placement,
   surface: PrintSurface,
   xc: number,
@@ -151,7 +151,8 @@ export function wrapStripMatrix(
 /**
  * The element's outline on the flat surface: the four corners of `box`, or, for an element that
  * `isWrapped`, `WRAP_OUTLINE_SAMPLES` points along the top edge (left to right) then along the
- * bottom edge (right to left), placed like the strips so the outline hugs the warped element.
+ * bottom edge (right to left), placed column by column (`wrapColumnMatrix`) so the outline hugs
+ * the warped element.
  */
 export function elementOutline(el: DesignElement, surface: PrintSurface, box: RectMm): PointMm[] {
   const right = box.x + box.width;
@@ -170,7 +171,7 @@ export function elementOutline(el: DesignElement, surface: PrintSurface, box: Re
   const edge = (y: number): PointMm[] =>
     Array.from({ length: WRAP_OUTLINE_SAMPLES }, (_, i) => {
       const xc = box.x + (box.width * i) / (WRAP_OUTLINE_SAMPLES - 1);
-      return applyToPoint(wrapStripMatrix(el.placement, surface, xc), { x: xc, y });
+      return applyToPoint(wrapColumnMatrix(el.placement, surface, xc), { x: xc, y });
     });
   return [...edge(box.y), ...edge(bottom).reverse()];
 }

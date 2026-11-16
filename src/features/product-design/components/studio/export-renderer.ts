@@ -36,7 +36,7 @@ export type ExportRenderer = {
    * else a short-lived offscreen one when the preview fell back to its flat view), else, where there
    * is no WebGL, the flat front.
    */
-  preview(size: number): Promise<Uint8Array>;
+  preview(size: number, signal?: AbortSignal): Promise<Uint8Array>;
   /**
    * One print area over its bleed box at `pxPerMm`, with every image at full resolution: its
    * bands, top to bottom (one, unless the page is more than a canvas may hold).
@@ -113,7 +113,7 @@ export function createCanvasExportRenderer(deps: RendererDeps): ExportRenderer {
   }
 
   return {
-    preview: (size) => exportPreview(deps, size),
+    preview: (size, signal) => exportPreview(deps, size, signal),
 
     async printSurface(code, doc, pxPerMm) {
       const surface = surfaces.byCode[code];
@@ -141,20 +141,21 @@ export function createCanvasExportRenderer(deps: RendererDeps): ExportRenderer {
         image: (assetId: string) => cache.get(assetId, "full"),
         createLayer,
         layerCache: layers,
+        // Wrapped images on the page's own pixel grid: each original is rasterised once at the
+        // source resolution (capped at its own, so a finer photo is scaled down first), then that
+        // raster is remapped once.
+        exactWarp: true,
       };
       const { width, height } = surfacePx(surface.flatBounds, pxPerMm);
       try {
         const bands: PrintBand[] = [];
-        for (const { y0Px, heightPx, overlapPx } of printBands(width, height)) {
+        for (const { y0Px, heightPx } of printBands(width, height)) {
           const canvas = document.createElement("canvas");
           if (!canvas.getContext("2d")) throw new ExportError(MESSAGES.canvas);
-          // The band's own rows and the overlap the next band repeats (no hairline between them).
-          renderSurface(canvas, ops, env, surface.flatBounds, {
-            y0Px,
-            heightPx: heightPx + overlapPx,
-          });
+          // The band's own rows only: no row is painted twice in the PDF (`BandRows`).
+          renderSurface(canvas, ops, env, surface.flatBounds, { y0Px, heightPx });
           try {
-            bands.push({ png: await pngOf(canvas), heightPx, overlapPx });
+            bands.push({ png: await pngOf(canvas), heightPx });
           } finally {
             // Up to 16 MP per band: hand the bitmap back now rather than at the next collection.
             canvas.width = 0;

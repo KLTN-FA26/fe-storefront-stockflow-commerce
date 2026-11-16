@@ -3,8 +3,8 @@
 import dynamic from "next/dynamic";
 
 import { StudioSkeleton } from "@/features/product-design/components/studio/studio-skeleton";
-import type { DesignDraft } from "@/features/product-design/types";
 import type { FontRegistry } from "@/features/product-design/engine";
+import type { Design } from "@/features/product-design/types";
 
 import { ProductPhoto } from "./product-photo";
 
@@ -17,8 +17,10 @@ const DesignStudio = dynamic(
   { ssr: false, loading: () => <StudioSkeleton /> },
 );
 
-const productPhoto = (design: DesignDraft) =>
-  design.productSlug ? <ProductPhoto slug={design.productSlug} sku={design.sku} /> : null;
+/** The catalogue photo of the design's variant, beside the flat preview. */
+const productPhoto = (design: Design) => (
+  <ProductPhoto slug={design.product.slug} sku={design.variant.sku} />
+);
 
 /** `ssr: false` is only allowed in a client component, so the page renders the studio through this. */
 export function DesignStudioLoader({ designId, fonts }: { designId: string; fonts: FontRegistry }) {

@@ -1,225 +1,308 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
+import { designArtifactDtoSchema } from "../design-dtos";
 import { cup12oz } from "../engine/__tests__/fixtures";
 import {
-  artifactRoleSchema,
-  changeReasonInputSchema,
   createDesignInputSchema,
-  customizationDtoSchema,
-  designArtifactDtoSchema,
   designAssetDtoSchema,
-  designDecisionDtoSchema,
   designDocumentRecordDtoSchema,
-  designDraftDtoSchema,
-  designPageDtoSchema,
-  designSnapshotDtoSchema,
+  designSchema,
+  designEventSchema,
+  designFileSchema,
+  designPageSchema,
   designStatusSchema,
   downloadLinkDtoSchema,
+  draftCountSchema,
+  preflightIssueSchema,
+  printConfigSchema,
+  renameDesignInputSchema,
+  returnReasonInputSchema,
 } from "../schemas";
 import {
-  beArtifact,
-  beAsset,
-  beCustomization,
-  beDecision,
-  beDocumentRecord,
-  beDownload,
-  beDraft,
-  bePage,
-  beSnapshot,
-  beTemplate,
-  ids,
-  proposedDraftFields,
-  validCreateInput,
+  approvedDto,
+  assetDto,
+  designDto,
+  documentRecordDto,
+  downloadDto,
+  eventDto,
+  artifactDto,
+  pageDto,
+  printConfigDto,
+  returnedDto,
 } from "./fixtures";
 
-describe("design draft (BE DesignDraftResponse)", () => {
-  it("parses a BE draft without the proposed fields", () => {
-    const draft = designDraftDtoSchema.parse(beDraft());
-    expect(draft).toMatchObject({ status: "DRAFT", version: 3, technicalReviewPassed: false });
-    expect(draft.sku).toBeUndefined();
-    expect(draft.reviewRequestedAt).toBeUndefined();
+const refuses = (schema: z.ZodType, value: unknown) =>
+  expect(() => schema.parse(value)).toThrow(z.ZodError);
+
+describe("a design as the screens read it", () => {
+  it("knows the four statuses of the docs' lifecycle", () => {
+    expect(designStatusSchema.options).toEqual(["DRAFT", "PENDING_REVIEW", "APPROVED", "ARCHIVED"]);
   });
 
-  it("parses the proposed P6 fields when the BE sends them", () => {
-    expect(designDraftDtoSchema.parse(beDraft(proposedDraftFields))).toMatchObject({
-      productSlug: "ly-giay-2-lop-12oz",
-      sku: "CUP-PAPER-12OZ-WHT",
-      templateCode: "CUP12-BODY",
-      previewArtifactId: ids.artifact,
-      reviewRequestedAt: "2026-10-25T08:00:00.123456Z",
+  it("parses a draft, a returned draft and an approved design", () => {
+    expect(designSchema.parse(designDto())).toMatchObject({
+      status: "DRAFT",
+      version: 3,
+      product: { slug: "ly-giay-2-lop-12oz" },
+      variant: { sku: "CUP-PAPER-12OZ-WHT" },
+      projectId: null,
+      lastReturn: null,
+    });
+    expect(designSchema.parse(returnedDto()).lastReturn?.reason).toContain("Logo bị mờ");
+    expect(designSchema.parse(approvedDto())).toMatchObject({
+      status: "APPROVED",
+      approvedAt: "2026-11-05T08:00:00Z",
     });
   });
 
-  it("reads the workflow fields the BE leaves out when they are null", () => {
-    const draft = designDraftDtoSchema.parse(
-      beDraft({
-        currentArtifactId: ids.artifact,
-        reviewNotes: "Sửa lại logo",
-        status: "SUBMITTED",
-      }),
-    );
-    expect(draft).toMatchObject({ currentArtifactId: ids.artifact, reviewNotes: "Sửa lại logo" });
-    expect(draft.parentSnapshotId).toBeUndefined();
-    expect(draft.assignedUserId).toBeUndefined();
+  it("refuses an unknown status, a bad id or a negative version", () => {
+    refuses(designSchema, designDto({ status: "SUBMITTED" }));
+    refuses(designSchema, designDto({ id: "d-1" }));
+    refuses(designSchema, designDto({ version: -1 }));
   });
 
-  it("rejects a status or an id outside the contract", () => {
-    expect(() => designDraftDtoSchema.parse(beDraft({ status: "LOCKED" }))).toThrow(z.ZodError);
-    expect(() => designDraftDtoSchema.parse(beDraft({ id: "d-1" }))).toThrow(z.ZodError);
-    expect(() => designDraftDtoSchema.parse(beDraft({ version: -1 }))).toThrow(z.ZodError);
+  it("holds a name of 1–200 characters and a return reason of 1–2000 (docs 12 §3)", () => {
+    expect(designSchema.parse(designDto({ name: "a".repeat(200) })).name).toHaveLength(200);
+    refuses(designSchema, designDto({ name: "a".repeat(201) }));
+    const returnOf = (reason: string) => ({ reason, returnedAt: "2026-11-03T09:00:00Z" });
+    expect(
+      designSchema.parse(returnedDto({ lastReturn: returnOf("r".repeat(2000)) })).lastReturn
+        ?.reason,
+    ).toHaveLength(2000);
+    refuses(designSchema, returnedDto({ lastReturn: returnOf("r".repeat(2001)) }));
   });
 
-  it("knows the four BE statuses (REJECTED is declared but never set)", () => {
-    expect(designStatusSchema.options).toEqual(["DRAFT", "SUBMITTED", "APPROVED", "REJECTED"]);
+  it("needs every nullable field present: null is allowed, absent is a contract break", () => {
+    expect(designSchema.parse(designDto({ projectId: null })).projectId).toBeNull();
+    const { projectId: _projectId, ...withoutProject } = designDto();
+    refuses(designSchema, withoutProject);
+    const { lastReturn: _lastReturn, ...withoutReturn } = designDto();
+    refuses(designSchema, withoutReturn);
   });
 
-  it("parses a BE page and keeps its 0-based numbering for the API layer to shift", () => {
-    const page = designPageDtoSchema.parse(bePage([beDraft()], { page: 2, hasPrevious: true }));
+  it("parses a page and keeps its 0-based numbering for the API layer to shift", () => {
+    const page = designPageSchema.parse(pageDto([designDto()], { page: 2, hasPrevious: true }));
     expect(page.items).toHaveLength(1);
     expect(page.page).toBe(2);
   });
-});
 
-describe("history, snapshot, artifacts and links", () => {
-  it("parses a decision (notes and actors can be absent)", () => {
-    expect(designDecisionDtoSchema.parse(beDecision)).toMatchObject({ version: 4 });
-    expect(
-      designDecisionDtoSchema.parse({ decision: "SUBMITTED", version: 1, at: beDecision.at }),
-    ).toMatchObject({ decision: "SUBMITTED" });
-  });
-
-  it("parses a snapshot with its artifact manifest", () => {
-    const snapshot = designSnapshotDtoSchema.parse(beSnapshot);
-    expect(snapshot.artifacts[0]?.role).toBe("CUSTOMER_PREVIEW");
-  });
-
-  it("parses artifacts and knows the four roles", () => {
-    expect(designArtifactDtoSchema.parse(beArtifact)).toMatchObject({ sizeBytes: 48_213 });
-    expect(artifactRoleSchema.options).toEqual([
-      "CUSTOMER_PREVIEW",
-      "TECHNICAL_SPEC",
-      "PRINT_READY",
-      "PRODUCTION_INSTRUCTION",
-    ]);
-    expect(() => designArtifactDtoSchema.parse({ ...beArtifact, role: "LOGO" })).toThrow(
-      z.ZodError,
-    );
-  });
-
-  it("parses a presigned download link", () => {
-    expect(downloadLinkDtoSchema.parse(beDownload).url).toContain("https://");
-    expect(() => downloadLinkDtoSchema.parse({ expiresAt: beDownload.expiresAt })).toThrow(
-      z.ZodError,
-    );
+  it("parses the draft count", () => {
+    expect(draftCountSchema.parse({ drafts: 2, limit: 50 })).toEqual({ drafts: 2, limit: 50 });
+    refuses(draftCountSchema, { drafts: -1, limit: 50 });
   });
 });
 
-describe("design document record (P3) and asset (P4)", () => {
+describe("history events (spec §3.3)", () => {
+  it.each([
+    "CREATED",
+    "DERIVED_FROM_SNAPSHOT",
+    "PREFLIGHT_FAILED",
+    "SUBMITTED_FOR_REVIEW",
+    "RETURNED",
+    "APPROVED",
+    "ARCHIVED",
+  ])("parses %s", (type) => {
+    expect(designEventSchema.parse(eventDto({ type })).type).toBe(type);
+  });
+
+  it("refuses an event the docs do not list, and a missing note", () => {
+    refuses(designEventSchema, eventDto({ type: "TECHNICAL_ACCEPTED" }));
+    const { note: _note, ...withoutNote } = eventDto();
+    refuses(designEventSchema, withoutNote);
+  });
+});
+
+describe("document, images, files and links", () => {
   it("parses a stored document through the engine's document schema", () => {
-    const record = designDocumentRecordDtoSchema.parse(beDocumentRecord());
-    expect(record.document.templateCode).toBe("CUP12-BODY");
-    expect(record.version).toBe(3);
+    const record = designDocumentRecordDtoSchema.parse(documentRecordDto());
+    expect(record).toMatchObject({ version: 3, document: { templateCode: "CUP12-BODY" } });
+    refuses(designDocumentRecordDtoSchema, documentRecordDto({ document: { schemaVersion: 2 } }));
   });
 
-  it("rejects a document the engine would not accept", () => {
-    const bad = beDocumentRecord({ document: { schemaVersion: 2 } });
-    expect(() => designDocumentRecordDtoSchema.parse(bad)).toThrow(z.ZodError);
+  it("parses an image with its pixel size", () => {
+    expect(designAssetDtoSchema.parse(assetDto)).toMatchObject({ widthPx: 1200, heightPx: 800 });
+    refuses(designAssetDtoSchema, { ...assetDto, widthPx: 0 });
   });
 
-  it("parses an asset with its pixel size", () => {
-    expect(designAssetDtoSchema.parse(beAsset)).toMatchObject({ widthPx: 1200, heightPx: 800 });
-    expect(() => designAssetDtoSchema.parse({ ...beAsset, widthPx: 0 })).toThrow(z.ZodError);
+  it("lists the three files of a submission and the production instruction the BE makes at approval, and no other role", () => {
+    for (const role of [
+      "CUSTOMER_PREVIEW",
+      "PRINT_READY",
+      "TECHNICAL_SPEC",
+      "PRODUCTION_INSTRUCTION",
+    ]) {
+      const artifact = designArtifactDtoSchema.parse(artifactDto(role));
+      expect(
+        designFileSchema.parse({
+          artifactId: artifact.artifactId,
+          role,
+          name: artifact.originalName,
+          sizeBytes: artifact.sizeBytes,
+          sha256: artifact.checksum,
+        }).role,
+      ).toBe(role);
+    }
+    refuses(designFileSchema, { ...artifactDto("OTHER"), name: "x", sha256: "f".repeat(64) });
+  });
+
+  it("parses a short-lived link", () => {
+    expect(downloadLinkDtoSchema.parse(downloadDto).url).toContain("https://");
+    refuses(downloadLinkDtoSchema, { expiresAt: downloadDto.expiresAt });
   });
 });
 
-describe("customization (P2)", () => {
-  const parseTemplate = (overrides: Record<string, unknown>) =>
-    customizationDtoSchema.parse(beCustomization({ templates: [beTemplate(overrides)] }))
-      .templates[0];
-
-  it("parses a customizable product with the engine's template schema", () => {
-    const customization = customizationDtoSchema.parse(beCustomization());
-    expect(customization.kind).toBe("CUSTOMIZABLE");
-    expect(customization.templates[0]?.model.kind).toBe("parametric-cup");
-  });
-
-  it("normalises allowed formats to lowercase MIME types, once each", () => {
-    const formats = (allowedFileFormats: string[]) =>
-      parseTemplate({ allowedFileFormats })?.allowedFileFormats;
-
-    expect(formats(["PNG", "JPG", "JPEG", "WEBP"])).toEqual([
-      "image/png",
-      "image/jpeg",
-      "image/webp",
-    ]);
-    expect(formats(["Image/PNG", "image/jpeg"])).toEqual(["image/png", "image/jpeg"]);
-  });
-
-  it("turns an empty font list into null (every registry font)", () => {
-    expect(parseTemplate({ allowedFontCodes: [] })?.allowedFontCodes).toBeNull();
-    expect(parseTemplate({ allowedFontCodes: ["inter", "lora"] })?.allowedFontCodes).toEqual([
-      "inter",
-      "lora",
-    ]);
-  });
-
-  it("reads a nullable field the BE leaves out as null, not as a contract break", () => {
-    const { maxColors: _maxColors, ...withoutMaxColors } = beTemplate({
-      allowedFontCodes: undefined,
+describe("print configuration (spec §4.1 PrintConfigDto)", () => {
+  it("parses the variant's template with the engine's schema and its file rules as MIME types", () => {
+    const config = printConfigSchema.parse(printConfigDto());
+    expect(config).toMatchObject({ variantStatus: "ACTIVE", hasCartonSpec: true });
+    expect(config.template.model.kind).toBe("parametric-cup");
+    expect(config.fileRules).toEqual({
+      minDpi: 300,
+      formats: ["image/png", "image/jpeg"],
+      maxFileSizeMb: 50,
     });
-    const parsed = customizationDtoSchema.parse(beCustomization({ templates: [withoutMaxColors] }));
-    expect(parsed.templates[0]).toMatchObject({ maxColors: null, allowedFontCodes: null });
   });
 
   it("keeps the template's own checks: a cup whose print shape disagrees with its model fails", () => {
-    const bad = beTemplate({
+    const template = {
+      ...cup12oz,
       printAreas: cup12oz.printAreas.map((area) => ({ ...area, shape: { type: "rect" } })),
-    });
-    expect(() => customizationDtoSchema.parse(beCustomization({ templates: [bad] }))).toThrow(
-      z.ZodError,
-    );
+    };
+    refuses(printConfigSchema, printConfigDto({ template }));
   });
 
-  it("accepts a standard product with no templates", () => {
+  it("refuses a variant status outside ACTIVE / BLOCKED / OBSOLETE", () => {
+    expect(printConfigSchema.parse(printConfigDto({ variantStatus: "BLOCKED" }))).toBeTruthy();
+    refuses(printConfigSchema, printConfigDto({ variantStatus: "DRAFT" }));
+  });
+
+  describe("model3d (the .glb link): a bad one is dropped, never blocks the config", () => {
+    const model3d = {
+      url: "/models/cup.glb",
+      surfaces: [{ printAreaCode: "BODY", meshName: "print:BODY" }],
+    };
+    const without = () => printConfigSchema.parse(printConfigDto());
+    const warn = vi.spyOn(console, "warn");
+
+    beforeEach(() => warn.mockReset().mockImplementation(() => undefined));
+    afterAll(() => warn.mockRestore());
+
+    /** Parses with the bad link: it becomes null, one warning, the rest equals the payload without it. */
+    const degrades = (bad: unknown) => {
+      const config = printConfigSchema.parse(printConfigDto({ model3d: bad }));
+      expect(config.model3d).toBeNull();
+      expect(config).toEqual(without());
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]?.[0])).toContain("model3d");
+    };
+
+    it("is null when the key is missing, without a warning", () => {
+      expect(without().model3d).toBeNull();
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("keeps an explicit null, without a warning", () => {
+      expect(printConfigSchema.parse(printConfigDto({ model3d: null })).model3d).toBeNull();
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("keeps a valid link, without a warning", () => {
+      expect(printConfigSchema.parse(printConfigDto({ model3d })).model3d).toEqual(model3d);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("drops a print area code that is not one of the template's", () => {
+      degrades({ ...model3d, surfaces: [{ printAreaCode: "FRONT", meshName: "print:FRONT" }] });
+    });
+
+    it("drops a link that leaves a print area of the template unmapped", () => {
+      const front = { ...cup12oz.printAreas[0], code: "FRONT", name: "Front" };
+      const template = { ...cup12oz, printAreas: [...cup12oz.printAreas, front] };
+      const config = printConfigSchema.parse(printConfigDto({ template, model3d }));
+      expect(config.model3d).toBeNull();
+      expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it("drops a repeated print area code", () => {
+      degrades({ ...model3d, surfaces: [...model3d.surfaces, ...model3d.surfaces] });
+    });
+
+    it("drops an empty mesh name", () => {
+      degrades({ ...model3d, surfaces: [{ printAreaCode: "BODY", meshName: "" }] });
+    });
+
+    it("drops a mesh name other than print: plus the print area code", () => {
+      degrades({ ...model3d, surfaces: [{ printAreaCode: "BODY", meshName: "body" }] });
+    });
+
+    it("drops a link of the wrong shape", () => {
+      degrades({ url: "", surfaces: [] });
+      warn.mockClear();
+      degrades("cup.glb");
+    });
+
+    it("still throws for an error anywhere else, with or without a model3d", () => {
+      refuses(printConfigSchema, printConfigDto({ variantStatus: "DRAFT", model3d }));
+      refuses(printConfigSchema, printConfigDto({ variantStatus: "DRAFT", model3d: 7 }));
+    });
+  });
+});
+
+describe("preflight issues (the details of 422 PREFLIGHT_FAILED)", () => {
+  it("parses an element issue and a document issue", () => {
     expect(
-      customizationDtoSchema.parse({ productId: ids.product, kind: "STANDARD", templates: [] }),
-    ).toMatchObject({ kind: "STANDARD", templates: [] });
+      preflightIssueSchema.parse({
+        ruleId: "ASSET_INVALID",
+        level: "fail",
+        message: "Ảnh không hợp lệ hoặc không tải được.",
+        surfaceCode: "BODY",
+        elementId: "el-1",
+      }),
+    ).toMatchObject({ surfaceCode: "BODY", elementId: "el-1" });
+    expect(
+      preflightIssueSchema.parse({ ruleId: "EMPTY_DESIGN", level: "fail", message: "Trống" }),
+    ).toEqual({ ruleId: "EMPTY_DESIGN", level: "fail", message: "Trống" });
+  });
+
+  it("refuses an unknown rule or level", () => {
+    refuses(preflightIssueSchema, { ruleId: "DPI_LOW", level: "fail", message: "x" });
+    refuses(preflightIssueSchema, { ruleId: "EMPTY_DESIGN", level: "warning", message: "x" });
   });
 });
 
 describe("inputs", () => {
-  it("trims the design name and requires 1-200 characters", () => {
-    expect(createDesignInputSchema.parse({ ...validCreateInput, name: "  Ly logo  " }).name).toBe(
-      "Ly logo",
-    );
-    expect(() => createDesignInputSchema.parse({ ...validCreateInput, name: "   " })).toThrow(
-      z.ZodError,
-    );
-    expect(() =>
-      createDesignInputSchema.parse({ ...validCreateInput, name: "x".repeat(201) }),
-    ).toThrow(z.ZodError);
-    expect(
-      createDesignInputSchema.parse({ ...validCreateInput, name: "x".repeat(200) }).name,
-    ).toHaveLength(200);
+  // docs 12 §3: a name of 1–200 characters.
+  it("trims the name and takes 1–200 characters", () => {
+    expect(renameDesignInputSchema.parse({ name: "  a  " }).name).toBe("a");
+    expect(renameDesignInputSchema.parse({ name: "x".repeat(200) }).name).toHaveLength(200);
+    refuses(renameDesignInputSchema, { name: "" });
+    refuses(renameDesignInputSchema, { name: "   " });
+    refuses(renameDesignInputSchema, { name: "x".repeat(201) });
   });
 
-  it("requires a product id, a sku and a template code", () => {
-    expect(() => createDesignInputSchema.parse({ ...validCreateInput, productId: "ly" })).toThrow(
-      z.ZodError,
-    );
-    expect(() => createDesignInputSchema.parse({ ...validCreateInput, sku: "" })).toThrow(
-      z.ZodError,
-    );
-    expect(() => createDesignInputSchema.parse({ ...validCreateInput, templateCode: "" })).toThrow(
-      z.ZodError,
-    );
+  it("says why a name is refused, in Vietnamese", () => {
+    const message = (name: string) =>
+      renameDesignInputSchema.safeParse({ name }).error?.issues[0]?.message;
+    expect(message("")).toBe("Hãy đặt tên cho thiết kế");
+    expect(message("x".repeat(201))).toBe("Tên tối đa 200 ký tự");
   });
 
-  it("trims a change reason and requires 1-2000 characters", () => {
-    expect(changeReasonInputSchema.parse({ reason: "  Đổi logo " }).reason).toBe("Đổi logo");
-    expect(() => changeReasonInputSchema.parse({ reason: "  " })).toThrow(z.ZodError);
-    expect(() => changeReasonInputSchema.parse({ reason: "x".repeat(2001) })).toThrow(z.ZodError);
-    expect(changeReasonInputSchema.parse({ reason: "x".repeat(2000) }).reason).toHaveLength(2000);
+  it("creates from a product slug, a SKU and a name", () => {
+    const input = { productSlug: "ly-giay-2-lop-12oz", sku: "CUP-PAPER-12OZ-WHT", name: "  a  " };
+    expect(createDesignInputSchema.parse(input)).toEqual({ ...input, name: "a" });
+    refuses(createDesignInputSchema, { ...input, productSlug: "" });
+    refuses(createDesignInputSchema, { ...input, sku: " " });
+    refuses(createDesignInputSchema, { ...input, name: "x".repeat(201) });
+  });
+
+  // docs 12 BR-06: a return needs a reason of 1–2,000 characters.
+  it("takes a return reason of 1–2000 characters", () => {
+    expect(returnReasonInputSchema.parse({ reason: "x".repeat(2000) }).reason).toHaveLength(2000);
+    expect(returnReasonInputSchema.parse({ reason: "  Đổi logo " }).reason).toBe("Đổi logo");
+    const message = (reason: string) =>
+      returnReasonInputSchema.safeParse({ reason }).error?.issues[0]?.message;
+    expect(message("  ")).toBe("Hãy nhập lý do");
+    expect(message("x".repeat(2001))).toBe("Lý do tối đa 2000 ký tự");
   });
 });

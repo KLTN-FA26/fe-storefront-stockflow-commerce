@@ -1,28 +1,29 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
+import { STORE_ROUTES } from "@/constants";
 import { ApiError } from "@/lib/api/error";
+import { useSignedIn } from "@/lib/auth/use-signed-in";
 import { beId } from "@/lib/validation/primitives";
-import { useIsMock } from "@/providers/app-providers";
 
-import { designCapabilities } from "../../capabilities";
 import type { FontRegistry } from "../../engine";
-import { describeDesignError, isDesignApiUnavailable } from "../../errors";
-import { useCustomization, useDesign, useDesignAssets, useDesignDocument } from "../../queries";
-import type { DesignDraft } from "../../types";
+import { describeDesignError } from "../../errors";
+import { useDesign, useDesignAssets, useDesignDocument, useDesignPrintConfig } from "../../queries";
+import type { Design } from "../../types";
+import { LauncherFrame, LauncherSignIn } from "../launcher-states";
 import type { ExportRenderer } from "./export-renderer";
 import type { StudioServices } from "./studio-context";
+import { STUDIO_LOAD_MESSAGES } from "./studio-kit";
 import { StudioSkeleton } from "./studio-skeleton";
 import { StudioLoadError, StudioNotFound } from "./studio-states";
 import { StudioWorkspace } from "./studio-workspace";
-import { WorkflowView } from "./workflow-view";
 
 export type DesignStudioProps = {
   designId: string;
   fonts: FontRegistry;
   /** The product's photo for the flat preview; the app composes it from the catalogue. */
-  renderProductPhoto?: (design: DesignDraft) => ReactNode;
+  renderProductPhoto?: (design: Design) => ReactNode;
   /** Test seam: receives the studio's services each time they change. */
   onServices?: (services: StudioServices) => void;
   /** Test seam: draws the review files in place of the canvases (jsdom has none). */
@@ -37,21 +38,32 @@ const DESIGN_ID = beId();
 /** Design ids are UUIDs: anything else (a mistyped or cut-off link) names no design. */
 const isDesignId = (id: string) => DESIGN_ID.safeParse(id).success;
 
-/** Without P6's `productSlug` and `templateCode` there is no template to open a design with (R6). */
-const lacksTemplate = (design: DesignDraft) => !design.productSlug || !design.templateCode;
-
-/** `/design/[id]`: a link whose id is no design id says so without asking the BE (R1-02). */
+/**
+ * `/design/[id]`: signed-in customers only (ruling R18) — a visitor gets the launcher's sign-in
+ * prompt, which brings them back here, and nothing is read. A link whose id is no design id says
+ * so without asking the BE (R1-02).
+ */
 export function DesignStudio(props: DesignStudioProps) {
+  const signedIn = useSignedIn();
+  if (signedIn === undefined) return <StudioSkeleton />;
+  if (!signedIn) {
+    return (
+      <LauncherFrame>
+        <LauncherSignIn from={STORE_ROUTES.design.detail(encodeURIComponent(props.designId))} />
+      </LauncherFrame>
+    );
+  }
   if (!isDesignId(props.designId)) return <StudioNotFound />;
   return <LoadedDesignStudio {...props} />;
 }
 
 /**
- * Loads the design, its document (P3), its images (P4) and its template (P2, by the draft's
- * `productSlug` and `templateCode`), then opens the studio. Until the BE serves P3/P4 nothing of
- * theirs is called, and a design without a template (one Sales created) cannot be edited either:
- * both open the workflow-only view (R72), where the lifecycle steps still work. The document always
- * exists (R41): a 404 means the design itself is not there.
+ * Loads the design, its document, its images and its variant's print configuration (by the
+ * design's own template, `GET /designs/{id}/template`), then opens the studio, whatever the status: it follows the
+ * status itself (spec §6.4). A design that is not the caller's, or was deleted (ARCHIVED), is not
+ * found (docs 12 BR-03, BR-16); so is one whose document is missing. A design deleted while it is
+ * open (another tab) answers its next read with a 404: that wins over the design still cached, so
+ * the studio closes on "Không tìm thấy thiết kế" (its unsaved edit stays in this browser).
  */
 function LoadedDesignStudio({
   designId,
@@ -60,28 +72,30 @@ function LoadedDesignStudio({
   onServices,
   exportRenderer,
 }: DesignStudioProps) {
-  const isMock = useIsMock();
-  const capabilities = useMemo(() => designCapabilities(isMock), [isMock]);
-  const live = capabilities.document && capabilities.assets;
   const design = useDesign(designId);
-  const document = useDesignDocument(designId, capabilities.document);
-  const assets = useDesignAssets(designId, capabilities.assets);
-  const slug = design.data?.productSlug ?? "";
-  const customization = useCustomization(slug, live && slug !== "");
-  const template = customization.data?.templates.find(
-    (candidate) => candidate.code === design.data?.templateCode,
-  );
+  const document = useDesignDocument(designId, true);
+  const assets = useDesignAssets(designId, true);
+  const printConfig = useDesignPrintConfig(design.data);
+  const config = printConfig.data;
 
-  if (design.data && document.data && assets.data && template && template.model.kind !== "gltf") {
+  const gone =
+    isNotFound(design.error) || isUnreadableAddress(design.error) || isNotFound(document.error);
+  if (gone || design.data?.status === "ARCHIVED") return <StudioNotFound />;
+  if (
+    design.data &&
+    document.data &&
+    assets.data &&
+    config &&
+    config.template.model.kind !== "gltf"
+  ) {
     return (
       <StudioWorkspace
         key={designId}
         design={design.data}
         record={document.data}
-        template={template}
+        printConfig={config}
         assets={assets.data}
         fonts={fonts}
-        capabilities={capabilities}
         productPhoto={renderProductPhoto?.(design.data)}
         onServices={onServices}
         exportRenderer={exportRenderer}
@@ -89,18 +103,8 @@ function LoadedDesignStudio({
     );
   }
 
-  const queries = [design, document, assets, customization];
-  // A template P2 no longer lists (deactivated) cannot open the editor either.
-  const editorUnavailable =
-    !live ||
-    (design.data !== undefined && lacksTemplate(design.data)) ||
-    (customization.data !== undefined && !template) ||
-    queries.some((query) => isDesignApiUnavailable(query.error));
-  if (editorUnavailable && design.data) return <WorkflowView design={design.data} />;
+  const queries = [design, document, assets, printConfig];
   const failure = queries.find((query) => query.error)?.error;
-  if (isNotFound(design.error) || isUnreadableAddress(design.error) || isNotFound(document.error)) {
-    return <StudioNotFound />;
-  }
   if (failure) {
     return (
       <StudioLoadError
@@ -110,8 +114,10 @@ function LoadedDesignStudio({
       />
     );
   }
-  if (template?.model.kind === "gltf") {
-    return <StudioLoadError message="Mẫu 3D của sản phẩm này chưa được hỗ trợ." />;
+  // Retrying cannot help: the variant has no print configuration until the warehouse adds one.
+  if (config === null) return <StudioLoadError message={STUDIO_LOAD_MESSAGES.noPrintConfig} />;
+  if (config?.template.model.kind === "gltf") {
+    return <StudioLoadError message={STUDIO_LOAD_MESSAGES.model3d} />;
   }
   return <StudioSkeleton />;
 }

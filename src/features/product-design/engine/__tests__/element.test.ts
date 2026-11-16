@@ -13,7 +13,7 @@ import {
   elementOutline,
   hitTest,
   isWrapped,
-  wrapStripMatrix,
+  wrapColumnMatrix,
 } from "../geometry/element";
 import { boundsOf } from "../geometry/polygon";
 import type { PointMm } from "../geometry/types";
@@ -75,6 +75,9 @@ describe("text layout", () => {
     const first = -l.heightMm / 2 + 0.1 * fs + 0.8 * fs;
     expect(l.lines[0]!.baselineMm).toBeCloseTo(first);
     expect(l.lines[1]!.baselineMm - l.lines[0]!.baselineMm).toBeCloseTo(1.2 * fs);
+    // The font's measured reach above and below a baseline, for whatever draws the glyphs.
+    expect(l.ascentMm).toBeCloseTo(0.8 * fs);
+    expect(l.descentMm).toBeCloseTo(0.2 * fs);
   });
 
   it("aligns lines to the left or right edge of the widest line", () => {
@@ -85,7 +88,7 @@ describe("text layout", () => {
     for (const line of right.lines) expect(line.xMm + line.widthMm).toBeCloseTo(right.widthMm / 2);
   });
 
-  it("adds letter spacing between code points only", () => {
+  it("adds letter spacing between graphemes only", () => {
     const l = layoutText(
       textEl("t", { content: "abcd", sizePt: 72, letterSpacingEm: 0.1 }),
       FONTS,
@@ -98,6 +101,20 @@ describe("text layout", () => {
       fakeMeasure,
     );
     expect(single.lines[0]!.widthMm).toBeCloseTo(0.5 * 25.4);
+  });
+
+  it("spaces a grapheme of several code points once, as the canvas's own letterSpacing does", () => {
+    // "ệ" typed as `e` + two combining marks, and a man, woman and girl joined by ZWJs.
+    const stacked = String.fromCodePoint(0x65, 0x323, 0x302);
+    const family = String.fromCodePoint(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467);
+    const l = layoutText(
+      textEl("t", { content: `a${stacked}\nb${family}`, sizePt: 72, letterSpacingEm: 0.1 }),
+      FONTS,
+      fakeMeasure,
+    );
+    // fakeMeasure is 0.5 em per code point; one gap between the two graphemes of each line.
+    expect(l.lines[0]!.widthMm).toBeCloseTo((4 * 0.5 + 0.1) * 25.4);
+    expect(l.lines[1]!.widthMm).toBeCloseTo((6 * 0.5 + 0.1) * 25.4);
   });
 
   it("reports the letter spacing in mm for the renderer", () => {
@@ -351,30 +368,30 @@ describe("arc mapping", () => {
     expect(arcOffsetU(bagFront, placement({ u: 100, scale: 2 }), 15)).toBeCloseTo(130);
   });
 
-  it("puts every strip centre on one radius, each strip turned to its own upright", () => {
+  it("puts every column centre on one radius, each column turned to its own upright", () => {
     const apex = cupBody.toFlat(0, sector.outerRadiusMm);
     const p = placement({ u: 120, v: 40 });
-    const strips = [-40, -10, 0, 25, 40].map((xc) => {
-      const m = wrapStripMatrix(p, cupBody, xc);
+    const columns = [-40, -10, 0, 25, 40].map((xc) => {
+      const m = wrapColumnMatrix(p, cupBody, xc);
       return { m, centre: applyToPoint(m, { x: xc, y: 0 }) };
     });
-    for (const { centre } of strips) {
+    for (const { centre } of columns) {
       expect(Math.hypot(centre.x - apex.x, centre.y - apex.y)).toBeCloseTo(
         sector.outerRadiusMm - 40,
         6,
       );
     }
-    const turns = strips.map(({ m }) => Math.atan2(m[1], m[0]));
+    const turns = columns.map(({ m }) => Math.atan2(m[1], m[0]));
     expect(turns[0]).toBeLessThan(turns[2]!);
     expect(turns[2]).toBeLessThan(turns[4]!);
     expect(turns[2]).toBeCloseTo(cupBody.toFlat(120, 40).uprightRad);
   });
 
-  it("ignores rotation: a wrapped strip band on the cup always reads horizontally", () => {
+  it("ignores rotation: a wrapped band of columns on the cup always reads horizontally", () => {
     const base = placement({ u: 120, v: 40 });
     for (const xc of [-40, 0, 25]) {
-      const rotated = wrapStripMatrix({ ...base, rotationDeg: 70 }, cupBody, xc);
-      expect(rotated).toEqual(wrapStripMatrix(base, cupBody, xc));
+      const rotated = wrapColumnMatrix({ ...base, rotationDeg: 70 }, cupBody, xc);
+      expect(rotated).toEqual(wrapColumnMatrix(base, cupBody, xc));
     }
   });
 
@@ -392,7 +409,7 @@ describe("arc mapping", () => {
     expect(isWrapped({ ...drawingEl("d"), wrap: true }, cupBody)).toBe(false);
   });
 
-  describe("flipped strips", () => {
+  describe("flipped columns", () => {
     const p = placement({ u: 120, v: 40, scale: 1.5 });
     const samples = [
       { x: 0, y: 0 },
@@ -411,15 +428,15 @@ describe("arc mapping", () => {
       expect(elementFlip(drawingEl("d"))).toEqual({ x: false, y: false });
     });
 
-    it("flip.x puts the column at -xc where the unflipped one sits, mirrored within its strip", () => {
+    it("flip.x puts the column at -xc where the unflipped one sits, mirrored about its own centre", () => {
       const xc = -30;
-      const flipped = wrapStripMatrix(p, cupBody, xc, { x: true, y: false });
-      const mirror = wrapStripMatrix(p, cupBody, -xc);
+      const flipped = wrapColumnMatrix(p, cupBody, xc, { x: true, y: false });
+      const mirror = wrapColumnMatrix(p, cupBody, -xc);
       // the left column lands at the right-hand arc position (larger u)
       const centre = applyToPoint(flipped, { x: xc, y: 0 });
       near(centre, applyToPoint(mirror, { x: -xc, y: 0 }));
       expect(cupBody.fromFlat(centre.x, centre.y).u).toBeGreaterThan(p.u);
-      // a flipped strip is the mirror strip with its x axis reversed: flipped(x, y) = mirror(-x, y)
+      // a flipped column is the mirror column with its x axis reversed: flipped(x, y) = mirror(-x, y)
       for (const { x, y } of samples) {
         near(applyToPoint(flipped, { x: xc + x, y }), applyToPoint(mirror, { x: -xc - x, y }));
       }
@@ -428,10 +445,10 @@ describe("arc mapping", () => {
       expect(cupBody.fromFlat(tip.x, tip.y).u).toBeLessThan(cupBody.fromFlat(centre.x, centre.y).u);
     });
 
-    it("flip.y points the strip's y axis the opposite way", () => {
+    it("flip.y points the column's y axis the opposite way", () => {
       const xc = 10;
-      const plain = wrapStripMatrix(p, cupBody, xc);
-      const flipped = wrapStripMatrix(p, cupBody, xc, { x: false, y: true });
+      const plain = wrapColumnMatrix(p, cupBody, xc);
+      const flipped = wrapColumnMatrix(p, cupBody, xc, { x: false, y: true });
       expect(flipped[0]).toBeCloseTo(plain[0]);
       expect(flipped[1]).toBeCloseTo(plain[1]);
       expect(flipped[2]).toBeCloseTo(-plain[2]);

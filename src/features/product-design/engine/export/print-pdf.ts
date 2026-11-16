@@ -6,11 +6,8 @@ import type { PrintAreaCode } from "../template/schema";
 import { pathToPdf } from "./pdf-path";
 import { A4_HEIGHT_MM, A4_WIDTH_MM } from "./spec-sheet";
 
-/**
- * A horizontal slice of a page's raster, as a PNG: `heightPx` rows of its own, then `overlapPx`
- * rows that the next band draws over again (`BAND_OVERLAP_PX`, none for the last band).
- */
-export type PrintBand = { png: Uint8Array; heightPx: number; overlapPx?: number };
+/** A horizontal slice of a page's raster, as a PNG of its own `heightPx` rows (`printBands`). */
+export type PrintBand = { png: Uint8Array; heightPx: number };
 
 /** One print area ready for the press: its raster, the page size, and the die-cut line over it. */
 export type PrintPage = {
@@ -63,8 +60,8 @@ async function addPngPage(
 
 /**
  * A page `widthMm × heightMm` (in pt) with the bands stacked over it from the top, each as wide as
- * the page and as tall as its share of the rows: the page and its raster are those of one PNG. A
- * band's overlap rows reach into the next band's share, which is drawn after it, over them.
+ * the page and as tall as its share of the rows: the page and its raster are those of one PNG.
+ * Bands meet edge to edge and never cover each other, so every row is painted once (`BandRows`).
  */
 async function addBandedPage(
   pdf: PdfDocument,
@@ -78,13 +75,12 @@ async function addBandedPage(
   let top = 0;
   for (const band of bands) {
     const share = (height * band.heightPx) / rows;
-    const drawn = (height * (band.heightPx + (band.overlapPx ?? 0))) / rows;
     // PDF y grows upwards: a band's bottom edge is the page height less its top and its height.
     page.drawImage(await pdf.embedPng(band.png), {
       x: 0,
-      y: height - top - drawn,
+      y: height - top - share,
       width,
-      height: drawn,
+      height: share,
     });
     top += share;
   }

@@ -13,7 +13,7 @@ import { describeDesignError } from "../../errors";
 
 /** The oversize refusal is about the design, not a file: say what the customer can do about it. */
 function saveErrorReason(error: unknown) {
-  return hasErrorCode(error, "PAYLOAD_TOO_LARGE")
+  return hasErrorCode(error, "REQUEST_BODY_TOO_LARGE")
     ? "Thiết kế quá phức tạp để lưu. Hãy bớt chi tiết rồi thử lại."
     : describeDesignError(error);
 }

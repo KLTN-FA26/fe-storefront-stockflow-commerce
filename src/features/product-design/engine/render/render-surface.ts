@@ -15,8 +15,9 @@ export function surfacePx(flatBounds: RectMm, pxPerMm: number): { width: number;
  * Paints composed ops onto a canvas sized to `flatBounds` at `env.pxPerMm`, or to the `rows` of
  * that raster only (a print band: the canvas is as tall as the band and the ops are shifted up by
  * its top). The canvas is only resized when its size changes (assigning a size reallocates the
- * bitmap, which would cost a frame while dragging) and is cleared before every paint. Does nothing
- * where the canvas has no 2D context (an unsupported browser, a context lost, a test DOM).
+ * bitmap, which would cost a frame while dragging) and is cleared before every paint. The env learns
+ * which pixels the canvas holds (`targetPx`), so an exact warp remaps no more. Does nothing where
+ * the canvas has no 2D context (an unsupported browser, a context lost, a test DOM).
  */
 export function renderSurface(
   canvas: HTMLCanvasElement,
@@ -35,6 +36,7 @@ export function renderSurface(
 
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, width, height);
-  if (rows !== undefined) ctx.setTransform(1, 0, 0, 1, 0, -rows.y0Px);
-  execute(ops, ctx, env);
+  const y0Px = rows?.y0Px ?? 0;
+  if (rows !== undefined) ctx.setTransform(1, 0, 0, 1, 0, -y0Px);
+  execute(ops, ctx, { ...env, targetPx: { x: 0, y: y0Px, width, height } });
 }

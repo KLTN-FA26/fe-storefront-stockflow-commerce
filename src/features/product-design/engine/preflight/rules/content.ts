@@ -1,8 +1,8 @@
 import type { DesignElement } from "../../document/schema";
 import type { PreflightInput, PreflightIssue, SurfaceScope } from "../types";
 
-// BR-DSG-001 (BE): fonts must be allowed and loadable. BR-06 (docs 12 §6): uploaded images pass a
-// basic format and size check. EMPTY_DESIGN and TOO_THIN have no BR (spec §8).
+// BR-DSG-001 (BE): fonts must be loadable. BR-06 (docs 12 §6): uploaded images pass a
+// basic format and size check. EMPTY_DESIGN has BR-05 (at least one element); TOO_THIN is a note (spec §7).
 
 /** A thinner line fills in or breaks up when printed. */
 const MIN_LINE_MM = 0.25;
@@ -40,14 +40,8 @@ const at = (scope: SurfaceScope, el: DesignElement) => ({
 function fontIssues(scope: SurfaceScope, el: DesignElement): PreflightIssue[] {
   if (el.type !== "text") return [];
 
-  const { template, fontStatus } = scope.input;
-  // `null` and an empty list both mean no restriction (every registered font is allowed).
-  const { allowedFontCodes } = template;
-  const listed =
-    allowedFontCodes === null ||
-    allowedFontCodes.length === 0 ||
-    allowedFontCodes.includes(el.fontCode);
-  if (listed && fontStatus[el.fontCode] !== "error") return [];
+  // Only a font that did not load fails: the allow-list is later scope (docs 01 §4.10 step 6).
+  if (scope.input.fontStatus[el.fontCode] !== "error") return [];
   return [
     {
       ruleId: "FONT_NOT_ALLOWED",
@@ -103,7 +97,7 @@ function thinIssues(scope: SurfaceScope, el: DesignElement): PreflightIssue[] {
   return [
     {
       ruleId: "TOO_THIN",
-      level: "warning",
+      level: "note",
       message: "Nét hoặc chữ quá mảnh để in rõ.",
       ...at(scope, el),
     },
@@ -116,17 +110,15 @@ export function elementContentIssues(scope: SurfaceScope, el: DesignElement): Pr
 }
 
 /**
- * `EMPTY_DESIGN`: nothing visible and no background on any surface. A design on one face of a
- * bag is not empty, so this is a document-level issue with no surface.
+ * `EMPTY_DESIGN`: no visible image, text or drawing on any surface; a background (colour or
+ * pattern) alone is not a design. A design on one face of a bag is not empty, so this is a
+ * document-level issue with no surface.
  */
 export function emptyDesignIssues(input: PreflightInput): PreflightIssue[] {
-  const hasContent = input.surfaces.order.some((code) => {
-    const content = input.document.surfaces[code];
-    return (
-      content !== undefined &&
-      (content.background.kind !== "none" || content.elements.some((el) => !el.hidden))
-    );
-  });
+  // docs 12 §3 (BR-05): a design has at least one element — an image, a text or a drawing.
+  const hasContent = input.surfaces.order.some(
+    (code) => input.document.surfaces[code]?.elements.some((el) => !el.hidden) ?? false,
+  );
   if (hasContent) return [];
   return [{ ruleId: "EMPTY_DESIGN", level: "fail", message: "Thiết kế chưa có nội dung." }];
 }

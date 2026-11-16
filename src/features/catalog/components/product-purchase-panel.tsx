@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { MessageCircle, PenTool } from "lucide-react";
+import { MessageCircle } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { AvailabilityBadge } from "@/components/storefront/availability-badge";
@@ -17,8 +18,8 @@ interface ProductPurchasePanelProps {
   onSkuChange: (sku: string) => void;
   /** Stock per SKU: the richer /availability answer, else the detail's own IN/OUT. */
   availabilityOf: (sku: string) => Availability | undefined;
-  /** The design launcher for the chosen SKU; null for a product that cannot be customized. */
-  designHref: string | null;
+  /** The design feature's entry for the chosen SKU (composed by the page); absent for a product that cannot be customized. */
+  designEntry?: ReactNode;
   /** Where the customer talks to Sales about this product. */
   chatHref: string;
 }
@@ -34,7 +35,7 @@ export function ProductPurchasePanel({
   sku,
   onSkuChange,
   availabilityOf,
-  designHref,
+  designEntry,
   chatHref,
 }: ProductPurchasePanelProps) {
   const availability = availabilityOf(sku);
@@ -61,18 +62,11 @@ export function ProductPurchasePanel({
       ) : null}
 
       <div className="space-y-3">
-        <div className={designHref ? "grid gap-3 sm:grid-cols-2" : "grid gap-3"}>
-          {designHref ? (
-            <Button asChild className="min-h-11 rounded-[var(--r-md)]">
-              <Link href={designHref}>
-                <PenTool className="size-4" aria-hidden="true" />
-                Bắt đầu thiết kế
-              </Link>
-            </Button>
-          ) : null}
+        <div className={designEntry ? "grid gap-3 sm:grid-cols-2" : "grid gap-3"}>
+          {designEntry ?? null}
           <Button
             asChild
-            variant={designHref ? "secondary" : "default"}
+            variant={designEntry ? "secondary" : "default"}
             className="min-h-11 rounded-[var(--r-md)]"
           >
             <Link href={chatHref}>
@@ -82,7 +76,7 @@ export function ProductPurchasePanel({
           </Button>
         </div>
         <p className="bg-bg-subtle text-ink-secondary rounded-[var(--r-md)] p-3 text-sm">
-          {designHref
+          {designEntry
             ? "Thiết kế in theo mẫu của bạn; khi bản thiết kế được duyệt, gửi yêu cầu báo giá để Sale báo giá theo số thùng bạn cần."
             : "Giá không hiển thị trên sàn: Sale báo giá theo số thùng bạn cần và chốt đơn với bạn qua hợp đồng."}
         </p>

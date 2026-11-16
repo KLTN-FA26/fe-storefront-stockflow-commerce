@@ -2,7 +2,7 @@
 
 import { Command as CommandPrimitive } from "cmdk";
 import { ChevronsUpDown, Search } from "lucide-react";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +12,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { cn } from "@/lib/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 import type { FontOption } from "./text-actions";
@@ -31,32 +32,46 @@ export function FontCombobox({
   value,
   options,
   onChange,
+  inline = false,
 }: {
   label: string;
   value: string;
   options: readonly FontOption[];
   onChange: (code: string) => void;
+  /** For a toolbar: the label is for assistive technology only, the button is 36 px tall and the
+   * padding around it (a click there opens the list) makes the 44 px target. */
+  inline?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
   const labelId = useId();
   const valueId = useId();
   const status = useFontStatus(open ? options.map((option) => option.code) : [value]);
   const selected = options.find((option) => option.code === value);
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <span id={labelId} className="text-ink-secondary text-xs">
+    <div
+      className={cn("flex flex-col gap-1.5", inline && "cursor-pointer py-1")}
+      onClick={(event) => {
+        if (inline && event.target === event.currentTarget) trigger.current?.click();
+      }}
+    >
+      <span id={labelId} className={cn("text-ink-secondary text-xs", inline && "sr-only")}>
         {label}
       </span>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
+            ref={trigger}
             type="button"
             variant="outline"
             role="combobox"
             aria-expanded={open}
             aria-labelledby={`${labelId} ${valueId}`}
-            className="border-border-default bg-bg-surface text-ink-primary hover:bg-bg-subtle h-11 w-full justify-between rounded-[var(--r-md)] px-3 font-normal"
+            className={cn(
+              "border-border-default bg-bg-surface text-ink-primary hover:bg-bg-subtle justify-between rounded-[var(--r-md)] px-3 font-normal",
+              inline ? "h-9 w-44" : "h-11 w-full",
+            )}
           >
             <span id={valueId} className="truncate" style={{ fontFamily: selected?.family }}>
               {selected?.label ?? value}
@@ -111,7 +126,7 @@ export function FontCombobox({
         </PopoverContent>
       </Popover>
       {!open && status[value] === "error" ? (
-        <p className="text-danger text-xs">{ERROR_HINT}</p>
+        <p className={cn("text-danger text-xs", inline && "sr-only")}>{ERROR_HINT}</p>
       ) : null}
     </div>
   );

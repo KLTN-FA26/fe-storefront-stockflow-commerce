@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import { hitTest, ProductViewer } from "../../engine";
+import { Model3dStatusLine, useModel3dStatus } from "./model3d-status";
 import { useStudio } from "./studio-context";
 import { useSurfaceRenderer } from "./use-surface-renderer";
 import { ViewerTitle, ViewerToolbar } from "./viewer-toolbar";
@@ -29,16 +30,28 @@ const CLICK_SLOP_PX = 5;
 export function Viewer3D({
   onUnavailable,
   fullscreenTarget,
+  compact = false,
 }: {
   onUnavailable: () => void;
   fullscreenTarget: RefObject<HTMLElement | null>;
+  /** In the corner card: no title bar, the controls float over the model's top-left corner. */
+  compact?: boolean;
 }) {
-  const { editor, surfaces, template, sizer, viewerRef: studioViewerRef } = useStudio();
+  const {
+    editor,
+    surfaces,
+    template,
+    sizer,
+    printConfig,
+    viewerRef: studioViewerRef,
+  } = useStudio();
+  const model3d = printConfig.model3d;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<ProductViewer | null>(null);
   const pressedAt = useRef<{ x: number; y: number } | null>(null);
   const [autoRotate, setAutoRotate] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const { message: modelMessage, report: reportModel3d } = useModel3dStatus(editor, model3d);
   const giveUp = useEffectEvent(onUnavailable);
 
   const textures = useSurfaceRenderer({
@@ -51,10 +64,14 @@ export function Viewer3D({
     const canvas = canvasRef.current;
     if (!canvas) return;
     let viewer: ProductViewer | undefined;
+    let offModel3d: (() => void) | undefined;
     try {
       viewer = new ProductViewer(canvas);
-      viewer.setModel(template, surfaces);
+      // Before `setModel`: it says "loading" at once, inside the call.
+      offModel3d = viewer.on("model3d", ({ status }) => reportModel3d(status));
+      viewer.setModel(template, surfaces, model3d);
     } catch {
+      offModel3d?.();
       viewer?.dispose();
       giveUp();
       return;
@@ -71,13 +88,14 @@ export function Viewer3D({
     });
     return () => {
       offSurface();
+      offModel3d?.();
       offLost();
       offError();
       viewerRef.current = null;
       if (studioViewerRef.current === viewer) studioViewerRef.current = null;
       viewer.dispose();
     };
-  }, [editor, template, surfaces, textures, studioViewerRef]);
+  }, [editor, template, model3d, reportModel3d, surfaces, textures, studioViewerRef]);
 
   useEffect(() => {
     const onChange = () => setFullscreen(document.fullscreenElement === fullscreenTarget.current);
@@ -109,20 +127,22 @@ export function Viewer3D({
     editor.select(content ? hitTest(content, surface, sizer, point) : null);
   };
 
+  const toolbar = (
+    <ViewerToolbar
+      autoRotate={autoRotate}
+      onAutoRotate={(on) => {
+        setAutoRotate(on);
+        viewerRef.current?.setAutoRotate(on);
+      }}
+      onResetView={() => viewerRef.current?.resetView()}
+      fullscreen={fullscreen}
+      onFullscreen={toggleFullscreen}
+    />
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ViewerTitle>
-        <ViewerToolbar
-          autoRotate={autoRotate}
-          onAutoRotate={(on) => {
-            setAutoRotate(on);
-            viewerRef.current?.setAutoRotate(on);
-          }}
-          onResetView={() => viewerRef.current?.resetView()}
-          fullscreen={fullscreen}
-          onFullscreen={toggleFullscreen}
-        />
-      </ViewerTitle>
+      {!compact && <ViewerTitle>{toolbar}</ViewerTitle>}
       <div className="relative min-h-0 flex-1">
         <canvas
           ref={canvasRef}
@@ -132,6 +152,12 @@ export function Viewer3D({
           onPointerDown={onPointerDown}
           onClick={onClick}
         />
+        {compact && (
+          <div className="bg-bg-surface border-border-default absolute top-2 left-2 rounded-[var(--r-md)] border shadow-[var(--sh-sm)]">
+            {toolbar}
+          </div>
+        )}
+        <Model3dStatusLine message={modelMessage} />
       </div>
     </div>
   );

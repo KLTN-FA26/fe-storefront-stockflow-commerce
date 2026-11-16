@@ -53,10 +53,9 @@ Do not introduce back-office/admin styling, caramel legacy theme, or one-off hex
 - Desktop layout: large viewer/canvas with side tools or report panel.
 - Desktop only (decision 2026-10-26): the studio and its launcher (`/design/new`, `/design/[id]`) open on a computer with a window ≥ 1024 px; phones, tablets (iPad included) and narrower windows get the desktop-only notice (`DesktopOnlyGate`). The mobile rules of this file (mobile-first, stacked sections, sheets/drawers) stay right for the rest of the storefront but do not apply to the Module 12 studio: do not add a phone or tablet studio layout. The `/design` list stays mobile-first.
 - Preflight result must be visible.
-- `Fail` blocks confirm.
-- `Warning` requires customer risk confirmation before production.
-- Add to cart is enabled only when Design status is `Confirmed`.
-- Variant changes must trigger a recheck warning because print area can change.
+- Preflight is Pass or Fail; Fail blocks submitting for review.
+- A design is bound to one variant; its print configuration decides the dieline.
+- Only an `APPROVED` design can be quoted (quote requests come with part D of the Module 12 work).
 - 2D/3D preview must disclose that real print color can differ.
 
 ## Module 13 — Catalog

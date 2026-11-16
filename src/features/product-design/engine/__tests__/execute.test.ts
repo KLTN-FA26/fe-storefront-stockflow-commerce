@@ -1,13 +1,15 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 
-import { PATTERN_IDS, type ImageElement, type Stroke } from "../document/schema";
-import { applyToPoint, IDENTITY, type Mat2D } from "../geometry/affine";
+import { PATTERN_IDS, type Stroke, type TextElement } from "../document/schema";
+import { applyToPoint, type Mat2D } from "../geometry/affine";
 import type { PathCmd, RectMm } from "../geometry/types";
 import { strokePolygon } from "../render/brush";
 import { compose } from "../render/compose";
 import { execute, type RenderEnv } from "../render/execute";
-import type { ComposeTarget, DrawOp } from "../render/ops";
+import { fontCss, fontSizePx, type TextMeasurer } from "../render/fonts";
+import { graphemes } from "../render/graphemes";
+import type { DrawOp } from "../render/ops";
 import { drawPattern } from "../render/patterns";
 import { renderSurface } from "../render/render-surface";
 import { layoutText } from "../render/text-layout";
@@ -16,7 +18,6 @@ import {
   drawingEl,
   fakeMeasure,
   FONTS,
-  imageEl,
   recordingCtx,
   sizer,
   textEl,
@@ -222,6 +223,9 @@ describe("execute: text", () => {
       fakeMeasure,
     );
     const SPACING_MM = 2.54;
+    /** A context width that is the sum of each grapheme's `width`: no kerning. */
+    const additive = (width: (grapheme: string) => number) => (text: string) =>
+      graphemes(text).reduce((sum, g) => sum + width(g), 0);
 
     it("lets a context that supports letterSpacing space the glyphs", () => {
       expect(spaced.letterSpacingMm).toBeCloseTo(SPACING_MM);
@@ -239,19 +243,63 @@ describe("execute: text", () => {
       expect(methodsOf(rec, "measureText")).toHaveLength(0);
     });
 
-    it("draws code point by code point, advancing by the measured width plus the spacing", () => {
-      const rec = recordingCtx({ glyphWidth: (text) => (text === "😀" ? 5 : 3) });
+    it("keeps a combining mark on its letter when it places the glyphs itself", () => {
+      // "ệ" typed as `e` + two combining marks: one grapheme, drawn and spaced as one.
+      const stacked = String.fromCodePoint(0x65, 0x323, 0x302);
+      const layout = layoutText(
+        textEl("t", { content: `a${stacked}b`, sizePt: 72, letterSpacingEm: 0.1 }),
+        FONTS,
+        fakeMeasure,
+      );
+      const rec = recordingCtx({ glyphWidth: additive((g) => (g === stacked ? 4 : 3)) });
+      execute([textOp({ layout })], rec.ctx, makeEnv().env);
+      const [line] = layout.lines;
+      const step = (width: number) => width + layout.letterSpacingMm;
+      expect(methodsOf(rec, "fillText")).toEqual([
+        ["fillText", "a", line!.xMm, line!.baselineMm],
+        ["fillText", stacked, line!.xMm + step(3), line!.baselineMm],
+        ["fillText", "b", line!.xMm + step(3) + step(4), line!.baselineMm],
+      ]);
+    });
+
+    it("places a kerned pair where the shaped line puts it, and ends where the line measures", () => {
+      // measureText("AV") is 0.6 narrower than "A" and "V" side by side.
+      const kerned = (text: string) => 3 * text.length - 0.6 * (text.split("AV").length - 1);
+      const layout = layoutText(
+        textEl("t", { content: "AVA", sizePt: 72, letterSpacingEm: 0.1 }),
+        FONTS,
+        fakeMeasure,
+      );
+      const rec = recordingCtx({ glyphWidth: kerned });
+      execute([textOp({ layout })], rec.ctx, makeEnv().env);
+      const [line] = layout.lines;
+      const spacing = layout.letterSpacingMm;
+      const drawn = methodsOf(rec, "fillText");
+      expect(drawn.map(([, text]) => text)).toEqual(["A", "V", "A"]);
+      const xs = drawn.map(([, , x]) => x as number);
+      // "V" at measure("AV") − measure("V") = 2.4, not 3, then one spacing.
+      [0, 2.4 + spacing, 5.4 + 2 * spacing].forEach((x, i) => {
+        expect(xs[i]).toBeCloseTo(line!.xMm + x, 9);
+      });
+      expect(xs[2]! + kerned("A")).toBeCloseTo(line!.xMm + kerned("AVA") + 2 * spacing, 9);
+    });
+
+    it("draws grapheme by grapheme, advancing by the measured width plus the spacing", () => {
+      const rec = recordingCtx({ glyphWidth: additive((g) => (g === "😀" ? 5 : 3)) });
       execute([textOp({ layout: spaced })], rec.ctx, makeEnv().env);
       expect(rec.sets.letterSpacing).toBeUndefined();
       const [first, second] = spaced.lines;
       const step = (width: number) => width + spaced.letterSpacingMm;
-      expect(methodsOf(rec, "fillText")).toEqual([
-        ["fillText", "a", first!.xMm, first!.baselineMm],
-        ["fillText", "b", first!.xMm + step(3), first!.baselineMm],
-        ["fillText", "a", second!.xMm, second!.baselineMm],
-        ["fillText", "😀", second!.xMm + step(3), second!.baselineMm],
-        ["fillText", "b", second!.xMm + step(3) + step(5), second!.baselineMm],
-      ]);
+      const expected = [
+        ["a", first!.xMm, first!.baselineMm],
+        ["b", first!.xMm + step(3), first!.baselineMm],
+        ["a", second!.xMm, second!.baselineMm],
+        ["😀", second!.xMm + step(3), second!.baselineMm],
+        ["b", second!.xMm + step(3) + step(5), second!.baselineMm],
+      ] as const;
+      const drawn = methodsOf(rec, "fillText");
+      expect(drawn.map(([, text, , y]) => [text, y])).toEqual(expected.map(([t, , y]) => [t, y]));
+      drawn.forEach(([, , x], i) => expect(x).toBeCloseTo(expected[i]![1], 9));
     });
 
     it("strokes the outline of a spaced line before filling any of its glyphs", () => {
@@ -432,6 +480,15 @@ describe("execute: drawings", () => {
     expect([...cache.keys()]).toEqual(["drawing:pen@4", "drawing:pen@8"]);
   });
 
+  it("keeps no layer at a passing resolution (a zoom frame): the next paint asks for another", () => {
+    const cache = new Map<string, CanvasImageSource>();
+    const { env, layers } = makeEnv({ layerCache: cache, transientResolution: true });
+    execute([drawingOp([draw, erase])], recordingCtx().ctx, env);
+    execute([drawingOp([draw, erase])], recordingCtx().ctx, env);
+    expect(layers).toHaveLength(2);
+    expect(cache.size).toBe(0);
+  });
+
   it("creates no layer for a drawing without strokes or points", () => {
     const rec = recordingCtx();
     const { env, layers } = makeEnv();
@@ -442,307 +499,283 @@ describe("execute: drawings", () => {
     execute([drawingOp([{ ...draw, points: [] }])], rec.ctx, env2);
     expect(methodsOf(layers2[0]!.rec, "fill")).toHaveLength(0);
   });
+
+  it("keeps at most 64 layers and drops the least recently used first", () => {
+    const cache = new Map<string, CanvasImageSource>();
+    const { env } = makeEnv({ layerCache: cache });
+    const box = { x: -2, y: -2, width: 26, height: 12 };
+    const paint = (id: string) =>
+      execute(
+        [{ op: "drawing", id, matrix: placed, box, strokes: [draw], opacity: 1 }],
+        recordingCtx().ctx,
+        env,
+      );
+    const keyOf = (id: string) => `drawing:${id}@4`;
+
+    for (let i = 0; i < 64; i++) paint(`d${i}`);
+    expect(cache.size).toBe(64);
+    paint("d0"); // a hit: d0 is now the most recently used and d1 the least
+    paint("d64");
+    expect(cache.size).toBe(64);
+    expect(cache.has(keyOf("d0"))).toBe(true);
+    expect(cache.has(keyOf("d1"))).toBe(false);
+    expect(cache.has(keyOf("d64"))).toBe(true);
+    paint("d65");
+    expect(cache.has(keyOf("d2"))).toBe(false);
+    expect(cache.has(keyOf("d0"))).toBe(true);
+    expect(cache.size).toBe(64);
+  });
 });
 
-describe("execute: wrapped (warped) elements", () => {
-  const warpedOf = (el: ReturnType<typeof imageEl> | ReturnType<typeof textEl>, target = "print") =>
+describe("execute: text along the arc", () => {
+  type ArcTextOp = Extract<DrawOp, { op: "arcText" }>;
+  const outline = { color: "#FFFFFF" as const, widthMm: 0.4 };
+  /** The op `compose` makes of an opaque text bent around the cup, measured by `measure`. */
+  const arcOp = (over: Partial<TextElement> = {}, measure: TextMeasurer = fakeMeasure): ArcTextOp =>
     compose({
       surface: cupBody,
-      content: { background: { kind: "none" }, elements: [el] },
-      target: target as ComposeTarget,
+      content: {
+        background: { kind: "none" },
+        elements: [
+          textEl("t", {
+            wrap: true,
+            content: "Ly\nCà phê",
+            placement: { u: 140, v: 60, rotationDeg: 0, scale: 1.5 },
+            ...over,
+          }),
+        ],
+      },
+      target: "print",
       material: "paper-white",
       sizer,
       fonts: FONTS,
-      measure: fakeMeasure,
-    }).find((o): o is Extract<DrawOp, { op: "warped" }> => o.op === "warped")!;
+      measure,
+    }).find((o): o is ArcTextOp => o.op === "arcText")!;
 
-  const placement = { u: 140, v: 60, rotationDeg: 0, scale: 1 };
-  const flipped = () => warpedOf(imageEl("img", { wrap: true, flipX: true, placement }));
-
-  it("does not flip a flipped wrapped image twice", () => {
-    const op = flipped();
+  it("strokes every glyph before filling any, each through its own matrix only", () => {
+    const op = arcOp({ outline });
+    const { glyphs } = op;
     const rec = recordingCtx();
-    const { env, layers } = makeEnv({}, { "asset-1": photo });
-    execute([op], rec.ctx, env);
+    execute([op], rec.ctx, makeEnv().env);
 
-    // The source carries the rigid, flip-bearing placement; the strips already carry the flip.
-    const matrices = [...rec.calls, ...layers.flatMap((l) => l.rec.calls)]
-      .filter(([m]) => m === "transform" || m === "setTransform")
-      .map(([, ...args]) => args);
-    expect(matrices).not.toContainEqual([...op.source.matrix]);
-    expect(op.strips.every((s) => s.matrix.some((v, i) => v !== op.source.matrix[i]))).toBe(true);
-
-    // The layer is drawn only through each strip matrix, one transform per strip, in order.
-    expect(methodsOf(rec, "transform")).toEqual(op.strips.map((s) => ["transform", ...s.matrix]));
-    expect(methodsOf(rec, "drawImage")).toHaveLength(op.strips.length);
-    expect(methodsOf(rec, "drawImage").every(([, src]) => src === layers[0]!.source)).toBe(true);
-  });
-
-  it("rasterises the source into the layer in its local frame, without the element matrix", () => {
-    const op = flipped();
-    const { env, layers } = makeEnv({}, { "asset-1": photo });
-    execute([op], recordingCtx().ctx, env);
-    expect(layers).toHaveLength(1);
-    const layer = layers[0]!;
-    expect([layer.widthPx, layer.heightPx]).toEqual([240, 160]);
-    expect(layer.rec.calls).toEqual([
-      ["scale", 4, 4],
-      ["translate", 30, 20],
-      ["drawImage", photo, -30, -20, 60, 40],
+    expect(glyphs).toHaveLength(8);
+    const perGlyph = (draw: string) => glyphs.flatMap(() => ["save", "transform", draw, "restore"]);
+    expect(rec.calls.map(([m]) => m)).toEqual([
+      "save",
+      "scale",
+      "save",
+      ...perGlyph("strokeText"),
+      ...perGlyph("fillText"),
+      "restore",
+      "restore",
+    ]);
+    const through = (draw: string) =>
+      glyphs.flatMap((g) => [
+        ["transform", ...g.matrix],
+        [draw, g.text, g.xMm, g.baselineMm],
+      ]);
+    expect(rec.calls.filter(([m]) => m !== "save" && m !== "restore" && m !== "scale")).toEqual([
+      ...through("strokeText"),
+      ...through("fillText"),
     ]);
   });
 
-  it("draws each strip widened by one device pixel, clamped to the source columns", () => {
-    const op = flipped();
+  it("styles the glyphs as the rigid text is styled, its letter spacing in their positions only", () => {
+    const op = arcOp({ outline, letterSpacingEm: 0.1 });
+    const rec = recordingCtx({ letterSpacing: true });
+    execute([op], rec.ctx, makeEnv().env);
+    const { layout } = op.source;
+    expect(rec.sets.font).toEqual([fontCss(layout, layout.fontSizeMm)]);
+    expect(rec.sets.textBaseline).toEqual(["alphabetic"]);
+    expect(rec.sets.letterSpacing).toEqual(["0px"]);
+    expect(rec.sets.globalAlpha).toEqual([1]);
+    expect(rec.sets.fillStyle).toEqual(["#000000"]);
+    expect(rec.sets.strokeStyle).toEqual(["#FFFFFF"]);
+    // The fill covers the inner half of a centred stroke, so the visible outline is `widthMm`.
+    expect(rec.sets.lineWidth).toEqual([0.8]);
+    expect(rec.sets.lineJoin).toEqual(["round"]);
+
+    const rigid = recordingCtx();
+    execute([op.source], rigid.ctx, makeEnv().env);
+    for (const key of [
+      "font",
+      "textBaseline",
+      "fillStyle",
+      "strokeStyle",
+      "lineWidth",
+      "lineJoin",
+    ]) {
+      expect(rec.sets[key]).toEqual(rigid.sets[key]);
+    }
+  });
+
+  it("only fills a text without an outline", () => {
     const rec = recordingCtx();
-    const { env } = makeEnv({}, { "asset-1": photo });
-    execute([op], rec.ctx, env);
-    const draws = methodsOf(rec, "drawImage");
-    const mid = op.strips[10]!;
-    const devicePx = 1 / (4 * Math.hypot(mid.matrix[0], mid.matrix[1]));
-    const [, , sx, sy, sw, sh, dx, dy, dw, dh] = draws[10]!;
-    expect(dx).toBeCloseTo(mid.srcX - devicePx / 2, 9);
-    expect(dw).toBeCloseTo(mid.srcWidth + devicePx, 9);
-    expect(sx).toBeCloseTo(((dx as number) + 30) * 4, 9);
-    expect(sw).toBeCloseTo((dw as number) * 4, 9);
-    expect([sy, sh, dy, dh]).toEqual([0, 160, -20, 40]);
-
-    const first = draws[0]!;
-    const last = draws.at(-1)!;
-    expect(first[6]).toBe(-30);
-    expect(first[2]).toBe(0);
-    expect((last[6] as number) + (last[8] as number)).toBeCloseTo(30, 9);
+    execute([arcOp()], rec.ctx, makeEnv().env);
+    expect(methodsOf(rec, "strokeText")).toHaveLength(0);
+    expect(methodsOf(rec, "fillText")).toHaveLength(8);
+    expect(rec.sets.lineWidth).toBeUndefined();
   });
 
-  it("rasterises a wrapped text once into a padded layer", () => {
-    const op = warpedOf(
-      textEl("t", { wrap: true, placement, outline: { color: "#FFFFFF", widthMm: 0.4 } }),
-    );
+  it("draws an opaque text straight onto the context: no layer, no image, no measuring", () => {
     const rec = recordingCtx();
-    const { env, layers } = makeEnv();
-    execute([op], rec.ctx, env);
-    expect(layers).toHaveLength(1);
-    const layer = layers[0]!;
-    expect(methodsOf(layer.rec, "fillText").length).toBeGreaterThan(0);
-    expect(methodsOf(layer.rec, "strokeText").length).toBeGreaterThan(0);
-    expect(methodsOf(layer.rec, "transform")).toHaveLength(0);
-    // Room above and below for stacked Vietnamese diacritics and the outline.
-    const { widthMm, heightMm } = (op.source as Extract<DrawOp, { op: "text" }>).layout;
-    expect(layer.widthPx).toBe(Math.ceil(widthMm * 4));
-    expect(layer.heightPx).toBeGreaterThan(Math.ceil(heightMm * 4));
+    const { env, layers } = makeEnv({ layerCache: new Map() });
+    execute([arcOp({ outline })], rec.ctx, env);
+    expect(layers).toHaveLength(0);
+    expect(env.layerCache?.size).toBe(0);
+    expect(methodsOf(rec, "drawImage")).toHaveLength(0);
+    expect(methodsOf(rec, "measureText")).toHaveLength(0);
   });
 
-  const rasterisedPhoto = (layers: Layer[]) =>
-    layers.filter((l) => methodsOf(l.rec, "drawImage").some(([, image]) => image === photo));
-
-  it("reuses the layer when the element moves or fades, keyed without its placement", () => {
-    const op = flipped();
-    const cache = new Map<string, CanvasImageSource>();
-    const { env, layers } = makeEnv({ layerCache: cache }, { "asset-1": photo });
-    execute([op], recordingCtx().ctx, env);
-    execute([op], recordingCtx().ctx, env);
-    const { matrix: _matrix, opacity: _opacity, ...stable } = op.source;
-    expect([...cache.keys()]).toEqual([`${JSON.stringify(stable)}@4`]);
-    expect(layers).toHaveLength(1);
-
-    const moved = warpedOf(
-      imageEl("img", { wrap: true, flipX: true, placement: { ...placement, u: 170, v: 50 } }),
-    );
-    expect(moved.source.matrix).not.toEqual(op.source.matrix);
-    execute([moved], recordingCtx().ctx, env);
-    const faded = warpedOf(imageEl("img", { wrap: true, flipX: true, placement, opacity: 0.5 }));
-    execute([faded], recordingCtx().ctx, env);
-    expect(rasterisedPhoto(layers)).toHaveLength(1);
-    expect(cache.size).toBe(1);
-  });
-
-  it("rasterises again for another resolution or picture, and shares a layer between equal ones", () => {
-    const op = flipped();
-    const cache = new Map<string, CanvasImageSource>();
-    const other = { name: "other" } as unknown as CanvasImageSource;
-    const { env, layers } = makeEnv({ layerCache: cache }, { "asset-1": photo, "asset-2": other });
-    const wrapped = (over: Partial<ImageElement>) =>
-      warpedOf(imageEl("img", { wrap: true, flipX: true, placement, ...over }));
-
-    execute([op], recordingCtx().ctx, env);
-    execute([op], recordingCtx().ctx, { ...env, pxPerMm: 8 });
-    execute([wrapped({ assetId: "asset-2" })], recordingCtx().ctx, env);
-    execute([wrapped({ placement: { ...placement, scale: 2 } })], recordingCtx().ctx, env);
-    // A scale-2 element at 4 px/mm is rasterised at 8 px/mm, like the first one at 8 px/mm.
-    expect(layers.map((l) => l.widthPx)).toEqual([240, 480, 240]);
-    expect(cache.size).toBe(3);
-  });
-
-  describe("layer cache bound", () => {
-    /** A tiny wrapped image: the cache cares about its key, so only the asset id differs. */
-    const tiny = (assetId: string): Extract<DrawOp, { op: "warped" }> => ({
-      op: "warped",
-      source: {
-        op: "image",
-        matrix: IDENTITY,
-        box: { x: -5, y: -5, width: 10, height: 10 },
-        assetId,
-        opacity: 1,
-      },
-      strips: [{ srcX: -5, srcWidth: 10, matrix: IDENTITY }],
-    });
-    const keyOf = (assetId: string) => {
-      const { matrix: _matrix, opacity: _opacity, ...stable } = tiny(assetId).source;
-      return `${JSON.stringify(stable)}@4`;
+  describe("translucent", () => {
+    const drawnText = (rec: RecordingCtx) =>
+      rec.calls.map(([m]) => m).filter((m) => m === "strokeText" || m === "fillText");
+    /** The one composite's `drawImage`: the source rect, then the flat-mm destination. */
+    const composite = (rec: RecordingCtx) => {
+      const draws = methodsOf(rec, "drawImage");
+      expect(draws).toHaveLength(1);
+      const [, image, ...rect] = draws[0]!;
+      return { image, source: rect.slice(0, 4), at: rect.slice(4) as number[] };
     };
-
-    it("keeps at most 64 layers and drops the least recently used first", () => {
-      const cache = new Map<string, CanvasImageSource>();
-      const images = Object.fromEntries(Array.from({ length: 70 }, (_, i) => [`a${i}`, photo]));
-      const { env } = makeEnv({ layerCache: cache }, images);
-      const paint = (id: string) => execute([tiny(id)], recordingCtx().ctx, env);
-
-      for (let i = 0; i < 64; i++) paint(`a${i}`);
-      expect(cache.size).toBe(64);
-      paint("a0"); // a hit: a0 is now the most recently used and a1 the least
-      paint("a64");
-      expect(cache.size).toBe(64);
-      expect(cache.has(keyOf("a0"))).toBe(true);
-      expect(cache.has(keyOf("a1"))).toBe(false);
-      expect(cache.has(keyOf("a64"))).toBe(true);
-      paint("a65");
-      expect(cache.has(keyOf("a2"))).toBe(false);
-      expect(cache.has(keyOf("a0"))).toBe(true);
-      expect(cache.size).toBe(64);
-    });
-  });
-
-  describe("resolution follows the element scale", () => {
-    const at = (scale: number) =>
-      warpedOf(imageEl("img", { wrap: true, placement: { ...placement, scale } }));
-    const paint = (op: Extract<DrawOp, { op: "warped" }>) => {
-      const rec = recordingCtx();
-      const { env, layers } = makeEnv({}, { "asset-1": photo });
-      execute([op], rec.ctx, env);
-      return { layer: layers[0]!, draws: methodsOf(rec, "drawImage") };
-    };
-
-    it("rasterises a scale-2 wrapped element twice as large in px as at scale 1", () => {
-      const one = paint(at(1)).layer;
-      const two = paint(at(2)).layer;
-      expect([one.widthPx, one.heightPx]).toEqual([240, 160]);
-      expect([two.widthPx, two.heightPx]).toEqual([480, 320]);
-      expect(two.rec.calls.slice(0, 2)).toEqual([
-        ["scale", 8, 8],
-        ["translate", 30, 20],
-      ]);
-    });
-
-    it("draws the strips at the same flat positions whatever the raster resolution", () => {
-      for (const scale of [1, 2]) {
-        const op = at(scale);
-        const devicePx = 1 / (4 * scale);
-        paint(op).draws.forEach(([, , sx, , sw, sh, dx, dy, dw, dh], i) => {
-          const strip = op.strips[i]!;
-          const [x, w] = [dx as number, dw as number];
-          // Destination: the strip's own columns (local mm), widened by at most one device px.
-          expect(w).toBeLessThanOrEqual(strip.srcWidth + devicePx + 1e-9);
-          expect(w).toBeGreaterThanOrEqual(strip.srcWidth - 1e-9);
-          expect([dy, dh]).toEqual([-20, 40]);
-          // Source: the same columns in layer px, at 4 x scale px per local mm.
-          expect(sx as number).toBeCloseTo((x + 30) * 4 * scale, 6);
-          expect(sw as number).toBeCloseTo(w * 4 * scale, 6);
-          expect(sh).toBeCloseTo(40 * 4 * scale, 6);
-          // On the flat, the rect is centred where the strip is (the two end strips are widened
-          // on their inner side only, so they sit up to half a device pixel off).
-          const centre = applyToPoint(strip.matrix, { x: x + w / 2, y: 0 });
-          const nominal = applyToPoint(strip.matrix, { x: strip.srcX + strip.srcWidth / 2, y: 0 });
-          const offBy = Math.hypot(centre.x - nominal.x, centre.y - nominal.y);
-          expect(offBy).toBeLessThanOrEqual(
-            i === 0 || i === op.strips.length - 1 ? 0.125 + 1e-9 : 1e-9,
-          );
-        });
-      }
-    });
-
-    it("clamps the layer to 8192 px on its longest edge", () => {
-      const { layer } = paint(at(100));
-      expect(layer.widthPx).toBe(8192);
-      expect(layer.heightPx).toBeLessThanOrEqual(8192);
-    });
-  });
-
-  describe("opacity", () => {
-    const faded = (opacity: number) =>
-      warpedOf(imageEl("img", { wrap: true, opacity, placement, flipX: true }));
-
-    it("is applied once to the whole warped element, not per strip", () => {
-      const op = faded(0.5);
-      const rec = recordingCtx();
-      const { env, layers } = makeEnv({}, { "asset-1": photo });
-      execute([op], rec.ctx, env);
-
-      // layer 0 is the shared source raster, layer 1 the composite the strips are drawn into
-      expect(layers).toHaveLength(2);
-      const [source, group] = [layers[0]!, layers[1]!];
-      expect(source.rec.sets.globalAlpha).toBeUndefined();
-      expect(group.rec.sets.globalAlpha).toBeUndefined();
-      expect(methodsOf(group.rec, "drawImage")).toHaveLength(op.strips.length);
-      expect(methodsOf(group.rec, "transform")).toHaveLength(op.strips.length);
-
-      expect(rec.sets.globalAlpha).toEqual([0.5]);
-      expect(methodsOf(rec, "transform")).toHaveLength(0);
-      expect(methodsOf(rec, "drawImage")).toHaveLength(1);
-      const [, image, , , sw, sh, dx, dy, dw, dh] = methodsOf(rec, "drawImage")[0]!;
-      expect(image).toBe(group.source);
-      const [x, y, w, h] = [dx, dy, dw, dh] as number[];
-      expect([group.widthPx, group.heightPx]).toEqual([Math.ceil(w! * 4), Math.ceil(h! * 4)]);
-      expect([sw, sh]).toEqual([w! * 4, h! * 4]);
-
-      // The composite covers every strip.
-      for (const strip of op.strips) {
-        for (const lx of [strip.srcX, strip.srcX + strip.srcWidth]) {
-          for (const ly of [-20, 20]) {
-            const p = applyToPoint(strip.matrix, { x: lx, y: ly });
-            expect(p.x).toBeGreaterThanOrEqual(x! - 1e-6);
-            expect(p.x).toBeLessThanOrEqual(x! + w! + 1e-6);
-            expect(p.y).toBeGreaterThanOrEqual(y! - 1e-6);
-            expect(p.y).toBeLessThanOrEqual(y! + h! + 1e-6);
+    /**
+     * Every glyph's advance, from `upMm` above its baseline to `downMm` below it, lies in the
+     * output px rectangle `px` (at 4 px/mm).
+     */
+    const expectInside = (
+      op: ArcTextOp,
+      upMm: number,
+      downMm: number,
+      px: { x: number; y: number; w: number; h: number },
+    ) => {
+      for (const g of op.glyphs) {
+        for (const lx of [g.xMm, g.xMm + g.widthMm]) {
+          for (const ly of [g.baselineMm - upMm, g.baselineMm + downMm]) {
+            const p = applyToPoint(g.matrix, { x: lx, y: ly });
+            expect(p.x * 4).toBeGreaterThanOrEqual(px.x);
+            expect(p.x * 4).toBeLessThanOrEqual(px.x + px.w);
+            expect(p.y * 4).toBeGreaterThanOrEqual(px.y);
+            expect(p.y * 4).toBeLessThanOrEqual(px.y + px.h);
           }
         }
       }
+    };
+
+    it("draws every glyph at full alpha into one layer, composited once at its opacity", () => {
+      const op = arcOp({ outline, opacity: 0.5 });
+      const rec = recordingCtx();
+      const { env, layers } = makeEnv();
+      execute([op], rec.ctx, env);
+
+      expect(layers).toHaveLength(1);
+      const group = layers[0]!;
+      expect(drawnText(group.rec)).toEqual([
+        ...Array(8).fill("strokeText"),
+        ...Array(8).fill("fillText"),
+      ]);
+      expect(group.rec.sets.globalAlpha).toBeUndefined();
+      expect(drawnText(rec)).toEqual([]);
+      expect(rec.sets.globalAlpha).toEqual([0.5]);
+
+      const { image, source, at } = composite(rec);
+      expect(image).toBe(group.source);
+      expect(source).toEqual([0, 0, group.widthPx, group.heightPx]);
+      // One layer px per output px (4 px/mm), on the output's pixel grid: drawn without a resample.
+      const [x, y, w, h] = at.map((mm) => mm * 4) as [number, number, number, number];
+      expect([x, y].every(Number.isInteger)).toBe(true);
+      expect([w, h]).toEqual([group.widthPx, group.heightPx]);
+      expect(group.rec.calls.slice(0, 2)).toEqual([
+        ["translate", -x, -y],
+        ["scale", 4, 4],
+      ]);
+      // The layer holds every glyph's advance, as far up and down as the font reaches.
+      const { ascentMm, descentMm } = op.source.layout;
+      expectInside(op, ascentMm + outline.widthMm, descentMm + outline.widthMm, { x, y, w, h });
     });
 
-    it("composes into the env's scratch layer when it has one, not a new layer per paint", () => {
-      const op = faded(0.5);
+    it("makes room for the font's whole ascent and descent, even at line height 0.8", () => {
+      // A face whose stacked capital marks reach 1.2 em up: at line height 0.8 the top line's
+      // marks rise well past the text's box.
+      const tall: TextMeasurer = (text, css) => {
+        const em = fontSizePx(css);
+        return { ...fakeMeasure(text, css), ascent: 1.2 * em, descent: 0.3 * em };
+      };
+      const op = arcOp({ content: "ỄỖ\nẾ", lineHeight: 0.8, outline, opacity: 0.5 }, tall);
+      const rec = recordingCtx();
+      execute([op], rec.ctx, makeEnv().env);
+      const [x, y, w, h] = composite(rec).at.map((mm) => mm * 4) as [
+        number,
+        number,
+        number,
+        number,
+      ];
+      const { fontSizeMm } = op.source.layout;
+      const reach = (em: number) => em * fontSizeMm + outline.widthMm;
+      expectInside(op, reach(1.2), reach(0.3), { x, y, w, h });
+    });
+
+    it("shares the scratch layer between translucent texts, each drawn out before the next", () => {
+      const rec = recordingCtx();
       const scratch = recordingCtx();
       const scratchSource = { name: "scratch" } as unknown as CanvasImageSource;
-      const scratchLayer = vi.fn(() => ({ source: scratchSource, ctx: scratch.ctx }));
-      const cache = new Map<string, CanvasImageSource>();
-      const { env, layers } = makeEnv({ layerCache: cache, scratchLayer }, { "asset-1": photo });
-      const rec = recordingCtx();
-      execute([op], rec.ctx, env);
-      execute([op], recordingCtx().ctx, env);
+      const drawnOutBefore: number[] = [];
+      const scratchLayer = vi.fn((_widthPx: number, _heightPx: number) => {
+        drawnOutBefore.push(methodsOf(rec, "drawImage").length);
+        return { source: scratchSource, ctx: scratch.ctx };
+      });
+      const texts = [arcOp({ opacity: 0.5 }), arcOp({ content: "Cà phê đá", opacity: 0.3 })];
+      execute(texts, rec.ctx, makeEnv({ scratchLayer }).env);
 
-      expect(layers).toHaveLength(1); // the cached source raster only
-      expect(scratchLayer).toHaveBeenCalledTimes(2);
-      expect(methodsOf(scratch, "drawImage")).toHaveLength(2 * op.strips.length);
-      expect(methodsOf(rec, "drawImage")[0]?.[1]).toBe(scratchSource);
+      expect(drawnOutBefore).toEqual([0, 1]);
+      expect(rec.sets.globalAlpha).toEqual([0.5, 0.3]);
+      // Each reads back only the part it asked for, laid out from the identity it is handed.
+      expect(
+        methodsOf(rec, "drawImage").map(([, image, ...rect]) => [image, ...rect.slice(0, 4)]),
+      ).toEqual(
+        scratchLayer.mock.calls.map(([width, height]) => [scratchSource, 0, 0, width, height]),
+      );
+      expect(methodsOf(scratch, "translate")).toHaveLength(2);
     });
 
-    it("draws an opaque element straight onto the context, with no composite layer", () => {
-      const op = faded(1);
+    it("composes in the env's scratch layer when it has one", () => {
+      const scratch = recordingCtx();
+      const scratchSource = { name: "scratch" } as unknown as CanvasImageSource;
+      const scratchLayer = vi.fn((_widthPx: number, _heightPx: number) => ({
+        source: scratchSource,
+        ctx: scratch.ctx,
+      }));
+      const { env, layers } = makeEnv({ scratchLayer });
       const rec = recordingCtx();
-      const { env, layers } = makeEnv({}, { "asset-1": photo });
-      execute([op], rec.ctx, env);
-      expect(layers).toHaveLength(1);
-      expect(rec.sets.globalAlpha).toBeUndefined();
-      expect(methodsOf(rec, "drawImage")).toHaveLength(op.strips.length);
-    });
-  });
+      execute([arcOp({ opacity: 0.5 })], rec.ctx, env);
 
-  it("does not cache a layer that painted a missing-image placeholder", () => {
-    const op = flipped();
-    const cache = new Map<string, CanvasImageSource>();
-    const { env, layers } = makeEnv({ layerCache: cache });
-    expect(() => execute([op], recordingCtx().ctx, env)).not.toThrow();
-    expect(methodsOf(layers[0]!.rec, "fillRect")).toHaveLength(1);
-    expect(cache.size).toBe(0);
+      expect(layers).toHaveLength(0);
+      expect(scratchLayer).toHaveBeenCalledTimes(1);
+      expect(drawnText(scratch)).toEqual(Array(8).fill("fillText"));
+      const { image, source } = composite(rec);
+      expect(image).toBe(scratchSource);
+      // Only the part asked for: the scratch canvas may be larger.
+      const [width, height] = scratchLayer.mock.calls[0]!;
+      expect(source).toEqual([0, 0, width, height]);
+    });
+
+    it("builds only the rows of a print band, and nothing for a band the text misses", () => {
+      const op = arcOp({ opacity: 0.5 });
+      const whole = recordingCtx();
+      execute([op], whole.ctx, makeEnv().env);
+      const [x, y, w] = composite(whole).at.map((mm) => mm * 4) as [number, number, number];
+
+      const band = { x: 0, y: y + 10, width: 100_000, height: 20 };
+      const rec = recordingCtx();
+      const { env, layers } = makeEnv({ targetPx: band });
+      execute([op], rec.ctx, env);
+      expect([layers[0]!.widthPx, layers[0]!.heightPx]).toEqual([w, 20]);
+      expect(composite(rec).at.map((mm) => mm * 4)).toEqual([x, y + 10, w, 20]);
+
+      const missed = makeEnv({ targetPx: { ...band, y: y - 1_000 } });
+      const none = recordingCtx();
+      execute([op], none.ctx, missed.env);
+      expect(missed.layers).toHaveLength(0);
+      expect(methodsOf(none, "drawImage")).toHaveLength(0);
+    });
   });
 });
 
@@ -876,6 +909,15 @@ describe("drawPattern", () => {
         env,
       );
       expect(layers).toHaveLength(2);
+    });
+
+    it("keeps no tile at a passing resolution (a zoom frame)", () => {
+      const cache = new Map<string, CanvasImageSource>();
+      const { env, layers } = makeEnv({ layerCache: cache, transientResolution: true });
+      drawPattern(patterningCtx().rec.ctx, op("stripes"), env);
+      drawPattern(patterningCtx().rec.ctx, op("stripes"), env);
+      expect(layers).toHaveLength(2);
+      expect(cache.size).toBe(0);
     });
 
     it("draws the lattice where the context makes no patterns", () => {

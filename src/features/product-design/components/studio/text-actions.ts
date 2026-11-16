@@ -10,7 +10,10 @@ import {
   type PrintAreaCode,
   type TextElement,
 } from "../../engine";
-import { largestScaleInSafe, safeBox } from "./image-actions";
+import type { LibraryText } from "../../types";
+import { SCALE_RANGE } from "./element-actions";
+import { bendOnSurface } from "./image-actions";
+import { largestScaleInSafe, safeBox } from "./safe-fit";
 import { STUDIO_ANNOUNCEMENTS } from "./studio-announcer";
 import type { StudioServices } from "./studio-context";
 
@@ -112,6 +115,7 @@ export function placeText(
     italic: false,
     letterSpacingEm: 0,
     lineHeight: 1.2,
+    ...bendOnSurface(surface),
   };
   // A text's box grows in step with its size, so the scale that fits is the factor to shrink by.
   const shrink = largestScaleInSafe(
@@ -123,6 +127,58 @@ export function placeText(
   );
   const fitted = Math.max(MIN_TEXT_SIZE_PT, Math.floor(sized.sizePt * shrink * 10) / 10);
   const element: TextElement = shrink === 1 ? sized : { ...sized, sizePt: fitted };
+
+  editor.apply((doc) => addElement(doc, code, element));
+  editor.select(element.id);
+  editor.setTool("select");
+  announce(STUDIO_ANNOUNCEMENTS.textAdded);
+  return element.id;
+}
+
+/**
+ * Adds a saved text style of the project library (`item.text` in `item.style`) to the active
+ * surface, centred on the safe area and selected, as one undo step. The saved size stays; when the
+ * box is wider than the safe area the placement's scale is lowered until the whole outline fits
+ * (the size and the outline width shrink with it). The saved font is used when the template allows
+ * it, else the first allowed one (an italic only where that font has one). Returns the new
+ * element's id, or `null` when nothing was added, as `placeText` does.
+ */
+export function placeTextStyle(
+  { editor, surfaces, sizer, fonts, template, announce }: PlaceServices,
+  item: Pick<LibraryText, "text" | "style">,
+): string | null {
+  const { activeSurface: code, readOnly, document } = editor.store.getState();
+  const surface = surfaces.byCode[code];
+  const allowed = allowedFonts(template, fonts);
+  const font = allowed.find((option) => option.code === item.style.fontCode) ?? allowed[0];
+  if (!surface || !font || readOnly) return null;
+  if ((document.surfaces[code]?.elements.length ?? 0) >= MAX_ELEMENTS_PER_SURFACE) return null;
+
+  const { style } = item;
+  const safe = safeBox(surface);
+  const sized: TextElement = {
+    id: editor.newId(),
+    type: "text",
+    name: "Chữ",
+    hidden: false,
+    locked: false,
+    opacity: 1,
+    placement: clampPlacement({ u: safe.u, v: safe.v, rotationDeg: 0, scale: 1 }, surface),
+    content: clipTextContent(item.text),
+    fontCode: font.code,
+    sizePt: style.sizePt,
+    color: style.color,
+    align: style.align,
+    bold: style.bold,
+    italic: font.italic ? style.italic : false,
+    letterSpacingEm: style.letterSpacingEm,
+    lineHeight: style.lineHeight,
+    ...(style.outline ? { outline: style.outline } : {}),
+    ...bendOnSurface(surface),
+  };
+  const scale = largestScaleInSafe(sized, sizer(sized), surface, SCALE_RANGE.min, 1);
+  const element: TextElement =
+    scale === 1 ? sized : { ...sized, placement: { ...sized.placement, scale } };
 
   editor.apply((doc) => addElement(doc, code, element));
   editor.select(element.id);

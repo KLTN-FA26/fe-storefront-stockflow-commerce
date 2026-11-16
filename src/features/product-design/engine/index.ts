@@ -61,6 +61,7 @@ export {
   updateElement,
 } from "./document/commands";
 export { DocumentHistory } from "./document/history";
+export { retargetDocument } from "./document/retarget";
 export { PRINT_SWATCHES } from "./document/palette";
 
 // Geometry
@@ -84,10 +85,18 @@ export {
   elementOutline,
   hitTest,
   isWrapped,
-  wrapStripMatrix,
+  wrapColumnMatrix,
   type ElementSizer,
   type Flip,
 } from "./geometry/element";
+export {
+  polarWarp,
+  warpBounds,
+  warpStretch,
+  warpToFlat,
+  warpToLocal,
+  type PolarWarp,
+} from "./geometry/polar-warp";
 export { alongEdges, boundsOf, pointInPolygon } from "./geometry/polygon";
 export { simplifyRdp } from "./geometry/simplify";
 export type { PathCmd, PointMm, RectMm } from "./geometry/types";
@@ -103,9 +112,9 @@ export {
   type TextMeasurer,
 } from "./render/fonts";
 export { layoutText, type TextLayout, type TextLine } from "./render/text-layout";
-export type { ComposeTarget, DrawOp, Strip, WarpableOp } from "./render/ops";
+export type { ComposeTarget, DrawOp } from "./render/ops";
 export { compose, KRAFT_INK_TINT, type ComposeInput } from "./render/compose";
-export { WARP_STRIP_COUNT, warpStrips } from "./render/warp";
+export { arcGlyphs, type ArcGlyph } from "./render/arc-text";
 export { execute, type ChromeColors, type Ctx2D, type RenderEnv } from "./render/execute";
 export { drawPattern } from "./render/patterns";
 export { strokePolygon } from "./render/brush";
@@ -133,6 +142,7 @@ export {
 // Preflight
 export { runPreflight } from "./preflight/run";
 export { isKraft, isNearWhite, relativeLuminance } from "./preflight/rules/color";
+export { VARIANT_OK } from "./preflight/rules/variant";
 export { dpiTier, placedDpi, printDpi, PRINT_DPI_FLOOR } from "./preflight/rules/resolution";
 export type {
   PreflightAsset,
@@ -141,6 +151,7 @@ export type {
   PreflightLevel,
   PreflightReport,
   PreflightRuleId,
+  PreflightVariant,
 } from "./preflight/types";
 
 // Export
@@ -172,7 +183,19 @@ export {
   type ShortcutKeyEvent,
 } from "./editor/shortcuts";
 
-// Live 3D preview (three.js enters the barrel only through here)
+// The .glb link of a print configuration (spec 2026-11-13 §3)
+export { model3dRefSchema, type Model3dRef } from "./model3d/schema";
+export {
+  buildGlbScene,
+  disposeGlbScene,
+  disposeGlbTree,
+  loadGlb,
+  Model3dError,
+  type Model3dErrorCode,
+  type Model3dLoadReason,
+} from "./model3d";
+
+// Live 3D preview (the viewer's three.js; the .glb loader above is imported on demand)
 export { ProductViewer, type ViewerOptions } from "./viewer3d/product-viewer";
 export { printUnderlay } from "./viewer3d/materials";
 export { isWebGLAvailable } from "./viewer3d/webgl";

@@ -1,4 +1,4 @@
-import { boundsOf } from "../geometry/polygon";
+import { sectorBounds } from "../geometry/sector";
 import type { PathCmd, PointMm, RectMm } from "../geometry/types";
 import type { CupModel, PrintArea } from "../template/schema";
 import { createRectSurface } from "./rect";
@@ -6,8 +6,6 @@ import type { PrintSurface, SurfaceRegion } from "./types";
 
 /** Below this top/bottom radius difference the body is unrolled as a cylinder (spec §4.3). */
 const CYLINDER_TAPER_MM = 0.5;
-/** Angles sampled along the bleed arcs when measuring the flat bounding box. */
-const BOUNDS_SAMPLES = 256;
 
 /**
  * The cup body (a truncated cone) unrolled into an annular sector (spec §4.3). Radii are measured
@@ -60,24 +58,15 @@ const canvasAngle = (phi: number) => phi - Math.PI / 2;
 
 /**
  * Bounding box of the bleed region relative to the apex (spec §4.3): bleed radii, trim angles
- * widened by `bleed / trimInner`, sampled at `BOUNDS_SAMPLES` angles.
+ * widened by `bleed / trimInner`.
  */
 function bleedBox(s: CupSector, bleed: number): RectMm {
   const widen = bleed / s.trimInnerMm;
-  const lo = -s.sweepRad / 2 - widen;
-  const hi = s.sweepRad / 2 + s.seamRad + widen;
-  const angles = Array.from(
-    { length: BOUNDS_SAMPLES },
-    (_, i) => lo + ((hi - lo) * i) / (BOUNDS_SAMPLES - 1),
-  );
-  // Sampling can step over an arc's extreme point; add the axis directions inside the range
-  // (φ = 0 is the top of the rim arc), so the box is exact.
-  for (let k = Math.ceil(lo / (Math.PI / 2)); k * (Math.PI / 2) <= hi; k++) {
-    angles.push(k * (Math.PI / 2));
-  }
-  const radii = [s.trimOuterMm + bleed, s.trimInnerMm - bleed];
-  return boundsOf(
-    angles.flatMap((phi) => radii.map((r) => ({ x: r * Math.sin(phi), y: -r * Math.cos(phi) }))),
+  return sectorBounds(
+    { x: 0, y: 0 },
+    [s.trimOuterMm + bleed, s.trimInnerMm - bleed],
+    -s.sweepRad / 2 - widen,
+    s.sweepRad / 2 + s.seamRad + widen,
   );
 }
 
@@ -154,6 +143,7 @@ function createSectorSurface(area: PrintArea, s: CupSector): PrintSurface {
     uRange: [0, (s.sweepRad + s.seamRad) * s.midRadiusMm],
     vRange: [s.outerRadiusMm - s.trimOuterMm, s.outerRadiusMm - s.trimInnerMm],
     bleedMm: bleed,
+    apexMm: { x: cx, y: cy },
     toFlat: (u, v) => {
       const phi = u / s.midRadiusMm - half;
       return { ...at(s.outerRadiusMm - v, phi), uprightRad: phi };

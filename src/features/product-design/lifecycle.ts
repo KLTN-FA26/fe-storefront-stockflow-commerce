@@ -1,131 +1,83 @@
 import type { SemanticTone } from "@/lib/domain/types";
 
-import type { DesignDraft } from "./types";
+import type { Design, DesignStatus } from "./types";
 
-// The BE knows DRAFT / SUBMITTED / APPROVED (REJECTED is declared and never set); what the
-// customer sees is derived from it plus the technical-review fields (spec §7.5). Docs 12's own
-// lifecycle vocabulary differs from the BE's: the FE follows the BE (spec G7).
+// The lifecycle of docs 12 §4 (spec 2026-11-09 §3): DRAFT → PENDING_REVIEW → APPROVED, a return
+// sends a review back to DRAFT, a deleted DRAFT is ARCHIVED. Client-side gating only: the server
+// decides and re-checks every move.
 
-export type DesignUiState =
-  | "editing"
-  | "awaitingReview"
-  | "changesRequested"
-  | "reviewPassed"
-  | "awaitingConfirmation"
-  | "confirmed";
+/** Where a design may go from each status (spec §3.2). */
+export const DESIGN_TRANSITIONS: Record<DesignStatus, readonly DesignStatus[]> = {
+  // save (version + 1, docs 12 BR-11), submit on a preflight Pass (BR-05, BR-07), delete (BR-16)
+  DRAFT: ["DRAFT", "PENDING_REVIEW", "ARCHIVED"],
+  // the Sales Manager approves (BR-08) or returns it with a reason (BR-06)
+  PENDING_REVIEW: ["APPROVED", "DRAFT"],
+  // final and read-only (BR-09); a change is a new DRAFT made by a revision (BR-12)
+  APPROVED: [],
+  // never restored (BR-16)
+  ARCHIVED: [],
+};
 
-export type DesignAction =
-  | "edit"
-  | "requestReview"
-  | "finalize"
-  | "confirm"
-  | "requestChanges"
-  | "withdraw"
-  | "fork"
-  | "requestQuote";
+/** No way out of these (spec §3.2). */
+export const TERMINAL_STATUSES: ReadonlySet<DesignStatus> = new Set(["APPROVED", "ARCHIVED"]);
 
-const hasReviewNotes = (draft: DesignDraft) => Boolean(draft.reviewNotes?.trim());
+export type DesignAction = "edit" | "rename" | "save" | "submit" | "delete" | "createRevision";
 
 /**
- * The customer asked QC to look and has changed nothing since. `updatedAt` marks a BE that sends
- * the P6 fields: there, anything that voids a review (a document save, a new artifact) clears
- * `reviewRequestedAt` while `currentArtifactId` stays, so a review is in progress only while the
- * request is there and not older than the last change (`reviewRequestedAt >= updatedAt`). The real
- * BE sends no P6 fields: a draft with a current artifact is a review in progress.
+ * What the customer may do in each status (spec §3.1). A DRAFT is theirs to change; PENDING_REVIEW
+ * is locked while it is reviewed (docs 12 BR-07); an APPROVED design only seeds a revision (BR-12).
+ * `submit` is further blocked while preflight fails (BR-05): the studio knows that, not this table.
  */
-function reviewIsInProgress(draft: DesignDraft) {
-  if (!draft.updatedAt) return Boolean(draft.reviewRequestedAt) || Boolean(draft.currentArtifactId);
-  if (!draft.reviewRequestedAt) return false;
-  return !(Date.parse(draft.reviewRequestedAt) < Date.parse(draft.updatedAt));
-}
+const ACTIONS: Record<DesignStatus, readonly DesignAction[]> = {
+  DRAFT: ["edit", "rename", "save", "submit", "delete"],
+  PENDING_REVIEW: [],
+  APPROVED: ["createRevision"],
+  ARCHIVED: [],
+};
+
+export const allowedActions = (design: Pick<Design, "status">): readonly DesignAction[] =>
+  ACTIONS[design.status];
 
 /**
- * The first match wins, in the order of spec §7.5: confirmed → awaitingConfirmation →
- * reviewPassed → changesRequested → awaitingReview → editing. A customer change request
- * (SUBMITTED → DRAFT) leaves `reviewNotes` set, so it reads as changesRequested with the
- * customer's own reason. REJECTED is never set by the BE; it falls through like a draft.
+ * Label, tone (special > danger > positive > warning > info > muted > neutral), whether the studio
+ * lets the customer edit, and a one-line "what happens next". ARCHIVED is never listed or opened.
  */
-export function deriveUiState(draft: DesignDraft): DesignUiState {
-  if (draft.status === "APPROVED") return "confirmed";
-  if (draft.status === "SUBMITTED") return "awaitingConfirmation";
-  if (draft.technicalReviewPassed) return "reviewPassed";
-  if (hasReviewNotes(draft)) return "changesRequested";
-  return reviewIsInProgress(draft) ? "awaitingReview" : "editing";
-}
-
-/**
- * Label, tone (special > danger > positive > warning > info > muted > neutral), whether the
- * studio lets the customer edit, and a one-line "what happens next".
- */
-export const DESIGN_UI_STATE_META: Record<
-  DesignUiState,
+export const DESIGN_STATUS_META: Record<
+  DesignStatus,
   { label: string; tone: SemanticTone; editable: boolean; hint: string }
 > = {
-  editing: {
-    label: "Đang thiết kế",
+  DRAFT: {
+    label: "Bản nháp",
     tone: "neutral",
     editable: true,
-    hint: "Thiết kế đang được lưu tự động. Khi xong, hãy gửi QC kiểm tra.",
+    hint: "Thiết kế được lưu tự động. Khi xong, bấm Gửi duyệt.",
   },
-  awaitingReview: {
-    label: "Chờ QC kiểm tra",
+  PENDING_REVIEW: {
+    label: "Chờ duyệt",
     tone: "info",
-    editable: true,
-    hint: "QC đang kiểm tra thiết kế của bạn. Chỉnh sửa lúc này sẽ huỷ yêu cầu kiểm tra.",
-  },
-  changesRequested: {
-    label: "QC yêu cầu sửa",
-    tone: "warning",
-    editable: true,
-    hint: "Hãy chỉnh thiết kế theo ghi chú của QC rồi gửi QC kiểm tra lại.",
-  },
-  reviewPassed: {
-    label: "Đạt kỹ thuật",
-    tone: "positive",
-    editable: true,
-    hint: "Thiết kế đã đạt kỹ thuật. Hãy chốt để tiếp tục báo giá; nếu chỉnh sửa, QC sẽ kiểm tra lại.",
-  },
-  awaitingConfirmation: {
-    label: "Chờ bạn xác nhận",
-    tone: "warning",
     editable: false,
-    hint: "Sales đã gửi thiết kế cho bạn. Hãy xác nhận, hoặc yêu cầu chỉnh sửa nếu chưa ưng ý.",
+    hint: "Quản lý kinh doanh đang duyệt thiết kế. Bạn sẽ nhận kết quả tại đây.",
   },
-  confirmed: {
-    label: "Đã chốt",
+  APPROVED: {
+    label: "Đã duyệt",
     tone: "positive",
     editable: false,
-    hint: "Thiết kế đã chốt và không thể sửa. Bạn có thể yêu cầu báo giá hoặc tạo phiên bản mới.",
+    hint: "Thiết kế đã duyệt và không sửa được nữa. Muốn thay đổi, hãy tạo bản sửa.",
+  },
+  ARCHIVED: {
+    label: "Đã xoá",
+    tone: "muted",
+    editable: false,
+    hint: "Bản nháp đã xoá.",
   },
 };
 
-/**
- * The hint of the workflow-only view (R72), where nothing can be edited or sent to QC: in the
- * states where the studio would ask the customer to edit or send, it says what Sales and QC do
- * next instead (N6). The states the view does act in keep their own hint.
- */
-export const WORKFLOW_ONLY_HINTS: Record<DesignUiState, string> = {
-  editing: "Sales đang lên thiết kế theo yêu cầu của bạn và sẽ gửi để bạn xác nhận.",
-  awaitingReview: "QC đang kiểm tra thiết kế. Kết quả sẽ hiện tại đây.",
-  changesRequested:
-    "Thiết kế đang được chỉnh theo ghi chú bên dưới; Sales sẽ gửi lại để bạn xác nhận.",
-  reviewPassed: "Thiết kế đã đạt kỹ thuật. Sales sẽ gửi để bạn xác nhận.",
-  awaitingConfirmation: DESIGN_UI_STATE_META.awaitingConfirmation.hint,
-  confirmed: DESIGN_UI_STATE_META.confirmed.hint,
+/** The secondary badge of a returned draft (spec §3.1). */
+export const RETURNED_META: { label: string; tone: SemanticTone } = {
+  label: "Bị trả lại",
+  tone: "warning",
 };
 
-/**
- * What the customer may do in each state (spec §7.5). UI gating only — the BE decides and
- * re-checks. `requestReview` is further blocked while preflight has a Fail (BR-01, BR-DSG-001):
- * the studio knows the preflight result, not this table.
- */
-const ACTIONS: Record<DesignUiState, readonly DesignAction[]> = {
-  editing: ["edit", "requestReview"],
-  awaitingReview: ["edit"],
-  changesRequested: ["edit", "requestReview"],
-  reviewPassed: ["edit", "finalize"],
-  awaitingConfirmation: ["confirm", "requestChanges", "withdraw"],
-  confirmed: ["fork", "requestQuote"],
-};
-
-export const allowedActions = (state: DesignUiState): readonly DesignAction[] => ACTIONS[state];
+/** A DRAFT the Sales Manager sent back: it carries the latest return's reason (docs 12 BR-06). */
+export const isReturned = (design: Pick<Design, "status" | "lastReturn">): boolean =>
+  design.status === "DRAFT" && design.lastReturn !== null;

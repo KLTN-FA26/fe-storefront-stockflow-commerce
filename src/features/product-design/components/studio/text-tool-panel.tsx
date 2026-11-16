@@ -7,15 +7,18 @@ import { Alert } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 
+import { ProjectTextStyles } from "./project-text-styles";
 import { useEditorState, useStudio } from "./studio-context";
 import {
   allowedFonts,
   DEFAULT_PRESET,
   placeText,
+  placeTextStyle,
   TEXT_PRESETS,
   type TextPreset,
 } from "./text-actions";
 import { useTextEditing } from "./text-editing";
+import type { LibraryText } from "../../types";
 
 const MESSAGES = {
   full: "Mặt này đã đủ số phần tử tối đa, hãy xoá bớt để thêm chữ.",
@@ -42,6 +45,11 @@ export function TextToolPanel() {
     const id = placeText(services, preset);
     setMessage(id === null ? (hasFont ? MESSAGES.full : MESSAGES.noFont) : null);
     if (id !== null) start(id);
+  };
+
+  const addStyle = (item: LibraryText) => {
+    const id = placeTextStyle(services, item);
+    setMessage(id === null ? (hasFont ? MESSAGES.full : MESSAGES.noFont) : null);
   };
 
   return (
@@ -73,13 +81,20 @@ export function TextToolPanel() {
           </Button>
         ))}
       </section>
+      {services.design.project ? (
+        <ProjectTextStyles
+          projectId={services.design.project.id}
+          disabled={readOnly || !hasFont}
+          onPlace={addStyle}
+        />
+      ) : null}
       {message ? (
         <div role="alert">
           <Alert tone="warning">{message}</Alert>
         </div>
       ) : null}
       <p className="text-ink-tertiary text-xs">
-        Nhấp đúp vào chữ trên khung vẽ, hoặc nhấn Enter ở tab Lớp, để sửa nội dung.
+        Nhấp đúp vào chữ trên khung vẽ, hoặc nhấn Enter trong Lớp, để sửa nội dung.
       </p>
     </div>
   );

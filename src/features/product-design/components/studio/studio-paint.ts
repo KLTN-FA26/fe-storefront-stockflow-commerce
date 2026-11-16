@@ -94,9 +94,11 @@ let scratch: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null
 
 /**
  * `RenderEnv.scratchLayer` for the paints that run every frame (editor, textures): one canvas that
- * grows to the largest composite asked for and is cleared over the part asked for each time, so a
- * translucent wrapped element does not allocate a canvas per paint. A paint is synchronous, so two
- * composites never use it at once; the executor draws one out before asking for the next.
+ * grows to the largest composite asked for, so a translucent wrapped text does not allocate a
+ * canvas per paint. It keeps the `RenderEnv.scratchLayer` contract: each time it is handed back
+ * cleared over the part asked for, with an identity transform, full alpha and `source-over` (a
+ * resize resets all of it). A paint is synchronous, so two composites never use it at once; the
+ * executor draws one out before asking for the next.
  */
 export function scratchLayer(
   widthPx: number,
@@ -143,11 +145,23 @@ function paintUnderlay(canvas: HTMLCanvasElement, color: string) {
   ctx.restore();
 }
 
+/** How `paintSurface` paints, besides the surface and its resolution. */
+export type PaintOptions = {
+  /** Painted behind the artwork over the whole canvas (an opaque stock's texture). */
+  underlay?: string | null;
+  /** Mid-gesture: the most pixels each wrapped image's remap may have (`RenderEnv.warpBudgetPx`). */
+  warpBudgetPx?: number | undefined;
+  /**
+   * `false` mid-zoom: nothing rasterised at this resolution is kept, as the next frame needs another
+   * (`RenderEnv.transientResolution`; a wrapped image's source still is, by its size in px).
+   */
+  keepLayers?: boolean;
+};
+
 /**
  * Composes one surface of the editor's current document (or the live preview's, while a stroke is
  * being drawn) for `target` and paints it onto `canvas` at `pxPerMm` (proxy images; not decoded
- * yet = placeholder), over `underlay` when one is given (an opaque stock's texture). No-op without
- * a 2D context.
+ * yet = placeholder), as `options` say. No-op without a 2D context.
  */
 export function paintSurface(
   canvas: HTMLCanvasElement,
@@ -155,7 +169,7 @@ export function paintSurface(
   code: PrintAreaCode,
   target: ComposeTarget,
   pxPerMm: number,
-  underlay: string | null = null,
+  { underlay = null, warpBudgetPx, keepLayers = true }: PaintOptions = {},
 ): void {
   const surface = services.surfaces.byCode[code];
   if (surface === undefined || !(pxPerMm > 0)) return;
@@ -177,6 +191,8 @@ export function paintSurface(
     createLayer,
     scratchLayer,
     layerCache: services.layerCache,
+    ...(keepLayers ? {} : { transientResolution: true }),
+    ...(warpBudgetPx === undefined ? {} : { warpBudgetPx }),
   };
   renderSurface(canvas, ops, env, surface.flatBounds);
   if (underlay !== null) paintUnderlay(canvas, underlay);

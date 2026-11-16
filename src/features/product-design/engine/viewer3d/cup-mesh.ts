@@ -89,7 +89,7 @@ function revolveStrips(
 }
 
 /** Width of the body's print at the surface, i.e. the `u` that α = 2π maps to (the glue flap lies beyond). */
-function printedWidthMm(model: CupModel, surface: PrintSurface): number {
+export function printedWidthMm(model: CupModel, surface: PrintSurface): number {
   if (surface.kind === "rect") return Math.PI * model.topDiameterMm;
   const sector = cupSector(model);
   return sector.sweepRad * sector.midRadiusMm;

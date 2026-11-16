@@ -14,6 +14,7 @@ import {
 } from "../../engine";
 import { downloadLinkQuery } from "../../queries";
 import type { DesignAsset } from "../../types";
+import { within } from "./deadline";
 import type { RepaintChannel } from "./studio-context";
 
 type Options = {
@@ -26,7 +27,7 @@ type Options = {
 };
 
 /** The ids of the images the document places. */
-function documentAssetIds(document: DesignDocument): Set<string> {
+export function documentAssetIds(document: DesignDocument): Set<string> {
   const ids = new Set<string>();
   for (const code of printAreaCodeSchema.options) {
     for (const el of document.surfaces[code]?.elements ?? []) {
@@ -99,30 +100,78 @@ const surfacesShowing = (document: DesignDocument, assetId: string) =>
     document.surfaces[code]?.elements.some((el) => el.type === "image" && el.assetId === assetId),
   );
 
-async function download(url: string): Promise<Blob> {
-  const response = await fetch(url);
+async function download(url: string, signal?: AbortSignal): Promise<Blob> {
+  const response = await (signal ? fetch(url, { signal }) : fetch(url));
   if (!response.ok) throw new Error(`Image download answered ${response.status}`);
   return response.blob();
 }
 
 /**
  * The stored file of a design's image: its presigned link (cached like `useDownloadLink`), then the
- * file; a failed download asks for a fresh link once (it may have expired) before giving up.
+ * file; a failed download asks for a fresh link once (it may have expired) before giving up. A
+ * download stopped by `signal` is not tried again.
  */
 export async function downloadAsset(
   client: QueryClient,
   designId: string,
   assetId: string,
+  signal?: AbortSignal,
 ): Promise<Blob> {
   const link = (fresh: boolean) => {
-    const query = downloadLinkQuery("asset", designId, assetId);
+    const query = downloadLinkQuery(designId, assetId);
     return client.fetchQuery(fresh ? { ...query, staleTime: 0 } : query);
   };
   try {
-    return await download((await link(false)).url);
-  } catch {
-    return download((await link(true)).url);
+    return await download((await link(false)).url, signal);
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return download((await link(true)).url, signal);
   }
+}
+
+/**
+ * Without the studio (`loadDesignSession`): loads the proxy of each image `document` places, as
+ * `useAssetImages` does, and answers preflight's `assets` once each has loaded or failed. One not
+ * loaded within `deadlineMs` is an error too, and its download is stopped; `signal` stops them
+ * all. An id the design has no stored image for is left out (preflight reports it).
+ */
+export async function loadDocumentImages(
+  {
+    client,
+    designId,
+    images,
+    assets,
+  }: {
+    client: QueryClient;
+    designId: string;
+    images: ImageCache;
+    assets: ReadonlyMap<string, DesignAsset>;
+  },
+  document: DesignDocument,
+  { deadlineMs, signal }: { deadlineMs: number; signal?: AbortSignal | undefined },
+): Promise<Record<string, PreflightAsset>> {
+  const status: Record<string, PreflightAsset> = {};
+  await Promise.all(
+    [...documentAssetIds(document)].map(async (assetId) => {
+      const asset = assets.get(assetId);
+      if (!asset) return;
+      const stop = new AbortController();
+      const cancel = () => stop.abort(signal?.reason);
+      signal?.addEventListener("abort", cancel, { once: true });
+      const load = downloadAsset(client, designId, assetId, stop.signal)
+        .then((blob) => images.load(assetId, blob, "proxy"))
+        .then(
+          () => true,
+          () => false,
+        );
+      const loaded = await within(load, deadlineMs, false);
+      signal?.removeEventListener("abort", cancel);
+      if (!loaded) stop.abort(); // past the deadline: the download goes no further
+      const { contentType, sizeBytes } = asset;
+      status[assetId] = { contentType, sizeBytes, status: loaded ? "ready" : "error" };
+    }),
+  );
+  return status;
 }
 
 /**

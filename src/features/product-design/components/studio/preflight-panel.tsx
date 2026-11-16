@@ -1,58 +1,60 @@
 "use client";
 
-import {
-  CircleCheck,
-  CircleX,
-  Info,
-  MessageSquareText,
-  RotateCw,
-  TriangleAlert,
-} from "lucide-react";
+import { CircleCheck, CircleX, Info, RotateCw } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 
-import type { PreflightIssue, PreflightLevel, PreflightReport, PrintAreaCode } from "../../engine";
+import type { PreflightLevel, PreflightReport, PrintAreaCode } from "../../engine";
+import type { ReportedPreflightIssue } from "../../types";
 import { usePreflightReport } from "./preflight-context";
 import { useStudio } from "./studio-context";
 
 const LEVELS: Record<PreflightLevel, { label: string; icon: typeof Info; tone: string }> = {
   fail: { label: "Lỗi", icon: CircleX, tone: "text-danger" },
-  warning: { label: "Cảnh báo", icon: TriangleAlert, tone: "text-warning" },
-  info: { label: "Lưu ý", icon: Info, tone: "text-info" },
+  note: { label: "Lưu ý", icon: Info, tone: "text-info" },
 };
 
-/** "Đạt", "{n} cảnh báo" or "{n} lỗi": the worst level found and how often it occurs. */
+/** "Đạt", or "Không đạt" with how many issues are in the way. */
 function SummaryChip({ report }: { report: PreflightReport }) {
-  const count = (level: PreflightLevel) => report.issues.filter((i) => i.level === level).length;
-  const { text, classes } =
-    report.result === "Fail"
-      ? { text: `${count("fail")} lỗi`, classes: "bg-danger/10 text-danger" }
-      : report.result === "Warning"
-        ? { text: `${count("warning")} cảnh báo`, classes: "bg-warning/10 text-warning" }
-        : { text: "Đạt", classes: "bg-positive/10 text-positive" };
+  const failed = report.result === "Fail";
   return (
-    <Badge className={cn("h-7 rounded-full px-3 text-sm font-semibold tabular-nums", classes)}>
-      {report.result === "Pass" ? <CircleCheck aria-hidden className="mr-1 size-4" /> : null}
-      {text}
+    <Badge
+      className={cn(
+        "h-7 rounded-full px-3 text-sm font-semibold tabular-nums",
+        failed ? "bg-danger/10 text-danger" : "bg-positive/10 text-positive",
+      )}
+    >
+      {failed ? (
+        <CircleX aria-hidden className="mr-1 size-4" />
+      ) : (
+        <CircleCheck aria-hidden className="mr-1 size-4" />
+      )}
+      {failed ? "Không đạt" : "Đạt"}
     </Badge>
   );
 }
 
-/** The messages of `issues` as a bulleted list: what a workflow dialog says is in the way. */
-export function IssueMessages({ issues }: { issues: readonly PreflightIssue[] }) {
-  return (
-    <ul className="mt-1 list-disc pl-4">
-      {issues.map((issue, i) => (
-        <li key={`${issue.ruleId}-${issue.elementId ?? i}`}>{issue.message}</li>
-      ))}
-    </ul>
-  );
+/**
+ * Shows where an issue is: switches to its surface, selects its element and turns the 3D view to
+ * it. Issues of the whole design (no surface) have nowhere to show.
+ */
+export function useLocateIssue() {
+  const { editor, viewerRef } = useStudio();
+  return ({
+    surfaceCode,
+    elementId,
+  }: Pick<ReportedPreflightIssue, "surfaceCode" | "elementId">) => {
+    if (!surfaceCode) return;
+    editor.setActiveSurface(surfaceCode);
+    editor.select(elementId ?? null);
+    viewerRef.current?.focusSurface(surfaceCode);
+  };
 }
 
 /** One finding; with `onLocate` it is a button that shows where it is. */
-function IssueRow({ issue, onLocate }: { issue: PreflightIssue; onLocate?: () => void }) {
+function IssueRow({ issue, onLocate }: { issue: ReportedPreflightIssue; onLocate?: () => void }) {
   const { label, icon: Icon, tone } = LEVELS[issue.level];
   const body = (
     <>
@@ -84,14 +86,15 @@ function IssueRow({ issue, onLocate }: { issue: PreflightIssue; onLocate?: () =>
   );
 }
 
+/** A titled list of issues; with `onLocate`, each issue on a surface is a button that shows it. */
 function IssueGroup({
   title,
   issues,
   onLocate,
 }: {
   title: string;
-  issues: PreflightIssue[];
-  onLocate?: (issue: PreflightIssue) => void;
+  issues: ReportedPreflightIssue[];
+  onLocate?: (issue: ReportedPreflightIssue) => void;
 }) {
   return (
     <div className="flex flex-col gap-1">
@@ -101,7 +104,7 @@ function IssueGroup({
           <IssueRow
             key={`${issue.ruleId}-${issue.elementId ?? i}`}
             issue={issue}
-            {...(onLocate ? { onLocate: () => onLocate(issue) } : {})}
+            {...(onLocate && issue.surfaceCode ? { onLocate: () => onLocate(issue) } : {})}
           />
         ))}
       </ul>
@@ -110,53 +113,64 @@ function IssueGroup({
 }
 
 /**
- * The "Kiểm tra" panel: the preflight summary, the notes QC left on the design, and the issues
- * grouped by print area. Clicking an issue selects its element, switches to its surface and turns
- * the 3D view to it. The checks are advisory; QC's review stays the gate.
+ * The failures of a preflight (the browser's, or the server's with any rule id): those of the whole
+ * design first, then each print area's under its name; clicking one on a surface calls `onLocate`.
  */
-export function PreflightPanel() {
-  const report = usePreflightReport();
-  const { editor, surfaces, template, design, viewerRef, retryImages } = useStudio();
+export function FailedIssues({
+  issues,
+  onLocate,
+}: {
+  issues: readonly ReportedPreflightIssue[];
+  onLocate: (issue: ReportedPreflightIssue) => void;
+}) {
+  const { surfaces, template } = useStudio();
   const nameOf = (code: PrintAreaCode) =>
     template.printAreas.find((area) => area.code === code)?.name ?? code;
-  const notes = design.reviewNotes?.trim();
-  const general = report.issues.filter((issue) => !issue.surfaceCode);
-  const imageFailed = report.issues.some((issue) => issue.ruleId === "ASSET_INVALID");
+  const fails = issues.filter((issue) => issue.level === "fail");
+  const general = fails.filter((issue) => !issue.surfaceCode);
   const groups = surfaces.order
-    .map((code) => ({ code, issues: report.issues.filter((i) => i.surfaceCode === code) }))
-    .filter(({ issues }) => issues.length > 0);
+    .map((code) => ({ code, issues: fails.filter((i) => i.surfaceCode === code) }))
+    .filter((group) => group.issues.length > 0);
+  return (
+    <>
+      {general.length > 0 ? <IssueGroup title="Toàn thiết kế" issues={general} /> : null}
+      {groups.map(({ code, issues: own }) => (
+        <IssueGroup key={code} title={nameOf(code)} issues={own} onLocate={onLocate} />
+      ))}
+    </>
+  );
+}
 
-  const locate = ({ surfaceCode, elementId }: PreflightIssue) => {
-    if (!surfaceCode) return;
-    editor.setActiveSurface(surfaceCode);
-    editor.select(elementId ?? null);
-    viewerRef.current?.focusSurface(surfaceCode);
-  };
+/**
+ * The "Kiểm tra" panel: the preflight summary (Pass/Fail, spec §7), the failures grouped by print
+ * area and the print notes under "Lưu ý khi in". Clicking an issue selects its element, switches
+ * to its surface and turns the 3D view to it. A Fail blocks "Gửi duyệt"; a note never does.
+ * `heading={false}` leaves out its own title when the container already carries it.
+ */
+export function PreflightPanel({ heading = true }: { heading?: boolean } = {}) {
+  const report = usePreflightReport();
+  const { retryImages } = useStudio();
+  const locate = useLocateIssue();
+  const printNotes = report.issues.filter((issue) => issue.level === "note");
+  const imageFailed = report.issues.some((issue) => issue.ruleId === "ASSET_INVALID");
 
   return (
     <section aria-label="Kết quả kiểm tra" className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-ink-primary text-sm font-semibold">Kiểm tra trước khi in</h2>
+        {heading ? (
+          <h2 className="text-ink-primary text-sm font-semibold">Kiểm tra trước khi in</h2>
+        ) : null}
         <SummaryChip report={report} />
       </div>
-      {notes ? (
-        <div className="bg-bg-subtle border-border-default rounded-[var(--r-md)] border p-3">
-          <p className="text-ink-secondary mb-1 flex items-center gap-1.5 text-xs font-semibold">
-            <MessageSquareText aria-hidden className="size-4" />
-            Ghi chú kiểm tra
-          </p>
-          <p className="text-ink-primary text-sm whitespace-pre-line">{notes}</p>
-        </div>
-      ) : null}
       {report.issues.length === 0 ? (
         <p className="text-ink-secondary text-sm">
-          Không phát hiện vấn đề nào. QC vẫn sẽ kiểm tra lại trước khi in.
+          Không phát hiện vấn đề nào. Quản lý kinh doanh vẫn duyệt lại trước khi in.
         </p>
       ) : null}
-      {general.length > 0 ? <IssueGroup title="Toàn thiết kế" issues={general} /> : null}
-      {groups.map(({ code, issues }) => (
-        <IssueGroup key={code} title={nameOf(code)} issues={issues} onLocate={locate} />
-      ))}
+      <FailedIssues issues={report.issues} onLocate={locate} />
+      {printNotes.length > 0 ? (
+        <IssueGroup title="Lưu ý khi in" issues={printNotes} onLocate={locate} />
+      ) : null}
       {imageFailed ? (
         <Button
           type="button"

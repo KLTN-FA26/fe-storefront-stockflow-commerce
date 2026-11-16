@@ -1,4 +1,4 @@
-import { ProductDetailScreen } from "@/features/catalog";
+import { ProductWithDesign } from "./product-with-design";
 
 /** Route params arrive percent-encoded for non-ASCII slugs; a stray `%` must not crash the page. */
 function readSlug(raw: string) {
@@ -11,5 +11,5 @@ function readSlug(raw: string) {
 
 export default async function ProductDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  return <ProductDetailScreen slug={readSlug(slug)} />;
+  return <ProductWithDesign slug={readSlug(slug)} />;
 }

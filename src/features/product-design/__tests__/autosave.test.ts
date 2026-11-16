@@ -199,12 +199,12 @@ describe("a version conflict (409)", () => {
     expect(states()).toEqual(["pending", "saving", "conflict"]);
   });
 
-  it("recognises an optimistic-lock race as a conflict too", async () => {
-    const save = vi.fn().mockRejectedValueOnce(new ApiError(409, "OPTIMISTIC_LOCK", "lost"));
+  it("does not take a design that changed status (409 DESIGN_NOT_DRAFT) for a conflict", async () => {
+    const save = vi.fn().mockRejectedValueOnce(new ApiError(409, "DESIGN_NOT_DRAFT", "moved on"));
     const { saver, last } = setup({ save });
     saver.schedule(d1);
     await saver.flush();
-    expect(last().state).toBe("conflict");
+    expect(last().state).toBe("error");
   });
 
   it("does not save on flush or retry afterwards", async () => {
@@ -532,6 +532,116 @@ describe("setVersion", () => {
     saver.retry();
     await vi.advanceTimersByTimeAsync(0);
     expect(save).toHaveBeenLastCalledWith(d1, 7);
+  });
+});
+
+describe("a design that can no longer be saved", () => {
+  it.each([
+    ["left DRAFT (409 DESIGN_NOT_DRAFT)", new ApiError(409, "DESIGN_NOT_DRAFT", "moved on")],
+    ["is gone (404)", new ApiError(404, "NOT_FOUND", "no such design")],
+  ])("sends nothing more once a save is refused because the design %s", async (_, refusal) => {
+    const save = vi.fn().mockRejectedValueOnce(refusal);
+    const { saver, last } = setup({ save });
+    saver.schedule(d1);
+    await saver.flush();
+    expect(last()).toMatchObject({ state: "error", error: refusal });
+
+    // Neither "Thử lại", a flush (tab hidden, studio left), the network coming back nor a later
+    // change sends anything.
+    saver.retry();
+    await saver.flush();
+    window.dispatchEvent(new Event("online"));
+    saver.schedule(d2);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it("lock(true) drops what is pending and sends nothing, silently, until lock(false)", async () => {
+    const save = vi
+      .fn()
+      .mockRejectedValueOnce(offline())
+      .mockResolvedValue({ version: 9, savedAt: T2 });
+    const { saver, states } = setup({ save });
+    saver.schedule(d1);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS); // offline: waiting for the backoff
+    expect(states()).toEqual(["pending", "saving", "offline"]);
+
+    saver.lock(true);
+    saver.schedule(d2);
+    saver.retry();
+    await saver.flush();
+    window.dispatchEvent(new Event("online"));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(states()).toEqual(["pending", "saving", "offline"]); // the caller says what is shown
+
+    saver.lock(false);
+    saver.schedule(d3);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenLastCalledWith(d3, 3);
+    expect(states().at(-1)).toBe("saved");
+  });
+
+  it("on retry() after a refusal, asks recheck(): still a draft, its document is saved at once and saving goes on", async () => {
+    const save = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError(409, "DESIGN_NOT_DRAFT", "moved on"))
+      .mockResolvedValue({ version: 9, savedAt: T2 });
+    const recheck = vi.fn(async (): Promise<DesignDocument | null> => d2);
+    const { saver, last } = setup({ save, recheck });
+    saver.schedule(d1);
+    await saver.flush();
+    expect(last()).toMatchObject({ state: "error" });
+
+    saver.retry();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(recheck).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenLastCalledWith(d2, 3);
+    expect(last()).toMatchObject({ state: "saved", version: 9 });
+    saver.schedule(d3);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(save).toHaveBeenLastCalledWith(d3, 9);
+  });
+
+  it("stays refused when recheck() finds the design is no longer a draft, or cannot tell", async () => {
+    const refusal = new ApiError(409, "DESIGN_NOT_DRAFT", "moved on");
+    const save = vi.fn().mockRejectedValue(refusal);
+    const recheck = vi
+      .fn<() => Promise<DesignDocument | null>>()
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new ApiError(0, "NETWORK_ERROR", "no network"));
+    const { saver, last } = setup({ save, recheck });
+    saver.schedule(d1);
+    await saver.flush();
+
+    saver.retry();
+    await vi.advanceTimersByTimeAsync(0);
+    saver.retry();
+    await vi.advanceTimersByTimeAsync(0);
+    saver.schedule(d2);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(recheck).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(last()).toMatchObject({ state: "error", error: refusal });
+  });
+
+  it("saves again after lock(false) once a refused save locked it", async () => {
+    const save = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError(409, "DESIGN_NOT_DRAFT", "moved on"))
+      .mockResolvedValue({ version: 9, savedAt: T2 });
+    const { saver } = setup({ save });
+    saver.schedule(d1);
+    await saver.flush();
+    saver.lock(true); // the studio follows the new status
+    saver.lock(false); // and the design came back as a draft
+    saver.schedule(d2);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(save).toHaveBeenCalledTimes(2);
   });
 });
 

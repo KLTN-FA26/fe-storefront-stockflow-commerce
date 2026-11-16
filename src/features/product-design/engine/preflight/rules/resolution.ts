@@ -1,67 +1,60 @@
 import type { DesignElement, ImageElement } from "../../document/schema";
+import { polarWarp, warpStretch } from "../../geometry/polar-warp";
 import { effectiveDpi } from "../../geometry/units";
+import type { PrintSurface } from "../../surfaces/types";
 import type { PreflightIssue, SurfaceScope } from "../types";
 
-// BR-DSG-001 (BE) and docs 12 §3 step 3 / edge cases (spec §8). Low-DPI policy (spec §2.4, BE
-// proposal Q9, decided 2026-10-26, BA sign-off pending): below `minDpi` fails ("thiếu DPI" blocks
-// confirmation), below the print file's DPI warns ("ảnh độ phân giải thấp" may go on, accepted).
+// BR-DSG-001 (BE) and docs 12 §3 step 3 / edge cases (spec §7): below `minDpi` fails. There is no
+// warning band any more (no warning level in the 2026-11 docs); the print raster stays at
+// `printDpi(minDpi)`.
 
-/** The print file's floor (spec §9): its raster is `printDpi(minDpi)` DPI. */
+/** The print file's floor: its raster is `printDpi(minDpi)` DPI. */
 export const PRINT_DPI_FLOOR = 300;
 
-/**
- * The DPI the print file is rendered at: `max(minDpi, 300)`. An image under it is upscaled in the
- * print file, so it prints soft even when it meets the template's minimum.
- */
+/** The DPI the print file is rendered at: `max(minDpi, 300)`. */
 export const printDpi = (minDpi: number): number => Math.max(minDpi, PRINT_DPI_FLOOR);
 
-/** The DPI the image reaches once placed: the worse of its two axes, at the placed (scaled) size. */
-export function placedDpi(el: ImageElement): number {
+/**
+ * The DPI the image reaches once placed: the worse of its two axes, at the placed (scaled) size.
+ * Bent around the cup on `surface`, its outer edge is stretched by `warpStretch` (spec §4), so the
+ * horizontal DPI is divided by it.
+ */
+export function placedDpi(el: ImageElement, surface?: PrintSurface): number {
   const { scale } = el.placement;
+  const warp =
+    surface &&
+    polarWarp(el, surface, {
+      x: -el.widthMm / 2,
+      y: -el.heightMm / 2,
+      width: el.widthMm,
+      height: el.heightMm,
+    });
+  const stretch = warp ? warpStretch(warp) : 1;
   return Math.min(
-    effectiveDpi(el.naturalWidthPx, el.widthMm * scale),
+    effectiveDpi(el.naturalWidthPx, el.widthMm * scale) / stretch,
     effectiveDpi(el.naturalHeightPx, el.heightMm * scale),
   );
 }
 
-/**
- * Where `dpi` stands against the template's `minDpi`: under it, under the print file's DPI
- * (`printDpi(minDpi)`: upscaled when printed), or fine. A template whose `minDpi` is 300 or more has
- * no "low" band: everything it accepts prints at full resolution.
- */
-export function dpiTier(dpi: number, minDpi: number): "below-min" | "low" | "ok" {
-  if (dpi < minDpi) return "below-min";
-  return dpi < printDpi(minDpi) ? "low" : "ok";
+/** Where `dpi` stands against the template's `minDpi`: under it, or fine. */
+export function dpiTier(dpi: number, minDpi: number): "below-min" | "ok" {
+  return dpi < minDpi ? "below-min" : "ok";
 }
 
-/** `DPI_BELOW_MIN` or `DPI_LOW` for an image; nothing for the other element kinds. */
+/** `DPI_BELOW_MIN` for an image; nothing for the other element kinds. */
 export function resolutionIssues(scope: SurfaceScope, el: DesignElement): PreflightIssue[] {
   if (el.type !== "image") return [];
 
   const { minDpi } = scope.input.template;
-  const dpi = placedDpi(el);
-  const at = { surfaceCode: scope.code, elementId: el.id };
-
-  const tier = dpiTier(dpi, minDpi);
-  if (tier === "below-min") {
-    return [
-      {
-        ruleId: "DPI_BELOW_MIN",
-        level: "fail",
-        message: `Ảnh chỉ đạt ${Math.round(dpi)} DPI, thấp hơn mức tối thiểu ${minDpi} DPI.`,
-        ...at,
-      },
-    ];
-  }
-  if (tier === "low") {
-    return [
-      {
-        ruleId: "DPI_LOW",
-        level: "warning",
-        message: `Ảnh đạt ${Math.round(dpi)} DPI, bản in có thể hơi mờ.`,
-        ...at,
-      },
-    ];
-  }
-  return [];
+  const dpi = placedDpi(el, scope.surface);
+  if (dpiTier(dpi, minDpi) === "ok") return [];
+  return [
+    {
+      ruleId: "DPI_BELOW_MIN",
+      level: "fail",
+      message: `Ảnh chỉ đạt ${Math.round(dpi)} DPI, thấp hơn mức tối thiểu ${minDpi} DPI.`,
+      surfaceCode: scope.code,
+      elementId: el.id,
+    },
+  ];
 }

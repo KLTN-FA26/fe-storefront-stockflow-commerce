@@ -2,17 +2,15 @@
 
 import { useCallback, useRef, useState } from "react";
 
-import {
-  rasterizeSvg,
-  readImageDimensions,
-  sha256Hex,
-  type CustomizationTemplate,
-} from "../../engine";
-import { describeDesignError } from "../../errors";
+import { rasterizeSvg, readImageDimensions, type CustomizationTemplate } from "../../engine";
+import { describeDesignError, describeFileRefusal } from "../../errors";
 import { useUploadAsset } from "../../mutations";
 import type { DesignAsset } from "../../types";
 import { SVG_MIN_RASTER_WIDTH_PX, svgRasterWidthPx } from "./image-actions";
+import { uploadKey } from "../../upload-key";
 import { useStudio } from "./studio-context";
+
+export { uploadKey };
 
 /** Images past this many pixels are refused: decoding one would exhaust a phone's memory. */
 const MAX_PIXELS = 40_000_000;
@@ -20,19 +18,26 @@ const BYTES_PER_MB = 1024 * 1024;
 const SVG_TYPE = "image/svg+xml";
 
 export const UPLOAD_MESSAGES = {
-  unsupported: "Định dạng không được hỗ trợ. Hỗ trợ: PNG, JPG, WebP, SVG.",
+  unsupported: (formats: readonly string[]) =>
+    `Định dạng không được hỗ trợ. Hỗ trợ: ${formats.join(", ")}.`,
   tooLarge: (maxMb: number) => `Tệp lớn hơn ${maxMb} MB.`,
   tooManyPixels: "Ảnh vượt 40 megapixel.",
   unreadable: "Không đọc được kích thước ảnh.",
   noRoom: "Mặt này đã đủ số phần tử tối đa, hãy xoá bớt để thêm ảnh.",
+  uploading: "Đang tải ảnh lên…",
 } as const;
 
 /** A file turned away before anything was sent; its message says why, in the customer's words. */
 export class AssetRefusedError extends Error {}
 
 /** The words for a failed upload: a refusal's own, else the API error's. */
-export const describeUploadError = (error: unknown) =>
-  error instanceof AssetRefusedError ? error.message : describeDesignError(error);
+export const describeUploadError = (
+  error: unknown,
+  template?: Pick<CustomizationTemplate, "allowedFileFormats" | "maxFileSizeMb">,
+) =>
+  error instanceof AssetRefusedError
+    ? error.message
+    : ((template && describeFileRefusal(error, template)) ?? describeDesignError(error));
 
 const TYPE_BY_EXTENSION: Record<string, string> = {
   png: "image/png",
@@ -54,38 +59,32 @@ function declaredType(file: File): string {
 export const acceptedFormats = (template: Pick<CustomizationTemplate, "allowedFileFormats">) =>
   [...template.allowedFileFormats, ".svg"].join(",");
 
+/** What a customer calls each format; any other MIME type reads as its subtype in capitals. */
+const FORMAT_NAMES: Record<string, string> = {
+  "image/png": "PNG",
+  "image/jpeg": "JPG",
+  "image/webp": "WebP",
+  [SVG_TYPE]: "SVG",
+};
+
+/**
+ * The formats a customer may pick, by name: the template's (its file rules', `templateOf`), then
+ * SVG, which is always taken because it is drawn to a PNG before it is sent.
+ */
+export function acceptedFormatNames(
+  template: Pick<CustomizationTemplate, "allowedFileFormats">,
+): string[] {
+  const names = template.allowedFileFormats.map(
+    (type) => FORMAT_NAMES[type] ?? type.replace(/^image\//, "").toUpperCase(),
+  );
+  return [...new Set([...names, FORMAT_NAMES[SVG_TYPE]!])];
+}
+
 /** The first of `files` (a drop or a paste may carry several; one image is placed at a time). */
 export const firstFile = (files: FileList | null | undefined): File | undefined => files?.[0];
 
-const HEX_DIGITS = new TextEncoder().encode("0123456789abcdef");
-
-/**
- * The idempotency key of an upload: the SHA-256 hex of `hex(bytes) + "\0" + name + "\0" +
- * contentType`, then `+ "\0" + role` for an artifact (R67). The BE replays a key only for the same
- * bytes, name and type (the mock's `sameUpload` too) and answers 422 `IDEMPOTENCY_KEY_REUSED` for
- * anything else, so identical bytes under another name or type must not share a key, while a true
- * retry still does. (R58)
- */
-export async function uploadKey(
-  bytes: Uint8Array,
-  name: string,
-  contentType: string,
-  artifactRole?: string,
-): Promise<string> {
-  const tail = artifactRole === undefined ? "" : `\0${artifactRole}`;
-  const suffix = new TextEncoder().encode(`\0${name}\0${contentType}${tail}`);
-  const input = new Uint8Array(bytes.length * 2 + suffix.length); // the hex digits as ASCII
-  for (let i = 0; i < bytes.length; i++) {
-    const byte = bytes[i] ?? 0;
-    input[2 * i] = HEX_DIGITS[byte >> 4] ?? 0;
-    input[2 * i + 1] = HEX_DIGITS[byte & 15] ?? 0;
-  }
-  input.set(suffix, bytes.length * 2);
-  return sha256Hex(input);
-}
-
 /** The SVG as a PNG named after it, drawn for the active face; a file the browser cannot draw is unreadable. */
-async function rasterized(file: File, widthPx: number): Promise<File> {
+export async function rasterized(file: File, widthPx: number): Promise<File> {
   let png: Blob;
   try {
     png = await rasterizeSvg(await file.text(), widthPx);
@@ -113,7 +112,7 @@ export function useAssetUpload() {
       const type = declaredType(file);
       const isSvg = type === SVG_TYPE;
       if (!isSvg && !template.allowedFileFormats.includes(type)) {
-        throw new AssetRefusedError(UPLOAD_MESSAGES.unsupported);
+        throw new AssetRefusedError(UPLOAD_MESSAGES.unsupported(acceptedFormatNames(template)));
       }
       const maxBytes = template.maxFileSizeMb * BYTES_PER_MB;
       const tooLarge = new AssetRefusedError(UPLOAD_MESSAGES.tooLarge(template.maxFileSizeMb));
@@ -160,6 +159,7 @@ export function useAssetUpload() {
  */
 export function useAssetPicker() {
   const { upload } = useAssetUpload();
+  const { template } = useStudio();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const running = useRef(false);
@@ -173,14 +173,14 @@ export function useAssetPicker() {
       try {
         return await upload(file);
       } catch (failure) {
-        setError(describeUploadError(failure));
+        setError(describeUploadError(failure, template));
         return null;
       } finally {
         running.current = false;
         setBusy(false);
       }
     },
-    [upload],
+    [upload, template],
   );
 
   return { pick, busy, error, fail: setError };

@@ -6,6 +6,8 @@ import { usePreflight } from "../components/studio/use-preflight";
 import { StudioProvider, type StudioServices } from "../components/studio/studio-context";
 import { addElement, createEditor, createSurfaces, emptyDocument } from "../engine";
 import { cup12oz, sizer, textEl } from "../engine/__tests__/fixtures";
+import { printConfigSchema } from "../schemas";
+import { printConfigDto } from "./fixtures";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -14,6 +16,10 @@ const label = textEl("t", {
   content: "Cà phê",
   placement: { u: 170, v: 55, rotationDeg: 0, scale: 1 },
 });
+
+/** The cup's print configuration, as the studio holds it (parsed). */
+const printConfigOf = (overrides: Record<string, unknown> = {}) =>
+  printConfigSchema.parse(printConfigDto(overrides));
 
 /** The hook over a real editor, with the studio services it reads (the others are not needed). */
 function setup() {
@@ -25,6 +31,7 @@ function setup() {
     sizer,
     assetStatus: {},
     fontStatus: {},
+    printConfig: printConfigOf(),
   } as StudioServices;
   const wrapper = ({ children }: { children: ReactNode }) => (
     <StudioProvider value={services}>{children}</StudioProvider>
@@ -85,6 +92,36 @@ describe("usePreflight", () => {
 
     expect(report().result).toBe("Fail");
     expect(report().issues.map((issue) => issue.ruleId)).toEqual(["FONT_NOT_ALLOWED"]);
+  });
+
+  it("checks the variant against the print configuration (R6: ACTIVE, carton spec)", () => {
+    const { report, place, provide, elapse } = setup();
+    place();
+    elapse(300);
+    expect(report().result).toBe("Pass");
+
+    provide({ printConfig: printConfigOf({ hasCartonSpec: false }) });
+    elapse(300);
+    expect(report().issues.map((issue) => issue.ruleId)).toEqual(["NO_CARTON_SPEC"]);
+
+    provide({ printConfig: printConfigOf({ variantStatus: "BLOCKED" }) });
+    elapse(300);
+    expect(report().issues.map((issue) => issue.ruleId)).toEqual(["VARIANT_UNAVAILABLE"]);
+  });
+
+  it("fails an ACTIVE variant whose product is neither APPROVED nor PUBLISHED, as the server does", () => {
+    const { report, place, provide, elapse } = setup();
+    place();
+    elapse(300);
+
+    const product = { ...printConfigDto().product, status: "ARCHIVED" };
+    provide({ printConfig: printConfigOf({ product }) });
+    elapse(300);
+    expect(report().issues.map((issue) => issue.ruleId)).toEqual(["VARIANT_UNAVAILABLE"]);
+
+    provide({ printConfig: printConfigOf({ product: { ...product, status: "APPROVED" } }) });
+    elapse(300);
+    expect(report().result).toBe("Pass");
   });
 
   it("recomputes when an image proves unusable", () => {

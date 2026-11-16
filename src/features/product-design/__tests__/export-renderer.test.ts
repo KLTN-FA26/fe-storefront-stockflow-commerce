@@ -15,29 +15,38 @@ import {
   ImageCache,
   MAX_BAND_PIXELS,
   type DesignDocument,
+  type Model3dRef,
+  type ProductViewer,
 } from "../engine";
 import {
   bagM,
+  cup12oz,
   fakeMeasure,
   FONTS,
   imageEl,
   PNG_1x1,
   recordingCtx,
   sizer,
+  type RecordingCtx,
 } from "../engine/__tests__/fixtures";
 
 /** Every decoded full-resolution image, in decode order, with its `close`. */
 let decoded: { close: ReturnType<typeof vi.fn> }[];
 /** The size of every canvas when it was encoded. */
 let encoded: { width: number; height: number }[];
+/** Every 2D context handed out, in order. */
+let contexts: RecordingCtx[];
 
 beforeEach(() => {
   decoded = [];
   encoded = [];
+  contexts = [];
   // jsdom has no 2D context, no `toBlob` and no decoder: fakes that do what a browser would.
-  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
-    () => recordingCtx().ctx as unknown as CanvasRenderingContext2D,
-  );
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => {
+    const rec = recordingCtx();
+    contexts.push(rec);
+    return rec.ctx as unknown as CanvasRenderingContext2D;
+  });
   vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation(function (
     this: HTMLCanvasElement,
     done: BlobCallback,
@@ -77,20 +86,26 @@ function bagDesign(): DesignDocument {
   return doc;
 }
 
-function renderer(doc: DesignDocument, offscreenViewer?: () => PreviewViewer | null) {
+function renderer(
+  doc: DesignDocument,
+  offscreenViewer?: () => PreviewViewer | null,
+  template = bagM,
+  extra: { model3d?: Model3dRef | null; onScreen?: PreviewViewer } = {},
+) {
   const repaint = createRepaintChannel();
   return createCanvasExportRenderer({
     ...(offscreenViewer ? { offscreenViewer } : {}),
-    editor: createEditor({ template: bagM, document: doc }),
-    template: bagM,
-    surfaces: createSurfaces(bagM),
+    editor: createEditor({ template, document: doc }),
+    template,
+    surfaces: createSurfaces(template),
     sizer,
     fonts: FONTS,
     measure: fakeMeasure,
     images: new ImageCache({ maxBytes: 1 }),
     layerCache: new Map(),
     livePreview: createLivePreview(repaint),
-    viewerRef: { current: null },
+    ...(extra.model3d !== undefined ? { model3d: extra.model3d } : {}),
+    viewerRef: { current: extra.onScreen ? (extra.onScreen as unknown as ProductViewer) : null },
     designId: "7c1f0a00-0000-4000-8000-000000000001",
     client: new QueryClient({ defaultOptions: { queries: { retry: false } } }),
   });
@@ -103,10 +118,10 @@ describe("the print surfaces", () => {
     const bands = await renderer(doc).printSurface("FRONT", doc, 16);
 
     expect(bands.map(({ heightPx }) => heightPx)).toEqual([2288, 2288]);
-    expect(bands.map(({ overlapPx }) => overlapPx)).toEqual([1, 0]);
-    // The top band also draws the bottom band's first row, which that band covers again (N5).
+    // Each band holds its own rows only: no row is drawn twice in the PDF.
+    expect(bands.every((band) => !("overlapPx" in band))).toBe(true);
     expect(encoded).toEqual([
-      { width: 4256, height: 2289 },
+      { width: 4256, height: 2288 },
       { width: 4256, height: 2288 },
     ]);
     expect(encoded.every(({ width, height }) => width * height <= MAX_BAND_PIXELS)).toBe(true);
@@ -130,6 +145,25 @@ describe("the print surfaces", () => {
     expect(decoded).toHaveLength(2);
     expect(decoded[1]!.close).toHaveBeenCalled();
   });
+
+  it("lays a wrapped image of the cup on the page's own pixel grid, not turned", async () => {
+    const doc = emptyDocument(cup12oz);
+    const placement = { u: 140, v: 60, rotationDeg: 0, scale: 1 };
+    doc.surfaces.BODY = {
+      background: { kind: "none" },
+      elements: [imageEl("w", { assetId: "a1", wrap: true, placement })],
+    };
+    await renderer(doc, undefined, cup12oz).printSurface("BODY", doc, 4);
+
+    // The page is the canvas cleared before the paint; the remap's layers are the others.
+    const page = contexts.find((rec) => rec.calls.some(([m]) => m === "clearRect"))!;
+    expect(page.calls.some(([m]) => m === "rotate" || m === "transform")).toBe(false);
+    const draws = page.calls.filter(([m]) => m === "drawImage");
+    expect(draws).toHaveLength(1);
+    for (const mm of draws[0]!.slice(2) as number[]) {
+      expect(Math.abs(mm * 4 - Math.round(mm * 4))).toBeLessThan(1e-9);
+    }
+  });
 });
 
 describe("the customer preview", () => {
@@ -141,6 +175,7 @@ describe("the customer preview", () => {
       resetView: vi.fn(),
       screenshot: vi.fn(async () => new Blob([bytes])),
       dispose: vi.fn(),
+      whenModelReady: vi.fn(async () => undefined),
     } satisfies PreviewViewer;
   }
 
@@ -155,6 +190,7 @@ describe("the customer preview", () => {
     expect(viewer.setModel).toHaveBeenCalledWith(
       bagM,
       expect.objectContaining({ order: ["FRONT", "BACK", "LEFT", "RIGHT"] }),
+      null,
     );
     expect(viewer.setSurfaceTexture.mock.calls.map(([code]) => code)).toEqual([
       "FRONT",
@@ -166,6 +202,126 @@ describe("the customer preview", () => {
     expect(viewer.screenshot).toHaveBeenCalledWith({ width: 1600, height: 1600 });
     expect(viewer.dispose).toHaveBeenCalled();
     expect(encoded).toEqual([]); // no flat picture was drawn
+  });
+
+  describe("with a .glb model", () => {
+    const MODEL3D: Model3dRef = {
+      url: "/models/sample-cup-12oz.glb",
+      surfaces: [{ printAreaCode: "BODY", meshName: "print:BODY" }],
+    };
+    const cupDesign = () => emptyDocument(cup12oz);
+    /** A viewer whose model is "swapped" only when its `whenModelReady` settles. */
+    function swappingViewer(ready: Promise<void>) {
+      const viewer = fakeViewer();
+      const seen = { swappedAtShot: false, swapped: false };
+      viewer.whenModelReady.mockImplementation(() => ready.then(() => void (seen.swapped = true)));
+      viewer.screenshot.mockImplementation(async () => {
+        seen.swappedAtShot = seen.swapped;
+        return new Blob([new Uint8Array([9])]);
+      });
+      return { viewer, seen };
+    }
+
+    afterEach(() => vi.useRealTimers());
+
+    it("gives the offscreen viewer the file and waits for it before the screenshot", async () => {
+      let swap!: () => void;
+      const { viewer, seen } = swappingViewer(new Promise<void>((done) => (swap = done)));
+      const pending = renderer(cupDesign(), () => viewer, cup12oz, { model3d: MODEL3D }).preview(
+        1600,
+      );
+
+      await vi.waitFor(() => expect(viewer.whenModelReady).toHaveBeenCalled());
+      expect(viewer.setModel).toHaveBeenCalledWith(cup12oz, expect.anything(), MODEL3D);
+      expect(viewer.screenshot).not.toHaveBeenCalled(); // still waiting
+      swap(); // late, but inside the deadline
+      expect([...(await pending)]).toEqual([9]);
+      expect(seen.swappedAtShot).toBe(true);
+      expect(viewer.dispose).toHaveBeenCalled();
+    });
+
+    it("waits in the viewer on screen too, and shoots the swapped model", async () => {
+      let swap!: () => void;
+      const { viewer, seen } = swappingViewer(new Promise<void>((done) => (swap = done)));
+      const pending = renderer(cupDesign(), undefined, cup12oz, {
+        model3d: MODEL3D,
+        onScreen: viewer,
+      }).preview(1600);
+
+      await vi.waitFor(() => expect(viewer.whenModelReady).toHaveBeenCalled());
+      expect(viewer.screenshot).not.toHaveBeenCalled();
+      swap();
+      expect([...(await pending)]).toEqual([9]);
+      expect(seen.swappedAtShot).toBe(true);
+      expect(viewer.resetView).toHaveBeenCalled();
+      expect(viewer.dispose).not.toHaveBeenCalled(); // the studio's own viewer stays
+    });
+
+    it("shoots what is there after 15 s when the model never settles (offscreen)", async () => {
+      vi.useFakeTimers();
+      const viewer = fakeViewer();
+      viewer.whenModelReady.mockReturnValue(new Promise<undefined>(() => undefined));
+      const pending = renderer(cupDesign(), () => viewer, cup12oz, { model3d: MODEL3D }).preview(
+        1600,
+      );
+
+      await vi.advanceTimersByTimeAsync(14_900);
+      expect(viewer.screenshot).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(200);
+      expect([...(await pending)]).toEqual([1, 2, 3]);
+      expect(viewer.screenshot).toHaveBeenCalledTimes(1);
+      expect(encoded).toEqual([]); // the 3D shot, not the flat one
+    });
+
+    it("shoots what is there after 15 s when the model never settles (on screen)", async () => {
+      vi.useFakeTimers();
+      const viewer = fakeViewer();
+      viewer.whenModelReady.mockReturnValue(new Promise<undefined>(() => undefined));
+      const pending = renderer(cupDesign(), undefined, cup12oz, {
+        model3d: MODEL3D,
+        onScreen: viewer,
+      }).preview(1600);
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect([...(await pending)]).toEqual([1, 2, 3]);
+      expect(viewer.screenshot).toHaveBeenCalledTimes(1);
+    });
+
+    it("an abort ends the wait at once: no 15 s timer is left and the offscreen viewer is disposed", async () => {
+      vi.useFakeTimers();
+      const viewer = fakeViewer();
+      viewer.whenModelReady.mockReturnValue(new Promise<undefined>(() => undefined));
+      const cancel = new AbortController();
+      const pending = renderer(cupDesign(), () => viewer, cup12oz, { model3d: MODEL3D }).preview(
+        1600,
+        cancel.signal,
+      );
+      const outcome = pending.catch((error: unknown) => error);
+      await vi.waitFor(() => expect(viewer.whenModelReady).toHaveBeenCalled());
+
+      cancel.abort(); // no timer advance: the abort alone ends it
+
+      expect(await outcome).toBe(cancel.signal.reason);
+      expect(viewer.dispose).toHaveBeenCalled();
+      expect(viewer.screenshot).not.toHaveBeenCalled();
+      expect(encoded).toEqual([]); // not redrawn flat either
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("leaves no timer after a normal settle", async () => {
+      vi.useFakeTimers();
+      const viewer = fakeViewer();
+      await renderer(cupDesign(), () => viewer, cup12oz, { model3d: MODEL3D }).preview(1600);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("does not wait, and sends no file, for a print configuration without one", async () => {
+      const viewer = fakeViewer();
+      await renderer(cupDesign(), () => viewer, cup12oz, { model3d: null }).preview(1600);
+      expect(viewer.whenModelReady).not.toHaveBeenCalled();
+      expect(viewer.setModel.mock.calls[0]![2]).toBeNull();
+      expect(viewer.screenshot).toHaveBeenCalled();
+    });
   });
 
   it("draws the flat front only where there is no WebGL", async () => {

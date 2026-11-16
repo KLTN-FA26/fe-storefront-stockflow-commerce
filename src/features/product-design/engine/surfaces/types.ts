@@ -24,6 +24,8 @@ export interface PrintSurface {
   uRange: [number, number];
   vRange: [number, number];
   bleedMm: number;
+  /** The flat position of the cone's apex: set on sector (cup) surfaces only. */
+  apexMm?: PointMm;
   toFlat(u: number, v: number): FlatPoint;
   fromFlat(x: number, y: number): SurfacePoint;
   contains(p: PointMm, region: SurfaceRegion): boolean;

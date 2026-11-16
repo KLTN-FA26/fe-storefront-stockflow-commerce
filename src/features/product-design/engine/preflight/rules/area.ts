@@ -1,12 +1,11 @@
 import type { DesignElement } from "../../document/schema";
 import { containmentPoints, elementOutline } from "../../geometry/element";
-import { alongEdges, pointInPolygon } from "../../geometry/polygon";
 import type { PointMm } from "../../geometry/types";
-import type { PrintSurface } from "../../surfaces/types";
 import type { PreflightIssue, SurfaceScope } from "../types";
 
-// BR-02 (docs 12 §6): content must not leave the print area. CROSSES_SAFE_AREA and ON_SEAM are the
-// layout warnings of docs 12 §3 step 4 (spec §8).
+// BR-02 (docs 12 §6): content must not leave the print area + bleed. CROSSES_SAFE_AREA and ON_SEAM
+// fail text and images (docs 12 §3 step 4: text and logos stay inside the safe zone, spec §7).
+// Drawings (and the surface background, which is not an element) may run into the bleed.
 
 /**
  * Outline points are tested this far (mm) inside the outline, so float noise on an element laid
@@ -27,59 +26,46 @@ function pulledIn(outline: PointMm[]): PointMm[] {
 }
 
 /**
- * Whether the element covers any of the trim. A full-bleed background has every corner in the
- * bleed strip yet covers the whole trim, so corners alone are not enough: the element also
- * overlaps the trim when an edge runs through it, or when it encloses the trim (the trim's
- * centre is inside the outline).
- */
-function overlapsTrim(surface: PrintSurface, outline: PointMm[]): boolean {
-  const [u0, u1] = surface.uRange;
-  const [v0, v1] = surface.vRange;
-  const centre = surface.toFlat((u0 + u1) / 2, (v0 + v1) / 2);
-  return (
-    alongEdges(outline).some((p) => surface.contains(p, "trim")) || pointInPolygon(centre, outline)
-  );
-}
-
-/**
- * Where an element sits on its surface. `OUTSIDE_PRINT_AREA` when it passes the bleed or lies
- * completely outside the trim. Otherwise `CROSSES_SAFE_AREA` when any of it is outside the safe
- * line: in the band between safe line and trim, or past the trim into the bleed, where it is cut
- * off. `ON_SEAM` when any of it is on the cup's glue flap (which may also cross the safe line).
- * "Any of it" is read off `containmentPoints`: on the cup the middle of an edge counts too.
+ * Where an element sits on its surface. `OUTSIDE_PRINT_AREA` when any of it passes the bleed. For
+ * text and images (never a drawing): otherwise `CROSSES_SAFE_AREA` when any of it is outside the
+ * safe line (between safe line and trim, or in the bleed, where it is cut off), and `ON_SEAM` when
+ * any of it is on the cup's glue flap. `CROSSES_SAFE_AREA` is not reported for an element that
+ * already got `OUTSIDE_PRINT_AREA` (it would say the same thing twice); `ON_SEAM` may still be
+ * reported with either. "Any of it" is read off `containmentPoints`: on the cup the middle of an
+ * edge counts too.
  */
 export function areaIssues(scope: SurfaceScope, el: DesignElement): PreflightIssue[] {
   const { input, surface, code } = scope;
   const outline = pulledIn(elementOutline(el, surface, input.sizer(el)));
   const points = containmentPoints(el, surface, outline);
   const at = { surfaceCode: code, elementId: el.id };
-  const issues: PreflightIssue[] = [];
 
-  const pastBleed = points.some((p) => !surface.contains(p, "bleed"));
-  if (pastBleed || !overlapsTrim(surface, outline)) {
+  const issues: PreflightIssue[] = [];
+  if (points.some((p) => !surface.contains(p, "bleed"))) {
     issues.push({
       ruleId: "OUTSIDE_PRINT_AREA",
       level: "fail",
       message: "Phần tử nằm ngoài vùng in và sẽ bị cắt mất.",
       ...at,
     });
-  } else if (points.some((p) => !surface.contains(p, "safe"))) {
+  }
+  if (el.type === "drawing") return issues;
+
+  if (issues.length === 0 && points.some((p) => !surface.contains(p, "safe"))) {
     issues.push({
       ruleId: "CROSSES_SAFE_AREA",
-      level: "warning",
+      level: "fail",
       message: "Phần tử vượt vùng an toàn, có thể bị xén khi cắt.",
       ...at,
     });
   }
-
   if (points.some((p) => surface.inSeam(p))) {
     issues.push({
       ruleId: "ON_SEAM",
-      level: "warning",
+      level: "fail",
       message: "Phần tử nằm trên mép dán của ly và sẽ bị che.",
       ...at,
     });
   }
-
   return issues;
 }

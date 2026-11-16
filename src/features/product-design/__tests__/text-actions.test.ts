@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { safeBox } from "../components/studio/image-actions";
+import { safeBox } from "../components/studio/safe-fit";
 import {
   allowedFonts,
   clipTextContent,
@@ -130,13 +130,21 @@ describe("placeText", () => {
     expect(insideSafe({ ...text!, sizePt: text!.sizePt * 1.02 })).toBe(false);
   });
 
-  it("keeps the text a flat quad (no wrap) and upright", () => {
+  it("bends a new text along the cup body so it reads straight on the cup, upright", () => {
     const { services, texts } = setup();
 
     placeText(services, { sizePt: 24, bold: false });
 
-    expect(texts()[0]!.wrap).toBeUndefined();
+    expect(texts()[0]!.wrap).toBe(true);
     expect(texts()[0]!.placement.rotationDeg).toBe(0);
+  });
+
+  it("keeps a new text rigid on a flat face", () => {
+    const { services, texts } = setup(bagM);
+
+    placeText(services, { sizePt: 24, bold: false });
+
+    expect(texts()[0]!.wrap).toBeUndefined();
   });
 
   it("works on a flat face too", () => {

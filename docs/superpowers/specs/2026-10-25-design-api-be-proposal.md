@@ -1,3 +1,5 @@
+> Superseded for lifecycle, data contract and workflow screens by `2026-11-09-design-module12-a-foundation-design.md`.
+
 # Design API — change request for the BE team
 
 - Date: 2026-10-26
