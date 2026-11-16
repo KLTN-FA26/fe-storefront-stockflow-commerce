@@ -12,8 +12,6 @@ export const PERM = {
   customerRead: "customer-customers:READ",
   /** Own orders: GET /orders/me, /orders/me/{id}. */
   ordersRead: "sales-orders:READ",
-  /** Place an order and read the payment terms: POST /orders, GET /orders/payment-terms. */
-  ordersCreate: "sales-orders:CREATE",
   /** Cancel an order or ask for its cancellation. */
   ordersUpdate: "sales-orders:UPDATE",
   /** Edit a design and move it along: specification, confirmation request, confirmation, revision. */
@@ -24,14 +22,15 @@ export const PERM = {
 
 /**
  * What an account must hold to use the storefront: the storefront catalog, its own profile, and
- * order self-service. A staff account lacks `catalog-storefront:READ` (BE: CUSTOMER and
+ * its own orders. A staff account lacks `catalog-storefront:READ` (BE: CUSTOMER and
  * System Admin hold it, and System Admin has no customer profile), so it is turned away here.
+ * Not `sales-orders:CREATE`: since BE 14b24f55 (2026-11-10) a customer no longer places orders
+ * itself (orders come from accepted quotes), so the CUSTOMER role does not hold it.
  */
 export const STOREFRONT_PERMISSIONS: readonly string[] = [
   PERM.catalogStorefront,
   PERM.customerRead,
   PERM.ordersRead,
-  PERM.ordersCreate,
 ];
 
 /** True when every required code is among the ones held. */

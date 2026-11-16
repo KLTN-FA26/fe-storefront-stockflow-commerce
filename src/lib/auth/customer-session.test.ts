@@ -123,6 +123,27 @@ describe("signInCustomer", () => {
     });
   });
 
+  it("lets in the BE's CUSTOMER role as granted today, which no longer places orders itself", async () => {
+    // GET /identity/me/permissions for a CUSTOMER at BE develop d47ed4ae: no sales-orders:CREATE.
+    const beCustomerGrants = [
+      "catalog-storefront:READ",
+      "customer-addresses:READ",
+      "customer-customers:READ",
+      "customer-customers:UPDATE",
+      "design-designs:CREATE",
+      "design-designs:READ",
+      "design-designs:UPDATE",
+      "sales-orders:READ",
+      "sales-orders:UPDATE",
+      "sales-quotes:APPROVE",
+      "sales-quotes:READ",
+    ];
+    backend({ roles: ["CUSTOMER"], permissions: beCustomerGrants });
+    await expect(signInCustomer({ username: "u", password: "p" })).resolves.toEqual({
+      mustChangePassword: false,
+    });
+  });
+
   it("refuses an account that is a CUSTOMER by name but lacks a storefront permission", async () => {
     for (const missing of STOREFRONT_PERMISSIONS) {
       vi.restoreAllMocks();
