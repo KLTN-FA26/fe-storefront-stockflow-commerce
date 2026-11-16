@@ -12,11 +12,11 @@ import { hasErrorCode } from "@/lib/api/describe-error";
 import { isDesignGone, isDesignStateChanged } from "./errors";
 import { reReadProject } from "./project-mutations";
 import { designKeys, projectKeys } from "./queries";
-import type { SaveImageToLibraryInput, SaveTextStyleInput } from "./types";
+import type { LibraryItem, SaveImageToLibraryInput, SaveTextStyleInput } from "./types";
 
 // The writes on a project's library (spec 2026-11-12 §4), re-exported by `mutations.ts`. A change
 // to the library re-reads the library and the project's history (`ASSET_ADDED` / `ASSET_REMOVED`);
-// a refusal that says the project's state changed (`PROJECT_ARCHIVED`, `LIBRARY_FULL`) re-reads the
+// a refusal that says the project's state changed (`DESIGN_PROJECT_ARCHIVED`, `DESIGN_PROJECT_LIBRARY_FULL`) re-reads the
 // whole project; any other refusal (a wrong file, a bad text) changes nothing the page shows.
 // Placing an image in a design changes that design's images, never the library; and deleting a
 // library item touches no design's images (docs 12 BR-18).
@@ -33,7 +33,10 @@ const reReadLibrary = (client: QueryClient, projectId: string) =>
 
 /** Only a refusal that says the project's state changed (closed, full) makes the page stale. */
 const reReadWhenProjectChanged = (client: QueryClient, projectId: string, error: unknown) => {
-  if (hasErrorCode(error, "PROJECT_ARCHIVED") || hasErrorCode(error, "LIBRARY_FULL")) {
+  if (
+    hasErrorCode(error, "DESIGN_PROJECT_ARCHIVED") ||
+    hasErrorCode(error, "DESIGN_PROJECT_LIBRARY_FULL")
+  ) {
     void reReadProject(client, projectId);
   }
 };
@@ -69,11 +72,11 @@ export function useSaveTextStyle(projectId: string) {
   });
 }
 
-/** Removes an item (`mutate(itemId)`); the designs that used it keep their copies (BR-18). */
+/** Removes an item (`mutate(item)`, routed by its `kind`, F-36); the designs that used it keep their copies (BR-18). */
 export function useDeleteLibraryItem(projectId: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (itemId: string) => deleteLibraryItem(projectId, itemId),
+    mutationFn: (item: Pick<LibraryItem, "id" | "kind">) => deleteLibraryItem(projectId, item),
     onSuccess: () => reReadLibrary(client, projectId),
     onError: (error) => reReadWhenProjectChanged(client, projectId, error),
   });
@@ -81,8 +84,8 @@ export function useDeleteLibraryItem(projectId: string) {
 
 /**
  * Copies a library image into the design (`mutate(libraryItemId)`), where it becomes one of its
- * images. A 422 FILE_RULE leaves everything as it was; a design that moved on (409), is gone
- * (404) or left the project meanwhile (422 NOT_IN_PROJECT, in another tab) is re-read, so the
+ * images. A 415 or 413 leaves everything as it was; a design that moved on (409), is gone
+ * or whose project no longer has that file (404, in another tab) is re-read, so the
  * studio follows and stops offering that library.
  */
 export function usePlaceFromLibrary(designId: string) {
@@ -93,8 +96,7 @@ export function usePlaceFromLibrary(designId: string) {
     onError: (error) => {
       if (
         isDesignStateChanged(error) ||
-        isDesignGone(error) ||
-        hasErrorCode(error, "NOT_IN_PROJECT")
+        isDesignGone(error) // 404 too: a file outside the design's project is not found
       ) {
         void client.invalidateQueries({ queryKey: designKeys.detail(designId), exact: true });
       }

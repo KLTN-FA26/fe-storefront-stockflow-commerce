@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { formatDateTime } from "@/lib/format";
 
-import { designEventDtoSchema, printConfigDtoSchema } from "../schemas";
+import { designEventSchema, printConfigSchema } from "../schemas";
 import {
   defaultDesignName,
   designCardView,
@@ -12,8 +12,7 @@ import {
 } from "../selectors";
 import { approvedDto, design, eventDto, printConfigDto, returnedDto } from "./fixtures";
 
-const event = (overrides: Record<string, unknown>) =>
-  designEventDtoSchema.parse(eventDto(overrides));
+const event = (overrides: Record<string, unknown>) => designEventSchema.parse(eventDto(overrides));
 
 describe("designCardView", () => {
   it("shows the name, product · variant, last save, status and preview", () => {
@@ -62,6 +61,48 @@ describe("defaultDesignName (spec §6.2)", () => {
 });
 
 describe("eventView (spec §3.3)", () => {
+  const element = "3f2a9c1e-7b4d-4e0a-9c55-0d1f2a3b4c5d";
+
+  it("words the BE's failed checks: no rule code and no element id reaches the customer", () => {
+    const note = `OUTSIDE_PRINT_AREA FRONT/${element}; EMPTY_DESIGN; DPI_BELOW_MIN FRONT/${element}`;
+    const view = eventView(event({ type: "PREFLIGHT_FAILED", note }));
+    expect(view.note).toBe(
+      [
+        "Phần tử nằm ngoài vùng in và sẽ bị cắt mất.",
+        "Thiết kế chưa có nội dung.",
+        "Ảnh có độ phân giải thấp hơn mức tối thiểu của quy cách này.",
+      ].join("\n"),
+    );
+    expect(view.note).not.toMatch(/OUTSIDE_PRINT_AREA|DPI_BELOW_MIN|FRONT|3f2a9c1e/);
+  });
+
+  it("words the studio's own ON_SEAM, which the browser recorded, as the studio does", () => {
+    const view = eventView(event({ type: "PREFLIGHT_FAILED", note: `ON_SEAM BODY/${element}` }));
+    expect(view.note).toBe("Phần tử nằm trên mép dán của ly và sẽ bị che.");
+    const mixed = eventView(
+      event({ type: "PREFLIGHT_FAILED", note: `ON_SEAM BODY/${element}; EMPTY_DESIGN` }),
+    );
+    expect(mixed.note).toBe(
+      "Phần tử nằm trên mép dán của ly và sẽ bị che.\nThiết kế chưa có nội dung.",
+    );
+    // The studio's notes are never reported; one in a note is not worded.
+    expect(eventView(event({ type: "PREFLIGHT_FAILED", note: "TOO_THIN" })).note).toBe(
+      "Bản thiết kế chưa đạt kiểm tra tự động.",
+    );
+  });
+
+  it("words the mock's comma-joined note the same way, and a rule it lacks reads as a generic line", () => {
+    expect(
+      eventView(event({ type: "PREFLIGHT_FAILED", note: "EMPTY_DESIGN, CARTON_SPEC_MISSING" }))
+        .note,
+    ).toBe("Thiết kế chưa có nội dung.\nQuy cách chưa có quy cách thùng, chưa gửi duyệt được.");
+    for (const note of ["BLEED_MISSING FRONT/" + element, "Something went wrong", element]) {
+      const shown = eventView(event({ type: "PREFLIGHT_FAILED", note })).note;
+      expect(shown).toBe("Bản thiết kế chưa đạt kiểm tra tự động.");
+    }
+    expect(eventView(event({ type: "PREFLIGHT_FAILED", note: "  " })).note).toBeNull();
+  });
+
   it.each([
     ["CREATED", "Tạo thiết kế"],
     ["DERIVED_FROM_SNAPSHOT", "Tạo bản sửa từ thiết kế đã duyệt"],
@@ -79,9 +120,6 @@ describe("eventView (spec §3.3)", () => {
 
   it("shows the customer the return reason and the failed checks, not the internal notes", () => {
     expect(eventView(event({ type: "RETURNED", note: " Logo bị mờ " })).note).toBe("Logo bị mờ");
-    expect(eventView(event({ type: "PREFLIGHT_FAILED", note: "Thiết kế trống" })).note).toBe(
-      "Thiết kế trống",
-    );
     const approval = "SKU X-KH0010-001 · snapshot s · checksum c";
     expect(eventView(event({ type: "APPROVED", note: approval })).note).toBeNull();
     expect(eventView(event({ type: "DERIVED_FROM_SNAPSHOT", note: "snap" })).note).toBeNull();
@@ -90,7 +128,7 @@ describe("eventView (spec §3.3)", () => {
 });
 
 const printConfig = (overrides: Record<string, unknown> = {}) =>
-  printConfigDtoSchema.parse(printConfigDto(overrides));
+  printConfigSchema.parse(printConfigDto(overrides));
 
 describe("templateOf", () => {
   it("takes the file limits from fileRules, not from the template (ruling R20)", () => {

@@ -40,7 +40,7 @@ import {
   type StudioProduct,
 } from "./design-backend";
 import { bagDocument, TEST_FONTS } from "./fixtures";
-import { libraryImageDto, libraryTextDto, textStyleDto } from "./project-fixtures";
+import { libraryTextDto, projectAssetDto, projectTextDto, textStyleDto } from "./project-fixtures";
 
 /** The real calls, taken before any spy replaces them. */
 const REAL_GET = api.get.bind(api);
@@ -214,9 +214,9 @@ describe("placing a library image", () => {
     await user.click(await libraryTile());
 
     await vi.waitFor(() => expect(imagesOf(seen)).toHaveLength(1), LISTED);
-    const copies = post.mock.calls.filter(([url]) => String(url).endsWith("/assets/from-library"));
+    const copies = post.mock.calls.filter(([url]) => String(url).endsWith("/assets/library"));
     expect(copies).toHaveLength(1);
-    expect(copies[0]![0]).toBe(`/designs/${designId}/assets/from-library`);
+    expect(copies[0]![0]).toBe(`/designs/${designId}/assets/library`);
     expect(imagesOf(seen)[0]!.name).toBe("logo.png");
     // The copy is the design's own asset, not the library item.
     expect(imagesOf(seen)[0]!.assetId).not.toBe("");
@@ -226,14 +226,10 @@ describe("placing a library image", () => {
     const user = userEvent.setup();
     const { designId, post } = await inProject();
     post.mockImplementation((url, ...rest) =>
-      String(url).endsWith("/assets/from-library")
-        ? Promise.reject(
-            new ApiError(422, "FILE_RULE", "Refused", undefined, undefined, {
-              rule: "FORMAT",
-              contentType: "image/png",
-              formats: ["image/jpeg"],
-            }),
-          )
+      String(url).endsWith("/assets/library")
+        ? // The BE: 415 for a format the template does not take, a message only (F-24); the
+          // words are the design's template's formats (PNG and JPG for the bag).
+          Promise.reject(new ApiError(415, "UNSUPPORTED_MEDIA_TYPE", "Refused"))
         : REAL_POST(url, ...rest),
     );
     const seen = await openStudio(designId);
@@ -242,7 +238,7 @@ describe("placing a library image", () => {
     await user.click(await libraryTile());
 
     expect(await screen.findByRole("alert", {}, LISTED)).toHaveTextContent(
-      "Quy cách này chỉ nhận ảnh JPG.",
+      "Quy cách này chỉ nhận ảnh PNG, JPG.",
     );
     expect(imagesOf(seen)).toHaveLength(0);
   });
@@ -290,9 +286,7 @@ describe("placing a library image", () => {
     expect(placed.u).toBeCloseTo(expected.u, 3);
     expect(placed.v).toBeCloseTo(expected.v, 3);
     expect(placed.u).not.toBeCloseTo(centre.u, 1);
-    expect(post.mock.calls.some(([url]) => String(url).endsWith("/assets/from-library"))).toBe(
-      true,
-    );
+    expect(post.mock.calls.some(([url]) => String(url).endsWith("/assets/library"))).toBe(true);
   });
 
   it("still places from a closed project (A-E2)", async () => {
@@ -442,10 +436,8 @@ describe("saving into the project library", () => {
     await screen.findByText("Đã lưu ảnh vào thư viện dự án", undefined, LISTED);
     expect(screen.getByText("Đã lưu vào thư viện dự án")).toBeVisible();
     expect(screen.getByRole("button", { name: "Lưu ảnh vào thư viện dự án" })).toBeDisabled();
-    const copy = post.mock.calls.find(([url]) =>
-      String(url).endsWith("/library/images/from-design"),
-    );
-    expect(copy?.[0]).toBe(`/design-projects/${project.id}/library/images/from-design`);
+    const copy = post.mock.calls.find(([url]) => String(url).endsWith("/assets/from-design"));
+    expect(copy?.[0]).toBe(`/design-projects/${project.id}/assets/from-design`);
     expect(copy?.[1]).toEqual({ designId, assetId: placed.assetId });
     expect((await listProjectLibrary(project.id)).filter((i) => i.kind === "IMAGE")).toHaveLength(
       2,
@@ -462,10 +454,10 @@ describe("saving into the project library", () => {
       },
     });
     const full = Array.from({ length: 30 }, (_, i) =>
-      libraryTextDto({ id: `7a1b0000-0000-4000-8000-${String(i).padStart(12, "0")}` }),
+      projectTextDto({ id: `7a1b0000-0000-4000-8000-${String(i).padStart(12, "0")}` }),
     );
     get.mockImplementation((url, ...rest) =>
-      String(url).endsWith("/library")
+      String(url).endsWith("/texts")
         ? Promise.resolve({ data: full } as never)
         : REAL_GET(url, ...rest),
     );
@@ -548,7 +540,7 @@ function holdCopies(post: PostSpy) {
   let release = () => {};
   const held = new Promise<void>((resolve) => (release = resolve));
   post.mockImplementation(async (url, ...rest) => {
-    if (String(url).endsWith("/assets/from-library")) await held;
+    if (String(url).endsWith("/assets/library")) await held;
     return REAL_POST(url, ...rest);
   });
   return release;
@@ -556,12 +548,12 @@ function holdCopies(post: PostSpy) {
 /** Makes the copy of a library placement fail with `error`. */
 function refuseCopies(post: PostSpy, error: ApiError) {
   post.mockImplementation(async (url, ...rest) => {
-    if (String(url).endsWith("/assets/from-library")) throw error;
+    if (String(url).endsWith("/assets/library")) throw error;
     return REAL_POST(url, ...rest);
   });
 }
 const copiesIn = (post: PostSpy) =>
-  post.mock.calls.filter(([url]) => String(url).endsWith("/assets/from-library")).length;
+  post.mock.calls.filter(([url]) => String(url).endsWith("/assets/library")).length;
 const libraryDrop = (id: string) => {
   const dataTransfer = {
     types: [LIBRARY_DRAG_TYPE],
@@ -628,17 +620,17 @@ describe("one library placement at a time", () => {
 });
 
 describe("refusals of a library placement", () => {
-  it("says NOT_IN_PROJECT and places nothing", async () => {
+  it("says the file is not found (the BE's 404 for a file outside the project) and places nothing", async () => {
     const user = userEvent.setup();
     const { designId, post } = await inProject();
-    refuseCopies(post, new ApiError(422, "NOT_IN_PROJECT", "No"));
+    refuseCopies(post, new ApiError(404, "NOT_FOUND", "No"));
     const seen = await openStudio(designId);
     await openImagePanel(user);
 
     await user.click(await libraryTile());
 
     expect(await screen.findByRole("alert", {}, LISTED)).toHaveTextContent(
-      "Bản thiết kế này không thuộc dự án của thư viện.",
+      "Không tìm thấy thiết kế hoặc sản phẩm này.",
     );
     expect(imagesOf(seen)).toHaveLength(0);
   });
@@ -647,14 +639,7 @@ describe("refusals of a library placement", () => {
     sizeTheStage();
     const user = userEvent.setup();
     const { designId, post, image } = await inProject();
-    refuseCopies(
-      post,
-      new ApiError(422, "FILE_RULE", "No", undefined, undefined, {
-        rule: "FORMAT",
-        contentType: "image/png",
-        formats: ["image/jpeg"],
-      }),
-    );
+    refuseCopies(post, new ApiError(415, "UNSUPPORTED_MEDIA_TYPE", "No"));
     const seen = await openStudio(designId);
     await openImagePanel(user);
     await libraryTile();
@@ -662,7 +647,7 @@ describe("refusals of a library placement", () => {
     libraryDrop(image.id);
 
     expect(await screen.findByRole("alert", {}, LISTED)).toHaveTextContent(
-      "Quy cách này chỉ nhận ảnh JPG.",
+      "Quy cách này chỉ nhận ảnh PNG, JPG.",
     );
     expect(imagesOf(seen)).toHaveLength(0);
   });
@@ -676,7 +661,7 @@ describe("a stale refusal", () => {
       pngBytes(600, 600),
       STUDIO_PRODUCTS.bag,
     );
-    refuseCopies(post, new ApiError(422, "NOT_IN_PROJECT", "No"));
+    refuseCopies(post, new ApiError(404, "NOT_FOUND", "No"));
     const seen = await openStudio(designId);
     await openImagePanel(user);
     await user.click(await libraryTile());
@@ -689,11 +674,10 @@ describe("a stale refusal", () => {
 });
 
 describe("more limits", () => {
-  const full = (kind: "IMAGE" | "TEXT") =>
-    Array.from({ length: 30 }, (_, i) => {
-      const id = `7a1b0000-0000-4000-8000-${String(i).padStart(12, "0")}`;
-      return kind === "IMAGE" ? libraryImageDto({ id }) : libraryTextDto({ id });
-    });
+  const full = () =>
+    Array.from({ length: 30 }, (_, i) =>
+      projectAssetDto({ assetId: `7a1b0000-0000-4000-8000-${String(i).padStart(12, "0")}` }),
+    );
 
   it("adds no saved style to a surface that holds 200 elements, and says so in the panel", async () => {
     const user = userEvent.setup();
@@ -731,8 +715,8 @@ describe("more limits", () => {
       surfaces: { BODY: { background: { kind: "none" }, elements: [imageEl("i1")] } },
     });
     get.mockImplementation((url, ...rest) =>
-      String(url).endsWith("/library")
-        ? Promise.resolve({ data: full("IMAGE") } as never)
+      String(url).startsWith("/design-projects/") && String(url).endsWith("/assets")
+        ? Promise.resolve({ data: full() } as never)
         : REAL_GET(url, ...rest),
     );
     const seen = await openStudio(designId);

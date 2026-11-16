@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 import { Alert, EmptyState, Skeleton } from "@/components/shared";
 
-import { describeDesignError } from "../errors";
+import { describeProjectError } from "../errors";
 import { LIBRARY_LIMIT } from "../library-rules";
 import type { Gate } from "../project-rules";
 import type { LibraryImage, LibraryItem, LibraryText } from "../types";
@@ -28,7 +28,7 @@ function Loaded({ panel, children }: { panel: PanelProps; children: ReactNode })
   if (panel.isError) {
     return (
       <div role="alert" className="flex flex-col items-start gap-2">
-        <Alert tone="danger">{describeDesignError(panel.error)}</Alert>
+        <Alert tone="danger">{describeProjectError(panel.error)}</Alert>
         <RetryButton onRetry={panel.onRetry} retrying={panel.retrying} />
       </div>
     );

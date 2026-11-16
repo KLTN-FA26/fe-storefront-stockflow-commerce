@@ -41,6 +41,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/**
+ * The DRAFT count the way the BE has it (F-11): the `totalElements` of a one-row page of DRAFTs.
+ * Any design URL does to see which adapter answers it.
+ */
+const drafts = (url = "/designs") => api.get(url, { params: { status: "DRAFT", size: 1 } });
+
 /** An adapter standing for the BE: answers `{ real: true }` to everything. */
 const backend = () =>
   vi.fn((config: InternalAxiosRequestConfig) =>
@@ -85,7 +91,7 @@ describe("mock adapter settles like a real HTTP adapter", () => {
   it("keeps the random server error for design requests in the full mock", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0.01);
 
-    const error = await api.get("/designs/draft-count").catch((err: unknown) => err);
+    const error = await drafts().catch((err: unknown) => err);
 
     expect(error).toMatchObject({ status: 500, code: "MOCK_RANDOM_ERROR" });
   });
@@ -116,11 +122,11 @@ describe("mock adapter settles like a real HTTP adapter", () => {
     vi.spyOn(Math, "random").mockReturnValue(0.5);
 
     for (const url of [
-      "/api/designs/draft-count",
-      "http://localhost:3000/api/designs/draft-count",
-      "https://be.example.vn/api/v1/designs/draft-count?x=1",
+      "/api/designs",
+      "http://localhost:3000/api/designs",
+      "https://be.example.vn/api/v1/designs?x=1",
     ]) {
-      expect((await api.get(url)).data).toEqual({ drafts: 2, limit: 50 });
+      expect((await drafts(url)).data).toMatchObject({ totalElements: 2 });
     }
   });
 });
@@ -150,7 +156,7 @@ describe("activateMockAdapter", () => {
     expect((await api.get("/customers/me")).status).toBe(200);
     expect(setUp).not.toHaveBeenCalled();
 
-    expect((await api.get("/designs/draft-count")).data).toEqual({ drafts: 2, limit: 50 });
+    expect((await drafts()).data).toMatchObject({ totalElements: 2 });
     expect((await api.get("/designs")).data).toMatchObject({ totalElements: 4 });
     expect(setUp).toHaveBeenCalledTimes(1);
   });
@@ -162,9 +168,9 @@ describe("activateMockAdapter", () => {
 
     activateMockAdapter();
     activateDesignMockAdapter();
-    expect((await api.get("/designs/draft-count")).data).toEqual({ drafts: 2, limit: 50 });
+    expect((await drafts()).data).toMatchObject({ totalElements: 2 });
     expect((await api.get("/customers/me")).status).toBe(200);
-    expect((await api.get("/designs/draft-count")).data).toEqual({ drafts: 2, limit: 50 });
+    expect((await drafts()).data).toMatchObject({ totalElements: 2 });
 
     expect(setUp).toHaveBeenCalledTimes(1);
   });
@@ -188,7 +194,7 @@ describe("isDesignMockPath", () => {
   it.each([
     "/designs",
     "/designs/x/document",
-    "/catalog/products/ly-a/variants/SKU1/print-config",
+    "/catalog/products/ly-a/customization",
     "/__mock/reset",
     "/api/v1/designs?page=0",
     "/api/designs/x/document",
@@ -233,7 +239,7 @@ describe("activateDesignMockAdapter", () => {
     expect(previous).toHaveBeenCalledTimes(1);
 
     // Answered by the design mock's own seeded store and route table, not by the previous adapter.
-    expect((await api.get("/designs/draft-count")).data).toEqual({ drafts: 2, limit: 50 });
+    expect((await drafts()).data).toMatchObject({ totalElements: 2 });
     const missing = await api.get(`/designs/${UNKNOWN_DESIGN}`).catch((err: unknown) => err);
     expect(missing).toBeInstanceOf(ApiError);
     expect(missing).toMatchObject({ status: 404, code: "NOT_FOUND" });
@@ -247,11 +253,11 @@ describe("activateDesignMockAdapter", () => {
     activateDesignMockAdapter();
 
     for (const url of [
-      "http://localhost:3000/designs/draft-count",
-      "http://localhost:3000/api/designs/draft-count",
-      "http://localhost:3000/api/v1/designs/draft-count",
+      "http://localhost:3000/designs",
+      "http://localhost:3000/api/designs",
+      "http://localhost:3000/api/v1/designs",
     ]) {
-      expect((await api.get(url)).data).toEqual({ drafts: 2, limit: 50 });
+      expect((await drafts(url)).data).toMatchObject({ totalElements: 2 });
     }
     const other = await api.get("http://localhost:3000/api/orders/me?page=1");
     expect(other.data).toEqual({ real: true });
@@ -266,9 +272,9 @@ describe("activateDesignMockAdapter", () => {
     vi.spyOn(Math, "random").mockReturnValue(0.01);
     activateDesignMockAdapter();
 
-    const response = await api.get("/designs/draft-count");
+    const response = await drafts();
 
     expect(response.status).toBe(200);
-    expect(response.data).toMatchObject({ limit: 50 });
+    expect(response.data).toMatchObject({ totalElements: 2 });
   });
 });

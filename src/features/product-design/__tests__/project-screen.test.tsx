@@ -24,6 +24,11 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/design/projects/x",
   useParams: () => ({}),
 }));
+// The design API is on the mock (the server flag, threaded by context): the panel shows.
+vi.mock("@/providers/app-providers", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/providers/app-providers")>();
+  return { ...actual, useIsDesignMock: () => true };
+});
 // The session is the heavy part (canvases, fonts, WebGL): faked, so the render step runs for real.
 vi.mock("../components/studio/load-design-session", () => ({
   loadDesignSession: env.loadDesignSession,
@@ -263,9 +268,12 @@ describe("ProjectScreen", () => {
     await userEvent.click(within(await cardOf(n.returned)).getByRole("checkbox"));
     expect(screen.getByText("Đã chọn 2 bản nháp")).toBeInTheDocument();
     const link = screen.getByRole("link", { name: "Gửi duyệt cả bộ" });
-    expect(link).toHaveAttribute(
-      "href",
-      `/design/projects/${project.id}/submit?ids=${draft},${returned}`,
+    // Adding a design to the project moves its version and time (the BE saves the draft), so the
+    // page lists them in the order of those times: the set is what counts, not its order.
+    const href = new URL(link.getAttribute("href")!, "http://localhost");
+    expect(href.pathname).toBe(`/design/projects/${project.id}/submit`);
+    expect(href.searchParams.get("ids")?.split(",").toSorted()).toEqual(
+      [draft, returned].toSorted(),
     );
     // A device the studio takes (the test DOM is one) is not told; a tablet is, whatever its width.
     expect(screen.queryByText("Cần máy tính để gửi duyệt cả bộ")).not.toBeInTheDocument();

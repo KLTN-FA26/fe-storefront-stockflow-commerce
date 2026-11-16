@@ -32,7 +32,7 @@ export function StatusBanner({ design }: { design: Design }) {
   }
   if (design.status === "APPROVED") {
     return (
-      <ReadOnlyBanner action={<SubmittedFiles designId={design.id} />}>
+      <ReadOnlyBanner action={<SubmittedFiles designId={design.id} approved />}>
         {`Đã duyệt lúc ${timeOf(design.approvedAt)}`}
       </ReadOnlyBanner>
     );

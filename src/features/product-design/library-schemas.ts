@@ -12,6 +12,8 @@ import { designAssetDtoSchema } from "./schemas";
 export const LIBRARY_LIMIT = 30;
 /** ASSUMPTION (A-E1): a saved text is a line or two, not a page. */
 export const LIBRARY_TEXT_MAX = 500;
+/** The shortened text a text style is listed under. */
+export const LIBRARY_NAME_MAX = 40;
 
 const instant = z.string().min(1);
 
@@ -58,7 +60,7 @@ export const libraryItemSchema = z.discriminatedUnion("kind", [
   libraryTextSchema,
 ]);
 
-/** POST …/library/texts: a text and its style (the server holds both to the same limits). */
+/** POST …/texts: a text and its style (the server holds both to the same limits). */
 export const libraryTextInputSchema = z.object({
   text: z
     .string()
@@ -68,5 +70,5 @@ export const libraryTextInputSchema = z.object({
   style: textStyleSchema,
 });
 
-/** POST …/library/images/from-design: an image of a design, copied into the library. */
+/** POST …/assets/from-design: an image of a design, copied into the library. */
 export const saveImageToLibraryInputSchema = z.object({ designId: beId(), assetId: beId() });

@@ -1,22 +1,24 @@
 import type { QueryClient } from "@tanstack/react-query";
 
+import { hasErrorCode } from "@/lib/api/describe-error";
+
 import type { FontRegistry } from "../engine";
-import { roundRefusalOf, type RoundRefusal } from "../errors";
-import type { SubmissionUploadInput } from "../round-mutations";
-import type {
-  Design,
-  OpenReviewRoundInput,
-  ReviewRound,
-  ReviewRoundItem,
-  SetPreflightFailureInput,
-  SubmissionUpload,
-} from "../types";
+import {
+  batchRefusalOf,
+  goneDesignIdsOf,
+  isDesignGone,
+  isDesignStateChanged,
+  refusedDesignIdsOf,
+  type BatchFailure,
+} from "../errors";
+import type { Design, OpenReviewRoundInput, ReviewRound, SetPreflightFailureInput } from "../types";
 import type { ExportRenderer } from "./studio/export-renderer";
 import { DocumentChangedError } from "./studio/submission-checks";
 import {
   ANNOUNCE,
-  DRAW_AGAIN,
-  REFUSED_ROW,
+  ROW_TEXT,
+  STOP_TEXT,
+  SetStopError,
   describeStop,
   failsOf,
   isFinal,
@@ -27,16 +29,20 @@ import {
 import {
   checkDesign,
   drawDesign,
+  repairFiles,
   uploadDrawn,
   type DrawnFiles,
+  type RoundDesign,
   type StepDeps,
+  type UploadFiles,
 } from "./submit-set-steps";
 
-// "Gửi duyệt cả bộ" (spec 2026-11-12 §8, docs 12 §4.10, BR-19), outside React: 1. check each
-// design; 2. the customer confirms; 3. draw and upload each design in turn; 4. open the round.
-// Nothing is sent for review before step 4, which takes every design or none. A stop keeps what
-// is done: "Thử lại" goes on from the design that stopped, without drawing or uploading again what
-// was (the upload's key is kept with the files). "Hủy" aborts the run.
+// "Gửi duyệt cả bộ" (docs 12 §4.10, BR-19), outside React: 1. check each design; 2. the customer
+// confirms; 3. draw each design in turn and upload its files as a single submission does, then read
+// its version; 4. one request opens the round over every `{ id, version }`. Nothing is sent for
+// review before step 4, which takes every design or none. A stop keeps what is done: "Thử lại"
+// goes on from the design that stopped, without drawing or uploading again what was. "Hủy"
+// aborts the run.
 
 export type { RowState, SetPhase, SetState } from "./submit-set-state";
 
@@ -44,17 +50,39 @@ type Failures = SetPreflightFailureInput["items"];
 
 export type SetRunDeps = {
   client: QueryClient;
+  /** The project the set is sent from: a design read afresh outside it is no longer of the set. */
+  projectId: string;
   fonts: FontRegistry;
   newRenderer?: (() => ExportRenderer) | undefined;
   /** The drafts sent, in order: fixed for the whole run. */
   designs: readonly Design[];
-  upload: (input: SubmissionUploadInput) => Promise<SubmissionUpload>;
+  /** A design's files, bound to the saved layout's checksum (`roles`: only these). */
+  upload: UploadFiles;
+  /** The design's version as it is now: each upload moved it on. */
+  readVersion: (designId: string) => Promise<number>;
   open: (input: OpenReviewRoundInput) => Promise<ReviewRound>;
   /** BATCH_PREFLIGHT_FAILED in the project's history (docs 12 §5.4); a failure is let go. */
   recordSetFailure: (items: Failures) => Promise<unknown>;
   /** Whether the round of these designs is open, read afresh (an answer lost on the way). */
   roundIsOpen: () => Promise<boolean>;
+  /**
+   * These designs read afresh, in the order of `ids`: `null` for one that is gone (404). Says why
+   * the BE refused a design (its code alone does not), and refreshes what the pages show.
+   */
+  readDesigns: (ids: readonly string[]) => Promise<ReadonlyArray<Design | null>>;
+  /**
+   * Why a design still a draft at the version sent was refused with `CONFLICT`: the BE's planning
+   * also answers it for a design not started on a template, or one with no layout
+   * (`DesignSubmissionService.plan`). Null when neither read says so.
+   */
+  diagnose: (design: Design) => Promise<"noTemplate" | "noLayout" | null>;
 };
+
+/** What a design read afresh says of a refused round (`whyRefused`). */
+type Outcome =
+  | { kind: "unchanged" }
+  | { kind: "changed"; message: string; reopen: boolean }
+  | { kind: "final"; message: string; reopen: boolean; notDraft: boolean };
 
 /** How many times files drawn of a design saved elsewhere before their upload are drawn again. */
 const DRAWS = 3;
@@ -75,10 +103,12 @@ export function createSetRun(deps: SetRunDeps) {
   let controller: AbortController | null = null;
   /** What "Thử lại" runs (`stalled`). */
   let resume: (() => Promise<void>) | null = null;
-  /** Kept across stops: passed step 1, drawn not uploaded yet, uploaded. */
+  /** Kept across stops: passed step 1, drawn not uploaded yet, uploaded (with its version). */
   const passed = new Set<string>();
   const drawn = new Map<string, DrawnFiles>();
-  const sent = new Map<string, ReviewRoundItem>();
+  const sent = new Map<string, RoundDesign>();
+  /** The BE's "files outdated" is repaired once per run (the files drawn again from a fresh template). */
+  let repairedOnce = false;
 
   /** A change of a run that was not called off ("Hủy", or the page left). */
   function set(signal: AbortSignal, patch: Partial<SetState>) {
@@ -154,8 +184,8 @@ export function createSetRun(deps: SetRunDeps) {
     else set(signal, { phase: "confirm", step: 2 });
   }
 
-  /** Step 3, one design: its files drawn (unless they are already), then uploaded. */
-  async function sendOne(signal: AbortSignal, design: Design): Promise<ReviewRoundItem | null> {
+  /** Step 3, one design: its files drawn (unless they are already), uploaded, its version read. */
+  async function sendOne(signal: AbortSignal, design: Design): Promise<RoundDesign | null> {
     const { id } = design;
     for (let draw = 1; ; draw += 1) {
       let files = drawn.get(id);
@@ -178,9 +208,9 @@ export function createSetRun(deps: SetRunDeps) {
       }
       setRow(signal, id, { kind: "uploading" });
       try {
-        const item = await uploadDrawn(steps(signal), design, files, deps.upload);
+        const item = await uploadDrawn(steps(signal), design, files, deps.upload, deps.readVersion);
         if (signal.aborted) return null;
-        drawn.delete(id); // the server holds the bytes now
+        drawn.delete(id); // the server holds the files now
         return item;
       } catch (error) {
         // Saved elsewhere since drawn: these files are stale, draw them again.
@@ -213,37 +243,231 @@ export function createSetRun(deps: SetRunDeps) {
     set(signal, { phase: "opening", step: 4 });
     announce(signal, ANNOUNCE.opening);
     try {
-      await deps.open({ items: designs.map((design) => sent.get(design.id)!) });
+      await deps.open({ designs: designs.map((design) => sent.get(design.id)!) });
     } catch (error) {
-      const refusal = roundRefusalOf(error);
-      if (refusal) return refused(signal, error, refusal);
-      if (isFinal(error)) throw error; // a closed project, a set too small: `go` stalls for good
-      // The network, the server: the round may have opened all the same. The project says.
-      const opened = await deps.roundIsOpen().catch(() => null);
-      if (signal.aborted) return;
-      if (opened !== true) return stall(signal, error, () => go(sendAll), opened === null);
+      if (hasErrorCode(error, "DESIGN_BATCH_PREFLIGHT_FAILED")) {
+        const failures = batchRefusalOf(error);
+        return failures ? refusedBatch(signal, error, failures) : unreadableRefusal(signal);
+      }
+      // A stale version or a design that is no longer a draft (409, naming the designs, BE-4).
+      if (hasErrorCode(error, "CONFLICT") || isDesignStateChanged(error)) {
+        // A lost answer then "Thử lại": the first request opened the round, and this one meets
+        // designs already in review. The project says whether that is so.
+        const opened = await deps.roundIsOpen().catch(() => false);
+        if (signal.aborted) return;
+        if (!opened) return explainConflict(signal, error);
+      } else if (isDesignGone(error)) {
+        return explainGone(signal, error);
+      } else {
+        return stopOrAsk(signal, error);
+      }
     }
     set(signal, { phase: "done" });
   }
 
-  /** The round named the designs in its way; their rows say why. */
-  function refused(signal: AbortSignal, error: unknown, refusal: RoundRefusal) {
+  /** Any other refusal: final ones stall for good; for the network or the server the project says. */
+  async function stopOrAsk(signal: AbortSignal, error: unknown) {
+    if (isFinal(error)) throw error; // a closed project, a bad request: `go` stalls for good
+    // The round may have opened all the same.
+    const opened = await deps.roundIsOpen().catch(() => null);
     if (signal.aborted) return;
-    for (const id of refusal.designIds) {
-      sent.delete(id);
-      drawn.delete(id);
-      if (refusal.code === "PREFLIGHT_FAILED") {
-        passed.delete(id);
-        const failure = refusal.failures.find((f) => f.designId === id);
-        setRow(signal, id, { kind: "failed", issues: failure?.issues ?? [] });
-      } else {
-        const message = REFUSED_ROW[refusal.code] ?? describeStop(error);
-        setRow(signal, id, { kind: "stopped", message });
+    if (opened !== true) return stall(signal, error, () => go(sendAll), opened === null);
+    set(signal, { phase: "done" });
+  }
+
+  /** Forgets what was drawn and sent of a design: it is drawn and uploaded again on the next try. */
+  function forget(id: string) {
+    sent.delete(id);
+    drawn.delete(id);
+  }
+
+  /**
+   * `422 DESIGN_BATCH_PREFLIGHT_FAILED`: none was sent, and the BE recorded it. A design with
+   * findings fails the set (its row lists them); one whose files are outdated has them drawn again
+   * from its template read afresh and uploaded, once, and the round is asked for again.
+   */
+  async function refusedBatch(signal: AbortSignal, error: unknown, failures: BatchFailure[]) {
+    if (signal.aborted) return;
+    const failed = failures.filter((failure) => failure.issues.length > 0);
+    const outdated = failures.filter((failure) => failure.issues.length === 0);
+    for (const { designId, issues } of failed) {
+      forget(designId);
+      passed.delete(designId);
+      setRow(signal, designId, { kind: "failed", issues });
+    }
+    if (failed.length > 0) {
+      for (const { designId } of outdated) {
+        forget(designId);
+        setRow(signal, designId, { kind: "stopped", message: ROW_TEXT.outdated });
+      }
+      set(signal, { phase: "failed" }); // the BE recorded the failed check itself
+      return;
+    }
+    if (repairedOnce) {
+      // Outdated again after the repair: ask the customer to try again, drawing everything anew.
+      for (const { designId } of outdated) {
+        forget(designId);
+        setRow(signal, designId, { kind: "stopped", message: ROW_TEXT.outdated });
+      }
+      return stall(signal, error, () => go(sendAll));
+    }
+    repairedOnce = true;
+    for (const { designId, roles } of outdated) {
+      const design = designs.find((candidate) => candidate.id === designId);
+      if (!design) continue;
+      setRow(signal, designId, { kind: "drawing", step: "preview", fraction: 0 });
+      const outcome = await onRow(signal, designId, () =>
+        repairFiles(
+          steps(signal),
+          design,
+          roles,
+          deps.upload,
+          deps.readVersion,
+          (step, fraction) => {
+            signal.throwIfAborted();
+            setRow(signal, designId, { kind: "drawing", step, fraction });
+          },
+        ),
+      );
+      if (signal.aborted) return;
+      if ("failed" in outcome) {
+        forget(designId);
+        passed.delete(designId);
+        const fails = failsOf(outcome.failed);
+        setRow(signal, designId, { kind: "failed", issues: fails });
+        await failSet(signal, [{ designId, issues: fails }]);
+        return;
+      }
+      sent.set(designId, outcome.repaired);
+      setRow(signal, designId, { kind: "uploaded" });
+    }
+    await openRound(signal);
+  }
+
+  /**
+   * `422 DESIGN_BATCH_PREFLIGHT_FAILED` whose `details` cannot be read or name no design: none was
+   * sent, and nothing says what to fix. The run stops; "Thử lại" draws and uploads every design
+   * anew (sending the same files would meet the same refusal), once per click, never by itself.
+   */
+  function unreadableRefusal(signal: AbortSignal) {
+    for (const design of designs) forget(design.id);
+    stall(signal, new SetStopError(STOP_TEXT.unreadable), () => go(sendAll));
+  }
+
+  /**
+   * 409 `CONFLICT` / `DESIGN_NOT_DRAFT`. The BE names every design of the batch with that refusal
+   * (`details.designIds`, BE-4), but not why: it checks the version before the status, so a design
+   * sent, approved or returned elsewhere is a `CONFLICT` too. The named designs are read again and
+   * each row says what the read shows (`whyRefused`). When the BE names none of the set (an older
+   * BE, or a refusal met after its planning step), every design of the set is read instead.
+   */
+  async function explainConflict(signal: AbortSignal, error: unknown): Promise<void> {
+    const named = (refusedDesignIdsOf(error) ?? []).filter((id) =>
+      designs.some((design) => design.id === id),
+    );
+    const listed = named.length > 0;
+    const asked = listed ? designs.filter((design) => named.includes(design.id)) : designs;
+    let fresh: ReadonlyArray<Design | null>;
+    try {
+      fresh = await deps.readDesigns(asked.map((design) => design.id));
+    } catch (readError) {
+      if (signal.aborted) return;
+      // Not known why: "Thử lại" reads them again before anything is drawn.
+      return stall(signal, readError, () => go((next) => explainConflict(next, error)));
+    }
+    if (signal.aborted) return;
+    const outcomes: Outcome[] = [];
+    for (const [i, design] of asked.entries()) {
+      const outcome = await whyRefused(design, fresh[i], listed);
+      if (signal.aborted) return;
+      if (outcome.kind === "unchanged") continue;
+      outcomes.push(outcome);
+      if (outcome.kind === "changed") forget(design.id); // drawn and uploaded again on "Thử lại"
+      setRow(signal, design.id, {
+        kind: "stopped",
+        message: outcome.message,
+        ...(outcome.reopen ? { reopen: true as const } : {}),
+      });
+    }
+    const final = outcomes.filter((outcome) => outcome.kind === "final");
+    if (final.length > 0) {
+      // A design that cannot go with the set: the set must be chosen anew, without a redraw.
+      const allNotDraft = final.every((outcome) => outcome.notDraft);
+      const text = allNotDraft ? STOP_TEXT.notDraft(final.length) : STOP_TEXT.cannotSend;
+      return stall(signal, new SetStopError(text), null);
+    }
+    if (outcomes.length > 0) {
+      return stall(signal, new SetStopError(STOP_TEXT.changed(outcomes.length)), () => go(sendAll));
+    }
+    // Nothing shows which one: every design is drawn and uploaded again on "Thử lại".
+    for (const design of designs) forget(design.id);
+    stall(signal, error, () => go(sendAll));
+  }
+
+  /**
+   * What a design read afresh says of the round's refusal:
+   *  - gone, or out of the project: it is not of the set any more;
+   *  - no longer a draft (sent, approved elsewhere): its new status, no redraw;
+   *  - a draft again with a new return (returned elsewhere): its reviewer's reason is to be read
+   *    first, no redraw;
+   *  - a draft at another version: edited elsewhere, drawn again on "Thử lại";
+   *  - a draft at the version sent, named by the BE: no template or no layout (`diagnose`), which
+   *    no retry fixes; else taken as edited elsewhere.
+   */
+  async function whyRefused(
+    design: Design,
+    now: Design | null | undefined,
+    named: boolean,
+  ): Promise<Outcome> {
+    if (now === undefined) return { kind: "unchanged" };
+    if (now === null || now.projectId !== deps.projectId) {
+      return { kind: "final", message: ROW_TEXT.notInProject, reopen: false, notDraft: false };
+    }
+    if (now.status !== "DRAFT") {
+      return {
+        kind: "final",
+        message: ROW_TEXT.notDraft(now.status),
+        reopen: true,
+        notDraft: true,
+      };
+    }
+    const returned =
+      now.lastReturn !== null && now.lastReturn.returnedAt !== design.lastReturn?.returnedAt;
+    if (returned) {
+      return { kind: "final", message: ROW_TEXT.returned, reopen: true, notDraft: false };
+    }
+    if (now.version !== sent.get(design.id)?.version) {
+      return { kind: "changed", message: ROW_TEXT.changed, reopen: true };
+    }
+    if (!named) return { kind: "unchanged" };
+    const cause = await deps.diagnose(now).catch(() => null);
+    if (cause === "noTemplate") {
+      return { kind: "final", message: ROW_TEXT.noTemplate, reopen: false, notDraft: false };
+    }
+    if (cause === "noLayout") {
+      return { kind: "final", message: ROW_TEXT.noLayout, reopen: false, notDraft: false };
+    }
+    return { kind: "changed", message: ROW_TEXT.changed, reopen: true };
+  }
+
+  /**
+   * 404: a design of the set is gone, or left the project, since the page read it
+   * (`requireInProject`). The BE sends no `details`: a design it names, or the set read again,
+   * says so on its row; otherwise the alert alone says one is. The run stops for good: the set
+   * must be chosen anew.
+   */
+  async function explainGone(signal: AbortSignal, error: unknown) {
+    const named = new Set(goneDesignIdsOf(error) ?? []);
+    const fresh = await deps.readDesigns(designs.map((design) => design.id)).catch(() => null);
+    if (signal.aborted) return;
+    for (const [i, design] of designs.entries()) {
+      const now = fresh?.[i];
+      const gone = now === null || (now !== undefined && now.projectId !== deps.projectId);
+      if (named.has(design.id) || gone) {
+        setRow(signal, design.id, { kind: "stopped", message: ROW_TEXT.notInProject });
       }
     }
-    // The server recorded the failed check itself (BATCH_PREFLIGHT_FAILED).
-    if (refusal.code === "PREFLIGHT_FAILED") set(signal, { phase: "failed" });
-    else stall(signal, error, DRAW_AGAIN.has(refusal.code) ? () => go(sendAll) : null);
+    stall(signal, new SetStopError(STOP_TEXT.gone), null);
   }
 
   return {

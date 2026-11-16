@@ -121,8 +121,9 @@ export function createDesignSubmission(ctx: FilesContext, files: DesignFiles) {
       if (preflight.result === "Fail" && !preflight.issues.some((i) => i.level === "fail")) {
         return invalid("preflight", "a Fail preflight lists at least one fail issue");
       }
-      if (row.status !== "DRAFT") return invalidState();
+      // Version first, as the BE (`DesignWorkflow`): a stale tab meets CONFLICT.
       if (row.version !== version) return versionConflict();
+      if (row.status !== "DRAFT") return invalidState();
 
       if (preflight.result === "Fail") return refusePreflight(row, preflight.issues);
       const issues = await recheck(ctx, row);

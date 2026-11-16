@@ -66,12 +66,20 @@ const reReadDrafts = (client: QueryClient) =>
   ]);
 
 /**
- * A write refused with 409 INVALID_STATE (the design moved on: another tab submitted it, the
- * reviewer answered) or 404 (another tab deleted it). Re-read it, so the studio follows its new
- * status, or says it is gone (spec §9).
+ * A write refused because the design moved on (another tab submitted it, the reviewer answered) or
+ * is gone (another tab deleted it): 409 `DESIGN_NOT_DRAFT`, 404, and the plain 409 `CONFLICT` the BE
+ * answers a stale tab first, since it checks the version before the status (`DesignWorkflow`).
+ * Re-read it, so the studio follows its new status, or says it is gone (spec §9). A write that
+ * handles a CONFLICT itself (the autosaver) passes `conflict: false`.
  */
-function reReadWhenStateChanged(client: QueryClient, id: string, error: unknown) {
-  if (!isDesignStateChanged(error) && !isDesignGone(error)) return;
+function reReadWhenStateChanged(
+  client: QueryClient,
+  id: string,
+  error: unknown,
+  { conflict = true }: { conflict?: boolean } = {},
+) {
+  const moved = isDesignStateChanged(error) || isDesignGone(error);
+  if (!moved && !(conflict && isDesignConflict(error))) return;
   void client.invalidateQueries({ queryKey: designKeys.detail(id), exact: true });
   void client.invalidateQueries({ queryKey: designKeys.lists() });
 }
@@ -128,7 +136,7 @@ const cancelDesignRead = (client: QueryClient, id: string) =>
 /**
  * Rename moves the version on: the answer becomes the cached design, so the next write sends it,
  * and the cached document's version follows (one version for the design and its document, docs 12
- * BR-11). The caller hands the new version to autosave. A stale version (409 VERSION_CONFLICT:
+ * BR-11). The caller hands the new version to autosave. A stale version (409 CONFLICT:
  * another tab saved or renamed) re-reads the design, so trying again sends the current one.
  */
 export function useRenameDesign(id: string) {
@@ -145,19 +153,15 @@ export function useRenameDesign(id: string) {
       void client.invalidateQueries({ queryKey: designKeys.lists() });
       void reReadProjects(client); // a project card shows the design's name
     },
-    onError: (error) => {
-      reReadWhenStateChanged(client, id, error);
-      if (isDesignConflict(error)) {
-        void client.invalidateQueries({ queryKey: designKeys.detail(id), exact: true });
-      }
-    },
+    // A stale version (409 CONFLICT) re-reads the design too, so trying again sends the current one.
+    onError: (error) => reReadWhenStateChanged(client, id, error),
   });
 }
 
 /**
  * For the autosaver's `save`. The record becomes the cached document, and its version and time the
  * cached design's. No refetch is awaited: the autosaver must not wait on one to send its next
- * version. A stale version (409 VERSION_CONFLICT) is left to the conflict dialog.
+ * version. A stale version (409 CONFLICT) is left to the conflict dialog.
  */
 export function useSaveDesignDocument(id: string) {
   const client = useQueryClient();
@@ -173,9 +177,14 @@ export function useSaveDesignDocument(id: string) {
       void client.invalidateQueries({ queryKey: designKeys.lists() });
       // The project page shows the design's preview and time: stale, not awaited (autosave).
       const projectId = client.getQueryData<Design>(designKeys.detail(id))?.projectId;
-      if (projectId) void client.invalidateQueries({ queryKey: projectKeys.designs(projectId) });
+      // `exact`: the library and the history nest under the detail, and every autosave would read
+      // them again (and re-sign each library image).
+      if (projectId) {
+        void client.invalidateQueries({ queryKey: projectKeys.detail(projectId), exact: true });
+      }
     },
-    onError: (error) => reReadWhenStateChanged(client, id, error),
+    // The autosaver reads the design itself on a CONFLICT (status moved on, or a reload dialog).
+    onError: (error) => reReadWhenStateChanged(client, id, error, { conflict: false }),
   });
 }
 
@@ -202,7 +211,7 @@ export function useDeleteDesign() {
   return useMutation({
     mutationFn: ({ id, version }: DeleteDesignTarget) => deleteDesign(id, { version }),
     onSuccess: (_design, { id }) => client.removeQueries({ queryKey: designKeys.detail(id) }),
-    // A draft submitted in another tab answers 409 INVALID_STATE: its status moved on, re-read it.
+    // A draft submitted in another tab answers 409 (CONFLICT, or DESIGN_NOT_DRAFT): re-read it.
     onError: (error, { id }) => reReadWhenStateChanged(client, id, error),
     // A project's count, strip and gates change with its designs, whatever the answer.
     onSettled: () => Promise.all([reReadDrafts(client), reReadProjects(client)]),

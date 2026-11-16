@@ -3,17 +3,22 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
-import { submitDesign } from "../../api";
 import {
   isDesignConflict,
   isDesignGone,
   isDesignStateChanged,
   isPreflightRefusal,
+  outdatedRolesOf,
   preflightIssuesOf,
 } from "../../errors";
 import { invalidateDesign } from "../../mutations";
-import { designKeys } from "../../queries";
+import { sendDesign } from "../../submission-flow";
+import { designKeys, designPrintConfigQuery } from "../../queries";
 import type { Design, ReportedPreflightIssue } from "../../types";
+import { newRunNonce } from "../../upload-key";
+import { failsOf } from "../submit-set-state";
+import { drawDesign } from "../submit-set-steps";
+import { ExportError } from "./export-renderer";
 import { checkDocument, drawBundle, type Checked, type SubmissionSubject } from "./run-submission";
 import type { BundleStep, SubmissionBundle } from "./submission-bundle";
 import {
@@ -26,10 +31,27 @@ import {
 } from "./submission-checks";
 import { useStudio } from "./studio-context";
 
+/** The template changed on the server and the design no longer passes its checks drawn on it. */
+const TEMPLATE_CHANGED =
+  "Khuôn in của quy cách này vừa thay đổi và thiết kế chưa còn đạt kiểm tra. Hãy kiểm tra lại thiết kế rồi gửi lại.";
+
+/**
+ * The template changed on the server and the design fails its browser checks drawn on it: the work
+ * made on the old template is stale, and the findings are the new template's.
+ */
+class TemplateChangedError extends ExportError {
+  constructor(readonly issues: ReportedPreflightIssue[]) {
+    super(TEMPLATE_CHANGED);
+  }
+}
+
 export type SubmitStep = "idle" | "checking" | BundleStep | "upload" | "done" | "error";
 
-/** What a run has made, kept so a retry resumes at the upload without drawing again. */
-type Work = Checked & { bundle: SubmissionBundle };
+/**
+ * What a run has made, kept so a retry resumes at the upload without drawing again. `runNonce` is
+ * part of every file's idempotency key: the run keeps it for its retries, and a redraw replaces it.
+ */
+type Work = Checked & { bundle: SubmissionBundle; runNonce: string };
 
 type State = {
   step: SubmitStep;
@@ -86,7 +108,7 @@ export function useDesignSubmission(design: Design) {
     const bundle = await drawBundle(subject, checked, (step, fraction) =>
       setState({ step, fraction, issues: null }),
     );
-    return { ...checked, bundle };
+    return { ...checked, bundle, runNonce: newRunNonce() };
   }
 
   async function execute() {
@@ -97,11 +119,46 @@ export function useDesignSubmission(design: Design) {
       const w = work.current;
       if (!w) return; // the preflight failed: `prepare` set the issues
       setState({ step: "upload", fraction: 0, issues: null });
-      const version = await assertStoredIs(ctx, w);
-      const submitted = await submitDesign(design.id, {
-        version,
-        preflight: w.report,
+      await assertStoredIs(ctx, w); // the stored layout is still the drawn one
+      const submitted = await sendDesign(design.id, {
+        documentChecksum: w.checksum,
         files: w.bundle,
+        runNonce: w.runNonce,
+        // The BE named files to draw again. The design's template is read afresh first, so a
+        // template edited on the server is drawn with its new values: when it differs from the
+        // studio's, a session of its own is loaded on it (as a set's designs are); otherwise the
+        // same checked document is drawn again here.
+        redraw: async () => {
+          // Outdated because a second tab saved meanwhile? Then the stored layout is not the
+          // drawn one: the conflict dialog, not three more uploads of the old document.
+          await assertStoredIs(ctx, w);
+          setState({ step: "preview", fraction: 0, issues: null });
+          const progress = (step: BundleStep, fraction: number) =>
+            setState({ step, fraction, issues: null });
+          const config = await client.fetchQuery({
+            ...designPrintConfigQuery(design),
+            staleTime: 0,
+          });
+          const changed =
+            config !== null &&
+            JSON.stringify(config.template) !== JSON.stringify(services.printConfig.template);
+          if (changed) {
+            const outcome = await drawDesign(
+              { client, fonts: services.fonts, signal: new AbortController().signal },
+              design.id,
+              progress,
+            );
+            // Its findings are on the history (`drawDesign` records them); the stale work goes.
+            if ("failed" in outcome) throw new TemplateChangedError(failsOf(outcome.failed));
+            w.bundle = outcome.drawn.bundle;
+          } else {
+            w.bundle = await drawBundle(subject, w, progress);
+          }
+          // New files, new upload: another nonce, so a bundle equal to an earlier one is not a replay.
+          w.runNonce = newRunNonce();
+          setState({ step: "upload", fraction: 0, issues: null });
+          return { files: w.bundle, runNonce: w.runNonce };
+        },
       });
       // Announced to the status follow: the re-read below covers the move, so it does not read the
       // same queries a second time.
@@ -121,8 +178,13 @@ export function useDesignSubmission(design: Design) {
   }
 
   function fail(error: unknown) {
-    const issues = preflightIssuesOf(error);
-    if (error instanceof DocumentChangedError) {
+    const issues =
+      preflightIssuesOf(error) ?? (error instanceof TemplateChangedError ? error.issues : null);
+    if (error instanceof TemplateChangedError) {
+      // The retry must not resend files drawn on the old template: the next run checks the design
+      // on the new one again (the findings are shown, as for any failed check).
+      work.current = null;
+    } else if (error instanceof DocumentChangedError) {
       // The editor is behind a document saved elsewhere: autosave stops and the conflict dialog
       // offers the reload. The next run draws anew.
       work.current = null;
@@ -132,6 +194,7 @@ export function useDesignSubmission(design: Design) {
       work.current = null;
     } else if (
       isPreflightRefusal(error) ||
+      outdatedRolesOf(error) !== null ||
       isDesignConflict(error) ||
       isDesignStateChanged(error) ||
       isDesignGone(error)

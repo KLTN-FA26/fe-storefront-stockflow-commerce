@@ -7,19 +7,19 @@ import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/design-seed";
 import { createMemoryStorage } from "@/lib/api/mock-fixtures/design-storage";
 import { createDesignMockStore, type DesignMockStore } from "@/lib/api/mock-fixtures/design-store";
 
+import { designArtifactDtoSchema } from "../design-dtos";
 import { pngBytes } from "../engine/__tests__/fixtures";
 import { sha256Hex } from "../engine/export/checksum";
 import {
   designAssetDtoSchema,
   designDocumentRecordDtoSchema,
-  designDtoSchema,
-  designEventDtoSchema,
-  designFileDtoSchema,
-  designPageDtoSchema,
+  designSchema,
+  designEventSchema,
+  designPageSchema,
   downloadLinkDtoSchema,
-  draftCountDtoSchema,
+  draftCountSchema,
   preflightIssueSchema,
-  printConfigDtoSchema,
+  printConfigSchema,
 } from "../schemas";
 
 // The mock must answer what the feature's schemas parse: a contract drift between the design mock
@@ -50,7 +50,7 @@ const parse = <S extends z.ZodType>(schema: S, result: MockResult): z.infer<S> =
 
 describe("reads", () => {
   it("every listed design, its history, document, images and files parse", async () => {
-    const page = parse(designPageDtoSchema, await store.list({ page: 0, size: 200 }));
+    const page = parse(designPageSchema, await store.list({ page: 0, size: 200 }));
     expect(page.items.map((d) => d.status).sort()).toEqual([
       "APPROVED",
       "DRAFT",
@@ -58,13 +58,13 @@ describe("reads", () => {
       "PENDING_REVIEW",
     ]);
     for (const { id } of page.items) {
-      expect(parse(designDtoSchema, await store.get(id)).id).toBe(id);
-      parse(z.array(designEventDtoSchema), await store.history(id));
+      expect(parse(designSchema, await store.get(id)).id).toBe(id);
+      parse(z.array(designEventSchema), await store.history(id));
       parse(designDocumentRecordDtoSchema, await store.getDocument(id));
       parse(z.array(designAssetDtoSchema), await store.listAssets(id));
-      parse(z.array(designFileDtoSchema), await store.files(id));
+      parse(z.array(designArtifactDtoSchema), await store.listArtifacts(id));
     }
-    expect(parse(draftCountDtoSchema, await store.draftCount())).toEqual({ drafts: 2, limit: 50 });
+    expect(parse(draftCountSchema, await store.draftCount())).toEqual({ drafts: 2, limit: 50 });
   });
 
   it("the approved design's image link parses", async () => {
@@ -76,14 +76,14 @@ describe("reads", () => {
   it.each(Object.values(MOCK_PRINT_CONFIGS).map((c) => [c.sku, c.product.slug] as const))(
     "the print configuration of %s parses",
     async (sku, slug) => {
-      expect(parse(printConfigDtoSchema, await store.printConfig(slug, sku)).sku).toBe(sku);
+      expect(parse(printConfigSchema, await store.printConfig(slug, sku)).sku).toBe(sku);
     },
   );
 
   it("only the 12 oz white cup is served with a .glb, mapped to a print area it has", async () => {
     const withModels: string[] = [];
     for (const { sku, product } of Object.values(MOCK_PRINT_CONFIGS)) {
-      const config = parse(printConfigDtoSchema, await store.printConfig(product.slug, sku));
+      const config = parse(printConfigSchema, await store.printConfig(product.slug, sku));
       if (!config.model3d) continue;
       withModels.push(sku);
       const areas = config.template.printAreas.map((area) => area.code);
@@ -93,7 +93,7 @@ describe("reads", () => {
     }
     expect(withModels).toEqual(["CUP-PAPER-12OZ-WHT"]);
     const cup = parse(
-      printConfigDtoSchema,
+      printConfigSchema,
       await store.printConfig("ly-giay-2-lop-12oz", "CUP-PAPER-12OZ-WHT"),
     );
     expect(cup.model3d).toEqual({
@@ -103,19 +103,19 @@ describe("reads", () => {
   });
 
   it("the default print configuration of a product the mock does not know parses", async () => {
-    parse(printConfigDtoSchema, await store.printConfig("tui-giay-la", "TUI-1"));
-    parse(printConfigDtoSchema, await store.printConfig("ly-nhua-la", "LY-1"));
+    parse(printConfigSchema, await store.printConfig("tui-giay-la", "TUI-1"));
+    parse(printConfigSchema, await store.printConfig("ly-nhua-la", "LY-1"));
   });
 });
 
 describe("writes", () => {
   it("create, rename, save, upload, revision and delete answer what the schemas parse", async () => {
     const created = parse(
-      designDtoSchema,
+      designSchema,
       await store.create({ productSlug: "tui-giay-kraft", sku: "BAG-KRAFT-M", name: "Túi" }),
     );
     const renamed = parse(
-      designDtoSchema,
+      designSchema,
       await store.rename(created.id, { name: "Túi mới", version: created.version }),
     );
     const record = parse(designDocumentRecordDtoSchema, await store.getDocument(created.id));
@@ -125,10 +125,10 @@ describe("writes", () => {
     );
     const png = new Blob([pngBytes(1200, 800)], { type: "image/png" });
     parse(designAssetDtoSchema, await store.uploadAsset(created.id, png, "logo.png", "k-1"));
-    parse(designDtoSchema, await store.revise(approved));
-    const current = parse(designDtoSchema, await store.get(created.id));
+    parse(designSchema, await store.revise(approved));
+    const current = parse(designSchema, await store.get(created.id));
     const removed = parse(
-      designDtoSchema,
+      designSchema,
       await store.remove(created.id, { version: current.version }),
     );
     expect(removed.status).toBe("ARCHIVED");
@@ -136,9 +136,9 @@ describe("writes", () => {
 
   it("a submission, a simulated return and approval, and a refused preflight parse", async () => {
     const issues = [{ ruleId: "EMPTY_DESIGN", level: "fail", message: "Thiết kế trống." }];
-    const before = parse(designDtoSchema, await store.get(returned));
+    const before = parse(designSchema, await store.get(returned));
     parse(
-      designEventDtoSchema,
+      designEventSchema,
       await store.recordPreflightFailure(returned, { version: before.version, issues }),
     );
 
@@ -166,7 +166,7 @@ describe("writes", () => {
       ),
     );
     const submitted = parse(
-      designDtoSchema,
+      designSchema,
       await store.submit(returned, {
         version: before.version,
         preflight: { result: "Pass", issues: [] },
@@ -175,12 +175,14 @@ describe("writes", () => {
       }),
     );
     expect(submitted.status).toBe("PENDING_REVIEW");
-    parse(z.array(designFileDtoSchema), await store.files(returned));
+    parse(z.array(designArtifactDtoSchema), await store.listArtifacts(returned));
 
-    const back = parse(designDtoSchema, await store.simulateReturn(returned, { reason: "Mờ" }));
+    const back = parse(designSchema, await store.simulateReturn(returned, { reason: "Mờ" }));
     expect(back.lastReturn?.reason).toBe("Mờ");
-    const approvedNow = parse(designDtoSchema, await store.simulateApprove(pending));
-    expect(approvedNow.approval).not.toBeNull();
-    parse(z.array(designEventDtoSchema), await store.history(pending));
+    const approvedNow = parse(designSchema, await store.simulateApprove(pending));
+    expect(approvedNow.approvedAt).not.toBeNull();
+    // The store still keeps the approval (the BE's snapshot is served from it); the screens' design does not.
+    expect((body(await store.get(pending)) as { approval: unknown }).approval).not.toBeNull();
+    parse(z.array(designEventSchema), await store.history(pending));
   });
 });

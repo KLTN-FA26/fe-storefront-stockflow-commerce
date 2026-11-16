@@ -24,7 +24,7 @@ export type VariantStatus = "ACTIVE" | "BLOCKED" | "OBSOLETE";
 
 export type FileRules = { minDpi: number; formats: string[]; maxFileSizeMb: number };
 
-/** Served as is by GET /catalog/products/{slug}/variants/{sku}/print-config. */
+/** The fixture of one variant: `design-be-contract.ts` serves it as the BE's customization template and design template. */
 export type PrintConfigRow = {
   sku: string;
   product: { slug: string; title: string; status: string };
@@ -192,7 +192,7 @@ const cup12oz = {
 export const MOCK_SKU_WITHOUT_CARTON_SPEC = "CUP-PAPER-8OZ-KRAFT";
 /** A BLOCKED variant: starting a design on it is VARIANT_UNAVAILABLE. */
 export const MOCK_BLOCKED_SKU = "CUP-KRAFT-16OZ";
-/** A seeded CUSTOMIZABLE SKU with no print configuration: its print-config answers 404. */
+/** A seeded CUSTOMIZABLE SKU with no print configuration: its customization lists no template. */
 export const MOCK_SKU_WITHOUT_PRINT_CONFIG = "BAG-KRAFT-L";
 
 const TEMPLATES: CustomizationTemplate[] = [

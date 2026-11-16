@@ -7,8 +7,8 @@
  *    On 401 → logout and redirect; there is no refresh-token flow.
  *
  * When USE_MOCK=true the mock adapter (mock-adapter.ts) replaces the default
- * adapter so every call resolves against the mock route table; otherwise, while
- * DESIGN_API_MOCKED, it serves the design API only and every other call reaches
+ * adapter so every call resolves against the mock route table; otherwise, with
+ * DESIGN_USE_MOCK on, it serves the design API only and every other call reaches
  * the BE — component code stays identical either way.
  *
  * Base URL is always same-origin "/api" — the real backend URL (API_URL) is

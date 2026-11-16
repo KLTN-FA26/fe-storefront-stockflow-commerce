@@ -14,7 +14,6 @@ import {
   getProject,
   getProjectHistory,
   listDesignAssets,
-  listProjectDesigns,
   listProjectLibrary,
   listProjects,
   placeFromLibrary,
@@ -25,7 +24,7 @@ import {
   uploadDesignAsset,
   uploadLibraryImage,
 } from "../api";
-import { describeDesignError, fileRuleOf } from "../errors";
+import { describeDesignError, describeFileRefusal } from "../errors";
 import { textStyleSchema } from "../library-schemas";
 import { textStyleDto } from "./project-fixtures";
 import { pngBytes } from "../engine/__tests__/fixtures";
@@ -33,8 +32,8 @@ import { designBackend } from "./design-backend";
 
 // The project API as the app serves it with the design mock on: the real client, the mock adapter
 // and the design route table, read through the feature's own API functions (which parse every
-// answer with the feature's zod schemas). A drift between `toProjectDto` / `toDesignDto` and
-// `project-schemas.ts` fails here, not in a screen.
+// answer with the DTO schemas of `project-dtos.ts`). A drift between the mock's BE-shaped answers
+// and those schemas fails here, not in a screen.
 
 const { draft, returned, pending } = MOCK_DESIGN_IDS;
 
@@ -48,9 +47,12 @@ describe("the project mock, read through the feature's API layer", () => {
     const created = await createProject({ name: "Bộ ly quán Hoa", description: "Ba cỡ ly" });
     expect(created).toMatchObject({ status: "ACTIVE", designCount: 0, openRound: null });
 
-    const joined = await addDesignToProject(created.id, draft);
-    expect(joined.projectId).toBe(created.id);
-    expect(joined.project).toEqual({ id: created.id, name: "Bộ ly quán Hoa", status: "ACTIVE" });
+    // The BE answers the project (F-31): the design joined is among its designs, knowing its project.
+    const joined = (await addDesignToProject(created.id, draft)).designs.find(
+      (d) => d.id === draft,
+    );
+    expect(joined?.projectId).toBe(created.id);
+    expect(joined?.project).toEqual({ id: created.id, name: "Bộ ly quán Hoa", status: "ACTIVE" });
     await addDesignToProject(created.id, returned);
 
     const page = await listProjects({ page: 1, size: 12, status: "ACTIVE" });
@@ -61,15 +63,15 @@ describe("the project mock, read through the feature's API layer", () => {
     expect(detail.designCount).toBe(2);
     expect(detail.previewUrls.length).toBeLessThanOrEqual(4);
 
-    const designs = await listProjectDesigns(created.id);
-    expect(designs.map((d) => d.id).sort()).toEqual([draft, returned].sort());
-    for (const d of designs) expect(d.project?.id).toBe(created.id);
+    // The designs come with the project (F-30).
+    expect(detail.designs.map((d) => d.id).sort()).toEqual([draft, returned].sort());
+    for (const d of detail.designs) expect(d.project?.id).toBe(created.id);
 
     const renamed = await updateProject(created.id, { name: "Bộ ly mới", version: detail.version });
     expect(renamed.version).toBe(detail.version + 1);
 
     const left = await removeDesignFromProject(created.id, returned);
-    expect(left).toMatchObject({ projectId: null, project: null });
+    expect(left.designs.map((d) => d.id)).toEqual([draft]);
 
     const closed = await archiveProject(created.id, { version: renamed.version });
     expect(closed.status).toBe("ARCHIVED");
@@ -104,11 +106,11 @@ describe("the project mock, read through the feature's API layer", () => {
     const refusal = await addDesignToProject(project.id, draft).catch((error: unknown) => error);
 
     expect(refusal).toBeInstanceOf(ApiError);
-    expect(refusal).toMatchObject({ status: 422, code: "PROJECT_ARCHIVED" });
+    expect(refusal).toMatchObject({ status: 409, code: "DESIGN_PROJECT_ARCHIVED" });
     expect(describeDesignError(refusal)).toContain("Dự án đã đóng.");
   });
 
-  it("refuses to close a project while a design is under review, naming the design", async () => {
+  it("refuses to close a project while a design is under review", async () => {
     const project = await createProject({ name: "Bộ chờ" });
     await addDesignToProject(project.id, pending);
 
@@ -116,11 +118,8 @@ describe("the project mock, read through the feature's API layer", () => {
       (error: unknown) => error,
     );
 
-    expect(refusal).toMatchObject({
-      status: 409,
-      code: "PROJECT_HAS_PENDING",
-      details: { designIds: [pending] },
-    });
+    expect(refusal).toMatchObject({ status: 409, code: "DESIGN_PROJECT_HAS_PENDING" });
+    expect(describeDesignError(refusal)).toContain("Còn bản đang chờ duyệt");
   });
 });
 
@@ -136,7 +135,7 @@ describe("the project library, read through the feature's API layer", () => {
     const uploaded = await uploadLibraryImage(project.id, png(), "logo.png", "k-1");
     expect(uploaded).toMatchObject({ kind: "IMAGE", name: "logo.png" });
     expect(uploaded.asset).toMatchObject({ contentType: "image/png" });
-    expect(uploaded.previewUrl).toEqual(expect.stringContaining("blob:mock/"));
+    expect(uploaded.previewUrl).toBeNull(); // read with the listing
 
     await addDesignToProject(project.id, MOCK_DESIGN_IDS.approved);
     const seeded = (await listDesignAssets(MOCK_DESIGN_IDS.approved))[0]!;
@@ -151,6 +150,11 @@ describe("the project library, read through the feature's API layer", () => {
 
     const items = await listProjectLibrary(project.id);
     expect(items.map((i) => i.id)).toEqual([text.id, copied.id, uploaded.id]);
+    // One preview link read per image (F-34): inline links to show the file from.
+    const image = items.find((i) => i.id === uploaded.id);
+    expect(image?.kind === "IMAGE" && image.previewUrl).toEqual(
+      expect.stringContaining("blob:mock/"),
+    );
     const events = await getProjectHistory(project.id);
     expect(events.map((e) => e.type)).toEqual([
       "PROJECT_CREATED",
@@ -170,7 +174,7 @@ describe("the project library, read through the feature's API layer", () => {
     expect(placed).toMatchObject({ designId: draft, originalName: "logo.png" });
     expect(placed.assetId).not.toBe(item.id);
 
-    const removed = await deleteLibraryItem(project.id, item.id);
+    const removed = await deleteLibraryItem(project.id, item);
     expect(removed).toMatchObject({ id: item.id, kind: "IMAGE" });
     expect(await listProjectLibrary(project.id)).toEqual([]);
     expect((await listDesignAssets(draft)).map((a) => a.assetId)).toContain(placed.assetId);
@@ -186,7 +190,7 @@ describe("the project library, read through the feature's API layer", () => {
       (error: unknown) => error,
     );
 
-    expect(refusal).toMatchObject({ status: 422, code: "FILE_REJECTED" });
+    expect(refusal).toMatchObject({ status: 415, code: "UNSUPPORTED_MEDIA_TYPE" });
   });
 
   it("refuses to add to a closed project but still places from it", async () => {
@@ -199,15 +203,15 @@ describe("the project library, read through the feature's API layer", () => {
     const refusal = await uploadLibraryImage(project.id, png("b.png"), "b.png", "k-5").catch(
       (error: unknown) => error,
     );
-    expect(refusal).toMatchObject({ status: 422, code: "PROJECT_ARCHIVED" });
-    const removal = await deleteLibraryItem(project.id, item.id).catch((error: unknown) => error);
-    expect(removal).toMatchObject({ status: 409, code: "PROJECT_ARCHIVED" });
+    expect(refusal).toMatchObject({ status: 409, code: "DESIGN_PROJECT_ARCHIVED" });
+    const removal = await deleteLibraryItem(project.id, item).catch((error: unknown) => error);
+    expect(removal).toMatchObject({ status: 409, code: "DESIGN_PROJECT_ARCHIVED" });
     expect(describeDesignError(removal)).toContain("Dự án đã đóng.");
 
     expect((await placeFromLibrary(draft, item.id)).originalName).toBe("logo.png");
   });
 
-  it("refuses the 31st image with LIBRARY_FULL and words it", async () => {
+  it("refuses the 31st image with DESIGN_PROJECT_LIBRARY_FULL and words it", async () => {
     await designBackend();
     const project = await createProject({ name: "Bộ đầy" });
     for (let n = 0; n < 30; n += 1) {
@@ -218,11 +222,11 @@ describe("the project library, read through the feature's API layer", () => {
       (error: unknown) => error,
     );
 
-    expect(refusal).toMatchObject({ status: 422, code: "LIBRARY_FULL" });
+    expect(refusal).toMatchObject({ status: 409, code: "DESIGN_PROJECT_LIBRARY_FULL" });
     expect(describeDesignError(refusal)).toContain("30 ảnh");
   }, 60_000);
 
-  it("names the rule of a FILE_RULE refusal in its details", async () => {
+  it("refuses with 415 and a message only; the words are built from the design's template (F-24)", async () => {
     await designBackend({
       printConfigFor: (slug, sku) => {
         const config = printConfigFor(slug, sku);
@@ -237,17 +241,17 @@ describe("the project library, read through the feature's API layer", () => {
 
     const refusal = await placeFromLibrary(draft, item.id).catch((error: unknown) => error);
 
-    expect(refusal).toMatchObject({ status: 422, code: "FILE_RULE" });
-    expect(fileRuleOf(refusal)).toEqual({
-      rule: "FORMAT",
-      contentType: "image/png",
-      formats: ["image/jpeg"],
+    expect(refusal).toMatchObject({
+      status: 415,
+      code: "UNSUPPORTED_MEDIA_TYPE",
+      details: undefined,
     });
-    expect(describeDesignError(refusal)).toBe("Quy cách này chỉ nhận ảnh JPG.");
+    const template = { allowedFileFormats: ["image/jpeg"], maxFileSizeMb: 50 };
+    expect(describeFileRefusal(refusal, template)).toBe("Quy cách này chỉ nhận ảnh JPG.");
     expect(await listDesignAssets(draft)).toEqual([]);
   });
 
-  it("refuses a design outside the project with NOT_IN_PROJECT, in both directions, and words it", async () => {
+  it("is not found, in both directions, for a design outside the project", async () => {
     await designBackend();
     const project = await createProject({ name: "Bộ ly" });
     const item = await uploadLibraryImage(project.id, png(), "logo.png", "k-7");
@@ -259,9 +263,11 @@ describe("the project library, read through the feature's API layer", () => {
       assetId: own!.assetId,
     }).catch((error: unknown) => error);
 
-    expect(place).toMatchObject({ status: 422, code: "NOT_IN_PROJECT" });
-    expect(copy).toMatchObject({ status: 422, code: "NOT_IN_PROJECT" });
-    expect(describeDesignError(place)).toContain("không thuộc dự án");
+    // Placing a file that is not of the design's project, and saving the image of a design that
+    // is not the project's: the BE's 404 both ways.
+    expect(place).toMatchObject({ status: 404, code: "NOT_FOUND" });
+    expect(copy).toMatchObject({ status: 404, code: "NOT_FOUND" });
+    expect(describeDesignError(copy)).toContain("Không tìm thấy thiết kế hoặc sản phẩm này.");
   });
 
   it("keeps uploading a design's own image working beside the library", async () => {

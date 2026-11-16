@@ -23,7 +23,11 @@
 import {
   BUNDLE_ROLES,
   MIN_SET_SIZE,
+  PROJECT_DESIGN_LIMIT,
   UPLOAD_TTL_MS,
+  asRecord,
+  isVersion,
+  versionConflict,
   fail,
   fileBlobKey,
   invalid,
@@ -51,6 +55,7 @@ import {
   type DesignFailure,
   type RoundItem,
 } from "./design-store-rounds-input";
+import { planOf } from "./design-store-artifacts";
 import { recheck } from "./design-store-submission";
 
 /** A refusal naming the designs it refuses, so the page can say which one. */
@@ -276,6 +281,128 @@ export function createRoundOps(ctx: StoreContext) {
       const listed = new Set(state.files.map(fileBlobKey));
       await ctx.discardBlobs(earlier.filter((key) => !listed.has(key)));
       return ok(structuredClone(round), 201);
+    },
+
+    /**
+     * POST /design-projects/{id}/review-rounds `{ designs: [{ id, version }] }` (the BE's way): the
+     * files are in each design already (`design-store-artifacts.ts`), so one request names the set.
+     * 2 to 20 designs of an ACTIVE project, each once, each DRAFT at the version sent, else 409
+     * `CONFLICT` / `DESIGN_NOT_DRAFT` with `details.designIds` (BE-4). Each is then planned as a single
+     * request for review is; one failing sends none: 422 `DESIGN_BATCH_PREFLIGHT_FAILED` with
+     * `details.designs[{designId, issues? | roles?}]`, on the project's history
+     * (`BATCH_PREFLIGHT_FAILED`) and, for findings, on each design's. Success moves every design to
+     * PENDING_REVIEW at one instant and answers the round (a customer cannot read it again).
+     */
+    async submitBatch(projectId: string, body: unknown): Promise<MockResult> {
+      const project = ctx.findProject(projectId);
+      if (!project) return projectNotFound();
+      const { designs } = asRecord(body);
+      const items = Array.isArray(designs) ? designs.map(asRecord) : [];
+      const ids = items.map((item) => item.id);
+      if (
+        items.length < MIN_SET_SIZE ||
+        items.length > PROJECT_DESIGN_LIMIT ||
+        ids.some((id) => typeof id !== "string" || !id.trim()) ||
+        new Set(ids).size !== ids.length ||
+        items.some((item) => !isVersion(item.version))
+      ) {
+        return invalid(
+          "designs",
+          `${MIN_SET_SIZE} to ${PROJECT_DESIGN_LIMIT} designs, each once, with a version`,
+        );
+      }
+      if (project.status !== "ACTIVE") return projectArchived();
+      const rows = items.map((item) => ctx.find(String(item.id)));
+      if (rows.some((row) => !row || row.projectId !== project.id)) return notFound();
+      const members = rows as DesignRow[];
+      // The BE's planning loop (`DesignBatchSubmissionService.submit`, d47ed4ae, BE-4) goes through
+      // every design: version first, as `DesignWorkflow` (a stale tab meets CONFLICT), then the
+      // status. The first refusal met sets the code, and `details.designIds` lists every design
+      // refused with that same code (one refused with the other code is not listed).
+      let refused: MockResult | null = null;
+      const refusedIds: string[] = [];
+      for (const [i, row] of members.entries()) {
+        const refusal =
+          row.version !== items[i]!.version
+            ? versionConflict()
+            : row.status !== "DRAFT"
+              ? invalidState()
+              : null;
+        if (!refusal) continue;
+        refused ??= refusal;
+        if (asRecord(refusal.data).errorCode === asRecord(refused.data).errorCode) {
+          refusedIds.push(row.id);
+        }
+      }
+      if (refused) {
+        const { errorCode, message } = asRecord(refused.data);
+        return refusedDesigns(refused.status, String(errorCode), String(message), refusedIds);
+      }
+      const failures: Array<{
+        row: DesignRow;
+        plan: NonNullable<Awaited<ReturnType<typeof planOf>>>;
+      }> = [];
+      for (const row of members) {
+        const plan = await planOf(ctx, row);
+        if (plan) failures.push({ row, plan });
+      }
+      if (failures.length) {
+        const note = failures
+          .map(
+            ({ row, plan }) =>
+              `${row.id}: ${"issues" in plan ? plan.issues.map((i) => i.rule).join(", ") : "files outdated"}`,
+          )
+          .join(" | ");
+        ctx.recordProject(project, "BATCH_PREFLIGHT_FAILED", note);
+        for (const { row, plan } of failures) {
+          if ("issues" in plan) {
+            ctx.record(
+              row,
+              "PREFLIGHT_FAILED",
+              plan.issues.map((i) => i.rule).join(", "),
+              row.version,
+            );
+          }
+        }
+        await ctx.persist();
+        return fail(
+          422,
+          "DESIGN_BATCH_PREFLIGHT_FAILED",
+          "Some designs did not pass; none was submitted",
+          {
+            details: {
+              designs: failures.map(({ row, plan }) => ({ designId: row.id, ...plan })),
+            },
+          },
+        );
+      }
+
+      // Every design at the same instant: PENDING_REVIEW, SUBMITTED_FOR_REVIEW noting the round.
+      const at = ctx.stamp();
+      const round: ReviewRoundRow = {
+        id: ctx.newId(),
+        projectId: project.id,
+        designIds: members.map((row) => row.id),
+        openedAt: at,
+        closedAt: null,
+      };
+      for (const row of members) {
+        row.status = "PENDING_REVIEW";
+        row.version += 1;
+        row.updatedAt = at;
+        row.submittedAt = at;
+        ctx.record(row, "SUBMITTED_FOR_REVIEW", round.id, row.version, at);
+      }
+      ctx.state().reviewRounds.push(round);
+      project.updatedAt = at;
+      ctx.recordProject(
+        project,
+        "BATCH_SUBMITTED",
+        `${round.id}: ${round.designIds.join(", ")}`,
+        at,
+      );
+      await ctx.persist();
+      return ok({ roundId: round.id, designIds: round.designIds }, 201);
     },
 
     /**

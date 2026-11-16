@@ -15,7 +15,7 @@ import { cup12oz } from "../engine/__tests__/fixtures";
 const T1 = "2026-10-25T08:00:00Z";
 const T2 = "2026-10-25T08:05:00Z";
 
-const conflict = () => new ApiError(409, "VERSION_CONFLICT", "stale version");
+const conflict = () => new ApiError(409, "CONFLICT", "stale version");
 const offline = () => new ApiError(0, "NETWORK_ERROR", "no network");
 const serverError = () => new ApiError(500, "INTERNAL", "boom");
 
@@ -199,8 +199,8 @@ describe("a version conflict (409)", () => {
     expect(states()).toEqual(["pending", "saving", "conflict"]);
   });
 
-  it("does not take a design that changed status (409 INVALID_STATE) for a conflict", async () => {
-    const save = vi.fn().mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "moved on"));
+  it("does not take a design that changed status (409 DESIGN_NOT_DRAFT) for a conflict", async () => {
+    const save = vi.fn().mockRejectedValueOnce(new ApiError(409, "DESIGN_NOT_DRAFT", "moved on"));
     const { saver, last } = setup({ save });
     saver.schedule(d1);
     await saver.flush();
@@ -537,7 +537,7 @@ describe("setVersion", () => {
 
 describe("a design that can no longer be saved", () => {
   it.each([
-    ["left DRAFT (409 INVALID_STATE)", new ApiError(409, "INVALID_STATE", "moved on")],
+    ["left DRAFT (409 DESIGN_NOT_DRAFT)", new ApiError(409, "DESIGN_NOT_DRAFT", "moved on")],
     ["is gone (404)", new ApiError(404, "NOT_FOUND", "no such design")],
   ])("sends nothing more once a save is refused because the design %s", async (_, refusal) => {
     const save = vi.fn().mockRejectedValueOnce(refusal);
@@ -586,7 +586,7 @@ describe("a design that can no longer be saved", () => {
   it("on retry() after a refusal, asks recheck(): still a draft, its document is saved at once and saving goes on", async () => {
     const save = vi
       .fn()
-      .mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "moved on"))
+      .mockRejectedValueOnce(new ApiError(409, "DESIGN_NOT_DRAFT", "moved on"))
       .mockResolvedValue({ version: 9, savedAt: T2 });
     const recheck = vi.fn(async (): Promise<DesignDocument | null> => d2);
     const { saver, last } = setup({ save, recheck });
@@ -607,7 +607,7 @@ describe("a design that can no longer be saved", () => {
   });
 
   it("stays refused when recheck() finds the design is no longer a draft, or cannot tell", async () => {
-    const refusal = new ApiError(409, "INVALID_STATE", "moved on");
+    const refusal = new ApiError(409, "DESIGN_NOT_DRAFT", "moved on");
     const save = vi.fn().mockRejectedValue(refusal);
     const recheck = vi
       .fn<() => Promise<DesignDocument | null>>()
@@ -632,7 +632,7 @@ describe("a design that can no longer be saved", () => {
   it("saves again after lock(false) once a refused save locked it", async () => {
     const save = vi
       .fn()
-      .mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "moved on"))
+      .mockRejectedValueOnce(new ApiError(409, "DESIGN_NOT_DRAFT", "moved on"))
       .mockResolvedValue({ version: 9, savedAt: T2 });
     const { saver } = setup({ save });
     saver.schedule(d1);

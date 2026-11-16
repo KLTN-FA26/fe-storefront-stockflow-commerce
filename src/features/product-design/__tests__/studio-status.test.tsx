@@ -180,25 +180,52 @@ describe("the studio per status", () => {
     expect(put).not.toHaveBeenCalled();
   });
 
-  it("lists the three files a submitted design was sent with, each to download", async () => {
+  it("lists the three files a submitted design was sent with; a link is asked for, and opened beside the studio, when one is clicked", async () => {
     const user = userEvent.setup();
-    await designBackend();
+    const replace = vi.fn();
+    const open = vi.fn(() => ({ opener: window, location: { replace }, close: vi.fn() }));
+    vi.stubGlobal("open", open);
+    const { get } = await designBackend();
     await openStudio(MOCK_DESIGN_IDS.pending);
+    const linksAsked = () =>
+      get.mock.calls.filter(([url]) => String(url).endsWith("/download-url")).length;
 
     await user.click(await screen.findByRole("button", { name: "File đã gửi" }));
+    expect(linksAsked()).toBe(0); // none until a file is asked for
 
-    for (const [label, name] of [
-      [/Ảnh xem trước/, "preview.png"],
-      [/File in \(PDF\)/, "print-ready.pdf"],
-      [/Đặc tả kỹ thuật \(PDF\)/, "technical-spec.pdf"],
-    ] as const) {
-      const link = await screen.findByRole("link", { name: label });
-      expect(link).toHaveAttribute("download", name);
-      expect(link.getAttribute("href")).toBeTruthy();
-      // A signed link on another origin ignores `download`: it opens beside the studio.
-      expect(link).toHaveAttribute("target", "_blank");
-      expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    // What the client got back: the file list (newest first) and each link it was handed.
+    const answer = async <T,>(index: number) =>
+      ((await get.mock.results[index]!.value) as { data: T }).data;
+    const listIndex = get.mock.calls.findLastIndex(
+      ([url]) => url === `/designs/${MOCK_DESIGN_IDS.pending}/artifacts`,
+    );
+    const listed = await answer<Array<{ artifactId: string; role: string }>>(listIndex);
+
+    for (const [index, [label, role]] of (
+      [
+        [/Ảnh xem trước/, "CUSTOMER_PREVIEW"],
+        [/File in \(PDF\)/, "PRINT_READY"],
+        [/Đặc tả kỹ thuật \(PDF\)/, "TECHNICAL_SPEC"],
+      ] as const
+    ).entries()) {
+      await user.click(await screen.findByRole("button", { name: label }));
+      // A signed link on another origin ignores `download`: it opens in a new tab, opened in the
+      // click itself (no popup blocked), its opener cut, then sent to the link.
+      expect(open).toHaveBeenCalledTimes(index + 1);
+      expect(open.mock.calls[index]).toEqual(["", "_blank"]);
+      await waitFor(() => expect(replace).toHaveBeenCalledTimes(index + 1));
+      // The link asked for is the clicked file's, and the tab goes to exactly that link.
+      const file = listed.find((artifact) => artifact.role === role)!;
+      const linkIndex = get.mock.calls.findLastIndex(([url]) =>
+        String(url).endsWith("/download-url"),
+      );
+      expect(get.mock.calls[linkIndex]![0]).toBe(
+        `/designs/${MOCK_DESIGN_IDS.pending}/artifacts/${file.artifactId}/download-url`,
+      );
+      const link = await answer<{ url: string }>(linkIndex);
+      expect(replace.mock.calls[index]).toEqual([link.url]);
     }
+    expect(linksAsked()).toBe(3);
   });
 
   it("reads the files again each time File đã gửi opens, so their short-lived links are fresh", async () => {
@@ -207,7 +234,7 @@ describe("the studio per status", () => {
     const id = MOCK_DESIGN_IDS.pending;
     await openStudio(id);
     const trigger = await screen.findByRole("button", { name: "File đã gửi" });
-    const reads = () => get.mock.calls.filter(([url]) => url === `/designs/${id}/files`).length;
+    const reads = () => get.mock.calls.filter(([url]) => url === `/designs/${id}/artifacts`).length;
     const before = reads();
 
     await user.click(trigger);
@@ -233,11 +260,14 @@ describe("the studio per status", () => {
       screen.getByText(`Đã duyệt lúc ${formatDateTime(approved.approvedAt!)}`),
     ).toBeInTheDocument();
     expect(screen.getByText("Đã duyệt")).toBeInTheDocument();
-    await userEvent.setup().click(await screen.findByRole("button", { name: "File đã gửi" }));
-    expect(await screen.findByRole("link", { name: /Ảnh xem trước/ })).toHaveAttribute(
-      "href",
-      "/logo.png",
-    );
+    const replace = vi.fn();
+    const open = vi.fn(() => ({ opener: window, location: { replace }, close: vi.fn() }));
+    vi.stubGlobal("open", open);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "File đã gửi" }));
+    await user.click(await screen.findByRole("button", { name: /Ảnh xem trước/ }));
+    expect(open).toHaveBeenCalledWith("", "_blank");
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/logo.png"));
     expect(screen.getByRole("button", { name: "Tạo bản sửa" })).toBeInTheDocument();
     expect(tools()).not.toBeInTheDocument();
     expect(toolOptions()).not.toBeInTheDocument();
@@ -308,7 +338,10 @@ describe("saving and renaming in the header", () => {
 
   it("refuses a name over 200 characters, renames on Enter, and saves on with the new version", async () => {
     const user = userEvent.setup();
-    const { store, patch, put } = await designBackend();
+    const { store, put } = await designBackend();
+    // The rename and the layout save are both PUTs now: told apart by their path.
+    const renames = () => put.mock.calls.filter(([url]) => String(url).endsWith("/name"));
+    const saves = () => put.mock.calls.filter(([url]) => String(url).endsWith("/document"));
     const id = await draftIn(store, STUDIO_PRODUCTS.cup);
     const seen = await openStudio(id);
 
@@ -319,33 +352,33 @@ describe("saving and renaming in the header", () => {
     await user.keyboard("{Enter}");
     expect(await screen.findByText("Tên tối đa 200 ký tự")).toBeInTheDocument();
     expect(field).toHaveAttribute("aria-invalid", "true");
-    expect(patch).not.toHaveBeenCalled();
+    expect(renames()).toHaveLength(0);
 
     await user.clear(field);
     await user.type(field, "  Ly mới  {Enter}");
     expect(await screen.findByRole("heading", { name: "Ly mới" })).toBeInTheDocument();
-    expect(patch).toHaveBeenCalledTimes(1);
-    expect(patch).toHaveBeenCalledWith(`/designs/${id}`, { name: "Ly mới", version: 0 });
+    expect(renames()).toHaveLength(1);
+    expect(put).toHaveBeenCalledWith(`/designs/${id}/name`, { version: 0, name: "Ly mới" });
     expect(await designIn(store, id)).toMatchObject({ name: "Ly mới", version: 1 });
 
     // The rename moved the version on: the next save sends it, without a conflict.
     paintBody(seen.current!, "#FF0000");
     expect(await screen.findByText(SAVED, undefined, { timeout: 4000 })).toBeInTheDocument();
-    expect(put).toHaveBeenCalledTimes(1);
-    expect(put.mock.lastCall?.[1]).toMatchObject({ version: 1 });
+    expect(saves()).toHaveLength(1);
+    expect(saves()[0]?.[1]).toMatchObject({ version: 1 });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("renames when the field is left, and Escape keeps the old name", async () => {
     const user = userEvent.setup();
-    const { store, patch } = await designBackend();
+    const { store, put } = await designBackend();
     const id = await draftIn(store, STUDIO_PRODUCTS.cup, undefined, "Ly cũ");
     await openStudio(id);
 
     await user.click(screen.getByRole("button", { name: "Đổi tên thiết kế" }));
     await user.type(screen.getByRole("textbox", { name: "Tên thiết kế" }), " nữa{Escape}");
     expect(screen.getByRole("heading", { name: "Ly cũ" })).toBeInTheDocument();
-    expect(patch).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Đổi tên thiết kế" }));
     await user.clear(screen.getByRole("textbox", { name: "Tên thiết kế" }));
@@ -353,12 +386,12 @@ describe("saving and renaming in the header", () => {
     await user.tab();
 
     expect(await screen.findByRole("heading", { name: "Ly mới" })).toBeInTheDocument();
-    expect(patch).toHaveBeenCalledWith(`/designs/${id}`, { name: "Ly mới", version: 0 });
+    expect(put).toHaveBeenCalledWith(`/designs/${id}/name`, { version: 0, name: "Ly mới" });
   });
 });
 
 describe("a design that moves on elsewhere", () => {
-  it("re-reads a design whose save is refused with 409 INVALID_STATE, turns read-only on the stored document, sends nothing more and keeps the edit in the browser (Review Focus 3)", async () => {
+  it("re-reads a design whose save is refused with the BE's 409 CONFLICT (version first), finds it moved on, turns read-only on the stored document, sends nothing more and keeps the edit in the browser (Review Focus 3)", async () => {
     const { store, put } = await designBackend();
     const id = await cupWithText(store);
     const { document: stored } = settle(await store.getDocument(id)).data as {
@@ -377,7 +410,10 @@ describe("a design that moves on elsewhere", () => {
       }),
     ).toBeInTheDocument();
     expect(put).toHaveBeenCalledTimes(1);
-    await expect(put.mock.results[0]!.value).rejects.toMatchObject({ code: "INVALID_STATE" });
+    // The BE checks the version before the status: the submit moved it, so this is a plain CONFLICT,
+    // and the studio reads the design to tell a status that moved on from a document saved elsewhere.
+    await expect(put.mock.results[0]!.value).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(); // not the reload dialog
     expect(tools()).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Gửi duyệt" })).not.toBeInTheDocument();
     expect(seen.current!.readOnly).toBe(true);
@@ -404,7 +440,7 @@ describe("a design that moves on elsewhere", () => {
     const id = await cupWithText(store);
     const seen = await openStudio(id);
     // The save is refused as if the design had left DRAFT; read again, it is a draft still.
-    put.mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "Design is not a draft"));
+    put.mockRejectedValueOnce(new ApiError(409, "DESIGN_NOT_DRAFT", "Design is not a draft"));
     paintBody(seen.current!, "#FF0000");
     const retry = await screen.findByRole(
       "button",
@@ -430,7 +466,7 @@ describe("a design that moves on elsewhere", () => {
     const { store, put } = await designBackend();
     const id = await cupWithText(store);
     const seen = await openStudio(id);
-    put.mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "Design is not a draft"));
+    put.mockRejectedValueOnce(new ApiError(409, "DESIGN_NOT_DRAFT", "Design is not a draft"));
     paintBody(seen.current!, "#FF0000");
     const retry = await screen.findByRole(
       "button",
@@ -473,7 +509,7 @@ describe("a design that moves on elsewhere", () => {
     expect(storedDraft(id)).toMatchObject({ document: RED });
   });
 
-  it("still opens the conflict dialog for a save refused with 409 VERSION_CONFLICT, and reloads", async () => {
+  it("still opens the conflict dialog for a save refused with 409 CONFLICT, and reloads", async () => {
     const user = userEvent.setup();
     const { store, put } = await designBackend();
     const id = await cupWithText(store);
@@ -489,7 +525,7 @@ describe("a design that moves on elsewhere", () => {
       { name: "Thiết kế đã thay đổi ở nơi khác" },
       { timeout: 5000 },
     );
-    await expect(put.mock.results[0]!.value).rejects.toMatchObject({ code: "VERSION_CONFLICT" });
+    await expect(put.mock.results[0]!.value).rejects.toMatchObject({ code: "CONFLICT" });
 
     await user.click(within(dialog).getByRole("button", { name: "Tải lại" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), {

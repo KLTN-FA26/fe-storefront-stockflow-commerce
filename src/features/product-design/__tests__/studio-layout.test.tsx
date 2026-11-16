@@ -11,9 +11,10 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/design/new",
   useParams: () => ({}),
 }));
-vi.mock("@/lib/config", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/config")>();
-  return { ...actual, DESIGN_API_MOCKED: true };
+// The design API is on the mock (the server flag, threaded by context).
+vi.mock("@/providers/app-providers", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/providers/app-providers")>();
+  return { ...actual, useIsDesignMock: () => true };
 });
 
 const PANEL = { name: "Giả lập Quản lý kinh doanh" } as const;

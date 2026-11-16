@@ -21,7 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 import { ApiError } from "@/lib/api/error";
 
-import { describeDesignError } from "../errors";
+import { describeProjectError } from "../errors";
 import { useCreateProject } from "../mutations";
 import { projectCreateInputSchema } from "../project-schemas";
 import type { CreateProjectInput } from "../types";
@@ -91,7 +91,7 @@ function CreateProjectForm({ onCancel }: { onCancel: () => void }) {
           </p>
         ) : null}
       </div>
-      {create.isError ? <Alert tone="danger">{describeDesignError(create.error)}</Alert> : null}
+      {create.isError ? <Alert tone="danger">{describeProjectError(create.error)}</Alert> : null}
       <DialogFooter className="gap-2">
         <Button
           type="button"

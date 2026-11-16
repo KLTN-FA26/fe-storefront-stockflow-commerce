@@ -131,8 +131,9 @@ export function createDesignOps(ctx: StoreContext, files: DesignFiles) {
       const name = boundedText("name", rawName, NAME_MAX);
       if ("refused" in name) return name.refused;
       if (!isVersion(version)) return invalid("version", "version must be a whole number ≥ 0");
-      if (row.status !== "DRAFT") return invalidState();
+      // Version first, as the BE (`DesignWorkflow`): a stale tab meets CONFLICT.
       if (row.version !== version) return versionConflict();
+      if (row.status !== "DRAFT") return invalidState();
       row.name = name.text;
       ctx.touch(row);
       await ctx.persist();
@@ -163,8 +164,9 @@ export function createDesignOps(ctx: StoreContext, files: DesignFiles) {
       if (!Array.isArray(issues) || !issues.length || !issues.every(isIssue)) {
         return invalid("issues", "issues must list what failed");
       }
-      if (row.status !== "DRAFT") return invalidState();
+      // Version first, as the BE (`DesignWorkflow`): a stale tab meets CONFLICT.
       if (row.version !== version) return versionConflict();
+      if (row.status !== "DRAFT") return invalidState();
       const event = ctx.record(row, "PREFLIGHT_FAILED", issuesNote(issues), version);
       await ctx.persist();
       return ok(toEventDto(event), 201);
@@ -176,8 +178,9 @@ export function createDesignOps(ctx: StoreContext, files: DesignFiles) {
       if (!row) return notFound();
       const { version } = asRecord(body);
       if (!isVersion(version)) return invalid("version", "version must be a whole number ≥ 0");
-      if (row.status !== "DRAFT") return invalidState();
+      // Version first, as the BE (`DesignWorkflow`): a stale tab meets CONFLICT.
       if (row.version !== version) return versionConflict();
+      if (row.status !== "DRAFT") return invalidState();
       row.status = "ARCHIVED";
       ctx.advance(row, "ARCHIVED", null);
       // A member draft leaving changes its project's count: the project's list order follows.

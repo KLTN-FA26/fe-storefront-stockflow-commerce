@@ -199,6 +199,10 @@ export type FileRow = {
   key?: string;
   /** Seeded rows only: a static link instead of a blob. */
   url?: string;
+  /** Files uploaded one by one (the BE's artifacts): the id, the layout it was drawn from and its key. */
+  artifactId?: string;
+  documentChecksum?: string;
+  uploadKey?: string;
 };
 
 /**
@@ -232,6 +236,13 @@ export type SubmissionUploadRow = {
   roundId: string | null;
 };
 
+/**
+ * An artifact the BE made for an `Idempotency-Key` (`role:key`), kept after a later upload replaced
+ * it as the role's current file: the BE finds a key among every artifact of the design, and a
+ * repeat answers that artifact without making it current again.
+ */
+export type ArtifactUploadRow = { designId: string; key: string; file: FileRow };
+
 /** Everything the store keeps, saved whole as `DesignMockSnapshot.rows` after every write. */
 export type DesignMockState = {
   designs: DesignRow[];
@@ -239,6 +250,8 @@ export type DesignMockState = {
   assets: AssetRow[];
   history: EventRow[];
   files: FileRow[];
+  /** Every artifact made under a key, current or not (`ArtifactUploadRow`). */
+  artifactUploads: ArtifactUploadRow[];
   projects: ProjectRow[];
   projectEvents: ProjectEventRow[];
   library: LibraryRow[];
@@ -258,6 +271,21 @@ const MOCK_CUSTOMER_NO = "0010";
  */
 export const customerSkuCode = (sku: string, seq: number) =>
   `${sku.toUpperCase().replace(/[^A-Z0-9-]/g, "-")}-KH${MOCK_CUSTOMER_NO}-${String(seq).padStart(3, "0")}`;
+
+/** A GUID-shaped id that is the same each time for the same text (FNV-1a; mock only). */
+export function stableGuid(text: string): string {
+  let hex = "";
+  for (let seed = 0; seed < 4; seed += 1) {
+    let h = (0x811c9dc5 ^ seed) >>> 0;
+    for (const char of text) h = Math.imul(h ^ char.charCodeAt(0), 0x01000193) >>> 0;
+    hex += h.toString(16).padStart(8, "0");
+  }
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+
+/** The id a file is listed under as a BE artifact: its own, or one made of the design and the role. */
+export const artifactIdOf = (file: Pick<FileRow, "artifactId" | "designId" | "role">) =>
+  file.artifactId ?? stableGuid(`artifact:${file.designId}:${file.role}`);
 
 export const assetKey = (assetId: string) => `asset/${assetId}`;
 /** The blob of a library image: its own bytes, apart from every design's copy (BR-18). */

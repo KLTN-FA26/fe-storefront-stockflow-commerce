@@ -71,6 +71,24 @@ function FailedChecks({ designId, row }: { designId: string; row: RowState & { k
   );
 }
 
+/** Why a design stopped; a design the refusal names has its studio to open again. */
+function StoppedRow({ designId, row }: { designId: string; row: RowState & { kind: "stopped" } }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-danger text-sm">{row.message}</p>
+      {row.reopen ? (
+        <Button
+          asChild
+          variant="outline"
+          className="min-h-11 self-start rounded-[var(--r-md)] px-4"
+        >
+          <Link href={STORE_ROUTES.design.detail(designId)}>Mở lại thiết kế</Link>
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 /** A design that passed with print notes (e.g. CMYK): shown before the customer confirms. */
 function PrintNotes({ row }: { row: RowState & { kind: "passed" } }) {
   return (
@@ -122,7 +140,7 @@ function SetRow({ design, row }: { design: Design; row: RowState }) {
           aria-valuenow={Math.round(drawn(row.step, row.fraction))}
         />
       ) : null}
-      {row.kind === "stopped" ? <p className="text-danger text-sm">{row.message}</p> : null}
+      {row.kind === "stopped" ? <StoppedRow designId={design.id} row={row} /> : null}
       {row.kind === "failed" ? <FailedChecks designId={design.id} row={row} /> : null}
       {row.kind === "passed" && row.notes.length > 0 ? <PrintNotes row={row} /> : null}
     </li>

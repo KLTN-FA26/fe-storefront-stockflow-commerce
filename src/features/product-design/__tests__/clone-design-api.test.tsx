@@ -18,8 +18,9 @@ import { retargetDocument } from "../engine/document/retarget";
 import { describeDesignError } from "../errors";
 import { useCloneDesign } from "../mutations";
 import { designKeys, projectKeys } from "../queries";
-import { cloneDesignInputSchema, cloneResultDtoSchema } from "../schemas";
-import { cupDocument, design, designDto, ids } from "./fixtures";
+import { cloneDtoSchema } from "../project-dtos";
+import { cloneDesignInputSchema } from "../schemas";
+import { cupDocument, design, designDraftDto, ids } from "./fixtures";
 import { designBackend } from "./design-backend";
 
 const env = vi.hoisted(() => ({ push: vi.fn() }));
@@ -35,12 +36,12 @@ const document = cupDocument();
 
 describe("clone schemas and API", () => {
   it("parses an answer with the draft and why it is in no project", () => {
-    const answer = { design: designDto({ id: ids.revision }), notInProject: "PROJECT_FULL" };
-    expect(cloneResultDtoSchema.parse(answer).notInProject).toBe("PROJECT_FULL");
-    expect(cloneResultDtoSchema.parse({ ...answer, notInProject: null }).notInProject).toBeNull();
-    // A missing field, or a reason the contract does not name, is a contract break.
-    expect(() => cloneResultDtoSchema.parse({ design: answer.design })).toThrow();
-    expect(() => cloneResultDtoSchema.parse({ ...answer, notInProject: "OTHER" })).toThrow();
+    const answer = { design: designDraftDto({ id: ids.revision }), notInProject: "PROJECT_FULL" };
+    expect(cloneDtoSchema.parse(answer).notInProject).toBe("PROJECT_FULL");
+    expect(cloneDtoSchema.parse({ ...answer, notInProject: null }).notInProject).toBeNull();
+    // The BE leaves the key out when the source had no project; a missing draft is a contract break.
+    expect(cloneDtoSchema.parse({ design: answer.design }).notInProject).toBeUndefined();
+    expect(() => cloneDtoSchema.parse({ notInProject: "PROJECT_FULL" })).toThrow();
   });
 
   it("needs a variant and a design document", () => {
@@ -51,7 +52,7 @@ describe("clone schemas and API", () => {
 
   it("posts the variant and the document and parses the answer", async () => {
     const post = vi.spyOn(api, "post").mockResolvedValueOnce({
-      data: { design: designDto({ id: ids.revision }), notInProject: null },
+      data: { design: designDraftDto({ id: ids.revision }), notInProject: null },
     });
     const result = await cloneDesign(id, { variantSku: "CUP-2", document }, "key-1");
     expect(post).toHaveBeenCalledWith(
@@ -60,6 +61,9 @@ describe("clone schemas and API", () => {
       { headers: { "Idempotency-Key": "key-1" } },
     );
     expect(result.design.id).toBe(ids.revision);
+    // The BE takes the target template from the document's `templateCode` (BE `DESIGN_CLONE_TARGET_INVALID`).
+    const sent = post.mock.calls[0]![1] as { document: { templateCode: string } };
+    expect(sent.document.templateCode).toBe(document.templateCode);
   });
 
   it("does not send a document the contract refuses", async () => {
@@ -70,8 +74,8 @@ describe("clone schemas and API", () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it("words VARIANT_NOT_ELIGIBLE", () => {
-    expect(describeDesignError(new ApiError(422, "VARIANT_NOT_ELIGIBLE", "x"))).toBe(
+  it("words DESIGN_CLONE_TARGET_INVALID", () => {
+    expect(describeDesignError(new ApiError(409, "DESIGN_CLONE_TARGET_INVALID", "x"))).toBe(
       "Không nhân bản được sang quy cách này. Hãy chọn quy cách khác.",
     );
   });
@@ -93,7 +97,7 @@ const keysOf = (spy: ReturnType<typeof setup>["invalidate"]) =>
 describe("useCloneDesign", () => {
   it("re-reads the lists, the draft count and the projects after a copy", async () => {
     vi.spyOn(api, "post").mockResolvedValueOnce({
-      data: { design: designDto({ id: ids.revision }), notInProject: null },
+      data: { design: designDraftDto({ id: ids.revision }), notInProject: null },
     });
     const { invalidate, wrapper } = setup();
     const { result } = renderHook(() => useCloneDesign(id), { wrapper });
@@ -128,7 +132,7 @@ describe("clone through the mock", () => {
     await designBackend();
   });
 
-  it("is refused with VARIANT_NOT_ELIGIBLE for a variant of another product", async () => {
+  it("is refused with DESIGN_CLONE_TARGET_INVALID for a variant of another product", async () => {
     const source = await createDesign({
       productSlug: "ly-giay-2-lop-8oz",
       sku: "CUP-PAPER-8OZ-WHT",
@@ -141,7 +145,7 @@ describe("clone through the mock", () => {
         { variantSku: "CUP-PAPER-12OZ-WHT", document: { ...document, sku: "CUP-PAPER-12OZ-WHT" } },
         "key-x",
       ),
-    ).rejects.toMatchObject({ status: 422, code: "VARIANT_NOT_ELIGIBLE" });
+    ).rejects.toMatchObject({ status: 409, code: "DESIGN_CLONE_TARGET_INVALID" });
     expect(await getDesign(source.id)).toMatchObject({ id: source.id });
   });
 

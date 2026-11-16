@@ -36,10 +36,19 @@
  * must apply the same rules, so it reuses them rather than keep a copy that could drift.
  */
 
-import { fail, ok, stampedAt, type DesignMockState, type MockResult } from "./design-rows";
+import { customizationOf, designTemplateOf } from "./design-be-contract";
+import {
+  fail,
+  notFound,
+  ok,
+  stampedAt,
+  type DesignMockState,
+  type MockResult,
+} from "./design-rows";
 import { seedDesignState } from "./design-seed";
 import { createExclusive, loadState } from "./design-store-access";
 import { createStoreContext, type DesignMockDeps } from "./design-store-context";
+import { createArtifactOps } from "./design-store-artifacts";
 import { createCloneOps } from "./design-store-clones";
 import { createDesignOps } from "./design-store-designs";
 import { createDocumentOps } from "./design-store-documents";
@@ -101,6 +110,7 @@ export async function createDesignMockStore(deps: DesignMockDeps) {
   const projects = createProjectOps(ctx, uploads);
   const library = createLibraryOps(ctx);
   const clones = createCloneOps(ctx, uploads);
+  const artifacts = createArtifactOps(ctx, uploads);
 
   return {
     /** false for memory storage: the simulation panel says data is lost on reload. */
@@ -118,6 +128,13 @@ export async function createDesignMockStore(deps: DesignMockDeps) {
     uploadAsset: operation(uploads.uploadAsset),
     assetLink: operation(uploads.assetLink),
     submit: operation(submission.submit),
+    uploadArtifact: operation(artifacts.upload),
+    listArtifacts: operation(artifacts.list),
+    artifactLink: operation(artifacts.link),
+    requestReview: operation(artifacts.requestReview),
+    snapshot: operation(artifacts.snapshot),
+    simulateOutdatedFiles: operation(artifacts.simulateOutdatedFiles),
+    simulateCorruptFile: operation(artifacts.simulateCorruptFile),
     files: operation(uploads.files),
     recordPreflightFailure: operation(designs.recordPreflightFailure),
     remove: operation(designs.remove),
@@ -140,6 +157,7 @@ export async function createDesignMockStore(deps: DesignMockDeps) {
     placeFromLibrary: operation(library.placeInDesign),
     uploadSubmission: operation(rounds.uploadSubmission),
     openReviewRound: operation(rounds.openRound),
+    submitBatch: operation(rounds.submitBatch),
     recordSetPreflightFailure: operation(rounds.recordFailures),
     simulateApprove: operation(simulation.simulateApprove),
     simulateReturn: operation(simulation.simulateReturn),
@@ -147,13 +165,30 @@ export async function createDesignMockStore(deps: DesignMockDeps) {
     simulateFailNextApproval: operation(simulation.simulateFailNextApproval),
     simulateRounds: operation(simulation.simulateRounds),
 
-    /** GET /catalog/products/{slug}/variants/{sku}/print-config — the fixtures, not the state. */
+    /**
+     * A variant's print configuration from the fixtures, not the state (the BE has no such read, so
+     * no route serves it: the route layer checks a create's template with it).
+     */
     async printConfig(slug: string, sku: string): Promise<MockResult> {
       const config = ctx.configFor(slug, sku);
       return stamped(
         config ? ok(config) : fail(404, "NOT_FOUND", "This variant has no print configuration"),
       );
     },
+
+    /**
+     * GET /catalog/products/{slug}/customization — the BE's read of a product's templates, over the
+     * same fixtures (`design-be-contract.ts`), as far as starting a design needs it.
+     */
+    async customization(slug: string, skuHint?: string): Promise<MockResult> {
+      return stamped(customizationOf(slug, ctx.configFor, skuHint));
+    },
+
+    /** GET /designs/{id}/template — the template the design is drawn on, in the BE's shape. */
+    designTemplate: operation(async (id: string): Promise<MockResult> => {
+      const row = ctx.find(id);
+      return row ? designTemplateOf(ctx.configOf(row)) : notFound();
+    }),
 
     /**
      * Mock-only POST /__mock/reset — everything cleared, the seed written again, the links made so

@@ -112,6 +112,27 @@ async function openSubmit(user: ReturnType<typeof userEvent.setup>) {
 }
 
 const urlsOf = (spy: { mock: { calls: unknown[][] } }) => spy.mock.calls.map(([url]) => url);
+
+/** What one complete sending posts, in order: the three files, then the request for review (F-19). */
+const SENT = (id: string) => [
+  `/designs/${id}/artifacts`,
+  `/designs/${id}/artifacts`,
+  `/designs/${id}/artifacts`,
+  `/designs/${id}/technical-review-requests`,
+];
+
+const realPost = api.post.bind(api);
+/** The BE refuses the request for review with `error` (the uploads before it go through). */
+function refuseReview(
+  post: { mockImplementation: (impl: (...args: unknown[]) => Promise<unknown>) => unknown },
+  error: ApiError,
+) {
+  post.mockImplementation((url, ...rest) =>
+    String(url).endsWith("/technical-review-requests")
+      ? Promise.reject(error)
+      : (realPost as (...args: unknown[]) => Promise<unknown>)(url, ...rest),
+  );
+}
 const historyOf = async (store: DesignMockStore, id: string) =>
   (settle(await store.history(id)).data as DesignEvent[]).map((event) => event.type);
 const designIn = async (store: DesignMockStore, id: string) =>
@@ -174,15 +195,11 @@ describe("SubmitDialog on a preflight Fail", () => {
     const { store, post } = await designBackend();
     const id = await draftWith(store, [textAt("text", 170)]);
     await openStudio(id, fakeRenderer());
-    post.mockRejectedValueOnce(
-      new ApiError(422, "PREFLIGHT_FAILED", "Preflight failed", undefined, undefined, {
-        issues: [
-          {
-            ruleId: "ASSET_INVALID",
-            level: "fail",
-            message: "Ảnh không hợp lệ hoặc không tải được.",
-          },
-        ],
+    // The BE's own preflight: `rule` and an English message that is not shown.
+    refuseReview(
+      post,
+      new ApiError(422, "DESIGN_PREFLIGHT_FAILED", "Preflight failed", undefined, undefined, {
+        issues: [{ rule: "ASSET_INVALID", message: "The image is not one of this design's" }],
       }),
     );
 
@@ -198,7 +215,10 @@ describe("SubmitDialog on a preflight Fail", () => {
     ).toBeInTheDocument();
     expect(within(dialog).getByText("Thiết kế chưa đạt kiểm tra tự động.")).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: "Thử lại" })).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/is not one of this design/)).not.toBeInTheDocument();
     expect(await designIn(store, id)).toMatchObject({ status: "DRAFT" });
+    // The BE recorded its own refusal: the studio sent no `preflight-failures` of its own.
+    expect(urlsOf(post)).not.toContain(`/designs/${id}/preflight-failures`);
   });
 });
 
@@ -247,7 +267,7 @@ describe("SubmitDialog on a preflight Pass", () => {
     act(() => release());
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), SUBMISSION);
-    expect(urlsOf(post)).toEqual([`/designs/${id}/submissions`]);
+    expect(urlsOf(post)).toEqual(SENT(id));
     expect(await designIn(store, id)).toMatchObject({ status: "PENDING_REVIEW" });
     expect(await historyOf(store, id)).toContain("SUBMITTED_FOR_REVIEW");
     expect(
@@ -277,7 +297,8 @@ describe("SubmitDialog on a preflight Pass", () => {
     await user.click(retry);
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), SUBMISSION);
-    expect(urlsOf(post)).toEqual([`/designs/${id}/submissions`, `/designs/${id}/submissions`]);
+    // The first upload failed; the retry sends the three files and the request, drawing nothing again.
+    expect(urlsOf(post)).toEqual([`/designs/${id}/artifacts`, ...SENT(id)]);
     expect(renderer.printSurface).toHaveBeenCalledTimes(1);
     expect(renderer.specSheet).toHaveBeenCalledTimes(1);
     expect(await designIn(store, id)).toMatchObject({ status: "PENDING_REVIEW" });
@@ -319,7 +340,7 @@ describe("SubmitDialog on a preflight Pass", () => {
     const again = await openSubmit(user);
     await user.click(await within(again).findByRole("button", { name: "Gửi duyệt" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), SUBMISSION);
-    expect(urlsOf(post)).toEqual([`/designs/${id}/submissions`]);
+    expect(urlsOf(post)).toEqual(SENT(id));
     expect(renderer.printSurface).toHaveBeenCalledTimes(1);
     expect(await designIn(store, id)).toMatchObject({ status: "PENDING_REVIEW" });
   });
@@ -367,13 +388,13 @@ describe("SubmitDialog on a preflight Pass", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), SUBMISSION);
   });
 
-  it("says why, and offers Đóng instead of Thử lại, once the design is no longer a draft (409 INVALID_STATE); the design is read again", async () => {
+  it("says why, and offers Đóng instead of Thử lại, once the design is no longer a draft (409 DESIGN_NOT_DRAFT); the design is read again", async () => {
     const user = userEvent.setup();
     const { store, post } = await designBackend();
     const id = await draftWith(store, [textAt("text", 170)]);
     const seen = await openStudio(id, fakeRenderer());
     const invalidate = vi.spyOn(seen.client, "invalidateQueries");
-    post.mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "Design is not a draft"));
+    post.mockRejectedValueOnce(new ApiError(409, "DESIGN_NOT_DRAFT", "Design is not a draft"));
 
     const dialog = await openSubmit(user);
     await user.click(within(dialog).getByRole("button", { name: "Gửi duyệt" }));
@@ -390,7 +411,7 @@ describe("SubmitDialog on a preflight Pass", () => {
 
     await user.click(within(dialog).getByRole("button", { name: "Đóng" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(urlsOf(post)).toEqual([`/designs/${id}/submissions`]);
+    expect(urlsOf(post)).toEqual([`/designs/${id}/artifacts`]); // refused at the first upload
   });
 
   it("says why, and offers only Đóng, once the design is gone (404: deleted in another tab)", async () => {
@@ -446,7 +467,7 @@ describe("SubmitDialog on a preflight Pass", () => {
     await user.click(again);
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), SUBMISSION);
-    expect(urlsOf(post)).toEqual([`/designs/${id}/submissions`]);
+    expect(urlsOf(post)).toEqual(SENT(id));
     expect(renderer.printSurface).toHaveBeenCalledTimes(2); // drawn anew from the edited design
     const { document } = settle(await store.getDocument(id)).data as { document: DesignDocument };
     expect(document.surfaces.BODY?.background).toEqual({ kind: "color", color: "#FF0000" });

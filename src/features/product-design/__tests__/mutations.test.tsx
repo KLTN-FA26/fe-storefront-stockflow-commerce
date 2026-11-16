@@ -22,7 +22,7 @@ import {
   assetDto,
   cupDocument,
   design,
-  designDto,
+  designDraftDto,
   documentRecordDto,
   ids,
 } from "./fixtures";
@@ -49,14 +49,25 @@ const invalidated = (spy: ReturnType<typeof setup>["invalidate"]) =>
 
 describe("create and revision (spec §4.4: lists, draftCount)", () => {
   it("useCreateDesign creates the draft and re-reads the lists and the draft count", async () => {
-    const post = vi.spyOn(api, "post").mockResolvedValueOnce({ data: designDto({ version: 0 }) });
+    // The BE wants the product's id and the template's code: read from the customization first (F-12).
+    vi.spyOn(api, "get").mockResolvedValueOnce({
+      data: { productId: ids.project, templates: [{ code: "CUP1-BODY", sku: "CUP-1" }] },
+    });
+    const post = vi
+      .spyOn(api, "post")
+      .mockResolvedValueOnce({ data: designDraftDto({ version: 0 }) });
     const { invalidate, wrapper } = setup();
     const { result } = renderHook(() => useCreateDesign(), { wrapper });
 
     result.current.mutate({ productSlug: "ly", sku: "CUP-1", name: "Ly" });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(post).toHaveBeenCalledWith("/designs", { productSlug: "ly", sku: "CUP-1", name: "Ly" });
+    expect(post).toHaveBeenCalledWith("/designs/mine", {
+      productId: ids.project,
+      sku: "CUP-1",
+      templateCode: "CUP1-BODY",
+      name: "Ly",
+    });
     expect(result.current.data).toMatchObject({ id, version: 0 });
     expect(invalidated(invalidate)).toEqual([
       { queryKey: designKeys.lists() },
@@ -67,7 +78,7 @@ describe("create and revision (spec §4.4: lists, draftCount)", () => {
   it("useCreateRevision creates a draft from an approved design and re-reads the same", async () => {
     const post = vi
       .spyOn(api, "post")
-      .mockResolvedValueOnce({ data: designDto({ id: ids.revision, version: 0 }) });
+      .mockResolvedValueOnce({ data: designDraftDto({ id: ids.revision, version: 0 }) });
     const { invalidate, wrapper } = setup();
     const { result } = renderHook(() => useCreateRevision(), { wrapper });
 
@@ -86,7 +97,9 @@ describe("create and revision (spec §4.4: lists, draftCount)", () => {
 
 describe("useRenameDesign (spec §4.4: detail, lists)", () => {
   it("puts the renamed design, with its new version, in the cache and re-reads the lists", async () => {
-    vi.spyOn(api, "patch").mockResolvedValueOnce({ data: designDto({ name: "Mới", version: 4 }) });
+    vi.spyOn(api, "put").mockResolvedValueOnce({
+      data: designDraftDto({ name: "Mới", version: 4 }),
+    });
     const { client, invalidate, wrapper } = setup();
     client.setQueryData(designKeys.detail(id), design());
     const { result } = renderHook(() => useRenameDesign(id), { wrapper });
@@ -106,7 +119,9 @@ describe("useRenameDesign (spec §4.4: detail, lists)", () => {
   });
 
   it("keeps the cached document's version in step: the rename moved the shared version on", async () => {
-    vi.spyOn(api, "patch").mockResolvedValueOnce({ data: designDto({ name: "Mới", version: 4 }) });
+    vi.spyOn(api, "put").mockResolvedValueOnce({
+      data: designDraftDto({ name: "Mới", version: 4 }),
+    });
     const { client, wrapper } = setup();
     client.setQueryData(designKeys.detail(id), design());
     client.setQueryData(designKeys.document(id), documentRecordDto({ version: 3 }));
@@ -121,8 +136,8 @@ describe("useRenameDesign (spec §4.4: detail, lists)", () => {
     });
   });
 
-  it("re-reads the design when it moved to another status meanwhile (409 INVALID_STATE)", async () => {
-    vi.spyOn(api, "patch").mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "x"));
+  it("re-reads the design when it moved to another status meanwhile (409 DESIGN_NOT_DRAFT)", async () => {
+    vi.spyOn(api, "put").mockRejectedValueOnce(new ApiError(409, "DESIGN_NOT_DRAFT", "x"));
     const { invalidate, wrapper } = setup();
     const { result } = renderHook(() => useRenameDesign(id), { wrapper });
 
@@ -135,15 +150,18 @@ describe("useRenameDesign (spec §4.4: detail, lists)", () => {
     ]);
   });
 
-  it("re-reads the design on a stale version (409 VERSION_CONFLICT), so a retry sends the current one", async () => {
-    vi.spyOn(api, "patch").mockRejectedValueOnce(new ApiError(409, "VERSION_CONFLICT", "x"));
+  it("re-reads the design on a stale version (409 CONFLICT), so a retry sends the current one", async () => {
+    vi.spyOn(api, "put").mockRejectedValueOnce(new ApiError(409, "CONFLICT", "x"));
     const { invalidate, wrapper } = setup();
     const { result } = renderHook(() => useRenameDesign(id), { wrapper });
 
     result.current.mutate({ name: "Mới", version: 3 });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
-    expect(invalidated(invalidate)).toEqual([{ queryKey: designKeys.detail(id), exact: true }]);
+    expect(invalidated(invalidate)).toContainEqual({
+      queryKey: designKeys.detail(id),
+      exact: true,
+    });
   });
 });
 
@@ -177,7 +195,30 @@ describe("useSaveDesignDocument (spec §4.4: detail version, lists updatedAt)", 
     result.current.mutate({ version: 3, document: cupDocument() });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(invalidated(invalidate)).toContainEqual({ queryKey: projectKeys.designs(ids.project) });
+    expect(invalidated(invalidate)).toContainEqual({
+      queryKey: projectKeys.detail(ids.project),
+      exact: true,
+    });
+  });
+
+  it("does not refetch the project's library or history on an autosave: only the detail is stale", async () => {
+    vi.spyOn(api, "put").mockResolvedValueOnce({ data: documentRecordDto({ version: 4 }) });
+    const { client, wrapper } = setup();
+    client.setQueryData(designKeys.detail(id), design({ projectId: ids.project }));
+    client.setQueryData(projectKeys.detail(ids.project), { id: ids.project });
+    client.setQueryData(projectKeys.library(ids.project), { images: [], texts: [] });
+    client.setQueryData(projectKeys.history(ids.project), []);
+    const { result } = renderHook(() => useSaveDesignDocument(id), { wrapper });
+
+    result.current.mutate({ version: 3, document: cupDocument() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await waitFor(() =>
+      expect(client.getQueryState(projectKeys.detail(ids.project))?.isInvalidated).toBe(true),
+    );
+    // The library re-signs every image on a read: nested under the detail, it must stay as it is.
+    expect(client.getQueryState(projectKeys.library(ids.project))?.isInvalidated).toBe(false);
+    expect(client.getQueryState(projectKeys.history(ids.project))?.isInvalidated).toBe(false);
   });
 
   it("does not invent a design in the cache when it holds none", async () => {
@@ -192,8 +233,8 @@ describe("useSaveDesignDocument (spec §4.4: detail version, lists updatedAt)", 
     expect(client.getQueryData(designKeys.document(id))).toMatchObject({ version: 4 });
   });
 
-  it("re-reads the design on 409 INVALID_STATE, so the studio follows its new status", async () => {
-    vi.spyOn(api, "put").mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "x"));
+  it("re-reads the design on 409 DESIGN_NOT_DRAFT, so the studio follows its new status", async () => {
+    vi.spyOn(api, "put").mockRejectedValueOnce(new ApiError(409, "DESIGN_NOT_DRAFT", "x"));
     const { invalidate, wrapper } = setup();
     const { result } = renderHook(() => useSaveDesignDocument(id), { wrapper });
 
@@ -206,8 +247,8 @@ describe("useSaveDesignDocument (spec §4.4: detail version, lists updatedAt)", 
     ]);
   });
 
-  it("leaves a stale version (409 VERSION_CONFLICT) to the conflict dialog", async () => {
-    vi.spyOn(api, "put").mockRejectedValueOnce(new ApiError(409, "VERSION_CONFLICT", "x"));
+  it("leaves a stale version (409 CONFLICT) to the conflict dialog", async () => {
+    vi.spyOn(api, "put").mockRejectedValueOnce(new ApiError(409, "CONFLICT", "x"));
     const { invalidate, wrapper } = setup();
     const { result } = renderHook(() => useSaveDesignDocument(id), { wrapper });
 
@@ -223,14 +264,18 @@ describe("a read of the design under way cannot put an older version back", () =
   function readUnderWay(client: QueryClient, version: number) {
     vi.spyOn(api, "get").mockImplementationOnce(
       () =>
-        new Promise((resolve) => setTimeout(() => resolve({ data: designDto({ version }) }), 50)),
+        new Promise((resolve) =>
+          setTimeout(() => resolve({ data: designDraftDto({ version }) }), 50),
+        ),
     );
     void client.fetchQuery({ ...designQuery(id), staleTime: 0 }).catch(() => undefined);
   }
   const landed = () => new Promise((resolve) => setTimeout(resolve, 100));
 
   it("after a rename", async () => {
-    vi.spyOn(api, "patch").mockResolvedValueOnce({ data: designDto({ name: "Mới", version: 4 }) });
+    vi.spyOn(api, "put").mockResolvedValueOnce({
+      data: designDraftDto({ name: "Mới", version: 4 }),
+    });
     const { client, wrapper } = setup();
     client.setQueryData(designKeys.detail(id), design());
     const { result } = renderHook(() => useRenameDesign(id), { wrapper });
@@ -280,7 +325,7 @@ describe("a write that finds the design gone (404: deleted in another tab)", () 
   });
 
   it("re-reads the design after a rename", async () => {
-    vi.spyOn(api, "patch").mockRejectedValueOnce(gone());
+    vi.spyOn(api, "put").mockRejectedValueOnce(gone());
     const { invalidate, wrapper } = setup();
     const { result } = renderHook(() => useRenameDesign(id), { wrapper });
 
@@ -321,8 +366,8 @@ describe("useUploadAsset (spec §4.4: assets)", () => {
 describe("useDeleteDesign (spec §4.4: lists, draftCount; removes detail)", () => {
   it("archives the draft with its version, forgets its cache and re-reads the lists and count", async () => {
     const del = vi
-      .spyOn(api, "delete")
-      .mockResolvedValueOnce({ data: designDto({ status: "ARCHIVED", version: 4 }) });
+      .spyOn(api, "post")
+      .mockResolvedValueOnce({ data: designDraftDto({ status: "ARCHIVED", version: 4 }) });
     const { client, invalidate, wrapper } = setup();
     client.setQueryData(designKeys.detail(id), design());
     client.setQueryData(designKeys.document(id), documentRecordDto());
@@ -332,7 +377,7 @@ describe("useDeleteDesign (spec §4.4: lists, draftCount; removes detail)", () =
     result.current.mutate({ id, version: 3 });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(del).toHaveBeenCalledWith(`/designs/${id}`, { data: { version: 3 } });
+    expect(del).toHaveBeenCalledWith(`/designs/${id}/archive`, { version: 3 });
     expect(client.getQueryData(designKeys.detail(id))).toBeUndefined();
     expect(client.getQueryData(designKeys.document(id))).toBeUndefined();
     expect(invalidated(invalidate)).toEqual([
@@ -342,8 +387,8 @@ describe("useDeleteDesign (spec §4.4: lists, draftCount; removes detail)", () =
     ]);
   });
 
-  it("re-reads the design too when the draft was submitted meanwhile (409 INVALID_STATE)", async () => {
-    vi.spyOn(api, "delete").mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "x"));
+  it("re-reads the design too when the draft was submitted meanwhile (409 DESIGN_NOT_DRAFT)", async () => {
+    vi.spyOn(api, "post").mockRejectedValueOnce(new ApiError(409, "DESIGN_NOT_DRAFT", "x"));
     const { client, invalidate, wrapper } = setup();
     client.setQueryData(designKeys.detail(id), design());
     const { result } = renderHook(() => useDeleteDesign(), { wrapper });
@@ -361,8 +406,23 @@ describe("useDeleteDesign (spec §4.4: lists, draftCount; removes detail)", () =
     );
   });
 
+  it("re-reads the design on a plain 409 CONFLICT too: the BE checks the version before the status", async () => {
+    vi.spyOn(api, "post").mockRejectedValueOnce(new ApiError(409, "CONFLICT", "x"));
+    const { client, invalidate, wrapper } = setup();
+    client.setQueryData(designKeys.detail(id), design());
+    const { result } = renderHook(() => useDeleteDesign(), { wrapper });
+
+    result.current.mutate({ id, version: 3 });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(invalidated(invalidate)).toContainEqual({
+      queryKey: designKeys.detail(id),
+      exact: true,
+    });
+  });
+
   it("re-reads the lists and the count when the delete is refused, and keeps the cache", async () => {
-    vi.spyOn(api, "delete").mockRejectedValueOnce(new ApiError(500, "INTERNAL_ERROR", "x"));
+    vi.spyOn(api, "post").mockRejectedValueOnce(new ApiError(500, "INTERNAL_ERROR", "x"));
     const { client, invalidate, wrapper } = setup();
     client.setQueryData(designKeys.detail(id), design());
     const { result } = renderHook(() => useDeleteDesign(), { wrapper });

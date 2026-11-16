@@ -8,9 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 import { cn } from "@/lib/cn";
-import { DESIGN_API_MOCKED } from "@/lib/config";
 // Read from the providers: the full-mock switch lives there, and this is its only use in the feature.
-import { useIsMock } from "@/providers/app-providers";
+import { useIsDesignMock } from "@/providers/app-providers";
 
 import { designQuery } from "../queries";
 import { getMockStorage } from "../simulation";
@@ -49,11 +48,11 @@ export function MockReviewPanel({
    */
   liftForBar?: boolean;
 }) {
-  const isMock = useIsMock();
+  const designMocked = useIsDesignMock();
   const signedIn = useSignedIn();
   const pathname = usePathname();
   const params = useParams<{ id?: string }>();
-  const shown = (isMock || DESIGN_API_MOCKED) && signedIn === true;
+  const shown = designMocked && signedIn === true;
   const storage = useQuery({
     queryKey: ["design-mock", "storage"],
     queryFn: ({ signal }) => getMockStorage(signal),

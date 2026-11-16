@@ -71,11 +71,19 @@ describe("the app's design mock, read through the feature's API layer", () => {
     ]);
   });
 
-  it("serves a print configuration for every variant the mock can design", async () => {
-    const configs = await Promise.all(
-      Object.values(MOCK_PRINT_CONFIGS).map((c) => getPrintConfig(c.product.slug, c.sku)),
-    );
-    expect(configs.map((c) => c.sku)).toEqual(Object.keys(MOCK_PRINT_CONFIGS));
+  it("serves a print configuration for every ACTIVE variant the mock can design, and lists no blocked one", async () => {
+    const all = Object.values(MOCK_PRINT_CONFIGS);
+    const active = all.filter((c) => c.variantStatus === "ACTIVE");
+    const configs = await Promise.all(active.map((c) => getPrintConfig(c.product.slug, c.sku)));
+    expect(configs.map((c) => c.sku)).toEqual(active.map((c) => c.sku));
+
+    // The BE lists ACTIVE variants only: a blocked one has no print configuration to read (F-22).
+    for (const blocked of all.filter((c) => c.variantStatus !== "ACTIVE")) {
+      await expect(getPrintConfig(blocked.product.slug, blocked.sku)).rejects.toMatchObject({
+        status: 404,
+        code: "PRINT_CONFIG_NOT_FOUND",
+      });
+    }
   });
 
   it("says through GET /__mock/storage whether the mock's data survives a reload", async () => {

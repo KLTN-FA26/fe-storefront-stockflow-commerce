@@ -36,6 +36,7 @@ type LaterCollection =
   | "library"
   | "reviewRounds"
   | "submissionUploads"
+  | "artifactUploads"
   | "failNextApproval";
 
 /**
@@ -60,6 +61,7 @@ function isState(rows: Record<string, unknown>): rows is StoredState {
     (library === undefined || Array.isArray(library)) &&
     (rows.reviewRounds === undefined || Array.isArray(rows.reviewRounds)) &&
     (rows.submissionUploads === undefined || Array.isArray(rows.submissionUploads)) &&
+    (rows.artifactUploads === undefined || Array.isArray(rows.artifactUploads)) &&
     (rows.failNextApproval === undefined || Array.isArray(rows.failNextApproval)) &&
     (projects === undefined || projects.every(hasSeq)) &&
     typeof documents === "object" &&
@@ -80,6 +82,7 @@ function completed(stored: StoredState): DesignMockState {
     library: stored.library ?? [],
     reviewRounds: stored.reviewRounds ?? [],
     submissionUploads: stored.submissionUploads ?? [],
+    artifactUploads: stored.artifactUploads ?? [],
     failNextApproval: stored.failNextApproval ?? [],
     seq: { ...stored.seq, project: projectSeq },
   };

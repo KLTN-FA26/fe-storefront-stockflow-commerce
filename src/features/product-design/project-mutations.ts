@@ -8,12 +8,13 @@ import {
   updateProject,
 } from "./api";
 import { designKeys, projectKeys } from "./queries";
-import type { ArchiveProjectInput, Design, UpdateProjectInput } from "./types";
+import type { ArchiveProjectInput, DesignProject, UpdateProjectInput } from "./types";
 
 // The writes on projects (spec 2026-11-12 §4), re-exported by `mutations.ts`: a change to a
 // project re-reads the project; adding or removing a design also re-reads that design (its
-// project label, its history). Adding or removing does not move the design's version (BR-17: no
-// content change), so an open studio keeps saving; its header follows the next read.
+// project label, its history). Adding or removing saves the draft in the BE, which moves its
+// version: the design's detail is re-read, so a studio open on it in this tab adopts the new
+// version (R69) before its next autosave; another tab's autosave meets a 409 and its reload offer.
 
 /**
  * A project changed, or a write to it was refused (so what the page shows is stale): the project
@@ -33,8 +34,8 @@ export const reReadProject = (client: QueryClient, projectId: string) =>
  */
 const reReadProjectDesigns = (client: QueryClient, projectId: string) =>
   Promise.all(
-    (client.getQueryData<readonly Design[]>(projectKeys.designs(projectId)) ?? []).map((design) =>
-      client.invalidateQueries({ queryKey: designKeys.detail(design.id), exact: true }),
+    (client.getQueryData<DesignProject>(projectKeys.detail(projectId))?.designs ?? []).map(
+      (design) => client.invalidateQueries({ queryKey: designKeys.detail(design.id), exact: true }),
     ),
   );
 
@@ -76,7 +77,7 @@ export function useUpdateProject(id: string) {
 
 /**
  * Closes the project for good (`mutate({ version })`, docs 12 BR-22). Its designs now say their
- * project is closed, so the design lists are re-read as well. A refusal (PROJECT_HAS_PENDING, a
+ * project is closed, so the design lists are re-read as well. A refusal (DESIGN_PROJECT_HAS_PENDING, a
  * stale version) re-reads the project: what the page showed was out of date.
  */
 export function useArchiveProject(id: string) {

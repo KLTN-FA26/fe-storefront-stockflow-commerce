@@ -14,7 +14,7 @@ import { DocumentEditedError } from "./submission-checks";
 import type { SubmitStep } from "./use-design-submission";
 
 /**
- * A submit refused because the design is no longer a DRAFT (409 INVALID_STATE). One refused because
+ * A submit refused because the design is no longer a DRAFT (409 DESIGN_NOT_DRAFT). One refused because
  * it is gone (404: deleted in another tab) says so in the API's words ("Không tìm thấy thiết kế…").
  */
 const NOT_A_DRAFT =

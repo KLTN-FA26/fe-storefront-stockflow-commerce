@@ -4,7 +4,12 @@ import { retryTransient } from "@/lib/api/retry";
 
 import { listDesignAssets } from "../../api";
 import { createEditor, createSizer, type FontRegistry, type PreflightAsset } from "../../engine";
-import { designDocumentQuery, designKeys, designQuery, printConfigQuery } from "../../queries";
+import {
+  designDocumentQuery,
+  designKeys,
+  designPrintConfigQuery,
+  designQuery,
+} from "../../queries";
 import { templateOf } from "../../selectors";
 import type { Design, DesignAsset, DesignDocumentRecord, PrintConfig } from "../../types";
 import { abortable } from "./deadline";
@@ -88,7 +93,7 @@ export async function loadDesignSession(
   );
   const [printConfig, storedAssets] = await abortable(
     Promise.all([
-      client.fetchQuery(printConfigQuery(design.product.slug, design.variant.sku)),
+      client.fetchQuery(designPrintConfigQuery(design)),
       client.fetchQuery(storedAssetsQuery(designId)),
     ]),
     signal,

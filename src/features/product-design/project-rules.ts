@@ -56,7 +56,7 @@ export function projectActions(
 
 /**
  * docs 12 BR-17: a design under review cannot leave its project. A closed project keeps its
- * designs (BR-22; the mock and the server refuse with PROJECT_ARCHIVED).
+ * designs (BR-22; the mock and the server refuse with DESIGN_PROJECT_ARCHIVED).
  */
 export function canRemoveFromProject(design: Pick<Design, "status" | "project">): Gate {
   if (design.project?.status === "ARCHIVED") return refuse(REASONS.closed);

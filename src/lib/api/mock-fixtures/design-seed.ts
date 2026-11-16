@@ -346,6 +346,7 @@ export async function seedDesignState(
       assets: [logo],
       history,
       files,
+      artifactUploads: [],
       projects: [],
       projectEvents: [],
       library: [],

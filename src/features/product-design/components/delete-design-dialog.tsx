@@ -21,8 +21,8 @@ import { useDeleteDesign } from "../mutations";
 import type { Design } from "../types";
 
 /**
- * The design the dialog holds is out of date: it moved on (409 INVALID_STATE, e.g. submitted in
- * another tab), changed (409 VERSION_CONFLICT) or is gone (404). Deleting it again cannot work;
+ * The design the dialog holds is out of date: it moved on (409 DESIGN_NOT_DRAFT), changed or
+ * submitted in another tab (409 CONFLICT) or is gone (404). Deleting it again cannot work;
  * the list re-reads (the mutation does), and the card shows what the customer can do now.
  */
 const isStale = (error: unknown) =>

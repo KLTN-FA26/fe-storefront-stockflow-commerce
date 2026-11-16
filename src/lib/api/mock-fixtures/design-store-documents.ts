@@ -77,8 +77,9 @@ export function createDocumentOps(ctx: StoreContext) {
       if (!row) return notFound();
       const { version, document } = asRecord(body);
       if (!isVersion(version)) return invalid("version", "version must be a whole number ≥ 0");
-      if (row.status !== "DRAFT") return invalidState();
+      // Version first, as the BE (`DesignWorkflow`): a stale tab meets CONFLICT.
       if (row.version !== version) return versionConflict();
+      if (row.status !== "DRAFT") return invalidState();
       const problem = documentProblem(document, ctx.configOf(row));
       if (problem) return invalid("document", problem);
       const tooLarge = documentTooLarge(document);

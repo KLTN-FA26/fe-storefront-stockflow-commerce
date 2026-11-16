@@ -17,7 +17,7 @@ import { ProjectLibrary } from "../components/project-library";
 import { pngBytes } from "../engine/__tests__/fixtures";
 import { textStyleSchema } from "../library-schemas";
 import { designBackend } from "./design-backend";
-import { libraryImageDto, textStyleDto } from "./project-fixtures";
+import { projectAssetDto, textStyleDto } from "./project-fixtures";
 
 // jsdom draws nothing: an SVG is "rasterised" to a PNG of the fixture's bytes.
 vi.mock("../engine", async (original) => ({
@@ -93,7 +93,7 @@ describe("the library of the project page: images", () => {
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Định dạng không được hỗ trợ");
-    expect(post.mock.calls.some(([url]) => String(url).endsWith("/library/images"))).toBe(false);
+    expect(post.mock.calls.some(([url]) => String(url).endsWith("/assets"))).toBe(false);
     expect(screen.getByText("1/30")).toBeInTheDocument();
   });
 
@@ -113,9 +113,7 @@ describe("the library of the project page: images", () => {
 
     expect(await screen.findByText("2/30", undefined, LISTED)).toBeInTheDocument();
     expect(screen.getByText("mark.png")).toBeInTheDocument();
-    expect(post.mock.calls.filter(([url]) => String(url).endsWith("/library/images"))).toHaveLength(
-      1,
-    );
+    expect(post.mock.calls.filter(([url]) => String(url).endsWith("/assets"))).toHaveLength(1);
   });
 
   it("asks before deleting, says the designs keep their copies, and deletes on confirm", async () => {
@@ -142,13 +140,13 @@ describe("the library of the project page: images", () => {
   it("locks the upload with the reason at 30 images", async () => {
     const { project, get } = await withLibrary();
     const full = Array.from({ length: 30 }, (_, i) =>
-      libraryImageDto({
-        id: `7a1b0000-0000-4000-8000-${String(i).padStart(12, "0")}`,
-        name: `a${i}.png`,
+      projectAssetDto({
+        assetId: `7a1b0000-0000-4000-8000-${String(i).padStart(12, "0")}`,
+        originalName: `a${i}.png`,
       }),
     );
     get.mockImplementation((url, ...rest) =>
-      String(url).endsWith("/library")
+      String(url).endsWith("/assets")
         ? Promise.resolve({ data: full } as never)
         : REAL_GET(url, ...rest),
     );

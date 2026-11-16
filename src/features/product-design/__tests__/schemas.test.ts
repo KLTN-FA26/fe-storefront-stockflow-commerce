@@ -1,20 +1,21 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
+import { designArtifactDtoSchema } from "../design-dtos";
 import { cup12oz } from "../engine/__tests__/fixtures";
 import {
   createDesignInputSchema,
   designAssetDtoSchema,
   designDocumentRecordDtoSchema,
-  designDtoSchema,
-  designEventDtoSchema,
-  designFileDtoSchema,
-  designPageDtoSchema,
+  designSchema,
+  designEventSchema,
+  designFileSchema,
+  designPageSchema,
   designStatusSchema,
   downloadLinkDtoSchema,
-  draftCountDtoSchema,
+  draftCountSchema,
   preflightIssueSchema,
-  printConfigDtoSchema,
+  printConfigSchema,
   renameDesignInputSchema,
   returnReasonInputSchema,
 } from "../schemas";
@@ -25,8 +26,7 @@ import {
   documentRecordDto,
   downloadDto,
   eventDto,
-  fileDto,
-  ids,
+  artifactDto,
   pageDto,
   printConfigDto,
   returnedDto,
@@ -35,13 +35,13 @@ import {
 const refuses = (schema: z.ZodType, value: unknown) =>
   expect(() => schema.parse(value)).toThrow(z.ZodError);
 
-describe("a design (spec §4.1 DesignDto)", () => {
+describe("a design as the screens read it", () => {
   it("knows the four statuses of the docs' lifecycle", () => {
     expect(designStatusSchema.options).toEqual(["DRAFT", "PENDING_REVIEW", "APPROVED", "ARCHIVED"]);
   });
 
   it("parses a draft, a returned draft and an approved design", () => {
-    expect(designDtoSchema.parse(designDto())).toMatchObject({
+    expect(designSchema.parse(designDto())).toMatchObject({
       status: "DRAFT",
       version: 3,
       product: { slug: "ly-giay-2-lop-12oz" },
@@ -49,47 +49,47 @@ describe("a design (spec §4.1 DesignDto)", () => {
       projectId: null,
       lastReturn: null,
     });
-    expect(designDtoSchema.parse(returnedDto()).lastReturn?.reason).toContain("Logo bị mờ");
-    expect(designDtoSchema.parse(approvedDto()).approval).toMatchObject({
-      snapshotId: ids.snapshot,
-      skuCode: "CUP-PAPER-12OZ-WHT-KH0010-001",
+    expect(designSchema.parse(returnedDto()).lastReturn?.reason).toContain("Logo bị mờ");
+    expect(designSchema.parse(approvedDto())).toMatchObject({
+      status: "APPROVED",
+      approvedAt: "2026-11-05T08:00:00Z",
     });
   });
 
   it("refuses an unknown status, a bad id or a negative version", () => {
-    refuses(designDtoSchema, designDto({ status: "SUBMITTED" }));
-    refuses(designDtoSchema, designDto({ id: "d-1" }));
-    refuses(designDtoSchema, designDto({ version: -1 }));
+    refuses(designSchema, designDto({ status: "SUBMITTED" }));
+    refuses(designSchema, designDto({ id: "d-1" }));
+    refuses(designSchema, designDto({ version: -1 }));
   });
 
   it("holds a name of 1–200 characters and a return reason of 1–2000 (docs 12 §3)", () => {
-    expect(designDtoSchema.parse(designDto({ name: "a".repeat(200) })).name).toHaveLength(200);
-    refuses(designDtoSchema, designDto({ name: "a".repeat(201) }));
+    expect(designSchema.parse(designDto({ name: "a".repeat(200) })).name).toHaveLength(200);
+    refuses(designSchema, designDto({ name: "a".repeat(201) }));
     const returnOf = (reason: string) => ({ reason, returnedAt: "2026-11-03T09:00:00Z" });
     expect(
-      designDtoSchema.parse(returnedDto({ lastReturn: returnOf("r".repeat(2000)) })).lastReturn
+      designSchema.parse(returnedDto({ lastReturn: returnOf("r".repeat(2000)) })).lastReturn
         ?.reason,
     ).toHaveLength(2000);
-    refuses(designDtoSchema, returnedDto({ lastReturn: returnOf("r".repeat(2001)) }));
+    refuses(designSchema, returnedDto({ lastReturn: returnOf("r".repeat(2001)) }));
   });
 
   it("needs every nullable field present: null is allowed, absent is a contract break", () => {
-    expect(designDtoSchema.parse(designDto({ projectId: null })).projectId).toBeNull();
+    expect(designSchema.parse(designDto({ projectId: null })).projectId).toBeNull();
     const { projectId: _projectId, ...withoutProject } = designDto();
-    refuses(designDtoSchema, withoutProject);
+    refuses(designSchema, withoutProject);
     const { lastReturn: _lastReturn, ...withoutReturn } = designDto();
-    refuses(designDtoSchema, withoutReturn);
+    refuses(designSchema, withoutReturn);
   });
 
   it("parses a page and keeps its 0-based numbering for the API layer to shift", () => {
-    const page = designPageDtoSchema.parse(pageDto([designDto()], { page: 2, hasPrevious: true }));
+    const page = designPageSchema.parse(pageDto([designDto()], { page: 2, hasPrevious: true }));
     expect(page.items).toHaveLength(1);
     expect(page.page).toBe(2);
   });
 
   it("parses the draft count", () => {
-    expect(draftCountDtoSchema.parse({ drafts: 2, limit: 50 })).toEqual({ drafts: 2, limit: 50 });
-    refuses(draftCountDtoSchema, { drafts: -1, limit: 50 });
+    expect(draftCountSchema.parse({ drafts: 2, limit: 50 })).toEqual({ drafts: 2, limit: 50 });
+    refuses(draftCountSchema, { drafts: -1, limit: 50 });
   });
 });
 
@@ -103,13 +103,13 @@ describe("history events (spec §3.3)", () => {
     "APPROVED",
     "ARCHIVED",
   ])("parses %s", (type) => {
-    expect(designEventDtoSchema.parse(eventDto({ type })).type).toBe(type);
+    expect(designEventSchema.parse(eventDto({ type })).type).toBe(type);
   });
 
   it("refuses an event the docs do not list, and a missing note", () => {
-    refuses(designEventDtoSchema, eventDto({ type: "TECHNICAL_ACCEPTED" }));
+    refuses(designEventSchema, eventDto({ type: "TECHNICAL_ACCEPTED" }));
     const { note: _note, ...withoutNote } = eventDto();
-    refuses(designEventDtoSchema, withoutNote);
+    refuses(designEventSchema, withoutNote);
   });
 });
 
@@ -125,11 +125,25 @@ describe("document, images, files and links", () => {
     refuses(designAssetDtoSchema, { ...assetDto, widthPx: 0 });
   });
 
-  it("parses the three files of a submission and refuses any other role", () => {
-    for (const role of ["CUSTOMER_PREVIEW", "PRINT_READY", "TECHNICAL_SPEC"]) {
-      expect(designFileDtoSchema.parse(fileDto(role)).role).toBe(role);
+  it("lists the three files of a submission and the production instruction the BE makes at approval, and no other role", () => {
+    for (const role of [
+      "CUSTOMER_PREVIEW",
+      "PRINT_READY",
+      "TECHNICAL_SPEC",
+      "PRODUCTION_INSTRUCTION",
+    ]) {
+      const artifact = designArtifactDtoSchema.parse(artifactDto(role));
+      expect(
+        designFileSchema.parse({
+          artifactId: artifact.artifactId,
+          role,
+          name: artifact.originalName,
+          sizeBytes: artifact.sizeBytes,
+          sha256: artifact.checksum,
+        }).role,
+      ).toBe(role);
     }
-    refuses(designFileDtoSchema, fileDto("PRODUCTION_INSTRUCTION"));
+    refuses(designFileSchema, { ...artifactDto("OTHER"), name: "x", sha256: "f".repeat(64) });
   });
 
   it("parses a short-lived link", () => {
@@ -140,7 +154,7 @@ describe("document, images, files and links", () => {
 
 describe("print configuration (spec §4.1 PrintConfigDto)", () => {
   it("parses the variant's template with the engine's schema and its file rules as MIME types", () => {
-    const config = printConfigDtoSchema.parse(printConfigDto());
+    const config = printConfigSchema.parse(printConfigDto());
     expect(config).toMatchObject({ variantStatus: "ACTIVE", hasCartonSpec: true });
     expect(config.template.model.kind).toBe("parametric-cup");
     expect(config.fileRules).toEqual({
@@ -155,12 +169,12 @@ describe("print configuration (spec §4.1 PrintConfigDto)", () => {
       ...cup12oz,
       printAreas: cup12oz.printAreas.map((area) => ({ ...area, shape: { type: "rect" } })),
     };
-    refuses(printConfigDtoSchema, printConfigDto({ template }));
+    refuses(printConfigSchema, printConfigDto({ template }));
   });
 
   it("refuses a variant status outside ACTIVE / BLOCKED / OBSOLETE", () => {
-    expect(printConfigDtoSchema.parse(printConfigDto({ variantStatus: "BLOCKED" }))).toBeTruthy();
-    refuses(printConfigDtoSchema, printConfigDto({ variantStatus: "DRAFT" }));
+    expect(printConfigSchema.parse(printConfigDto({ variantStatus: "BLOCKED" }))).toBeTruthy();
+    refuses(printConfigSchema, printConfigDto({ variantStatus: "DRAFT" }));
   });
 
   describe("model3d (the .glb link): a bad one is dropped, never blocks the config", () => {
@@ -168,7 +182,7 @@ describe("print configuration (spec §4.1 PrintConfigDto)", () => {
       url: "/models/cup.glb",
       surfaces: [{ printAreaCode: "BODY", meshName: "print:BODY" }],
     };
-    const without = () => printConfigDtoSchema.parse(printConfigDto());
+    const without = () => printConfigSchema.parse(printConfigDto());
     const warn = vi.spyOn(console, "warn");
 
     beforeEach(() => warn.mockReset().mockImplementation(() => undefined));
@@ -176,7 +190,7 @@ describe("print configuration (spec §4.1 PrintConfigDto)", () => {
 
     /** Parses with the bad link: it becomes null, one warning, the rest equals the payload without it. */
     const degrades = (bad: unknown) => {
-      const config = printConfigDtoSchema.parse(printConfigDto({ model3d: bad }));
+      const config = printConfigSchema.parse(printConfigDto({ model3d: bad }));
       expect(config.model3d).toBeNull();
       expect(config).toEqual(without());
       expect(warn).toHaveBeenCalledTimes(1);
@@ -189,12 +203,12 @@ describe("print configuration (spec §4.1 PrintConfigDto)", () => {
     });
 
     it("keeps an explicit null, without a warning", () => {
-      expect(printConfigDtoSchema.parse(printConfigDto({ model3d: null })).model3d).toBeNull();
+      expect(printConfigSchema.parse(printConfigDto({ model3d: null })).model3d).toBeNull();
       expect(warn).not.toHaveBeenCalled();
     });
 
     it("keeps a valid link, without a warning", () => {
-      expect(printConfigDtoSchema.parse(printConfigDto({ model3d })).model3d).toEqual(model3d);
+      expect(printConfigSchema.parse(printConfigDto({ model3d })).model3d).toEqual(model3d);
       expect(warn).not.toHaveBeenCalled();
     });
 
@@ -205,7 +219,7 @@ describe("print configuration (spec §4.1 PrintConfigDto)", () => {
     it("drops a link that leaves a print area of the template unmapped", () => {
       const front = { ...cup12oz.printAreas[0], code: "FRONT", name: "Front" };
       const template = { ...cup12oz, printAreas: [...cup12oz.printAreas, front] };
-      const config = printConfigDtoSchema.parse(printConfigDto({ template, model3d }));
+      const config = printConfigSchema.parse(printConfigDto({ template, model3d }));
       expect(config.model3d).toBeNull();
       expect(warn).toHaveBeenCalledTimes(1);
     });
@@ -229,8 +243,8 @@ describe("print configuration (spec §4.1 PrintConfigDto)", () => {
     });
 
     it("still throws for an error anywhere else, with or without a model3d", () => {
-      refuses(printConfigDtoSchema, printConfigDto({ variantStatus: "DRAFT", model3d }));
-      refuses(printConfigDtoSchema, printConfigDto({ variantStatus: "DRAFT", model3d: 7 }));
+      refuses(printConfigSchema, printConfigDto({ variantStatus: "DRAFT", model3d }));
+      refuses(printConfigSchema, printConfigDto({ variantStatus: "DRAFT", model3d: 7 }));
     });
   });
 });

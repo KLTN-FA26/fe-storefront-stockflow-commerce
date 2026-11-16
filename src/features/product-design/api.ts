@@ -1,7 +1,8 @@
 // The design API of spec 2026-11-09 §4.2 (/api/v1/designs/**; the /v1 prefix lives in API_URL),
 // the one module the feature imports it from. Each answer is parsed once, where it is read. Every
-// write sends the design's `version` (docs 12 BR-11): a stale one answers 409 VERSION_CONFLICT, a
-// design in another status 409 INVALID_STATE.
+// write sends the design's `version` (docs 12 BR-11): a stale one answers 409 CONFLICT (checked
+// before the status, so a design in another status answers it too, and 409 DESIGN_NOT_DRAFT only to
+// a caller holding its current version).
 
 export {
   deleteLibraryItem,
@@ -17,13 +18,11 @@ export {
   createProject,
   getProject,
   getProjectHistory,
-  listProjectDesigns,
   listProjects,
   openReviewRound,
   recordSetPreflightFailure,
   removeDesignFromProject,
   updateProject,
-  uploadSubmission,
 } from "./api-projects";
 export {
   cloneDesign,
@@ -44,8 +43,18 @@ export {
   uploadDesignAsset,
 } from "./api-document";
 export {
+  getDesignPrintConfig,
   getPrintConfig,
+  printConfigOfSku,
+  readProductCustomization,
+} from "./api-print-config";
+export {
+  getArtifactDownloadUrl,
   listDesignFiles,
+  readDesignVersion,
   recordPreflightFailure,
+  requestReview,
   submitDesign,
+  uploadDesignFile,
+  uploadDesignFiles,
 } from "./api-submission";

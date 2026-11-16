@@ -7,7 +7,9 @@
  *  - a project has a name (≤ 200) and an optional description (≤ 2000), is created ACTIVE and holds
  *    at most 20 designs, ARCHIVED ones not counted (B42);
  *  - a design is in at most one project; an ARCHIVED design is not added; a PENDING_REVIEW design
- *    is not removed; adding or removing changes neither its status nor its `version` (BR-17);
+ *    is not removed; adding or removing leaves its status alone but moves its `version` on, as the BE
+ *    saves the draft (`DesignProjectService.join` / `leaveProject`): an open studio's next save
+ *    meets 409 CONFLICT until it reads the design again;
  *  - a project is closed once and never reopened, and not while a design waits for review (BR-22);
  *  - a project write sends the project's `version`: a stale one is 409 VERSION_CONFLICT (BR-11).
  * The mock has one implicit customer, so a project "of another customer" is an unknown id: 404.
@@ -56,8 +58,9 @@ export function joinRefusal(ctx: StoreContext, project: ProjectRow): MockResult 
 }
 
 /**
- * Puts `row` in `project` and records it. The design's `version` and `updatedAt` stay: joining a
- * project is not a change of its content (BR-17), so an open studio's autosave is not refused.
+ * Puts `row` in `project` and records it. The design's `version` stays here: a design that starts
+ * in a project (create, clone, revision) is saved once. Adding an existing design moves its
+ * version (`addDesign`).
  */
 export function joinProject(ctx: StoreContext, row: DesignRow, project: ProjectRow) {
   row.projectId = project.id;
@@ -265,6 +268,7 @@ export function createProjectOps(ctx: StoreContext, files: DesignFiles) {
       const refused = joinRefusal(ctx, project);
       if (refused) return refused;
       joinProject(ctx, row, project);
+      ctx.touch(row); // the BE saves the draft: its version moves on
       await ctx.persist();
       return ok(await files.toDto(row));
     },
@@ -287,6 +291,7 @@ export function createProjectOps(ctx: StoreContext, files: DesignFiles) {
       }
       row.projectId = null;
       ctx.record(row, "REMOVED_FROM_PROJECT", project.name, row.version);
+      ctx.touch(row); // the BE saves the draft: its version moves on
       project.updatedAt = ctx.stamp();
       await ctx.persist();
       return ok(await files.toDto(row));

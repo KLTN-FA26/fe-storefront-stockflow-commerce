@@ -23,14 +23,10 @@ vi.mock("next/navigation", () => ({
   usePathname: () => env.pathname,
   useParams: () => env.params,
 }));
-vi.mock("@/lib/config", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/config")>();
-  return {
-    ...actual,
-    get DESIGN_API_MOCKED() {
-      return env.mocked;
-    },
-  };
+// Whether the design API is on the mock comes from the server flag through context.
+vi.mock("@/providers/app-providers", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/providers/app-providers")>();
+  return { ...actual, useIsDesignMock: () => env.mocked };
 });
 
 vi.setConfig({ testTimeout: 20_000 });

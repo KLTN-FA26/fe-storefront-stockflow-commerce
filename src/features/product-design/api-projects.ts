@@ -1,25 +1,25 @@
-import { z } from "zod";
-
 import { api } from "@/lib/api/client";
 
-import { designPath, multipart, to0Based, withSignal } from "./api-request";
-import { bundleForm } from "./api-submission";
+import { to0Based, withSignal } from "./api-request";
 import {
-  designProjectSchema,
+  batchSubmittedDtoSchema,
+  projectDtoSchema,
+  projectEventDtoSchema,
+  projectEventPageDtoSchema,
+  projectSummaryPageDtoSchema,
+  type ProjectEventDto,
+} from "./project-dtos";
+import { toProject, toProjectEvent, toProjectSummary } from "./project-mappers";
+import {
   openReviewRoundInputSchema,
   projectCreateInputSchema,
-  projectEventDtoSchema,
-  projectPageDtoSchema,
   projectUpdateInputSchema,
-  reviewRoundSchema,
   setPreflightFailureInputSchema,
-  submissionUploadDtoSchema,
 } from "./project-schemas";
-import { designDtoSchema } from "./schemas";
+import { beRuleOf } from "./preflight-messages";
 import type {
   ArchiveProjectInput,
   CreateProjectInput,
-  Design,
   DesignProject,
   OpenReviewRoundInput,
   ProjectEvent,
@@ -27,15 +27,27 @@ import type {
   ProjectPage,
   ReviewRound,
   SetPreflightFailureInput,
-  SubmissionFiles,
-  SubmissionUpload,
   UpdateProjectInput,
 } from "./types";
 
-// The design projects (spec 2026-11-12 §4); re-exported by `api.ts`.
+// The design projects against the BE's API (`DesignProjectController`); re-exported by `api.ts`.
+// The shapes are the BE's (`project-dtos.ts`), turned into the screens' by `project-mappers.ts`.
 
 const projectPath = (id: string, tail = "") => `/design-projects/${encodeURIComponent(id)}${tail}`;
-/** GET /design-projects?status=&page=&size= — the caller's projects, newest updated first. */
+
+/** The BE's page size limit: more is a 400, never a short page. */
+const MAX_PAGE_SIZE = 200;
+/** A history is a few dozen rows; this only stops a runaway loop. */
+const MAX_HISTORY_PAGES = 25;
+/** The BE takes 1 to 20 designs, each with 1 to 50 findings, of the studio's own preflight. */
+const MAX_REPORTED_DESIGNS = 20;
+const MAX_REPORTED_ISSUES = 50;
+
+/**
+ * GET /design-projects?status=&page=&size= — the caller's projects, newest created first. A row has
+ * no previews, no round and no `updatedAt` (F-26, F-28): a card reads its project's detail for the
+ * previews when it shows (`useProject`), one read each, cached.
+ */
 export async function listProjects(
   p: ProjectListParams,
   signal?: AbortSignal,
@@ -44,90 +56,90 @@ export async function listProjects(
     params: { page: to0Based(p.page), size: p.size, ...(p.status ? { status: p.status } : {}) },
     ...withSignal(signal),
   });
-  const page = projectPageDtoSchema.parse(data);
-  return { ...page, page: page.page + 1 };
+  const page = projectSummaryPageDtoSchema.parse(data);
+  return { ...page, items: page.items.map(toProjectSummary), page: page.page + 1 };
 }
 
-/** GET /design-projects/{id} — a closed project is readable too. */
+/**
+ * GET /design-projects/{id} — a closed project is readable too. Its designs come with it (F-30),
+ * not ARCHIVED, each with its preview.
+ */
 export async function getProject(id: string, signal?: AbortSignal): Promise<DesignProject> {
   const { data } = await api.get<unknown>(projectPath(id), withSignal(signal));
-  return designProjectSchema.parse(data);
+  return toProject(projectDtoSchema.parse(data));
 }
 
-/** POST /design-projects — an ACTIVE project. */
+/** POST /design-projects — an ACTIVE project (201). */
 export async function createProject(input: CreateProjectInput): Promise<DesignProject> {
   const body = projectCreateInputSchema.parse(input);
   const { data } = await api.post<unknown>("/design-projects", body);
-  return designProjectSchema.parse(data);
+  return toProject(projectDtoSchema.parse(data));
 }
 
-/** PATCH /design-projects/{id} — name and/or description; 409 VERSION_CONFLICT on a stale version. */
+/**
+ * PUT /design-projects/{id} `{ version, name, description? }` — the BE takes the name every time
+ * (F-29); 409 `CONFLICT` on a stale version.
+ */
 export async function updateProject(id: string, input: UpdateProjectInput): Promise<DesignProject> {
   const { version, ...fields } = input;
   const body = projectUpdateInputSchema.parse(fields);
-  const { data } = await api.patch<unknown>(projectPath(id), { ...body, version });
-  return designProjectSchema.parse(data);
+  const { data } = await api.put<unknown>(projectPath(id), { ...body, version });
+  return toProject(projectDtoSchema.parse(data));
 }
 
-/** POST /design-projects/{id}/archive — 409 PROJECT_HAS_PENDING while a design is under review. */
+/** POST /design-projects/{id}/archive — 409 `DESIGN_PROJECT_HAS_PENDING` while a design is under review. */
 export async function archiveProject(
   id: string,
   input: ArchiveProjectInput,
 ): Promise<DesignProject> {
   const { data } = await api.post<unknown>(projectPath(id, "/archive"), { version: input.version });
-  return designProjectSchema.parse(data);
+  return toProject(projectDtoSchema.parse(data));
 }
 
-/** GET /design-projects/{id}/designs — its designs (not ARCHIVED), newest updated first. */
-export async function listProjectDesigns(id: string, signal?: AbortSignal): Promise<Design[]> {
-  const { data } = await api.get<unknown>(projectPath(id, "/designs"), withSignal(signal));
-  return z.array(designDtoSchema).parse(data);
-}
-
-/** POST /design-projects/{id}/designs — puts an existing design in the project (docs 12 BR-17). */
-export async function addDesignToProject(id: string, designId: string): Promise<Design> {
+/**
+ * POST /design-projects/{id}/designs `{ designId }` — puts an existing design in the project (docs
+ * 12 BR-17). The BE answers the project (F-31); 409 `DESIGN_IN_ANOTHER_PROJECT`,
+ * `DESIGN_PROJECT_FULL`, `DESIGN_PROJECT_ARCHIVED`, and an archived design is a 404.
+ */
+export async function addDesignToProject(id: string, designId: string): Promise<DesignProject> {
   const { data } = await api.post<unknown>(projectPath(id, "/designs"), { designId });
-  return designDtoSchema.parse(data);
+  return toProject(projectDtoSchema.parse(data));
 }
 
-/** DELETE /design-projects/{id}/designs/{designId} — 409 DESIGN_PENDING while it is under review. */
-export async function removeDesignFromProject(id: string, designId: string): Promise<Design> {
+/** DELETE /design-projects/{id}/designs/{designId} — answers the project (F-31); 409 `DESIGN_PENDING_IN_PROJECT` while under review. */
+export async function removeDesignFromProject(
+  id: string,
+  designId: string,
+): Promise<DesignProject> {
   const { data } = await api.delete<unknown>(
     projectPath(id, `/designs/${encodeURIComponent(designId)}`),
   );
-  return designDtoSchema.parse(data);
-}
-
-/** GET /design-projects/{id}/history — the events, oldest first. */
-export async function getProjectHistory(id: string, signal?: AbortSignal): Promise<ProjectEvent[]> {
-  const { data } = await api.get<unknown>(projectPath(id, "/history"), withSignal(signal));
-  return z.array(projectEventDtoSchema).parse(data);
+  return toProject(projectDtoSchema.parse(data));
 }
 
 /**
- * POST /designs/{id}/submission-uploads — one design's three files for a set (spec §8), kept by
- * the server with the design's version until a round takes them (24 hours at most, A-E4). The
- * same `idempotencyKey` with the same files answers the same token: a retry stores nothing twice.
+ * GET /design-projects/{id}/history — every event, oldest first (F-16). The BE pages it newest
+ * first (size ≤ 200): all pages are read and the order reversed.
  */
-export async function uploadSubmission(
-  designId: string,
-  files: SubmissionFiles,
-  idempotencyKey: string,
-): Promise<SubmissionUpload> {
-  const { body, checksums } = await bundleForm(files);
-  const { data } = await api.post<unknown>(
-    designPath(designId, "/submission-uploads"),
-    body,
-    multipart({ "Idempotency-Key": idempotencyKey }),
-  );
-  const { uploadToken } = submissionUploadDtoSchema.parse(data);
-  return { uploadToken, checksums };
+export async function getProjectHistory(id: string, signal?: AbortSignal): Promise<ProjectEvent[]> {
+  const rows: ProjectEventDto[] = [];
+  for (let page = 0; page < MAX_HISTORY_PAGES; page += 1) {
+    const { data } = await api.get<unknown>(projectPath(id, "/history"), {
+      params: { page, size: MAX_PAGE_SIZE },
+      ...withSignal(signal),
+    });
+    const answer = projectEventPageDtoSchema.parse(data);
+    rows.push(...answer.items);
+    if (!answer.hasNext) break;
+  }
+  return rows.toReversed().map(toProjectEvent);
 }
 
 /**
- * POST /design-projects/{id}/review-rounds — opens one round over the uploaded designs, all or
- * nothing (docs 12 BR-19): every design goes to PENDING_REVIEW, or none does and the refusal names
- * the designs in the way (`roundRefusalOf`).
+ * POST /design-projects/{id}/review-rounds `{ designs: [{ id, version }] }` — one round over 2 to
+ * 20 DRAFT designs whose files are uploaded, all or nothing (docs 12 BR-19, F-32): 201 `{ roundId,
+ * project }`. A refusal is 422 `DESIGN_BATCH_PREFLIGHT_FAILED` naming each design's findings or
+ * outdated roles (`batchRefusalOf`), or a plain 409 `CONFLICT` / `DESIGN_NOT_DRAFT` that names none.
  */
 export async function openReviewRound(
   projectId: string,
@@ -135,19 +147,31 @@ export async function openReviewRound(
 ): Promise<ReviewRound> {
   const body = openReviewRoundInputSchema.parse(input);
   const { data } = await api.post<unknown>(projectPath(projectId, "/review-rounds"), body);
-  return reviewRoundSchema.parse(data);
+  const answer = batchSubmittedDtoSchema.parse(data);
+  return { roundId: answer.roundId, project: toProject(answer.project) };
 }
 
 /**
- * POST /design-projects/{id}/preflight-failures — the check of a set found a Fail: the project's
- * history records it with each design's issues (docs 12 §5.4 BATCH_PREFLIGHT_FAILED). No design
- * changes; each records its own failure (`recordPreflightFailure`).
+ * POST /design-projects/{id}/preflight-failures — the page's own check of a set found a Fail: the
+ * project's history records it (docs 12 §5.4 BATCH_PREFLIGHT_FAILED). Findings by `rule`, the BE
+ * ignores a `message` (none is sent); 1 to 20 designs, each 1 to 50. No design changes; each
+ * records its own failure (`recordPreflightFailure`).
  */
 export async function recordSetPreflightFailure(
   projectId: string,
   input: SetPreflightFailureInput,
 ): Promise<ProjectEvent> {
-  const body = setPreflightFailureInputSchema.parse(input);
+  const { items } = setPreflightFailureInputSchema.parse(input);
+  const body = {
+    items: items.slice(0, MAX_REPORTED_DESIGNS).map(({ designId, issues }) => ({
+      designId,
+      issues: issues.slice(0, MAX_REPORTED_ISSUES).map((issue) => ({
+        rule: beRuleOf(issue.ruleId),
+        ...(issue.surfaceCode ? { surfaceCode: issue.surfaceCode } : {}),
+        ...(issue.elementId ? { elementId: issue.elementId } : {}),
+      })),
+    })),
+  };
   const { data } = await api.post<unknown>(projectPath(projectId, "/preflight-failures"), body);
-  return projectEventDtoSchema.parse(data);
+  return toProjectEvent(projectEventDtoSchema.parse(data));
 }

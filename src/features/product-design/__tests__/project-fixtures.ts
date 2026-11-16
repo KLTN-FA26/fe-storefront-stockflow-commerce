@@ -1,17 +1,65 @@
+import { projectDtoSchema } from "../project-dtos";
+import { toProject } from "../project-mappers";
 import { ids } from "./fixtures";
 
-/** A project answer shaped as the contract of spec 2026-11-12 §3, inside the envelope. */
+/**
+ * A project as the BE answers it (`DesignProjectResponse`): its designs aside, no `description`
+ * (a null is left out), no previews or round (those are derived from `designs`).
+ */
 export const projectDto = (overrides: Record<string, unknown> = {}) => ({
   id: ids.project,
   name: "Bộ ly quán Hoa",
-  description: null,
+  status: "ACTIVE",
+  version: 1,
+  createdAt: "2026-11-10T08:00:00Z",
+  designs: [],
+  assetCount: 0,
+  ...overrides,
+});
+
+/** A project as the screens hold it (the domain `DesignProject`), from what the BE sends. */
+export const project = (overrides: Record<string, unknown> = {}) =>
+  toProject(projectDtoSchema.parse(projectDto(overrides)));
+
+/** A row of the BE's project list (`DesignProjectSummaryResponse`). */
+export const projectSummaryDto = (overrides: Record<string, unknown> = {}) => ({
+  id: ids.project,
+  name: "Bộ ly quán Hoa",
   status: "ACTIVE",
   version: 1,
   designCount: 0,
-  previewUrls: [],
-  openRound: null,
   createdAt: "2026-11-10T08:00:00Z",
-  updatedAt: "2026-11-11T08:00:00Z",
+  ...overrides,
+});
+
+/** A row of a project's history as the BE sends it (`DesignProjectEventResponse`), newest first in a page. */
+export const projectEventDto = (overrides: Record<string, unknown> = {}) => ({
+  event: "PROJECT_CREATED",
+  createdAt: "2026-11-10T08:00:00Z",
+  ...overrides,
+});
+
+/** A library file as the BE sends it (`DesignProjectAssetResponse`). */
+export const projectAssetDto = (overrides: Record<string, unknown> = {}) => ({
+  assetId: "7a1b0000-0000-4000-8000-0000000000a1",
+  projectId: ids.project,
+  originalName: "logo.png",
+  contentType: "image/png",
+  sizeBytes: 90_001,
+  checksum: "c".repeat(64),
+  widthPx: 1200,
+  heightPx: 800,
+  storedAt: "2026-11-11T07:50:00Z",
+  ...overrides,
+});
+
+/** A library text as the BE sends it (`DesignProjectTextResponse`): no `kind`, no `name`. */
+export const projectTextDto = (overrides: Record<string, unknown> = {}) => ({
+  id: "7a1b0000-0000-4000-8000-0000000000a2",
+  projectId: ids.project,
+  text: "Xin chào",
+  style: textStyleDto(),
+  createdAt: "2026-11-11T07:55:00Z",
   ...overrides,
 });
 

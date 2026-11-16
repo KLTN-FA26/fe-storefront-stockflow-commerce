@@ -70,7 +70,7 @@ describe("ProjectListScreen", () => {
     );
   });
 
-  it("shows a card with its name, description, count, time, status and link", async () => {
+  it("shows a card with its name, count, creation time, status and link", async () => {
     const [created] = await makeProjects(1);
     render();
     const list = await screen.findByRole("list", { name: "Danh sách dự án" }, FIRST_READ);
@@ -79,7 +79,7 @@ describe("ProjectListScreen", () => {
     expect(item.getByText("Bộ ly")).toBeInTheDocument();
     expect(item.getByText("0/20 bản")).toBeInTheDocument();
     expect(item.getByText("Đang dùng")).toBeInTheDocument();
-    expect(item.getByText(/^Cập nhật \d/)).toBeInTheDocument();
+    expect(item.getByText(/^Tạo lúc \d/)).toBeInTheDocument();
     const id = (created as { data: { id: string } }).data.id;
     expect(item.getByRole("link", { name: "Mở dự án Dự án 1" })).toHaveAttribute(
       "href",

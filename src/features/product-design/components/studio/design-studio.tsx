@@ -9,7 +9,7 @@ import { beId } from "@/lib/validation/primitives";
 
 import type { FontRegistry } from "../../engine";
 import { describeDesignError } from "../../errors";
-import { useDesign, useDesignAssets, useDesignDocument, usePrintConfig } from "../../queries";
+import { useDesign, useDesignAssets, useDesignDocument, useDesignPrintConfig } from "../../queries";
 import type { Design } from "../../types";
 import { LauncherFrame, LauncherSignIn } from "../launcher-states";
 import type { ExportRenderer } from "./export-renderer";
@@ -59,7 +59,7 @@ export function DesignStudio(props: DesignStudioProps) {
 
 /**
  * Loads the design, its document, its images and its variant's print configuration (by the
- * design's product slug and SKU), then opens the studio, whatever the status: it follows the
+ * design's own template, `GET /designs/{id}/template`), then opens the studio, whatever the status: it follows the
  * status itself (spec §6.4). A design that is not the caller's, or was deleted (ARCHIVED), is not
  * found (docs 12 BR-03, BR-16); so is one whose document is missing. A design deleted while it is
  * open (another tab) answers its next read with a 404: that wins over the design still cached, so
@@ -75,9 +75,7 @@ function LoadedDesignStudio({
   const design = useDesign(designId);
   const document = useDesignDocument(designId, true);
   const assets = useDesignAssets(designId, true);
-  const product = design.data?.product.slug ?? "";
-  const sku = design.data?.variant.sku ?? "";
-  const printConfig = usePrintConfig(product, sku, design.data !== undefined);
+  const printConfig = useDesignPrintConfig(design.data);
   const config = printConfig.data;
 
   const gone =

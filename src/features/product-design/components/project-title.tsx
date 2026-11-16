@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-import { describeDesignError } from "../errors";
+import { describeProjectError } from "../errors";
 import { useUpdateProject } from "../mutations";
 import { projectCreateInputSchema } from "../project-schemas";
 import type { DesignProject } from "../types";
@@ -92,7 +92,7 @@ function EditForm({ project, onDone }: { project: DesignProject; onDone: () => v
           Huỷ
         </Button>
       </div>
-      {update.isError ? <Alert tone="danger">{describeDesignError(update.error)}</Alert> : null}
+      {update.isError ? <Alert tone="danger">{describeProjectError(update.error)}</Alert> : null}
     </form>
   );
 }

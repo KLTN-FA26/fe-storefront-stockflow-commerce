@@ -4,14 +4,13 @@ import { pageResponseSchema } from "@/lib/api/page-response";
 import { beId } from "@/lib/validation/primitives";
 
 import { designDocumentSchema } from "./engine/document/schema";
-import { type Model3dRef, model3dRefSchema } from "./engine/model3d/schema";
 import type { PreflightRuleId } from "./engine/preflight/types";
-import { customizationTemplateSchema, printAreaCodeSchema } from "./engine/template/schema";
+import { printAreaCodeSchema } from "./engine/template/schema";
 
-// The design API the FE defines from docs 12 (spec 2026-11-09 §4.1): the mock serves it now, the BE
-// later. Nullable fields are sent as `null`, never left out, so they are `.nullable()`: a missing
-// one is a contract break. Engine schemas come from their own modules, never `engine/index.ts`
-// (it pulls three.js).
+// The DOMAIN schemas the screens read (a `Design`, its page, its history events) and the INPUT schemas
+// of forms and writes. What the BE sends is described by the `*Dto` schemas of `design-dtos.ts` and
+// turned into these by `design-mappers.ts` (projects: `project-dtos.ts`, `project-mappers.ts`). Engine
+// schemas come from their own modules, never `engine/index.ts` (it pulls three.js).
 
 /** docs 12 §4 (spec §3.1). */
 export const designStatusSchema = z.enum(["DRAFT", "PENDING_REVIEW", "APPROVED", "ARCHIVED"]);
@@ -30,8 +29,11 @@ const REASON_MAX = 2000;
 /** docs 12 §5.4 (spec 2026-11-12 §3): a project is open, or closed for good. */
 export const projectStatusSchema = z.enum(["ACTIVE", "ARCHIVED"]);
 
-/** GET /designs/{id} and every write that answers the design. */
-export const designDtoSchema = z.object({
+/**
+ * A design as the screens hold it. `createdAt` and `approval` are not here: the BE has no creation
+ * time and no screen shows either (F-9, F-6).
+ */
+export const designSchema = z.object({
   id: beId(),
   name: z.string().min(1).max(NAME_MAX),
   status: designStatusSchema,
@@ -50,23 +52,25 @@ export const designDtoSchema = z.object({
     .nullable(),
   /** The latest CUSTOMER_PREVIEW, for cards. */
   previewUrl: z.string().min(1).nullable(),
-  createdAt: instant,
   updatedAt: instant,
   submittedAt: instant.nullable(),
   approvedAt: instant.nullable(),
-  approval: z.object({ snapshotId: beId(), skuCode: code, bundleChecksum: checksum }).nullable(),
 });
 
-/** GET /designs — `page` is 0-based here; the API layer shifts it. */
-export const designPageDtoSchema = pageResponseSchema(designDtoSchema);
+/** A page of designs; `page` is 0-based until the API layer shifts it. */
+export const designPageSchema = pageResponseSchema(designSchema);
 
-/** GET /designs/draft-count (docs 12 §4.1, B37). */
-export const draftCountDtoSchema = z.object({
+/** The customer's drafts against the limit (docs 12 §4.1, B37): counted from the list, see `design-mappers.ts`. */
+export const draftCountSchema = z.object({
   drafts: z.number().int().nonnegative(),
   limit: z.number().int().positive(),
 });
 
-/** docs 12 §5.3 (spec §3.3). */
+/**
+ * docs 12 §5.3 (spec §3.3), plus what the BE records beyond it: `QUOTE_REQUESTED`, and `OTHER` for a
+ * decision this build does not know (the BE's staff-workflow words, or a newer one): the history
+ * lists it neutrally instead of failing whole.
+ */
 export const designEventTypeSchema = z.enum([
   "CREATED",
   "DERIVED_FROM_SNAPSHOT",
@@ -77,10 +81,12 @@ export const designEventTypeSchema = z.enum([
   "ARCHIVED",
   "ADDED_TO_PROJECT", // part E: the note is the project's name
   "REMOVED_FROM_PROJECT",
+  "QUOTE_REQUESTED",
+  "OTHER",
 ]);
 
-/** GET /designs/{id}/history rows, oldest first. */
-export const designEventDtoSchema = z.object({
+/** One row of a design's history as the screens read it, oldest first. */
+export const designEventSchema = z.object({
   type: designEventTypeSchema,
   at: instant,
   version,
@@ -115,92 +121,22 @@ export const downloadLinkDtoSchema = z.object({ url: z.string().min(1), expiresA
 /** The three files of a submission (spec §4.2). */
 export const designFileRoleSchema = z.enum(["CUSTOMER_PREVIEW", "PRINT_READY", "TECHNICAL_SPEC"]);
 
-/** GET /designs/{id}/files: the bundle of the latest submission. */
-export const designFileDtoSchema = z.object({
-  role: designFileRoleSchema,
+/** Every role a design's file can have, in the order the file list shows them (the last is made at approval). */
+export const designArtifactRoleSchema = z.enum([
+  "CUSTOMER_PREVIEW",
+  "PRINT_READY",
+  "TECHNICAL_SPEC",
+  "PRODUCTION_INSTRUCTION",
+]);
+
+/** A file of a design as the file list shows it: the newest of its role; its link is asked for on a click. */
+export const designFileSchema = z.object({
+  artifactId: beId(),
+  role: designArtifactRoleSchema,
   name: z.string().min(1),
   sizeBytes,
   sha256: checksum,
-  url: z.string().min(1),
 });
-
-/** The link when it is valid by its own shape and against the template, else `null` plus a warning. */
-function usableModel3d(config: {
-  sku: string;
-  template: z.infer<typeof customizationTemplateSchema>;
-  model3d?: unknown;
-}): Model3dRef | null {
-  if (config.model3d === undefined || config.model3d === null) return null;
-  const parsed = model3dRefSchema.safeParse(config.model3d);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    warnIgnored(config, issue?.path ?? [], issue?.message ?? "invalid");
-    return null;
-  }
-  const problem = templateProblem(parsed.data, config.template);
-  if (problem === null) return parsed.data;
-  warnIgnored(config, problem.path, problem.message);
-  return null;
-}
-
-type Problem = { path: PropertyKey[]; message: string };
-
-/** Every print area of the template has one entry, and every entry is a print area of it. */
-function templateProblem(
-  ref: Model3dRef,
-  template: z.infer<typeof customizationTemplateSchema>,
-): Problem | null {
-  const codes = new Set<string>(template.printAreas.map((area) => area.code));
-  const foreign = ref.surfaces.findIndex((surface) => !codes.has(surface.printAreaCode));
-  if (foreign >= 0) {
-    return {
-      path: ["surfaces", foreign, "printAreaCode"],
-      message: `The template has no print area ${ref.surfaces[foreign]?.printAreaCode}`,
-    };
-  }
-  const mapped = new Set<string>(ref.surfaces.map((surface) => surface.printAreaCode));
-  const missing = [...codes].find((code) => !mapped.has(code));
-  return missing === undefined
-    ? null
-    : { path: ["surfaces"], message: `Print area ${missing} has no mesh` };
-}
-
-function warnIgnored(
-  config: { sku: string; template: { code: string } },
-  path: PropertyKey[],
-  message: string,
-): void {
-  console.warn(
-    `Print configuration ${config.template.code} (${config.sku}): model3d ignored, the code-built model is used. ${["model3d", ...path.map(String)].join(".")}: ${message}`,
-  );
-}
-
-/**
- * GET /catalog/products/{slug}/variants/{sku}/print-config. File formats are lowercase MIME types,
- * as the engine's template wants them (docs open-questions B34: 300 DPI, PNG/JPG, 50 MB).
- */
-export const printConfigDtoSchema = z
-  .object({
-    sku: code,
-    product: z.object({ slug: code, title: z.string().min(1), status: code }),
-    variantStatus: z.enum(["ACTIVE", "BLOCKED", "OBSOLETE"]),
-    /** docs 12 BR-05, B25: needed before submitting. */
-    hasCartonSpec: z.boolean(),
-    template: customizationTemplateSchema,
-    /**
-     * The `.glb` beside the template's numbers (spec 2026-11-13 §3). Read as `unknown` and checked
-     * in the transform below, where the template is known.
-     */
-    model3d: z.unknown().optional(),
-    fileRules: z.object({
-      minDpi: z.number().positive(),
-      formats: z.array(z.string().min(1)).min(1),
-      maxFileSizeMb: z.number().positive(),
-    }),
-  })
-  // A bad `.glb` link never blocks the config (spec 2026-11-13 §8): it becomes `null` and one
-  // warning says why. Everything else in the object stays strict.
-  .transform((config) => ({ ...config, model3d: usableModel3d(config) }));
 
 /** Every engine rule, once: adding a rule to `PreflightRuleId` fails here until it is listed. */
 const PREFLIGHT_RULE_IDS = {
@@ -233,7 +169,7 @@ export type ReportedRuleId = PreflightRuleId | (string & {});
 const reportedRuleId: z.ZodType<ReportedRuleId> = z.string().min(1);
 
 /**
- * An issue of `422 PREFLIGHT_FAILED`, in `details.issues`: the engine's shape, but any non-empty
+ * An issue of `422 DESIGN_PREFLIGHT_FAILED`, in `details.issues`: the engine's shape, but any non-empty
  * `ruleId` is read, so a rule the server added still shows its message instead of losing them all.
  */
 export const reportedPreflightIssueSchema = preflightIssueSchema.extend({
@@ -272,8 +208,8 @@ export const cloneDesignInputSchema = z.object({
 export const notInProjectReasonSchema = z.enum(["PROJECT_ARCHIVED", "PROJECT_FULL"]);
 
 /** The answer of a clone: the new draft, and why it is in no project when its source had one. */
-export const cloneResultDtoSchema = z.object({
-  design: designDtoSchema,
+export const cloneResultSchema = z.object({
+  design: designSchema,
   notInProject: notInProjectReasonSchema.nullable(),
 });
 
@@ -284,3 +220,6 @@ export const renameDesignInputSchema = z.object({ name: designName });
 export const returnReasonInputSchema = z.object({
   reason: z.string().trim().min(1, "Hãy nhập lý do").max(REASON_MAX, "Lý do tối đa 2000 ký tự"),
 });
+
+// The print configuration's domain schema lives in its own file; re-exported with the other domain schemas.
+export { printConfigSchema } from "./print-config-schemas";

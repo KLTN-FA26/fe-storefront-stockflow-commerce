@@ -3,7 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
 
-import { describeDesignError } from "../../errors";
+import { describeDesignError, describeFileRefusal } from "../../errors";
 import { usePlaceFromLibrary } from "../../library-mutations";
 import { placeImage } from "./image-actions";
 import { useStudio } from "./studio-context";
@@ -76,7 +76,7 @@ export function LibraryPlacementProvider({ children }: { children: ReactNode }) 
       if (editor.store.getState().activeSurface !== code) editor.setActiveSurface(code);
       return placeImage(services, asset, at) ? null : UPLOAD_MESSAGES.noRoom;
     } catch (error) {
-      return describeDesignError(error);
+      return describeFileRefusal(error, services.template) ?? describeDesignError(error);
     } finally {
       running.current = false;
       setPending(false);

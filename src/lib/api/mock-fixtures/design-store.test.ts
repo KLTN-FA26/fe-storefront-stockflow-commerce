@@ -768,7 +768,8 @@ describe("design mock store", () => {
       ),
     ).toEqual([409, "VERSION_CONFLICT"]);
 
-    // A submits while B still edits the version it last read: B learns the state changed.
+    // A submits while B still edits the version it last read: the submit moved the version, and
+    // the BE checks the version before the status, so B's save is a plain CONFLICT.
     const current = data<DesignDocumentRecordDto>(await tabB.getDocument(created.id));
     expect((await submitPassing(tabA, created.id)).status).toBe(200);
     expect(
@@ -777,6 +778,13 @@ describe("design mock store", () => {
           version: current.version,
           document: current.document,
         }),
+      ),
+    ).toEqual([409, "VERSION_CONFLICT"]);
+    // Holding the version the submit left, B learns that the state changed.
+    const after = data<DesignDocumentRecordDto>(await tabB.getDocument(created.id));
+    expect(
+      refusal(
+        await tabB.putDocument(created.id, { version: after.version, document: after.document }),
       ),
     ).toEqual([409, "INVALID_STATE"]);
     expect((await design(tabB, created.id)).status).toBe("PENDING_REVIEW");
@@ -960,7 +968,7 @@ describe("design mock store", () => {
     expect((await design(store, id)).version).toBe(record.version + 1);
   });
 
-  it("a submit and a save of the same version at once: the submit goes first, the save answers 409 INVALID_STATE", async () => {
+  it("a submit and a save of the same version at once: the submit goes first, the save meets the moved version (409 VERSION_CONFLICT)", async () => {
     const store = await makeStore();
     const id = MOCK_DESIGN_IDS.draft;
     const record = data<DesignDocumentRecordDto>(await store.getDocument(id));
@@ -972,7 +980,7 @@ describe("design mock store", () => {
     ]);
 
     expect(submitted.status).toBe(200);
-    expect(refusal(saved)).toEqual([409, "INVALID_STATE"]);
+    expect(refusal(saved)).toEqual([409, "VERSION_CONFLICT"]);
     expect(data<DesignDocumentRecordDto>(await store.getDocument(id)).version).toBe(
       record.version + 1,
     );

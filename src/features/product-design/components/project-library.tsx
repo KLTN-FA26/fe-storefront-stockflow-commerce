@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Alert, ConfirmDialog } from "@/components/shared";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { describeDesignError } from "../errors";
+import { describeProjectError } from "../errors";
 import { libraryActions } from "../library-rules";
 import { useDeleteLibraryItem } from "../library-mutations";
 import { useProjectLibrary } from "../queries";
@@ -66,7 +66,7 @@ export function ProjectLibrary({ project }: { project: DesignProject }) {
       </Tabs>
       {remove.isError ? (
         <div role="alert">
-          <Alert tone="danger">{describeDesignError(remove.error)}</Alert>
+          <Alert tone="danger">{describeProjectError(remove.error)}</Alert>
         </div>
       ) : null}
       <ConfirmDialog
@@ -76,7 +76,7 @@ export function ProjectLibrary({ project }: { project: DesignProject }) {
         description={`"${removing?.name ?? ""}" sẽ bị xoá khỏi thư viện. Các bản đã dùng nó không bị ảnh hưởng, kể cả bản đã gửi duyệt.`}
         confirmLabel="Xoá"
         cancelLabel="Huỷ"
-        onConfirm={() => removing && remove.mutate(removing.id)}
+        onConfirm={() => removing && remove.mutate(removing)}
       />
     </section>
   );

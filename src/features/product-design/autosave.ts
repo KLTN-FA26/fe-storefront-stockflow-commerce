@@ -24,7 +24,7 @@ export type AutosaveOptions = {
   isOnline?: () => boolean;
   onChange: (change: AutosaveChange) => void;
   /**
-   * "Thử lại" after a refusal (409 INVALID_STATE or 404: the design left DRAFT or is gone, so the
+   * "Thử lại" after a refusal (409 DESIGN_NOT_DRAFT or 404: the design left DRAFT or is gone, so the
    * server said): the caller reads the design again and answers the document to save when it is
    * still a DRAFT, `null` when it is not (it then follows the new status). Without it, or when it
    * fails, the refusal stands.

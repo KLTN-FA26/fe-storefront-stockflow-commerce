@@ -6,6 +6,7 @@ import {
   useQuery,
 } from "@tanstack/react-query";
 
+import { isDesignMockMode } from "@/lib/api/design-mock-flag";
 import { ApiError } from "@/lib/api/error";
 import { QUERY_TIMES } from "@/lib/api/query-client";
 import { retryTransient } from "@/lib/api/retry";
@@ -15,15 +16,17 @@ import {
   getDesign,
   getDesignDocument,
   getDesignHistory,
+  getDesignPrintConfig,
   getDraftCount,
-  getPrintConfig,
   listDesignAssets,
   listDesignFiles,
   listDesigns,
+  printConfigOfSku,
+  readProductCustomization,
 } from "./api";
 import type { Design, DesignListParams, DownloadLink, PrintConfig } from "./types";
 
-import { DESIGN_POLL_MS } from "./project-queries";
+import { DESIGN_POLL_MS, projectQuery } from "./project-queries";
 
 export * from "./project-queries"; // the projects' keys and queries live in their own file
 
@@ -41,6 +44,9 @@ export const designKeys = {
   document: (id: string) => [...designKeys.detail(id), "document"] as const,
   assets: (id: string) => [...designKeys.detail(id), "assets"] as const,
   files: (id: string) => [...designKeys.detail(id), "files"] as const,
+  /** The latest submission's files, or the approved snapshot's: two reads, two entries. */
+  fileList: (id: string, approved: boolean) =>
+    [...designKeys.files(id), approved ? "approved" : "latest"] as const,
   /** The SKUs of a product's variants, read for "Nhân bản sang cỡ khác". */
   variantSkus: (productSlug: string) => [...designKeys.all, "variant-skus", productSlug] as const,
   downloadLink: (designId: string, assetId: string) =>
@@ -49,7 +55,13 @@ export const designKeys = {
 
 export const printConfigKeys = {
   all: ["print-configs"] as const,
+  /** A variant's, from the product's customization (launcher, new design). */
   detail: (productSlug: string, sku: string) => [...printConfigKeys.all, productSlug, sku] as const,
+  /** A product's customization and title, shared by its variants' (`hint`: the mock's SKU, else null). */
+  customization: (productSlug: string, hint: string | null) =>
+    [...printConfigKeys.all, "customization", productSlug, hint] as const,
+  /** A design's, from its own template (studio, export). */
+  design: (designId: string) => [...printConfigKeys.all, "design", designId] as const,
 };
 
 export function useDesignList(params: DesignListParams) {
@@ -73,11 +85,19 @@ export function useDraftCount(enabled = true) {
   });
 }
 
-/** The query of one design, for `useDesign` and for a step that needs it fresh. */
+/**
+ * The query of one design, for `useDesign` and for a step that needs it fresh. Its project's name
+ * and status come from the project's own query, read once and kept until a project-changing write
+ * invalidates it (`reReadProject`, `reReadProjects`): the 5 s poll of a design in review re-reads
+ * the design, never the whole project (Data M-6).
+ */
 export function designQuery(id: string) {
   return queryOptions({
     queryKey: designKeys.detail(id),
-    queryFn: ({ signal }) => getDesign(id, signal),
+    queryFn: ({ signal, client }) =>
+      getDesign(id, signal, (projectId) =>
+        client.fetchQuery({ ...projectQuery(projectId), staleTime: Infinity }),
+      ),
     retry: retryTransient,
     ...QUERY_TIMES.detail,
   });
@@ -141,32 +161,81 @@ export function useDesignHistory(id: string) {
   });
 }
 
-/** The files of the latest submission (`[]` before one). */
-export function useDesignFiles(id: string, enabled: boolean) {
+/**
+ * The files of the latest submission (`[]` before one), or of the approved snapshot (`approved`):
+ * each read under its own key, so one never answers for the other.
+ */
+export function useDesignFiles(id: string, enabled: boolean, approved = false) {
   return useQuery({
-    queryKey: designKeys.files(id),
-    queryFn: ({ signal }) => listDesignFiles(id, signal),
+    queryKey: designKeys.fileList(id, approved),
+    queryFn: ({ signal }) => listDesignFiles(id, signal, approved),
     enabled,
     retry: retryTransient,
     ...QUERY_TIMES.detail,
   });
 }
 
-/** A variant without a print configuration answers 404: that is an answer (`null`), not a failure. */
+/**
+ * A variant the BE does not list answers 404, and a product that cannot be customized 409
+ * `PRODUCT_NOT_CUSTOMIZABLE`: both are an answer (`null`: no print configuration), not a failure.
+ */
 function noneWhenNotFound(error: unknown): null {
-  if (error instanceof ApiError && error.status === 404) return null;
+  if (
+    error instanceof ApiError &&
+    (error.status === 404 || error.code === "PRODUCT_NOT_CUSTOMIZABLE")
+  ) {
+    return null;
+  }
   throw error;
+}
+
+/**
+ * The query of a product's customization and title, which every variant's print configuration is
+ * made from: one read for all of a product's SKUs (Data M-7). In design mock mode only, the SKU is
+ * part of the key: the mock uses it as a hint for a product it does not know.
+ */
+export function productCustomizationQuery(productSlug: string, sku: string) {
+  const hint = isDesignMockMode() ? sku : null;
+  return queryOptions({
+    queryKey: printConfigKeys.customization(productSlug, hint),
+    queryFn: ({ signal }) => readProductCustomization(productSlug, sku, signal),
+    retry: retryTransient,
+    ...QUERY_TIMES.detail,
+  });
 }
 
 /** The query of a variant's print configuration: `null` when it has none (a 404). */
 export function printConfigQuery(productSlug: string, sku: string) {
   return queryOptions({
     queryKey: printConfigKeys.detail(productSlug, sku),
-    queryFn: ({ signal }): Promise<PrintConfig | null> =>
-      getPrintConfig(productSlug, sku, signal).catch(noneWhenNotFound),
+    queryFn: ({ client }): Promise<PrintConfig | null> =>
+      client
+        // One attempt here: this query's own retry covers a transient failure.
+        .fetchQuery({ ...productCustomizationQuery(productSlug, sku), retry: false })
+        .then((read) => printConfigOfSku(read, sku))
+        .catch(noneWhenNotFound),
     retry: retryTransient,
     ...QUERY_TIMES.detail,
   });
+}
+
+/** The query of a design's print configuration (its own template, F-23): `null` when it has none. */
+export function designPrintConfigQuery(design: Pick<Design, "id" | "product" | "variant">) {
+  return queryOptions({
+    queryKey: printConfigKeys.design(design.id),
+    queryFn: ({ signal }): Promise<PrintConfig | null> =>
+      getDesignPrintConfig(design, signal).catch(noneWhenNotFound),
+    retry: retryTransient,
+    ...QUERY_TIMES.detail,
+  });
+}
+
+/** The print configuration a design is drawn on, once the design is read; `null` when it has none. */
+export function useDesignPrintConfig(design: Design | undefined) {
+  const query = designPrintConfigQuery(
+    design ?? { id: "", product: { slug: "", title: "" }, variant: { sku: "", label: "" } },
+  );
+  return useQuery({ ...query, enabled: design !== undefined });
 }
 
 /** The variant's print configuration, or `null` when it has none (catalog BR-14: no "Thiết kế"). */

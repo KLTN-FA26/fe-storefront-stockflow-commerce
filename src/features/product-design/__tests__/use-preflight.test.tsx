@@ -6,7 +6,7 @@ import { usePreflight } from "../components/studio/use-preflight";
 import { StudioProvider, type StudioServices } from "../components/studio/studio-context";
 import { addElement, createEditor, createSurfaces, emptyDocument } from "../engine";
 import { cup12oz, sizer, textEl } from "../engine/__tests__/fixtures";
-import { printConfigDtoSchema } from "../schemas";
+import { printConfigSchema } from "../schemas";
 import { printConfigDto } from "./fixtures";
 
 beforeEach(() => vi.useFakeTimers());
@@ -19,7 +19,7 @@ const label = textEl("t", {
 
 /** The cup's print configuration, as the studio holds it (parsed). */
 const printConfigOf = (overrides: Record<string, unknown> = {}) =>
-  printConfigDtoSchema.parse(printConfigDto(overrides));
+  printConfigSchema.parse(printConfigDto(overrides));
 
 /** The hook over a real editor, with the studio services it reads (the others are not needed). */
 function setup() {

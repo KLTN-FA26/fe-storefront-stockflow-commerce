@@ -183,7 +183,7 @@ describe("design projects: create, read, update, list", () => {
 });
 
 describe("design projects: adding and removing designs (BR-17)", () => {
-  it("adds a design: it carries project {id, name, status}, its status and version do not change, ADDED_TO_PROJECT is recorded", async () => {
+  it("adds a design: it carries project {id, name, status}, its status stays and its version moves on, ADDED_TO_PROJECT is recorded", async () => {
     const store = await makeStore();
     const project = await newProject(store);
     const design = await draft(store);
@@ -193,7 +193,7 @@ describe("design projects: adding and removing designs (BR-17)", () => {
     const after = data<DesignDto>(added);
     expect(after).toMatchObject({
       status: "DRAFT",
-      version: design.version,
+      version: design.version + 1, // the BE saves the draft (`DesignProjectService.join`)
       projectId: project.id,
       project: { id: project.id, name: "Quán Hoa", status: "ACTIVE" },
     });
@@ -272,7 +272,7 @@ describe("design projects: adding and removing designs (BR-17)", () => {
     );
 
     // An ARCHIVED design is not counted: deleting one makes room.
-    const first = made[0]!;
+    const first = data<DesignDto>(await store.get(made[0]!.id)); // its version moved when it joined
     expect((await store.remove(first.id, { version: first.version })).status).toBe(200);
     expect(data<Project>(await store.getProject(project.id)).designCount).toBe(19);
     const listed = data<DesignDto[]>(await store.projectDesigns(project.id));
@@ -311,7 +311,7 @@ describe("design projects: adding and removing designs (BR-17)", () => {
     ]);
   });
 
-  it("removes a design: ids cleared, REMOVED_FROM_PROJECT recorded, status and version unchanged", async () => {
+  it("removes a design: ids cleared, REMOVED_FROM_PROJECT recorded, status stays and version moves on", async () => {
     const store = await makeStore();
     const project = await newProject(store);
     const design = await draft(store);
@@ -321,7 +321,7 @@ describe("design projects: adding and removing designs (BR-17)", () => {
     expect(removed.status).toBe(200);
     expect(data<DesignDto>(removed)).toMatchObject({
       status: "DRAFT",
-      version: design.version,
+      version: design.version + 2, // joined (+1) and left (+1): each saves the draft
       projectId: null,
       project: null,
     });

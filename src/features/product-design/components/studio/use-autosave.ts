@@ -9,6 +9,8 @@ import {
   type Autosaver,
   type AutosaveState,
 } from "../../autosave";
+import { ApiError } from "@/lib/api/error";
+
 import type { DesignDocument, EditorController } from "../../engine";
 import { isDesignConflict } from "../../errors";
 import { DESIGN_STATUS_META } from "../../lifecycle";
@@ -99,6 +101,15 @@ export function useAutosave(
       return await send(version);
     } catch (error) {
       if (!isDesignConflict(error)) throw error;
+      // The BE checks the version before the status, so a design submitted or answered elsewhere
+      // is a CONFLICT too: read it, and when it is no longer a DRAFT take the status path (the
+      // studio follows the status, nothing more is sent) instead of the reload dialog.
+      const fresh = await client
+        .fetchQuery({ ...designQuery(designId), staleTime: 0 })
+        .catch(() => null);
+      if (fresh && !DESIGN_STATUS_META[fresh.status].editable) {
+        throw new ApiError(409, "DESIGN_NOT_DRAFT", "The design is no longer a draft");
+      }
       // R69: refused for a version a non-document write moved on? Then send it once more.
       const read = await readStored().catch(() => null);
       if (!read?.unchanged || read.record.version <= version) throw error;

@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { Alert } from "@/components/shared";
 
-import { describeDesignError } from "../errors";
+import { describeProjectError } from "../errors";
 import { useUploadLibraryImage } from "../library-mutations";
 import type { Gate } from "../project-rules";
 import { ImageDropzone } from "./image-dropzone";
@@ -62,7 +62,7 @@ export function LibraryDropzone({ projectId, gate }: { projectId: string; gate: 
       idempotencyKey: await uploadKey(bytes, file.name, file.type),
     });
   };
-  const message = refused ?? (upload.isError ? describeDesignError(upload.error) : null);
+  const message = refused ?? (upload.isError ? describeProjectError(upload.error) : null);
 
   return (
     <div className="space-y-2">

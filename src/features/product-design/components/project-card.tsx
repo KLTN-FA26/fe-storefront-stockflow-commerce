@@ -10,7 +10,8 @@ import { formatDateTime } from "@/lib/format";
 import { isRemoteImage } from "@/lib/remote-image";
 
 import { PROJECT_DESIGN_LIMIT } from "../project-schemas";
-import type { DesignProject } from "../types";
+import { useProjectPreviews } from "../queries";
+import type { ProjectSummary } from "../types";
 import { ProjectStatusBadge } from "./project-status-badge";
 
 /** Up to four previews in a strip; empty slots stay as quiet tiles so every card keeps its shape. */
@@ -47,11 +48,12 @@ function PreviewStrip({ urls, name }: { urls: readonly string[]; name: string })
 }
 
 /** One project (spec 2026-11-12 §5): name, description, previews, "N/20 bản", when, status. */
-export function ProjectCard({ project }: { project: DesignProject }) {
+export function ProjectCard({ project }: { project: ProjectSummary }) {
   const href = STORE_ROUTES.design.project(project.id);
+  const previewUrls = useProjectPreviews(project.id);
   return (
     <article className="bg-bg-surface border-border-default flex h-full flex-col overflow-hidden rounded-[var(--r-lg)] border shadow-[var(--card-shadow)] transition-shadow duration-200 hover:shadow-[var(--sh-md)]">
-      <PreviewStrip urls={project.previewUrls} name={project.name} />
+      <PreviewStrip urls={previewUrls} name={project.name} />
       <div className="flex flex-1 flex-col gap-3 p-[var(--card-pad)]">
         <div className="space-y-2">
           <ProjectStatusBadge status={project.status} />
@@ -67,7 +69,7 @@ export function ProjectCard({ project }: { project: DesignProject }) {
             {project.designCount}/{PROJECT_DESIGN_LIMIT} bản
           </p>
           <p className="text-ink-secondary text-sm tabular-nums">
-            Cập nhật {formatDateTime(project.updatedAt)}
+            Tạo lúc {formatDateTime(project.createdAt)}
           </p>
         </div>
         <div className="mt-auto">

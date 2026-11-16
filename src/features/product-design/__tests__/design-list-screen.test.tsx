@@ -150,7 +150,7 @@ describe("DesignListScreen", () => {
     const dialog = await screen.findByRole("dialog", { name: "Xoá bản nháp này?" });
 
     // Another tab submits it first, so the version and status the card holds are stale.
-    backend.delete.mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "x"));
+    backend.post.mockRejectedValueOnce(new ApiError(409, "DESIGN_NOT_DRAFT", "x"));
     await userEvent.click(within(dialog).getByRole("button", { name: "Xoá bản nháp" }));
 
     expect(
@@ -168,7 +168,7 @@ describe("DesignListScreen", () => {
     const listReads = () => backend.get.mock.calls.filter(([url]) => url === "/designs").length;
     const readsBefore = listReads();
 
-    backend.delete.mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "x"));
+    backend.post.mockRejectedValueOnce(new ApiError(409, "DESIGN_NOT_DRAFT", "x"));
     await userEvent.click(within(dialog).getByRole("button", { name: "Xoá bản nháp" }));
 
     expect(
@@ -180,7 +180,10 @@ describe("DesignListScreen", () => {
 
     await userEvent.click(within(dialog).getByRole("button", { name: "Đóng" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(backend.delete).toHaveBeenCalledTimes(1);
+    // The delete is a POST to /archive: it was sent once (refused).
+    expect(
+      backend.post.mock.calls.filter(([url]) => String(url).endsWith("/archive")),
+    ).toHaveLength(1);
   });
 
   it("disables every 'Tạo bản sửa' while one revision is being created (L4)", async () => {
@@ -204,7 +207,7 @@ describe("DesignListScreen", () => {
   describe("a revision that fails (L4)", () => {
     const failRevision = async () => {
       const backend = await designBackend();
-      backend.post.mockRejectedValueOnce(new ApiError(409, "INVALID_STATE", "x"));
+      backend.post.mockRejectedValueOnce(new ApiError(409, "DESIGN_NOT_DRAFT", "x"));
       render();
       const card = await cardOf("Ly cà phê Nhà Mình 12oz");
       await userEvent.click(card.getByRole("button", { name: /Tạo bản sửa/ }));

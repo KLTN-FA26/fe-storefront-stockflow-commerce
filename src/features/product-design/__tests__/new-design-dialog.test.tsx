@@ -114,13 +114,12 @@ describe("NewDesignDialog", () => {
     expect(screen.getByRole("button", { name: "Bắt đầu" })).toBeDisabled();
   });
 
-  it("disables a variant that takes designs no more", async () => {
+  it("disables a variant that takes designs no more: the BE does not list it, so it reads as without a print configuration (F-22)", async () => {
     open();
     await pickProduct("Ly giấy kraft 16oz");
 
     await waitFor(
-      () =>
-        expect(variant(MOCK_BLOCKED_SKU)).toHaveAccessibleDescription("Không còn nhận thiết kế"),
+      () => expect(variant(MOCK_BLOCKED_SKU)).toHaveAccessibleDescription("Chưa nhận thiết kế"),
       WAIT,
     );
     expect(variant(MOCK_BLOCKED_SKU)).toBeDisabled();

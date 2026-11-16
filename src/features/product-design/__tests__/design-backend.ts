@@ -172,7 +172,8 @@ function cupDocumentWithText(): DesignDocument {
 
 /**
  * A project with one cup draft per name, all sent in one review round, written in `store` itself
- * (uploads, then the round): what the reviewer simulation lists. Answers the ids.
+ * (each design's three files as artifacts bound to its layout, then the round over every
+ * `{ id, version }`, the BE's way): what the reviewer simulation lists. Answers the ids.
  */
 export async function roundIn(
   store: DesignMockStore,
@@ -180,14 +181,14 @@ export async function roundIn(
   projectName = "Quán Hoa",
 ) {
   const project = settle(await store.createProject({ name: projectName })).data as { id: string };
-  const items = [];
-  const designIds: string[] = [];
+  const designs: Array<{ id: string; version: number }> = [];
   for (const [i, name] of names.entries()) {
     const created = settle(
       await store.create({ ...STUDIO_PRODUCTS.cup, name, projectId: project.id }),
     );
     const { id } = created.data as { id: string };
     settle(await store.putDocument(id, { version: 0, document: cupDocumentWithText() }));
+    const { checksum } = settle(await store.getDocument(id)).data as { checksum: string };
     const files = {
       CUSTOMER_PREVIEW: new File([PNG_1x1.slice()], "preview.png", { type: "image/png" }),
       PRINT_READY: new File([new Uint8Array([1, i])], "print-ready.pdf", {
@@ -197,21 +198,14 @@ export async function roundIn(
         type: "application/pdf",
       }),
     };
-    const checksums: Record<string, string> = {};
     for (const [role, file] of Object.entries(files)) {
-      checksums[role] = await sha256Hex(new Uint8Array(await file.arrayBuffer()));
+      settle(await store.uploadArtifact(id, { role, file, documentChecksum: checksum }));
     }
-    const upload = settle(await store.uploadSubmission(id, { files, checksums }, `key-${id}`));
-    const { uploadToken } = upload.data as { uploadToken: string };
-    items.push({
-      designId: id,
-      version: 1,
-      uploadToken,
-      preflight: { result: "Pass", issues: [] },
-      checksums,
-    });
-    designIds.push(id);
+    const { version } = settle(await store.get(id)).data as { version: number };
+    designs.push({ id, version });
   }
-  const round = settle(await store.openReviewRound(project.id, { items })).data as { id: string };
-  return { projectId: project.id, roundId: round.id, designIds };
+  const round = settle(await store.submitBatch(project.id, { designs })).data as {
+    roundId: string;
+  };
+  return { projectId: project.id, roundId: round.roundId, designIds: designs.map((d) => d.id) };
 }

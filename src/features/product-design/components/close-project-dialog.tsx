@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { describeDesignError } from "../errors";
+import { describeProjectError } from "../errors";
 import { useArchiveProject } from "../mutations";
 import type { DesignProject } from "../types";
 
@@ -47,7 +47,9 @@ export function CloseProjectDialog({
             {`Dự án "${project.name}" sẽ chỉ để xem, không mở lại được. Các bản bên trong vẫn mở và dùng riêng lẻ được.`}
           </DialogDescription>
         </DialogHeader>
-        {archive.isError ? <Alert tone="danger">{describeDesignError(archive.error)}</Alert> : null}
+        {archive.isError ? (
+          <Alert tone="danger">{describeProjectError(archive.error)}</Alert>
+        ) : null}
         <DialogFooter className="gap-2">
           <Button
             type="button"

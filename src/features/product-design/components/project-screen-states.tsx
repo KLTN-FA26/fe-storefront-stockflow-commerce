@@ -6,7 +6,7 @@ import { STORE_ROUTES } from "@/constants";
 import { Alert, EmptyState, Skeleton } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 
-import { describeDesignError } from "../errors";
+import { describeProjectError } from "../errors";
 import { RetryButton } from "./design-list-states";
 
 export function ProjectSkeleton() {
@@ -50,7 +50,7 @@ export function ProjectReadError({
   return (
     <div className="space-y-3">
       <Alert tone="danger" title="Không tải được dự án">
-        {describeDesignError(error)}
+        {describeProjectError(error)}
       </Alert>
       <RetryButton onRetry={onRetry} retrying={retrying} />
     </div>

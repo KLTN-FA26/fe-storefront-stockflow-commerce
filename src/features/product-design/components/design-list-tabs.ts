@@ -1,12 +1,12 @@
 import { parseAsInteger, parseAsStringLiteral } from "nuqs";
 
-import type { DesignStatus } from "../types";
+import type { DesignListParams } from "../types";
 
 export const TAB_IDS = ["all", "drafts", "pending", "approved"] as const;
 export type Tab = (typeof TAB_IDS)[number];
 
 /** A tab is a status of the docs' lifecycle (spec §6.3); ARCHIVED is never listed. */
-export const TABS: Record<Tab, { label: string; status: DesignStatus | undefined }> = {
+export const TABS: Record<Tab, { label: string; status: DesignListParams["status"] }> = {
   all: { label: "Tất cả", status: undefined },
   drafts: { label: "Bản nháp", status: "DRAFT" },
   pending: { label: "Chờ duyệt", status: "PENDING_REVIEW" },

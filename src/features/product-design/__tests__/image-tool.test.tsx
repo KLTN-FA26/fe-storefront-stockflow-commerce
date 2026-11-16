@@ -404,13 +404,15 @@ describe("uploading an image", () => {
   it("shows an API failure in words", async () => {
     const user = userEvent.setup();
     const { store: studio, post } = await designBackend();
+    // The BE's 413 for a file over the template's size carries a message only: the words are
+    // built from the template (F-24), 50 MB for the cup.
     post.mockRejectedValueOnce(new ApiError(413, "PAYLOAD_TOO_LARGE", "Too large"));
     const services = await openStudio(await cupDraft(studio));
     await chooseImageTool(user);
 
     await user.upload(dropzone(), png(3000, 2000));
 
-    expect(await alert()).toHaveTextContent("Tệp vượt dung lượng cho phép.");
+    expect(await alert()).toHaveTextContent("Ảnh vượt 50 MB, mức quy cách này cho phép.");
     expect(imagesOf(services)).toEqual([]);
   });
 });

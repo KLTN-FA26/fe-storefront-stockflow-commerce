@@ -1,12 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { canRemoveFromProject, projectActions, PROJECT_DESIGN_LIMIT } from "../project-rules";
-import { designProjectSchema } from "../project-schemas";
 import { design } from "./fixtures";
-import { projectDto } from "./project-fixtures";
+import { project as projectOf } from "./project-fixtures";
 
-const project = (overrides: Record<string, unknown> = {}) =>
-  designProjectSchema.parse(projectDto(overrides));
+const project = projectOf;
 const drafts = (n: number) =>
   Array.from({ length: n }, (_, i) =>
     design({ id: `7c1f0a00-0000-4000-8000-0000000001${i + 10}` }),

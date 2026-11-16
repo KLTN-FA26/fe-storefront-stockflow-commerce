@@ -51,14 +51,14 @@ it("a design mock that cannot seed answers 500 on design routes; every other moc
 
 it("design routes over a store that did not start answer 503", async () => {
   registerDesignMockRoutes(Promise.reject(new Error("no storage")));
-  expect(await failure(api.get("/designs/draft-count"))).toEqual([503, "DESIGN_MOCK_UNAVAILABLE"]);
+  expect(await failure(api.get("/designs"))).toEqual([503, "DESIGN_MOCK_UNAVAILABLE"]);
 });
 
 it("design routes over a store still starting after 10 s answer 503, and say so in the console", async () => {
   vi.useFakeTimers();
   registerDesignMockRoutes(new Promise(() => undefined)); // an IndexedDB open that never settles
 
-  const answer = failure(api.get("/designs/draft-count"));
+  const answer = failure(api.get("/designs"));
   await vi.advanceTimersByTimeAsync(9_000);
   expect(warnings).not.toHaveBeenCalledWith(expect.stringContaining("[mock-design]"));
   await vi.advanceTimersByTimeAsync(2_000);

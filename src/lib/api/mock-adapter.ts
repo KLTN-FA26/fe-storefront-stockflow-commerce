@@ -4,7 +4,7 @@
  *  - `activateMockAdapter()`, when `USE_MOCK=true` (server-only flag, see `src/lib/config.ts`):
  *    every request resolves against the mock route table — simulating server-side pagination,
  *    filtering, sorting, latency, and an occasional random 500 (`MOCK_RANDOM_ERROR`).
- *  - `activateDesignMockAdapter()`, otherwise while `DESIGN_API_MOCKED`: only the design API
+ *  - `activateDesignMockAdapter()`, otherwise with `DESIGN_USE_MOCK` on: only the design API
  *    (spec 2026-11-09 §5) is served by the mock, with latency but never a random 500; every other
  *    request reaches the BE.
  *
@@ -24,6 +24,7 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from "axios";
 import { api } from "./client";
+import { setDesignMockMode } from "./design-mock-flag";
 
 /* ── Types ───────────────────────────────────────────────────────────── */
 
@@ -75,7 +76,7 @@ export function paginate<T>(
  * path of the route table.
  */
 const DESIGN_PATH =
-  /^(?:\/designs(?:\/.*)?|\/design-projects(?:\/.*)?|\/catalog\/products\/[^/]+\/variants\/[^/]+\/print-config|\/__mock(?:\/.*)?)$/;
+  /^(?:\/designs(?:\/.*)?|\/design-projects(?:\/.*)?|\/catalog\/products\/[^/]+\/customization|\/__mock(?:\/.*)?)$/;
 
 /**
  * A design URL as the route table knows it, null for any other: without an origin
@@ -229,6 +230,7 @@ let mockActive = false;
 export function activateMockAdapter(): void {
   if (mockActive) return;
   mockActive = true;
+  setDesignMockMode(true);
 
   // Register all mock routes before activating the adapter. The dynamic
   // import is async even though the module is already bundled, so the
@@ -264,6 +266,7 @@ let designMockActive = false;
 export function activateDesignMockAdapter(): void {
   if (designMockActive) return;
   designMockActive = true;
+  setDesignMockMode(true);
 
   // Set up now (design requests wait for it); the same design mock as the full mock's, if both run.
   designMockReady().catch(() => undefined);
@@ -287,6 +290,7 @@ export function activateDesignMockAdapter(): void {
 export function __resetMockAdapterForTests(): void {
   mockActive = false;
   designMockActive = false;
+  setDesignMockMode(false);
   routesReady = undefined;
   designMock = undefined;
   routes.clear();

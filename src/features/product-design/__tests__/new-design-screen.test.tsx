@@ -4,6 +4,7 @@ import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/lib/api/error";
+import { seedMockCatalog } from "@/lib/api/mock-fixtures/catalog";
 import { MOCK_BLOCKED_SKU, printConfigFor } from "@/lib/api/mock-fixtures/design-print-configs";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
@@ -22,7 +23,10 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => env.search,
 }));
 // Mock mode counts every caller as signed in; the real session is what these tests drive.
-vi.mock("@/providers/app-providers", () => ({ useIsMock: () => false }));
+vi.mock("@/providers/app-providers", () => ({
+  useIsMock: () => false,
+  useIsDesignMock: () => false,
+}));
 
 beforeEach(() => {
   env.replace.mockReset();
@@ -37,6 +41,10 @@ afterEach(() => {
 const CUP = "ly-giay-2-lop-12oz";
 const CUP_SKU = "CUP-PAPER-12OZ-WHT";
 const NAME = "Ly giấy 2 lớp 12oz · CUP-PAPER-12OZ-WHT";
+// What the BE wants beside the slug and SKU: the product's id and the template's code, read from
+// the product's customization (F-12).
+const CUP_PRODUCT_ID = seedMockCatalog().find((product) => product.slug === CUP)!.productId;
+const CUP_TEMPLATE = printConfigFor(CUP, CUP_SKU)!.template.code;
 
 describe("NewDesignScreen", () => {
   it("creates the design named after the product and variant, and opens its studio", async () => {
@@ -48,9 +56,10 @@ describe("NewDesignScreen", () => {
       WAIT,
     );
     expect(post).toHaveBeenCalledTimes(1);
-    expect(post).toHaveBeenCalledWith("/designs", {
-      productSlug: CUP,
+    expect(post).toHaveBeenCalledWith("/designs/mine", {
+      productId: CUP_PRODUCT_ID,
       sku: CUP_SKU,
+      templateCode: CUP_TEMPLATE,
       name: NAME,
     });
     expect(env.replace).toHaveBeenCalledTimes(1);
@@ -63,9 +72,10 @@ describe("NewDesignScreen", () => {
     renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
 
     await waitFor(() => expect(env.replace).toHaveBeenCalledTimes(1), WAIT);
-    expect(post).toHaveBeenCalledWith("/designs", {
-      productSlug: CUP,
+    expect(post).toHaveBeenCalledWith("/designs/mine", {
+      productId: CUP_PRODUCT_ID,
       sku: CUP_SKU,
+      templateCode: CUP_TEMPLATE,
       name: NAME,
       projectId: project.id,
     });
@@ -130,12 +140,15 @@ describe("NewDesignScreen", () => {
     const { post } = await designBackend();
     renderWithProviders(<NewDesignScreen product="ly-giay-kraft-16oz" sku={MOCK_BLOCKED_SKU} />);
 
-    expect(await screen.findByText(/không còn nhận thiết kế/, undefined, WAIT)).toBeInTheDocument();
+    // The BE lists no blocked variant (F-22): it reads as one without a template.
+    expect(
+      await screen.findByText("Quy cách này chưa nhận thiết kế.", undefined, WAIT),
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Chat với Sale" })).toBeInTheDocument();
     expect(post).not.toHaveBeenCalled();
   });
 
-  it("says a variant of a product that takes no designs any more is unavailable", async () => {
+  it("says a variant of a product that is no longer published takes no design: it is not listed either (F-22)", async () => {
     const { post } = await designBackend({
       printConfigFor: (slug, sku) => {
         const config = printConfigFor(slug, sku);
@@ -145,7 +158,7 @@ describe("NewDesignScreen", () => {
     renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
 
     expect(
-      await screen.findByText("Quy cách này hiện không còn nhận thiết kế.", undefined, WAIT),
+      await screen.findByText("Quy cách này chưa nhận thiết kế.", undefined, WAIT),
     ).toBeInTheDocument();
     expect(post).not.toHaveBeenCalled();
   });

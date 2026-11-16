@@ -155,7 +155,7 @@ describe("the image library", () => {
     const original = api.get;
     const { get } = await designBackend();
     get.mockImplementation((url, ...rest) =>
-      url.endsWith("/url")
+      url.endsWith("/download-url")
         ? Promise.reject(new ApiError(403, "FORBIDDEN", "No"))
         : original.call(api, url, ...rest),
     );

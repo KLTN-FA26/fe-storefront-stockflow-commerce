@@ -13,8 +13,11 @@ import {
 } from "./schemas";
 import type { DesignAsset, DesignDocumentRecord, DownloadLink, SaveDocumentInput } from "./types";
 
-// A design's document and the images it places (spec 2026-11-09 §4.2, §4.5); re-exported by
-// `api.ts`.
+// A design's document and the images it places, against the BE's design API; re-exported by
+// `api.ts`. The shapes are the BE's own (rows 10-14 of the comparison: `DesignDocumentResponse`,
+// `DesignAssetResponse`, `{url, expiresAt}`), so each is parsed by the schema that is also the
+// domain type. The BE's refusals (413 `REQUEST_BODY_TOO_LARGE`, 415 `UNSUPPORTED_MEDIA_TYPE`, 413
+// `PAYLOAD_TOO_LARGE` and 429 `RATE_LIMITED` carry only a `message`) are worded in `errors.ts`.
 
 /** GET /designs/{id}/document */
 export async function getDesignDocument(
@@ -33,7 +36,7 @@ export async function saveDesignDocument(
   if (documentByteSize(input.document) > MAX_DOCUMENT_BYTES) {
     throw new ApiError(
       413,
-      "PAYLOAD_TOO_LARGE",
+      "REQUEST_BODY_TOO_LARGE",
       `The design document is larger than ${MAX_DOCUMENT_BYTES} bytes`,
     );
   }
@@ -64,13 +67,13 @@ export async function uploadDesignAsset(
   return designAssetDtoSchema.parse(data);
 }
 
-/** GET /designs/{id}/assets/{assetId}/url — a short-lived link. */
+/** GET /designs/{id}/assets/{assetId}/download-url — a short-lived link, valid 10 minutes (F-18). */
 export async function getAssetDownloadUrl(
   id: string,
   assetId: string,
   signal?: AbortSignal,
 ): Promise<DownloadLink> {
-  const path = designPath(id, `/assets/${encodeURIComponent(assetId)}/url`);
+  const path = designPath(id, `/assets/${encodeURIComponent(assetId)}/download-url`);
   const { data } = await api.get<unknown>(path, withSignal(signal));
   return downloadLinkDtoSchema.parse(data);
 }

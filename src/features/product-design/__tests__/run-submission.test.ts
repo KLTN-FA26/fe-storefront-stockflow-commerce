@@ -150,9 +150,7 @@ describe("a submission without the studio", () => {
     });
     expect(client.getQueryData(designKeys.detail(id))).toMatchObject({ id, status: "DRAFT" });
     expect(client.getQueryData(designKeys.assets(id))).toEqual([]);
-    expect(
-      client.getQueryData(printConfigKeys.detail(STUDIO_PRODUCTS.cup.productSlug, cup12oz.sku)),
-    ).toMatchObject({ sku: cup12oz.sku });
+    expect(client.getQueryData(printConfigKeys.design(id))).toMatchObject({ sku: cup12oz.sku });
 
     const steps: BundleStep[] = [];
     const bundle = await buildSessionBundle(session, checked, (step) => {

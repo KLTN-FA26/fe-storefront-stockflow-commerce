@@ -1,111 +1,49 @@
 /**
- * Mock routes of Module 12 (spec 2026-11-09 §4.2, §4.3; projects: part E spec §4): the docs'
- * design API, served by the store of `mock-fixtures/design-store.ts`, and the reviewer simulation
- * under `/__mock`. Responses use the ApiResponse envelope; the mock adapter turns error statuses
- * into ApiError.
- * The first matching pattern wins, so `/designs/draft-count` is registered before `/designs/:id`.
+ * Mock routes of Module 12, served by the store of `mock-fixtures/design-store.ts`, and the
+ * reviewer simulation under `/__mock`. Responses use the ApiResponse envelope; the mock adapter
+ * turns error statuses into ApiError.
+ *
+ * Every route is at the BE's path and in its shapes, errors and statuses (`mock-fixtures/
+ * design-be-contract.ts` for designs, files and clones, `design-be-projects.ts` for projects, the
+ * library and review rounds turn the store's rows into them); only `/__mock` is the mock's own. The
+ * store keeps its rows in the shape the front end first defined.
+ * The first matching pattern wins, so literal paths (`/designs/mine`) come before `/designs/:id`.
  */
 
 import type { AxiosRequestConfig } from "axios";
 
 import { registerMockRoute } from "./mock-adapter";
+import { registerProjectRoutes, cloneAnswer } from "./mock-design-projects";
 import {
-  BUNDLE_ROLES,
+  blobPart,
+  bodyOf,
+  formOf,
+  headerOf,
+  param,
+  queryParams,
+  respond,
+} from "./mock-design-request";
+import {
+  beDecision,
+  beDraft,
+  beHistoryPage,
+  beSnapshot,
+  productOfId,
+  viaBe,
+} from "./mock-fixtures/design-be-contract";
+import { printConfigFor } from "./mock-fixtures/design-print-configs";
+import {
+  asRecord,
   fail,
   fileRejected,
+  invalid,
   ok,
-  type BundleRole,
+  type DesignDto,
+  type DesignEventDto,
   type MockResult,
 } from "./mock-fixtures/design-rows";
 import { openDesignStorage } from "./mock-fixtures/design-storage";
 import { createDesignMockStore, type DesignMockStore } from "./mock-fixtures/design-store";
-import type { BundleForm } from "./mock-fixtures/design-store-files";
-import type { DesignSubmission } from "./mock-fixtures/design-store-submission";
-
-const respond = (result: MockResult) => ({ status: result.status, data: result.data, headers: {} });
-
-const param = (config: AxiosRequestConfig, name: string) => {
-  const params = (config as AxiosRequestConfig & { _mockParams?: Record<string, string> })
-    ._mockParams;
-  return decodeURIComponent(params?.[name] ?? "");
-};
-
-function queryParams(config: AxiosRequestConfig): Record<string, unknown> {
-  const raw: unknown = config.params;
-  return raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-}
-
-const parseJson = (text: string | undefined): unknown => {
-  if (text === undefined) return undefined;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-};
-
-/** A JSON body: axios hands the adapter the serialised string. */
-const bodyOf = (config: AxiosRequestConfig): unknown =>
-  typeof config.data === "string" ? parseJson(config.data) : config.data;
-
-/** A request header by name, ignoring case: axios hands the adapter an `AxiosHeaders`, tests a plain object. */
-function headerOf(config: AxiosRequestConfig, name: string): string | undefined {
-  const headers: unknown = config.headers;
-  if (!headers || typeof headers !== "object") return undefined;
-  const wanted = name.toLowerCase();
-  const found = Object.entries(headers).find(([key]) => key.toLowerCase() === wanted)?.[1];
-  return typeof found === "string" ? found : undefined;
-}
-
-/** A multipart body (duck-typed: the FormData may come from another realm in tests). */
-function formOf(config: AxiosRequestConfig): FormData | undefined {
-  const data: unknown = config.data;
-  return typeof data === "object" && data !== null && typeof (data as FormData).get === "function"
-    ? (data as FormData)
-    : undefined;
-}
-
-/** A Blob, duck-typed like `formOf`: one from another realm is not `instanceof Blob` here. */
-function isBlobLike(value: unknown): value is Blob {
-  if (typeof value !== "object" || value === null) return false;
-  const blob = value as Partial<Record<keyof Blob, unknown>>;
-  return (
-    typeof blob.arrayBuffer === "function" &&
-    typeof blob.size === "number" &&
-    typeof blob.type === "string"
-  );
-}
-
-const blobPart = (form: FormData | undefined, name: string) => {
-  const part: unknown = form?.get(name);
-  return isBlobLike(part) ? part : undefined;
-};
-
-const textPart = (form: FormData | undefined, name: string) => {
-  const part = form?.get(name);
-  return typeof part === "string" ? part : undefined;
-};
-
-/** The files of a bundle (one part per role) and their `checksums`, as a multipart sends them. */
-function bundleOf(form: FormData | undefined): BundleForm {
-  const files: Partial<Record<BundleRole, Blob>> = {};
-  for (const role of BUNDLE_ROLES) {
-    const file = blobPart(form, role);
-    if (file) files[role] = file;
-  }
-  return { checksums: parseJson(textPart(form, "checksums")), files };
-}
-
-/** The multipart parts of a submission: `version`, `preflight`, `checksums` and one file per role. */
-function submissionOf(config: AxiosRequestConfig): DesignSubmission {
-  const form = formOf(config);
-  const version = textPart(form, "version");
-  return {
-    version: version === undefined || version.trim() === "" ? undefined : Number(version),
-    preflight: parseJson(textPart(form, "preflight")),
-    ...bundleOf(form),
-  };
-}
 
 /**
  * 503: the design mock never started (logged once by `setUpDesignMock`), or is still starting
@@ -155,96 +93,186 @@ export function registerDesignMockRoutes(store: DesignMockStore | Promise<Design
     });
   const id = (config: AxiosRequestConfig) => param(config, "id");
 
-  /* ── Designs ── */
+  /* ── Designs and their lifecycle, in the BE's contract (SF1) ── */
 
-  route("GET", "/designs", (s, config) => s.list(queryParams(config)));
-  route("GET", "/designs/draft-count", (s) => s.draftCount());
-  route("POST", "/designs", (s, config) => s.create(bodyOf(config)));
-  route("GET", "/designs/:id", (s, config) => s.get(id(config)));
-  route("PATCH", "/designs/:id", (s, config) => s.rename(id(config), bodyOf(config)));
-  route("DELETE", "/designs/:id", (s, config) => s.remove(id(config), bodyOf(config)));
-  route("GET", "/designs/:id/history", (s, config) => s.history(id(config)));
-  route("GET", "/designs/:id/document", (s, config) => s.getDocument(id(config)));
-  route("PUT", "/designs/:id/document", (s, config) => s.putDocument(id(config), bodyOf(config)));
+  // The store's design (`DesignDto`) as the BE's `DesignDraftResponse`.
+  const draft = (data: unknown) => {
+    const design = data as DesignDto;
+    return beDraft(design, printConfigFor(design.product.slug, design.variant.sku)?.template.code);
+  };
+  const drafts = (page: unknown) => {
+    const body = asRecord(page);
+    return { ...body, items: (Array.isArray(body.items) ? body.items : []).map(draft) };
+  };
+  const nothing = () => null;
 
-  /* ── Projects (part E spec §4) ── */
-
-  route("GET", "/design-projects", (s, config) => s.listProjects(queryParams(config)));
-  route("POST", "/design-projects", (s, config) => s.createProject(bodyOf(config)));
-  route("GET", "/design-projects/:id", (s, config) => s.getProject(id(config)));
-  route("PATCH", "/design-projects/:id", (s, config) =>
-    s.updateProject(id(config), bodyOf(config)),
-  );
-  route("POST", "/design-projects/:id/archive", (s, config) =>
-    s.archiveProject(id(config), bodyOf(config)),
-  );
-  route("GET", "/design-projects/:id/designs", (s, config) => s.projectDesigns(id(config)));
-  route("POST", "/design-projects/:id/designs", (s, config) =>
-    s.addToProject(id(config), bodyOf(config)),
-  );
-  route("DELETE", "/design-projects/:id/designs/:designId", (s, config) =>
-    s.removeFromProject(id(config), param(config, "designId")),
-  );
-  route("GET", "/design-projects/:id/history", (s, config) => s.projectHistory(id(config)));
-  route("POST", "/design-projects/:id/review-rounds", (s, config) =>
-    s.openReviewRound(id(config), bodyOf(config)),
-  );
-  route("POST", "/design-projects/:id/preflight-failures", (s, config) =>
-    s.recordSetPreflightFailure(id(config), bodyOf(config)),
-  );
-  route("GET", "/design-projects/:id/library", (s, config) => s.listLibrary(id(config)));
-  route("POST", "/design-projects/:id/library/images", async (s, config) => {
-    const file = blobPart(formOf(config), "file");
-    if (!file) return fileRejected("The file part is required");
-    return s.uploadLibraryImage(id(config), file, undefined, headerOf(config, "Idempotency-Key"));
+  route("GET", "/designs", (s, config) => {
+    const query = queryParams(config);
+    const status = typeof query.status === "string" ? query.status.trim().toUpperCase() : "";
+    // The BE lists a design that is not archived: that status, or an unknown one, is a 400.
+    if (status === "ARCHIVED") {
+      return Promise.resolve(
+        fail(
+          400,
+          "UNSUPPORTED_PARAMETER",
+          "status must be one of [DRAFT, PENDING_REVIEW, APPROVED]",
+        ),
+      );
+    }
+    return s.list({ ...query, ...(status ? { status } : {}) }).then((r) => viaBe(r, drafts));
   });
-  route("POST", "/design-projects/:id/library/images/from-design", (s, config) =>
-    s.saveLibraryImageFromDesign(id(config), bodyOf(config)),
+  route("POST", "/designs/mine", async (s, config) => {
+    const body = asRecord(bodyOf(config));
+    for (const field of ["productId", "sku", "templateCode"] as const) {
+      const value = body[field];
+      if (typeof value !== "string" || !value.trim()) {
+        return viaBe(invalid(field, `${field} must not be blank`), nothing);
+      }
+    }
+    const product = productOfId(body.productId);
+    if (!product) return fail(404, "NOT_FOUND", "Product not found");
+    const sku = String(body.sku).trim();
+    const found = asRecord(asRecord((await s.printConfig(product.slug, sku)).data).data);
+    if (asRecord(found.template).code !== body.templateCode) {
+      return fail(404, "PRINT_CONFIG_NOT_FOUND", "Customization template not found");
+    }
+    const { projectId } = body;
+    return viaBe(
+      await s.create({ productSlug: product.slug, sku, name: body.name, projectId }),
+      draft,
+      {
+        status: 201,
+      },
+    );
+  });
+  route("GET", "/designs/:id", async (s, config) => viaBe(await s.get(id(config)), draft));
+  route("PUT", "/designs/:id/name", async (s, config) =>
+    viaBe(await s.rename(id(config), bodyOf(config)), draft),
   );
-  route("POST", "/design-projects/:id/library/texts", (s, config) =>
-    s.saveLibraryText(id(config), bodyOf(config)),
+  route("POST", "/designs/:id/archive", async (s, config) =>
+    viaBe(await s.remove(id(config), bodyOf(config)), draft),
   );
-  route("DELETE", "/design-projects/:id/library/:itemId", (s, config) =>
-    s.deleteLibraryItem(id(config), param(config, "itemId")),
+  route("GET", "/designs/:id/history", async (s, config) => {
+    const result = await s.history(id(config));
+    return asRecord(result.data).success === true
+      ? beHistoryPage(asRecord(result.data).data as DesignEventDto[], queryParams(config))
+      : result;
+  });
+  route("GET", "/designs/:id/snapshot", async (s, config) => {
+    const result = await s.snapshot(id(config));
+    return asRecord(result.data).success === true
+      ? beSnapshot(asRecord(result.data).data as DesignDto)
+      : result;
+  });
+  // The layout: the BE's own shape (a stored layout keeps its own nulls: only the envelope's go).
+  const record = (data: unknown) => data;
+  route("GET", "/designs/:id/document", async (s, config) =>
+    viaBe(await s.getDocument(id(config)), record, { shallow: true }),
   );
+  route("PUT", "/designs/:id/document", async (s, config) =>
+    viaBe(await s.putDocument(id(config), bodyOf(config)), record, {
+      shallow: true,
+      // The BE's word for a layout over 1,000,000 bytes.
+      codes: { PAYLOAD_TOO_LARGE: { status: 413, code: "REQUEST_BODY_TOO_LARGE", bare: true } },
+    }),
+  );
+  route("GET", "/designs/:id/template", async (s, config) =>
+    viaBe(await s.designTemplate(id(config)), record),
+  );
+
+  /* ── Projects, their library and review rounds (`mock-design-projects.ts`) ── */
+
+  registerProjectRoutes(route);
 
   /* ── Images ── */
 
-  route("GET", "/designs/:id/assets", (s, config) => s.listAssets(id(config)));
+  // The BE's contract (rows 12-15): refusals of a file are 415 / 413 with a message only.
+  const asset = (data: unknown) => data;
+  route("GET", "/designs/:id/assets", async (s, config) =>
+    viaBe(await s.listAssets(id(config)), asset),
+  );
   route("POST", "/designs/:id/assets", async (s, config) => {
     const file = blobPart(formOf(config), "file");
-    if (!file) return fileRejected("The file part is required");
-    return s.uploadAsset(id(config), file, undefined, headerOf(config, "Idempotency-Key"));
+    if (!file) return viaBe(fileRejected("The file part is required"), asset);
+    const key = headerOf(config, "Idempotency-Key");
+    return viaBe(await s.uploadAsset(id(config), file, undefined, key), asset, { status: 201 });
   });
-  route("POST", "/designs/:id/assets/from-library", (s, config) =>
-    s.placeFromLibrary(id(config), bodyOf(config)),
-  );
-  route("GET", "/designs/:id/assets/:assetId/url", (s, config) =>
-    s.assetLink(id(config), param(config, "assetId")),
+  route("POST", "/designs/:id/assets/library", async (s, config) => {
+    const { assetId } = asRecord(bodyOf(config));
+    if (typeof assetId !== "string" || !assetId.trim()) {
+      return viaBe(invalid("assetId", "assetId must not be blank"), nothing);
+    }
+    // The library item's id is the file's `assetId` of the BE.
+    const placed = await s.placeFromLibrary(id(config), { libraryItemId: assetId });
+    return viaBe(placed, asset, { status: 201 });
+  });
+  route("GET", "/designs/:id/assets/:assetId/download-url", async (s, config) =>
+    viaBe(await s.assetLink(id(config), param(config, "assetId")), asset),
   );
 
   /* ── Submitting and after ── */
 
-  route("POST", "/designs/:id/submissions", (s, config) =>
-    s.submit(id(config), submissionOf(config)),
+  // The BE's flow of one design (F-19): its files one by one, then the request for review.
+  const artifact = (data: unknown) => data;
+  route("POST", "/designs/:id/artifacts", async (s, config) => {
+    const query = queryParams(config);
+    const uploaded = await s.uploadArtifact(id(config), {
+      role: query.role,
+      file: blobPart(formOf(config), "file"),
+      documentChecksum: query.documentChecksum,
+      key: headerOf(config, "Idempotency-Key"),
+    });
+    return viaBe(uploaded, artifact, { status: 201 });
+  });
+  route("GET", "/designs/:id/artifacts", async (s, config) =>
+    viaBe(await s.listArtifacts(id(config)), artifact),
   );
-  route("POST", "/designs/:id/submission-uploads", (s, config) =>
-    s.uploadSubmission(id(config), bundleOf(formOf(config)), headerOf(config, "Idempotency-Key")),
+  route("GET", "/designs/:id/artifacts/:artifactId/download-url", async (s, config) =>
+    viaBe(await s.artifactLink(id(config), param(config, "artifactId")), artifact),
   );
-  route("POST", "/designs/:id/preflight-failures", (s, config) =>
-    s.recordPreflightFailure(id(config), bodyOf(config)),
+  route("POST", "/designs/:id/technical-review-requests", async (s, config) =>
+    viaBe(await s.requestReview(id(config), bodyOf(config)), draft),
   );
-  route("GET", "/designs/:id/files", (s, config) => s.files(id(config)));
-  route("POST", "/designs/:id/revisions", (s, config) => s.revise(id(config)));
-  route("POST", "/designs/:id/clones", (s, config) =>
-    s.clone(id(config), bodyOf(config), headerOf(config, "Idempotency-Key")),
+  // The studio's own refusal on the record (row 18): findings are `{rule, surfaceCode?, elementId?}`.
+  route("POST", "/designs/:id/preflight-failures", async (s, config) => {
+    const { version, issues } = asRecord(bodyOf(config));
+    const reported = Array.isArray(issues) ? issues.map(asRecord) : [];
+    if (
+      reported.length < 1 ||
+      reported.length > 50 ||
+      reported.some((i) => typeof i.rule !== "string" || !i.rule.trim() || i.rule.length > 64)
+    ) {
+      return viaBe(invalid("issues", "1 to 50 findings, each with a rule"), nothing);
+    }
+    // The BE keeps the rule and where it is, and ignores any message.
+    const kept = reported.map((i) => ({
+      ruleId: i.rule,
+      level: "fail",
+      message: String(i.rule),
+      surfaceCode: i.surfaceCode,
+      elementId: i.elementId,
+    }));
+    const recorded = await s.recordPreflightFailure(id(config), { version, issues: kept });
+    return viaBe(recorded, (event) => beDecision(event as DesignEventDto), { status: 201 });
+  });
+  route("POST", "/designs/:id/revisions", async (s, config) =>
+    viaBe(await s.revise(id(config)), draft, {
+      status: 200,
+      // A revision of a design that is not approved is a plain conflict in the BE.
+      codes: { INVALID_STATE: { status: 409, code: "CONFLICT" } },
+    }),
+  );
+  // 201 `{design, notInProject?}`, the Idempotency-Key required (row 9).
+  route("POST", "/designs/:id/clones", async (s, config) =>
+    cloneAnswer(await s.clone(id(config), bodyOf(config), headerOf(config, "Idempotency-Key"))),
   );
 
   /* ── Catalogue ── */
 
-  route("GET", "/catalog/products/:slug/variants/:sku/print-config", (s, config) =>
-    s.printConfig(param(config, "slug"), param(config, "sku")),
-  );
+  route("GET", "/catalog/products/:slug/customization", (s, config) => {
+    const hint = queryParams(config).sku;
+    return s.customization(param(config, "slug"), typeof hint === "string" ? hint : undefined);
+  });
 
   /* ── Reviewer simulation (mock only, spec §4.3) ── */
 

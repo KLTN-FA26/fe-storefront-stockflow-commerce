@@ -135,9 +135,10 @@ describe("DesignStudio", () => {
     expect(seen.current!.template).toEqual(templateOf(seen.current!.printConfig));
     expect(seen.current!.status).toBe("DRAFT");
     expect(seen.current!.readOnly).toBe(false);
-    expect(get.mock.calls.map(([url]) => url)).toContain(
-      "/catalog/products/tui-giay-kraft/variants/BAG-KRAFT-M/print-config",
-    );
+    // The design's own template, and the customization for the carton spec (F-22, F-23).
+    const urls = get.mock.calls.map(([url]) => url);
+    expect(urls).toContain(`/designs/${MOCK_DESIGN_IDS.draft}/template`);
+    expect(urls).toContain("/catalog/products/tui-giay-kraft/customization");
   });
 
   it("says so when the design's variant no longer has a print configuration", async () => {
@@ -315,7 +316,9 @@ describe("DesignStudio", () => {
 
     const logo = MOCK_DESIGN_IDS.logoAsset;
     await waitFor(() => expect(services.current?.assetStatus[logo]?.status).toBe("error"), OPENED);
-    const linkCalls = get.mock.calls.filter(([url]) => url.endsWith(`/assets/${logo}/url`));
+    const linkCalls = get.mock.calls.filter(([url]) =>
+      url.endsWith(`/assets/${logo}/download-url`),
+    );
     expect(linkCalls).toHaveLength(2);
     expect(fetchFile).toHaveBeenCalledTimes(2);
 

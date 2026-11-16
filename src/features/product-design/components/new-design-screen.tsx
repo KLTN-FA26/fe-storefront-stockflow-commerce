@@ -4,10 +4,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
 
 import { STORE_ROUTES } from "@/constants";
-import { hasErrorCode } from "@/lib/api/describe-error";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 
-import { describeDesignError } from "../errors";
+import { describeDesignError, isProjectRefusal } from "../errors";
 import { useCreateDesign } from "../mutations";
 import { useDraftCount, usePrintConfig } from "../queries";
 import { defaultDesignName, isPrintConfigUsable } from "../selectors";
@@ -89,11 +88,7 @@ export function NewDesignScreen({ product, sku }: { product: string; sku: string
         ? () => start(true)
         : () => void (configFailed ? config.refetch() : count.refetch());
       // The project refused the design (full, closed): trying again cannot help, the page can.
-      const refused =
-        create.isError &&
-        projectId !== undefined &&
-        (hasErrorCode(create.error, "PROJECT_FULL") ||
-          hasErrorCode(create.error, "PROJECT_ARCHIVED"));
+      const refused = create.isError && projectId !== undefined && isProjectRefusal(create.error);
       return (
         <LauncherError
           title="Không bắt đầu được thiết kế"

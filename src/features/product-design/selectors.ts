@@ -2,6 +2,7 @@ import { formatDateTime } from "@/lib/format";
 
 import type { CustomizationTemplate } from "./engine/template/schema";
 import { isReturned } from "./lifecycle";
+import { describeRecordedFailure } from "./preflight-messages";
 import type { Design, DesignEvent, DesignEventType, DesignStatus, PrintConfig } from "./types";
 
 /**
@@ -82,6 +83,8 @@ const EVENT_LABELS: Record<DesignEventType, string> = {
   ARCHIVED: "Xoá bản nháp",
   ADDED_TO_PROJECT: "Thêm vào dự án",
   REMOVED_FROM_PROJECT: "Gỡ khỏi dự án",
+  QUOTE_REQUESTED: "Yêu cầu báo giá",
+  OTHER: "Cập nhật khác",
 };
 
 /**
@@ -92,12 +95,18 @@ const CUSTOMER_NOTES: ReadonlySet<DesignEventType> = new Set(["RETURNED", "PREFL
 
 export type EventView = { label: string; note: string | null; atLabel: string | null };
 
-/** One row of a design's history: its label, the note the customer may read, and its time. */
+/**
+ * One row of a design's history: its label, the note the customer may read, and its time. A return
+ * reason is the reviewer's own text; the note of a failed check is the BE's rule codes and element
+ * ids, so it is worded (`describeRecordedFailure`) and never shown as it is.
+ */
 export function eventView(event: DesignEvent): EventView {
   const note = event.note?.trim();
+  const readable =
+    note && event.type === "PREFLIGHT_FAILED" ? describeRecordedFailure(note) : (note ?? null);
   return {
     label: EVENT_LABELS[event.type],
-    note: note && CUSTOMER_NOTES.has(event.type) ? note : null,
+    note: readable && CUSTOMER_NOTES.has(event.type) ? readable : null,
     atLabel: readableDateTime(event.at),
   };
 }
