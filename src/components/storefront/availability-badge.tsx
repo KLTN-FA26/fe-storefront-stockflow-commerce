@@ -20,7 +20,8 @@ const classNames = {
 export function AvailabilityBadge({ status, quantity }: AvailabilityBadgeProps) {
   return (
     <Badge className={`rounded-full border-0 ${classNames[status]}`}>
-      {labels[status]}{typeof quantity === "number" ? ` · ${quantity}` : ""}
+      {labels[status]}
+      {typeof quantity === "number" ? ` · ${quantity}` : ""}
     </Badge>
   );
 }

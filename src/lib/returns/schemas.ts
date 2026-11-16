@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { pageResponseSchema } from "@/lib/api/page-response";
-import { beId } from "@/lib/validation/primitives";
+import { beId, currencySchema } from "@/lib/validation/primitives";
 import { tolerantEnum } from "@/lib/validation/tolerant-enum";
 
 /**
@@ -69,7 +69,7 @@ export const returnRowDtoSchema = z.object({
   settlementAmount: z.number().nullish(),
   refundedAmount: z.number().nullish(),
   offsetAmount: z.number().nullish(),
-  currency: z.string().nullish(),
+  currency: currencySchema.nullish().catch(null),
   closedAt: z.string().nullish(),
   version: z.number(),
 });
@@ -111,7 +111,7 @@ export const customerReturnDtoSchema = z.object({
   rejectionReason: z.string().nullish(),
   receivedAt: z.string().nullish(),
   closedAt: z.string().nullish(),
-  currency: z.string().nullish(),
+  currency: currencySchema.nullish().catch(null),
   refundedAmount: z.number().nullish(),
   offsetAmount: z.number().nullish(),
   lines: z.array(customerReturnLineDtoSchema),

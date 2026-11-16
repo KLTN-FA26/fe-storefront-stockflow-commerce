@@ -1,4 +1,4 @@
-import { Lock, MapPin, Package, UserRound, type LucideIcon } from "lucide-react";
+import { Lock, MapPin, Package, Undo2, UserRound, type LucideIcon } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
 
@@ -26,6 +26,12 @@ export const accountNavItems: readonly AccountNavItem[] = [
     label: "Đơn hàng",
     description: "Theo dõi & lịch sử mua",
     icon: Package,
+  },
+  {
+    href: STORE_ROUTES.account.returns.list,
+    label: "Trả hàng",
+    description: "Yêu cầu trả hàng & hoàn tiền",
+    icon: Undo2,
   },
   {
     href: STORE_ROUTES.account.addresses,

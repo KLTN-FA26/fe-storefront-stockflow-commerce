@@ -31,6 +31,12 @@ export const STORE_ROUTES = {
     orders: {
       list: "/account/orders",
       detail: (id: string) => `/account/orders/${id}`,
+      /** Mở yêu cầu trả hàng cho đơn đã giao (kltn-docs 17 §4.10). */
+      newReturn: (id: string) => `/account/orders/${id}/return`,
+    },
+    returns: {
+      list: "/account/returns",
+      detail: (id: string) => `/account/returns/${id}`,
     },
     addresses: "/account/addresses",
     security: "/account/security",
