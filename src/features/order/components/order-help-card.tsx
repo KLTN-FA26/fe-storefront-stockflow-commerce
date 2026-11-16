@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Hourglass, MessageCircle } from "lucide-react";
+import { Hourglass, MessageCircle, Undo2 } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
 import { Alert } from "@/components/shared";
@@ -18,6 +18,8 @@ interface OrderHelpCardProps {
   mayCancel: boolean;
   /** A cancellation request this browser knows is waiting for Sales to decide. */
   requestPending: boolean;
+  /** Where to open a return, when the order is delivered, in its window and the account may (17 §4.10). */
+  returnHref?: string | null | undefined;
 }
 
 type CancelMode = "cancel" | "request" | null;
@@ -33,7 +35,16 @@ function cancellationOf(order: Order, requestPending: boolean): CancelMode {
   return requestPending && isCancellationRequestable(order.status) ? "request" : null;
 }
 
-function helpText(order: Order, mode: CancelMode, possible: CancelMode, mayCancel: boolean) {
+function helpText(
+  order: Order,
+  mode: CancelMode,
+  possible: CancelMode,
+  mayCancel: boolean,
+  mayReturn: boolean,
+) {
+  if (mayReturn) {
+    return "Hàng nhận được bị lỗi, hỏng hoặc giao sai? Gửi yêu cầu trả hàng kèm ảnh trong 7 ngày kể từ ngày giao.";
+  }
   if (mode === "cancel") {
     return "Bạn có thể huỷ đơn khi đơn chưa chuyển cho kho hoặc sản xuất, hoặc chat với chúng tôi nếu cần đổi thông tin.";
   }
@@ -56,7 +67,13 @@ function helpText(order: Order, mode: CancelMode, possible: CancelMode, mayCance
  * allowedActions decide what it will do — cancel at once or record a request Sales decide (since the
  * 4B rescope always a request: the order runs under a signed contract) — and the button says which.
  */
-export function OrderHelpCard({ order, onCancel, mayCancel, requestPending }: OrderHelpCardProps) {
+export function OrderHelpCard({
+  order,
+  onCancel,
+  mayCancel,
+  requestPending,
+  returnHref,
+}: OrderHelpCardProps) {
   const possible = cancellationOf(order, requestPending);
   const mode = mayCancel ? possible : null;
 
@@ -73,7 +90,7 @@ export function OrderHelpCard({ order, onCancel, mayCancel, requestPending }: Or
           Cần hỗ trợ?
         </h2>
         <p className="text-ink-secondary mt-1 text-sm">
-          {helpText(order, mode, possible, mayCancel)}
+          {helpText(order, mode, possible, mayCancel, !!returnHref)}
         </p>
       </div>
       {requestPending && mode === "request" ? (
@@ -86,6 +103,14 @@ export function OrderHelpCard({ order, onCancel, mayCancel, requestPending }: Or
         </div>
       ) : null}
       <div className="flex flex-col gap-2">
+        {returnHref ? (
+          <Button asChild variant="outline" className="min-h-11 rounded-[var(--r-md)] px-5">
+            <Link href={returnHref}>
+              <Undo2 aria-hidden className="mr-2 size-4" />
+              Yêu cầu trả hàng
+            </Link>
+          </Button>
+        ) : null}
         <Button asChild className="min-h-11 rounded-[var(--r-md)] px-5">
           <Link href={STORE_ROUTES.chat.list}>
             <MessageCircle aria-hidden className="mr-2 size-4" />

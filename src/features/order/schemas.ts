@@ -179,6 +179,9 @@ export const orderLineDtoSchema = z.object({
   unitPrice: z.number().nonnegative(),
   lineTotal: z.number().nonnegative(),
   designSnapshotId: beId().nullish(),
+  /** 4B-2 (14 BR-08): cartons ordered; `quantity` is cartons × unitsPerCarton pieces. */
+  cartons: z.number().int().nullish(),
+  unitsPerCarton: z.number().int().nullish(),
   // Only a line printed to the customer's design carries production progress.
   production: z
     .object({ state: productionStateSchema, goodQuantity: z.number().int().nonnegative() })
