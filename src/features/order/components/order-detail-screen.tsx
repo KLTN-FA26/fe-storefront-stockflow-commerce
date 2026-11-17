@@ -8,18 +8,20 @@ import { ChevronLeft } from "lucide-react";
 import { STORE_ROUTES } from "@/constants";
 import { useHasPermission } from "@/lib/auth/my-permissions";
 import { formatDateTime } from "@/lib/format/date";
+import { canOpenReturn } from "@/lib/returns";
 
 import { describeCancelError, isNotFound } from "../errors";
 import { useCancelMyOrder } from "../mutations";
 import { useKnownCancellationRequest, useOrder } from "../queries";
 import { isValidOrderId } from "../schemas";
+import { RETURN_CREATE_PERMISSION } from "../return-form";
 import { CancellationDialog } from "./cancellation-dialog";
 import { OrderCancellationCard } from "./order-cancellation-card";
 import { CopyOrderNumber } from "./copy-order-number";
 import { OrderDeliveryCard, OrderLinesCard, OrderTotalCard } from "./order-detail-sections";
 import { OrderHelpCard } from "./order-help-card";
 import { OrderReorder } from "./order-reorder";
-import { OrderCompletionHint } from "./order-completion-hint";
+import { OrderCompletionHint, deliveredAtOf } from "./order-completion-hint";
 import { OrderInvoicesCard } from "./order-invoices-card";
 import { OrderPaymentCard } from "./order-payment-card";
 import { OrderRefundCard } from "./order-refund-card";
@@ -55,6 +57,7 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
   const cancel = useCancelMyOrder();
   const known = useKnownCancellationRequest(orderId);
   const mayCancel = useHasPermission("sales-orders:UPDATE");
+  const mayReturn = useHasPermission(RETURN_CREATE_PERMISSION);
 
   // Not a UUID: the BE would answer 400 UNSUPPORTED_PARAMETER, and to the customer it is simply an
   // order that does not exist. The query is disabled for it, so nothing is sent.
@@ -134,6 +137,11 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
               setDialog(mode);
             }}
             mayCancel={mayCancel}
+            returnHref={
+              mayReturn && canOpenReturn(order.status, deliveredAtOf(order))
+                ? STORE_ROUTES.account.orders.newReturn(order.orderId)
+                : null
+            }
             requestPending={
               order.cancellationRequest
                 ? order.cancellationRequest.status === "PENDING"
