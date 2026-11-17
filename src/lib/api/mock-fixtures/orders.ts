@@ -658,6 +658,9 @@ export function createMockOrderBook(
       );
     },
 
+    /** The customer's own order as stored (returns mock reads its lines and delivery). */
+    ownOrder: (orderId: string): Readonly<MockOrder> | undefined => own(orderId),
+
     /** Test hook: the order's latest cancellation request, as Sales see it (with its id). */
     pendingCancellationOf: (orderId: string) => own(orderId)?.pendingCancellation,
 
@@ -849,6 +852,11 @@ export function seedMockOrders(customerId: string, count = 24): MockOrder[] {
   );
   return [...mine, seedOrder(count, "CUS-OTHER", "CONFIRMED")];
 }
+
+/** Id of the n-th seeded order (its status is the n-th of the status cycle). */
+export const seededMockOrderId = (n: number) => uuid("0b7d3c1e", n);
+/** Index of the first seeded order with this status. */
+export const seededMockOrderIndex = (status: MockOrderStatus) => STATUS_CYCLE.indexOf(status);
 
 /** Id of the seeded order that belongs to another customer (404 demo). */
 export const foreignMockOrderId = (count = 24) => uuid("0b7d3c1e", count);

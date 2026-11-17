@@ -2,7 +2,8 @@
  * Mock routes for the BE orders a customer reaches: /orders/me,
  * /orders/me/{orderId} and /orders/{orderId}/cancellation, and the customer's
  * contract installments (GET /installments/me, /installments/me/orders/{orderId},
- * /installments/me/{installmentId}/transfer-instructions). Responses use the real ApiResponse
+ * /installments/me/{installmentId}/transfer-instructions), and the customer's returns
+ * (/orders/{orderId}/returns, /returns/me…, mock-fixtures/returns). Responses use the real ApiResponse
  * envelope; the mock adapter rejects error statuses so the client interceptor turns them into
  * ApiError. `GET /orders` (the back-office list) is not mocked here.
  */
@@ -14,10 +15,17 @@ import { MOCK_CUSTOMER_ID } from "./mock-customer-addresses";
 import {
   createMockOrderBook,
   seedMockOrders,
+  seededMockOrderId,
+  seededMockOrderIndex,
   type MockOrderBook,
   type MockOrderDeps,
   type MockResult,
 } from "./mock-fixtures/orders";
+import {
+  createMockReturnBook,
+  seedMockReturns,
+  type MockReturnBook,
+} from "./mock-fixtures/returns";
 
 const respond = (result: MockResult) => ({ status: result.status, data: result.data, headers: {} });
 
@@ -76,5 +84,41 @@ export function registerOrderMockRoutes(
   );
   registerMockRoute("POST", "/orders/:orderId/cancellation", (config) =>
     respond(book.cancel(pathParams(config).orderId ?? "", bodyOf(config))),
+  );
+  registerReturnMockRoutes(defaultReturnBook(book));
+}
+
+function defaultReturnBook(book: MockOrderBook): MockReturnBook {
+  const orderOf = (orderId: string) => book.ownOrder(orderId);
+  return createMockReturnBook(
+    book.customerId,
+    orderOf,
+    seedMockReturns(book.customerId, orderOf, {
+      awaiting: seededMockOrderId(seededMockOrderIndex("DELIVERED")),
+      resolved: seededMockOrderId(seededMockOrderIndex("RETURNED")),
+    }),
+  );
+}
+
+export function registerReturnMockRoutes(returns: MockReturnBook): void {
+  registerMockRoute("POST", "/orders/:orderId/returns", (config) =>
+    respond(returns.open(pathParams(config).orderId ?? "", bodyOf(config))),
+  );
+  registerMockRoute("GET", "/returns/me", (config) => respond(returns.mine(queryParams(config))));
+  registerMockRoute("GET", "/returns/me/:returnId", (config) =>
+    respond(returns.one(pathParams(config).returnId ?? "")),
+  );
+  registerMockRoute("POST", "/returns/:returnId/evidence", (config) => {
+    const file = config.data instanceof FormData ? config.data.get("file") : null;
+    const name = file instanceof File ? file.name : undefined;
+    return respond(returns.addEvidence(pathParams(config).returnId ?? "", name));
+  });
+  registerMockRoute("GET", "/returns/:returnId/evidence/:evidenceId/download-url", (config) =>
+    respond(
+      returns.evidenceLink(pathParams(config).returnId ?? "", pathParams(config).evidenceId ?? ""),
+    ),
+  );
+  registerMockRoute("POST", "/returns/:returnId/cancellation", (config) =>
+    respond(returns.cancel(pathParams(config).returnId ?? "")),
   );
 }
