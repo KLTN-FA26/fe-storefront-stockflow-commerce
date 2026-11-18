@@ -13,13 +13,17 @@ export const SLUG_HEIGHT_MM = 14;
 /** The name of the non-printing layer that carries the safe-area, seam and crease lines. */
 export const GUIDES_LAYER_NAME = "Hướng dẫn kỹ thuật (không in)";
 
-/** The guide kinds drawn on that layer (bleed and trim are the page's boxes and the cut line). */
-export type PrintGuideKind = Exclude<Guide["kind"], "bleed" | "trim">;
+/**
+ * The guide kinds drawn on that layer (bleed and trim are the page's boxes and the cut line); `edge`
+ * is the trim of a piece that is not die-cut, where it only marks the edge of the print.
+ */
+export type PrintGuideKind = Exclude<Guide["kind"], "bleed" | "trim"> | "edge";
 
 const GUIDE_LEGEND: Record<PrintGuideKind, string> = {
   safe: "nét đứt = vùng an toàn",
   seam: "nét liền = mép dán",
   crease: "gạch chấm = nếp gấp",
+  edge: "chấm = mép vùng in",
 };
 
 /** What identifies the print job, as the slug writes it (the date already in Vietnam time). */
@@ -44,6 +48,10 @@ export type SlugArea = {
   bleedMm: number;
   /** The glue flap's width, where the area has one (a cup body). */
   seamMm?: number;
+  /** Printed on the formed product (a clear PET cup), so never die-cut. */
+  formed?: boolean;
+  /** Whether the page carries a white-ink underlay, where its stock needs one. */
+  underlay?: boolean;
   guideKinds: PrintGuideKind[];
 };
 
@@ -68,9 +76,13 @@ export function printSlugLines(info: PrintJobInfo, area: SlugArea): string[] {
     [
       `Vùng in ${area.name} (${area.code})`,
       `Trang ${area.page}/${area.pages}`,
-      `Thành phẩm ${mm(width)} × ${mm(height)} mm`,
+      `${area.formed ? "Vùng in trải phẳng" : "Thành phẩm"} ${mm(width)} × ${mm(height)} mm`,
       `Lề tràn ${mm(area.bleedMm)} mm`,
       ...(area.seamMm ? [`Mép dán ${mm(area.seamMm)} mm`] : []),
+      ...(area.formed ? ["In lên ly đã thành hình, không bế"] : []),
+      ...(area.underlay === undefined
+        ? []
+        : [area.underlay ? "Lót trắng: lớp White" : "Chưa có lớp lót trắng"]),
       `PDF/X-4, ${info.profileName}`,
     ].join(" · "),
     ...(legend.length > 0

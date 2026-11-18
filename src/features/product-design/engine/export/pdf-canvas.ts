@@ -24,7 +24,9 @@ export type GlyphOutliner = (
 /**
  * What a recorded page draws: PDF content operators in page space (pt, y up) and the resources they
  * name: `/VCs` (the sRGB colour space), `/VGs<i>` (the alpha of `alphas[i]`), `/VIm<i>` (`images[i]`)
- * and `/VL<i>` (the optional-content layer `layers[i]`).
+ * and `/VL<i>` (the optional-content layer `layers[i]`). An underlay recording names `/VWh` (the
+ * `White` separation), `/VWg<i>` and `/VMk<i>` instead: `images[i]` is then a picture whose alpha is
+ * the shape of white ink under it.
  */
 export type VectorArt = {
   content: string;
@@ -65,12 +67,25 @@ const sizeOf = (source: CanvasImageSource): [number, number] => {
 };
 
 /**
+ * `art` draws the artwork in its colours; `underlay` draws the same shapes in 100 % `White` (a spot
+ * ink printed under the colours on clear or dark stock), each at its element's opacity, and every
+ * image as the shape of its alpha.
+ */
+export type RecordMode = "art" | "underlay";
+
+const NAMES: Record<RecordMode, { space: string; state: string; image: string }> = {
+  art: { space: "VCs", state: "VGs", image: "VIm" },
+  underlay: { space: "VWh", state: "VWg", image: "VMk" },
+};
+
+/**
  * A recording 2D context that writes PDF instead of pixels, so the studio's own executor draws the
  * print file: paths, fills, clips and strokes stay vectors, text becomes glyph outlines, images and
  * the executor's raster layers become image XObjects. `base` maps the canvas's units to the page
  * (pt, y up). Anything a PDF cannot say the same way is noted in `unsupported`, never guessed.
  */
-export function createPdfCanvas(base: Mat2D, outline: GlyphOutliner) {
+export function createPdfCanvas(base: Mat2D, outline: GlyphOutliner, mode: RecordMode = "art") {
+  const names = NAMES[mode];
   const out: string[] = [];
   const images: CanvasImageSource[] = [];
   const alphas: number[] = [];
@@ -116,7 +131,7 @@ export function createPdfCanvas(base: Mat2D, outline: GlyphOutliner) {
   const gs = (alpha: number) => {
     let i = alphas.indexOf(alpha);
     if (i < 0) i = alphas.push(alpha) - 1;
-    return `/VGs${i} gs`;
+    return `/${names.state}${i} gs`;
   };
   const colour = (style: unknown): Rgba | null => {
     const rgba = typeof style === "string" ? parseCssColor(style) : null;
@@ -136,19 +151,11 @@ export function createPdfCanvas(base: Mat2D, outline: GlyphOutliner) {
     if (!paintable() || rgba === null || segments.length === 0) return;
     const [r, g, b, a] = rgba;
     const set = op === "S" ? "SC" : "sc";
-    const space = op === "S" ? "/VCs CS" : "/VCs cs";
+    const space = op === "S" ? `/${names.space} CS` : `/${names.space} cs`;
+    const tint = mode === "underlay" ? "1" : `${n(r)} ${n(g)} ${n(b)}`;
     const line =
       op === "S" ? [`${n(s.lineWidth * scaleOf())} w`, `${JOINS[s.lineJoin] ?? 0} j`] : [];
-    out.push(
-      "q",
-      gs(s.alpha * a),
-      space,
-      `${n(r)} ${n(g)} ${n(b)} ${set}`,
-      ...line,
-      ...segments,
-      op,
-      "Q",
-    );
+    out.push("q", gs(s.alpha * a), space, `${tint} ${set}`, ...line, ...segments, op, "Q");
   };
 
   const textPath = (text: string, x: number, y: number) => {
@@ -337,7 +344,14 @@ export function createPdfCanvas(base: Mat2D, outline: GlyphOutliner) {
       const clip = cropped
         ? [...corners.map(([x, y], k) => `${n(x)} ${n(y)} ${k === 0 ? "m" : "l"}`), "h W n"]
         : [];
-      out.push("q", gs(s.alpha), ...clip, `${full.map(n).join(" ")} cm`, `/VIm${i} Do`, "Q");
+      out.push(
+        "q",
+        gs(s.alpha),
+        ...clip,
+        `${full.map(n).join(" ")} cm`,
+        `/${names.image}${i} Do`,
+        "Q",
+      );
     },
     fillText(text: string, x: number, y: number) {
       paint(textPath(text, x, y), s.fill, "f");

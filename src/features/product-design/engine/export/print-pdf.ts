@@ -14,7 +14,7 @@ import {
   type PrintProfiles,
 } from "./pdfx";
 import { GUIDES_LAYER_NAME, SLUG_HEIGHT_MM, type PrintGuideKind } from "./slug";
-import { addVectorArt, resourceDict, type VectorPage } from "./vector-page";
+import { addVectorArt, resourceDict, type VectorPage, type WhiteInk } from "./vector-page";
 
 /** A horizontal slice of a page's raster, as a PNG of its own `heightPx` rows (`printBands`). */
 export type PrintBand = { png: Uint8Array; heightPx: number };
@@ -38,6 +38,11 @@ export type PrintPage = {
   vector?: VectorPage;
   /** The trim outline in the same flat mm space as the raster (`PrintSurface.outline("trim")`). */
   cutPath: PathCmd[];
+  /**
+   * Whether the press die-cuts the piece along `cutPath` (the `CutContour` line). `false` for a piece
+   * printed after it is formed (a clear PET cup): the trim is then a guide, never a cut line.
+   */
+  cut?: boolean;
   /** Safe area, seam and creases (`PrintSurface.guides()` without bleed and trim). */
   guides: PrintGuide[];
   /** The slug, a PNG `widthMm × SLUG_HEIGHT_MM` drawn under the bleed box. */
@@ -74,7 +79,11 @@ const GUIDE_DASH: Record<PrintGuideKind, number[]> = {
   safe: [4, 2],
   seam: [],
   crease: [6, 2, 1, 2],
+  edge: [1, 1.5],
 };
+/** The spot ink printed under the colours on clear stock, and the name of its (printing) layer. */
+const WHITE_INK_NAME = "White";
+export const WHITE_LAYER_NAME = "Lót trắng (mực White)";
 /** ISO A4 portrait, in mm: the default sheet page. */
 export const A4_WIDTH_MM = 210;
 export const A4_HEIGHT_MM = 297;
@@ -115,6 +124,7 @@ async function addPrintPage(
   lib: PdfLib,
   srgb: PDFRef,
   { bands, vector, widthMm, heightMm, cutPath, slug }: PrintPage,
+  white: WhiteInk | undefined,
 ): Promise<{ page: PDFPage; layers: PDFRef[] }> {
   const [width, height, slugHeight, margin] = [
     widthMm,
@@ -140,7 +150,7 @@ async function addPrintPage(
   };
   let layers: PDFRef[] = [];
   if (vector) {
-    layers = await addVectorArt(pdf, lib, page, srgb, vector);
+    layers = await addVectorArt(pdf, lib, page, srgb, vector, white);
   } else {
     const rows = bands.reduce((sum, band) => sum + band.heightPx, 0);
     let top = 0;
@@ -158,7 +168,8 @@ async function addPrintPage(
 /**
  * The print file (PDF/X-4, ISO 15930-7): one page per print area, each with its raster over the
  * bleed box (sRGB, converted by the RIP to the OutputIntent), the slug under it, the guides on a
- * layer that is off (so never printed) and the `CutContour` line on top.
+ * layer that is off (so never printed) and the `CutContour` line on top (not on a page that is not
+ * die-cut). Pages with an underlay get the `White` ink under their artwork, on a layer that is on.
  */
 export async function buildPrintPdf(job: PrintJob): Promise<Uint8Array> {
   const { pages, profiles } = job;
@@ -181,6 +192,23 @@ export async function buildPrintPdf(job: PrintJob): Promise<Uint8Array> {
   const cutGraphicsState = context.register(
     context.obj({ Type: "ExtGState", OP: true, op: true, OPM: 1 }),
   );
+  // White ink under the artwork of clear stock: a `White` separation whose alternate is no ink at
+  // all (a press without a white plate prints nothing for it), on a layer that is on.
+  const white: WhiteInk | undefined = pages.some((page) => page.vector?.underlay)
+    ? {
+        space: context.register(
+          context.obj([
+            "Separation",
+            WHITE_INK_NAME,
+            "DeviceCMYK",
+            { FunctionType: 2, Domain: [0, 1], C0: [0, 0, 0, 0], C1: [0, 0, 0, 0], N: 1 },
+          ]),
+        ),
+        layer: context.register(
+          context.obj({ Type: "OCG", Name: PDFHexString.fromText(WHITE_LAYER_NAME) }),
+        ),
+      }
+    : undefined;
   // The guides' layer is listed but off in the default configuration: viewers can show it, and a
   // PDF/X RIP (which prints the default configuration) leaves it out. The artwork's layers are on.
   const hasGuides = pages.some((page) => page.guides.length > 0);
@@ -203,9 +231,9 @@ export async function buildPrintPdf(job: PrintJob): Promise<Uint8Array> {
     pathToPdf(path, heightMm).map(({ op: name, args }) => op(pathOperators[name], args.map(num)));
 
   for (const printPage of pages) {
-    const { bands, vector, heightMm, cutPath, guides } = printPage;
+    const { bands, vector, heightMm, cutPath, guides, cut = true } = printPage;
     if (bands.length === 0 && !vector) throw new Error("A print page needs its raster");
-    const { page, layers } = await addPrintPage(pdf, lib, srgb, printPage);
+    const { page, layers } = await addPrintPage(pdf, lib, srgb, printPage, white);
     artLayers.push(...layers);
 
     // `/Resources /ColorSpace`, `/ExtGState` and `/Properties` are not created on demand by pdf-lib.
@@ -230,6 +258,7 @@ export async function buildPrintPdf(job: PrintJob): Promise<Uint8Array> {
       );
     }
 
+    if (!cut) continue;
     page.pushOperators(
       op(names.PushGraphicsState),
       op(names.SetGraphicsStateParams, [PDFName.of(CUT_GRAPHICS_STATE)]),
@@ -241,7 +270,11 @@ export async function buildPrintPdf(job: PrintJob): Promise<Uint8Array> {
       op(names.PopGraphicsState),
     );
   }
-  const layers = guidesLayer ? [...artLayers, guidesLayer] : artLayers;
+  const layers = [
+    ...(white ? [white.layer] : []),
+    ...artLayers,
+    ...(guidesLayer ? [guidesLayer] : []),
+  ];
   if (layers.length > 0) {
     pdf.catalog.set(
       PDFName.of("OCProperties"),
@@ -258,9 +291,19 @@ export async function buildPrintPdf(job: PrintJob): Promise<Uint8Array> {
   return asPdf16(await pdf.save(SAVE_OPTIONS));
 }
 
-/** The guides of a surface that go on the print file's guide layer (not bleed or trim). */
-export const printGuides = (guides: Guide[]): PrintGuide[] =>
-  guides.flatMap(({ kind, path }) => (kind === "bleed" || kind === "trim" ? [] : [{ kind, path }]));
+/**
+ * The guides of a surface that go on the print file's guide layer: not the bleed, and not the trim
+ * where it is the cut line; on a piece that is not die-cut (`cut: false`) the trim is an `edge` guide.
+ */
+export const printGuides = (
+  guides: Guide[],
+  { cut = true }: { cut?: boolean } = {},
+): PrintGuide[] =>
+  guides.flatMap(({ kind, path }): PrintGuide[] => {
+    if (kind === "bleed") return [];
+    if (kind === "trim") return cut ? [] : [{ kind: "edge", path }];
+    return [{ kind, path }];
+  });
 
 /**
  * A sheet of `pngs`, one page each, `widthMm × heightMm` (A4 portrait by default), every picture over

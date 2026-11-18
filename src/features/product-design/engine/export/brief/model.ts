@@ -54,6 +54,11 @@ export type DesignBrief = {
   sku: string;
   material: string;
   materialNote: string;
+  /**
+   * Printed on the formed product (a clear PET cup): not die-cut, and the print file carries a
+   * white-ink underlay under the colours.
+   */
+  formed: boolean;
   dimensions: string;
   version: number;
   exportedAt: string;
@@ -228,6 +233,7 @@ export function buildDesignBrief(input: {
     sku: template.sku,
     material: material?.label ?? "Theo mẫu",
     materialNote: material?.note ?? "",
+    formed: cup?.material === "pet-clear",
     dimensions: dimensionsOf(template),
     version: input.version,
     exportedAt: input.exportedAt,

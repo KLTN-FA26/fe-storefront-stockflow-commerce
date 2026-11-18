@@ -55,6 +55,7 @@ export type ExportRenderer = {
     code: PrintAreaCode,
     document: DesignDocument,
     pxPerMm: number,
+    options?: { underlay?: boolean },
   ): Promise<VectorPage | null>;
   /** The print file's slug under a page `widthMm` wide: `lines` on a transparent strip. */
   printSlug(lines: readonly string[], widthMm: number, pxPerMm: number): Promise<Uint8Array>;
@@ -190,10 +191,10 @@ export function createCanvasExportRenderer(deps: RendererDeps): ExportRenderer {
       }
     },
 
-    async printVector(code, doc, pxPerMm) {
+    async printVector(code, doc, pxPerMm, options) {
       const { surface, content, ops, env } = await prepare(code, doc, pxPerMm);
       try {
-        return await printVectorArt(ops, surface, content, env, deps.fonts);
+        return await printVectorArt(ops, surface, content, env, deps.fonts, options);
       } finally {
         letGo();
       }

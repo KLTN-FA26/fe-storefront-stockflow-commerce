@@ -81,6 +81,27 @@ describe("buildSubmissionBundle", () => {
     expect(steps).toEqual(["preview", "print", "spec"]);
   });
 
+  it("prints a clear PET cup with white ink under its art and no cut line", async () => {
+    const renderer = fakeRenderer();
+    const petCup = {
+      ...cup12oz,
+      model: { ...cup12oz.model, material: "pet-clear" },
+    } as typeof cup12oz;
+
+    const bundle = await buildSubmissionBundle(input(renderer, petCup));
+
+    expect(renderer.printVector).toHaveBeenCalledWith(
+      "BODY",
+      expect.anything(),
+      expect.any(Number),
+      { underlay: true },
+    );
+    const raw = new TextDecoder("latin1").decode(bundle.PRINT_READY.bytes);
+    expect(raw).not.toContain("/CutContour CS");
+    const [slug] = renderer.printSlug.mock.lastCall!;
+    expect(slug[1]).toContain("In lên ly đã thành hình, không bế · Chưa có lớp lót trắng");
+  });
+
   it("lets go of the print images even when a surface fails", async () => {
     const renderer = fakeRenderer();
     renderer.printSurface.mockRejectedValue(new Error("canvas"));

@@ -169,6 +169,7 @@ export {
   buildPrintPdf,
   buildSheetPdf,
   PAGE_MARGIN_MM,
+  WHITE_LAYER_NAME,
   printGuides,
   type PrintBand,
   type PrintGuide,
@@ -184,7 +185,7 @@ export {
   type TextOutline,
   type VectorArt,
 } from "./export/pdf-canvas";
-export type { VectorPage } from "./export/vector-page";
+export type { AlphaMask, VectorPage } from "./export/vector-page";
 export { elementLayerName, printLayerNames } from "./export/print-layers";
 export {
   drawSlug,

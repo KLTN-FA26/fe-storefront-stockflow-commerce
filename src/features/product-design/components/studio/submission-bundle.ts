@@ -83,6 +83,9 @@ export async function buildSubmissionBundle(input: {
   };
   const areaNames = new Map(template.printAreas.map((area) => [area.code, area.name]));
   const seamMm = template.model.kind === "parametric-cup" ? template.model.seamMm : undefined;
+  // A clear PET cup is printed after it is formed: no die-cut, and white ink under the colours.
+  const formed =
+    template.model.kind === "parametric-cup" && template.model.material === "pet-clear";
   const pages: PrintPage[] = [];
   try {
     for (const [i, code] of surfaces.order.entries()) {
@@ -90,10 +93,10 @@ export async function buildSubmissionBundle(input: {
       await breathe();
       const surface = surfaces.byCode[code]!;
       // Vectors, each element on its own layer, where the page allows; else the raster.
-      const vector = await renderer.printVector(code, document, pxPerMm);
+      const vector = await renderer.printVector(code, document, pxPerMm, { underlay: formed });
       const bands = vector ? [] : await renderer.printSurface(code, document, pxPerMm);
       const { width: widthMm, height: heightMm } = surface.flatBounds;
-      const guides = printGuides(surface.guides());
+      const guides = printGuides(surface.guides(), { cut: !formed });
       const cutPath = surface.outline("trim");
       const slugLines = printSlugLines(info, {
         code,
@@ -106,6 +109,7 @@ export async function buildSubmissionBundle(input: {
           ? { seamMm }
           : {}),
         guideKinds: guides.map((guide) => guide.kind),
+        ...(formed ? { formed, underlay: Boolean(vector?.underlay) } : {}),
       });
       const slug = await renderer.printSlug(slugLines, widthMm, pxPerMm);
       pages.push({
@@ -115,6 +119,7 @@ export async function buildSubmissionBundle(input: {
         bands,
         ...(vector ? { vector } : {}),
         cutPath,
+        cut: !formed,
         guides,
         slug,
       });
