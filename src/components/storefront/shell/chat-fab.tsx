@@ -6,9 +6,14 @@ import { MessageCircle } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
 
+import { ChatUnreadBadge } from "@/features/chat/components/chat-entry";
+
 import { Button } from "@/components/ui/button";
 
-/** Floating shortcut to sales chat; hidden on chat pages, where it would cover the composer. */
+/**
+ * Floating shortcut to sales chat, with the unread badge; hidden on chat pages, where it would
+ * cover the composer.
+ */
 export function ChatFab() {
   const pathname = usePathname();
   if (pathname?.startsWith(STORE_ROUTES.chat.list)) return null;
@@ -20,6 +25,7 @@ export function ChatFab() {
           <MessageCircle className="size-5" />
         </Link>
       </Button>
+      <ChatUnreadBadge />
     </div>
   );
 }

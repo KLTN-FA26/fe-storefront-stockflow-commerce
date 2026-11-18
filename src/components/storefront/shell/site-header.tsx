@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { MessageCircle } from "lucide-react";
 
-import { BRAND, STORE_ROUTES } from "@/constants";
+import { BRAND } from "@/constants";
 import { cn } from "@/lib/cn";
 
 import { HeaderAccountLink } from "@/features/auth/components/header-account-link";
+import { ChatHeaderLink } from "@/features/chat/components/chat-entry";
 import { NotificationBell } from "@/features/notification";
 import { ThemeToggle } from "@/components/storefront/theme-toggle";
 
@@ -43,10 +43,7 @@ export function SiteHeader() {
           </Link>
           <HeaderSearch className="mx-auto hidden max-w-xl md:flex" />
           <div className="ml-auto flex items-center gap-1 md:ml-0">
-            <Link href={STORE_ROUTES.chat.list} className={cn(actionLink, "hidden sm:inline-flex")}>
-              <MessageCircle className="size-5" aria-hidden="true" />
-              <span className="sr-only lg:not-sr-only">Tư vấn</span>
-            </Link>
+            <ChatHeaderLink className={cn(actionLink, "hidden sm:inline-flex")} />
             <HeaderAccountLink className={cn(actionLink, "hidden sm:inline-flex")} />
             <NotificationBell />
             <ThemeToggle />
