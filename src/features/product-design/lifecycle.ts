@@ -21,17 +21,19 @@ export const DESIGN_TRANSITIONS: Record<DesignStatus, readonly DesignStatus[]> =
 /** No way out of these (spec §3.2). */
 export const TERMINAL_STATUSES: ReadonlySet<DesignStatus> = new Set(["APPROVED", "ARCHIVED"]);
 
-export type DesignAction = "edit" | "rename" | "save" | "submit" | "delete" | "createRevision";
+export type DesignAction =
+  "edit" | "rename" | "save" | "submit" | "delete" | "createRevision" | "requestQuote";
 
 /**
  * What the customer may do in each status (spec §3.1). A DRAFT is theirs to change; PENDING_REVIEW
- * is locked while it is reviewed (docs 12 BR-07); an APPROVED design only seeds a revision (BR-12).
+ * is locked while it is reviewed (docs 12 BR-07); an APPROVED design only seeds a revision (BR-12)
+ * and is the one a quote is asked on by itself (§4.8.23; a draft asks with its submission, §4.8.24).
  * `submit` is further blocked while preflight fails (BR-05): the studio knows that, not this table.
  */
 const ACTIONS: Record<DesignStatus, readonly DesignAction[]> = {
   DRAFT: ["edit", "rename", "save", "submit", "delete"],
   PENDING_REVIEW: [],
-  APPROVED: ["createRevision"],
+  APPROVED: ["createRevision", "requestQuote"],
   ARCHIVED: [],
 };
 

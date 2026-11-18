@@ -52,7 +52,7 @@ describe("allowedActions (spec §3.1)", () => {
   it.each([
     ["DRAFT", ["edit", "rename", "save", "submit", "delete"]],
     ["PENDING_REVIEW", []],
-    ["APPROVED", ["createRevision"]],
+    ["APPROVED", ["createRevision", "requestQuote"]],
     ["ARCHIVED", []],
   ] as const satisfies ReadonlyArray<readonly [DesignStatus, readonly DesignAction[]]>)(
     "%s allows %j",

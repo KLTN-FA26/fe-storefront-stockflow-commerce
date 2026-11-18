@@ -44,6 +44,8 @@ export const designKeys = {
   document: (id: string) => [...designKeys.detail(id), "document"] as const,
   assets: (id: string) => [...designKeys.detail(id), "assets"] as const,
   files: (id: string) => [...designKeys.detail(id), "files"] as const,
+  /** Its quote requests (A-3), newest first: an ask or a submission with one re-reads them. */
+  quoteRequests: (id: string) => [...designKeys.detail(id), "quote-requests"] as const,
   /** The latest submission's files, or the approved snapshot's: two reads, two entries. */
   fileList: (id: string, approved: boolean) =>
     [...designKeys.files(id), approved ? "approved" : "latest"] as const,

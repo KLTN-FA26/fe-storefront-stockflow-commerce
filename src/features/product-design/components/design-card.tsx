@@ -11,7 +11,9 @@ import { isRemoteImage } from "@/lib/remote-image";
 
 import { allowedActions, isReturned } from "../lifecycle";
 import { designCardView } from "../selectors";
+import { mayHaveQuoteRequest } from "../quote-request-rules";
 import type { Design } from "../types";
+import { DesignQuoteSummary, RequestQuoteButton } from "./design-quote-request";
 import { DesignStatusBadge } from "./design-status-badge";
 
 /** The preview image of a design, or a placeholder when it has none yet. */
@@ -60,7 +62,10 @@ type DesignCardProps = {
   notes?: ReactNode;
 };
 
-/** One design: preview, status, what it is for, when it changed, and what its status allows. */
+/**
+ * One design: preview, status, what it is for, when it changed, its quote request (WF-02 D1), and
+ * what its status allows.
+ */
 export function DesignCard({
   design,
   onDelete,
@@ -100,6 +105,7 @@ export function DesignCard({
             <p className="text-ink-secondary line-clamp-3 text-sm">Lý do trả lại: {returnReason}</p>
           ) : null}
           {notes}
+          {mayHaveQuoteRequest(design) ? <DesignQuoteSummary design={design} /> : null}
         </div>
         <div className="mt-auto flex flex-wrap gap-2">
           {actions.includes("edit") ? (
@@ -126,6 +132,7 @@ export function DesignCard({
               {revising ? "Đang tạo..." : "Tạo bản sửa"}
             </Button>
           ) : null}
+          {actions.includes("requestQuote") ? <RequestQuoteButton design={design} /> : null}
           {onClone ? (
             <Button
               type="button"

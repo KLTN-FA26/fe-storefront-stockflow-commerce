@@ -18,6 +18,7 @@ import { OpenRoundBanner } from "./open-round-banner";
 import { ProjectDesigns } from "./project-designs";
 import { ProjectHeader } from "./project-header";
 import { ProjectLibrary } from "./project-library";
+import { ProjectQuoteSection } from "./project-quote-section";
 import { SubmitSetBar } from "./submit-set-bar";
 
 /** Until the designs are read nothing can be asked of the project: every gate is shut. */
@@ -73,6 +74,7 @@ export function ProjectBody({ project, designs, catalogue, loadFonts }: BodyProp
         </Alert>
       )}
       <OpenRoundBanner round={project.openRound} designs={items} />
+      <ProjectQuoteSection project={project} designs={items} />
       {items ? (
         <ProjectDesigns
           designs={items}

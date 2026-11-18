@@ -8,7 +8,7 @@
  *    even when a later upload has replaced it (`state.artifactUploads` keeps every keyed upload),
  *    and does not make it current again (`DesignArtifactService.upload`: `attachArtifact` runs only
  *    for a new artifact); with other bytes or another layout it is 422 `IDEMPOTENCY_KEY_REUSED`;
- *  - the request (`{ version }`) is refused with 409 `CONFLICT` for a stale version, 409
+ *  - the request (`{ version, quoteRequest? }`; the quote request in `design-store-quotes.ts`) is refused with 409 `CONFLICT` for a stale version, 409
  *    `DESIGN_NOT_DRAFT`, 422 `DESIGN_PREFLIGHT_FAILED` (on the record, issues in the BE's shape:
  *    `{rule, surfaceCode?, elementId?, message}`) when the saved layout fails its checks or a print
  *    or spec file is not a PDF, and 409 `DESIGN_FILES_OUTDATED` with `details.roles` when a file is
@@ -18,6 +18,7 @@
  */
 
 import { sha256Hex } from "@/features/product-design/engine/export/checksum";
+import { vnDateOf } from "@/features/product-design/quote-request-rules";
 
 import {
   BUNDLE_ROLES,
@@ -38,6 +39,7 @@ import {
   type MockResult,
 } from "./design-rows";
 import type { StoreContext } from "./design-store-context";
+import { askOnSubmit, readAsk, type Ask } from "./design-store-quotes";
 import { hashOf, mimeOf, nameOf, withBlobs, type DesignFiles } from "./design-store-files";
 import { recheck } from "./design-store-submission";
 
@@ -225,11 +227,19 @@ export function createArtifactOps(ctx: StoreContext, files: DesignFiles) {
     async requestReview(id: string, body: unknown): Promise<MockResult> {
       const row = ctx.find(id);
       if (!row) return notFound();
-      const { version } = asRecord(body);
+      const { version, quoteRequest } = asRecord(body);
       if (!isVersion(version)) return invalid("version", "version must be a whole number ≥ 0");
       // Version first, as the BE (`DesignWorkflow`): a stale tab meets CONFLICT.
       if (row.version !== version) return versionConflict();
       if (row.status !== "DRAFT") return invalidState();
+      // "Gửi duyệt và yêu cầu báo giá" (A-2): the request is checked before the preflight, so a
+      // request that could not be asked refuses the whole submission.
+      let quote: Ask | null = null;
+      if (quoteRequest !== undefined && quoteRequest !== null) {
+        const read = readAsk(quoteRequest, vnDateOf(ctx.now()), "quoteRequest.");
+        if ("refused" in read) return read.refused;
+        quote = read.ask;
+      }
 
       const refuse = async (found: Array<ReturnType<typeof beIssue>>) => {
         // On the record, the design and its version untouched (the studio must not record it again).
@@ -244,7 +254,10 @@ export function createArtifactOps(ctx: StoreContext, files: DesignFiles) {
       row.status = "PENDING_REVIEW";
       ctx.advance(row, "SUBMITTED_FOR_REVIEW", null);
       row.submittedAt = row.updatedAt;
+      // Opened only once the design is sent; one still open from a return is changed (B40).
+      const tellChat = quote ? askOnSubmit(ctx, row, quote) : null;
       await ctx.persist();
+      tellChat?.();
       return ok(await files.toDto(row));
     },
 

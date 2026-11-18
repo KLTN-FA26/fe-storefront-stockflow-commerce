@@ -31,6 +31,7 @@ import {
   type MockResult,
 } from "./design-rows";
 import { joinProject, joinRefusal } from "./design-store-projects";
+import { closeOpenQuote } from "./design-store-quotes";
 import type { StoreContext } from "./design-store-context";
 import type { DesignFiles } from "./design-store-files";
 
@@ -183,6 +184,7 @@ export function createDesignOps(ctx: StoreContext, files: DesignFiles) {
       if (row.status !== "DRAFT") return invalidState();
       row.status = "ARCHIVED";
       ctx.advance(row, "ARCHIVED", null);
+      closeOpenQuote(ctx, row.id); // B40: a deleted draft's open quote request closes with it
       // A member draft leaving changes its project's count: the project's list order follows.
       const home = row.projectId === null ? undefined : ctx.findProject(row.projectId);
       if (home) home.updatedAt = row.updatedAt;

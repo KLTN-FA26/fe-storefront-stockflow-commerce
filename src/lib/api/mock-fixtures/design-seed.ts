@@ -2,7 +2,7 @@
  * The designs the mock starts with (and starts again with after `__mock/reset`): one per status of
  * the docs' lifecycle, for the one mock customer the mock serves — a DRAFT kraft bag, a DRAFT cup
  * returned with a reason, a cup PENDING_REVIEW, an APPROVED cup with a logo (snapshot, SKU code)
- * and an ARCHIVED cup that is never listed. Ids are fixed so tests and links can name them.
+ * and an open quote request of 120 cartons, and an ARCHIVED cup that is never listed. Ids are fixed so tests and links can name them.
  *
  * The customer preview of a seeded submission is the static `/logo.png` (its real size and
  * SHA-256); the print-ready file and the technical spec are small placeholder blobs, not renderable
@@ -15,6 +15,8 @@ import type {
   TextElement,
 } from "@/features/product-design/engine/document/schema";
 import { documentChecksum, sha256Hex } from "@/features/product-design/engine/export/checksum";
+
+import { vnDateOf } from "@/features/product-design/quote-request-rules";
 
 import { MOCK_PRINT_CONFIGS } from "./design-print-configs";
 import {
@@ -29,6 +31,7 @@ import {
   type DocumentRow,
   type EventRow,
   type FileRow,
+  type QuoteRequestRow,
 } from "./design-rows";
 
 export const MOCK_DESIGN_IDS = {
@@ -41,6 +44,8 @@ export const MOCK_DESIGN_IDS = {
   approvedSnapshot: "7d51f000-0000-4000-8000-0000000000c1",
   /** The logo image on the approved cup's document. */
   logoAsset: "7d51f000-0000-4000-8000-0000000000e1",
+  /** The approved cup's open quote request (WF-02 D1): its card shows it. */
+  approvedQuoteRequest: "7d51f000-0000-4000-8000-0000000000a1",
 } as const;
 
 /** `public/logo.png`. */
@@ -308,6 +313,25 @@ export async function seedDesignState(
       { type: "APPROVED", at: ago(3 * DAY), version: 5, note: approvalNote(approval) },
     ],
   );
+  // Asked two days ago, for delivery in a month: OPEN, the sales staff have not answered yet.
+  const desiredDeliveryDate = vnDateOf(new Date(t + 30 * DAY));
+  const quoteRequest: QuoteRequestRow = {
+    id: MOCK_DESIGN_IDS.approvedQuoteRequest,
+    designId: MOCK_DESIGN_IDS.approved,
+    cartons: 120,
+    desiredDeliveryDate,
+    status: "OPEN",
+    requestedAt: ago(2 * DAY),
+    closedAt: null,
+    closedBy: null,
+  };
+  history.push({
+    designId: MOCK_DESIGN_IDS.approved,
+    type: "QUOTE_REQUESTED",
+    at: ago(2 * DAY),
+    version: 5,
+    note: `120 carton(s), delivery by ${desiredDeliveryDate}`,
+  });
   const logo: AssetRow = {
     designId: MOCK_DESIGN_IDS.approved,
     assetId: MOCK_DESIGN_IDS.logoAsset,
@@ -353,6 +377,8 @@ export async function seedDesignState(
       reviewRounds: [],
       submissionUploads: [],
       failNextApproval: [],
+      quoteRequests: [quoteRequest],
+      projectQuoteRequests: [],
       seq: { design: designs.length, project: 0 },
     },
     blobs,

@@ -14,7 +14,7 @@ import {
 import { invalidateDesign } from "../../mutations";
 import { sendDesign } from "../../submission-flow";
 import { designKeys, designPrintConfigQuery } from "../../queries";
-import type { Design, ReportedPreflightIssue } from "../../types";
+import type { Design, QuoteRequestInput, ReportedPreflightIssue } from "../../types";
 import { newRunNonce } from "../../upload-key";
 import { failsOf } from "../submit-set-state";
 import { drawDesign } from "../submit-set-steps";
@@ -79,6 +79,8 @@ export function useDesignSubmission(design: Design) {
   const busy = useRef(false);
   /** The attempt succeeded: `retry()` resumes a failed attempt only, so it must not submit again. */
   const isDone = useRef(false);
+  /** "Gửi duyệt và yêu cầu báo giá": the request the attempt sends with the design (A-2), or none. */
+  const quote = useRef<QuoteRequestInput | null>(null);
   const [state, setState] = useState<State>(IDLE);
 
   /**
@@ -124,6 +126,7 @@ export function useDesignSubmission(design: Design) {
         documentChecksum: w.checksum,
         files: w.bundle,
         runNonce: w.runNonce,
+        quoteRequest: quote.current ?? undefined,
         // The BE named files to draw again. The design's template is read afresh first, so a
         // template edited on the server is drawn with its new values: when it differs from the
         // studio's, a session of its own is loaded on it (as a set's designs are); otherwise the
@@ -168,8 +171,12 @@ export function useDesignSubmission(design: Design) {
       work.current = null;
       isDone.current = true;
       setState({ step: "done", fraction: 1, issues: null });
-      // Re-reading is best effort: the design is submitted whatever it answers.
+      // Re-reading is best effort: the design is submitted whatever it answers. The answer has no
+      // quote request in it: it is read back (A-3).
       invalidateDesign(client, design.id).catch(() => undefined);
+      if (quote.current) {
+        void client.invalidateQueries({ queryKey: designKeys.quoteRequests(design.id) });
+      }
     } catch (error) {
       fail(error);
     } finally {
@@ -231,15 +238,25 @@ export function useDesignSubmission(design: Design) {
 
   return {
     ...state,
-    run: () => {
+    /** A new attempt, with the quote request to send along (none: a plain submission). */
+    run: (quoteRequest?: QuoteRequestInput) => {
       // A new attempt (also of a design that came back as a draft): forget the last one.
       if (busy.current) return Promise.resolve();
       work.current = null;
       isDone.current = false;
+      quote.current = quoteRequest ?? null;
       setState(IDLE);
       return execute();
     },
     retry: execute,
+    /**
+     * The attempt again with another quote request (or none), after the BE refused the one sent
+     * (400 on `quoteRequest.*`): the files already drawn and uploaded are sent again as they are.
+     */
+    resume: (quoteRequest: QuoteRequestInput | null) => {
+      quote.current = quoteRequest;
+      return execute();
+    },
     check,
   };
 }

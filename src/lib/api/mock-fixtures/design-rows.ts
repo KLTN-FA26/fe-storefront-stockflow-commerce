@@ -32,7 +32,9 @@ export type DesignEventType =
   | "APPROVED"
   | "ARCHIVED"
   | "ADDED_TO_PROJECT"
-  | "REMOVED_FROM_PROJECT";
+  | "REMOVED_FROM_PROJECT"
+  /** A quote asked on the design, on its own or with its submission (BE `QUOTE_REQUESTED`). */
+  | "QUOTE_REQUESTED";
 
 /** docs 12 §5.4 (part E spec §2). */
 export type ProjectStatus = "ACTIVE" | "ARCHIVED";
@@ -51,7 +53,9 @@ export type ProjectEventType =
   | "PROJECT_ARCHIVED"
   | "BATCH_SUBMITTED"
   | "BATCH_PREFLIGHT_FAILED"
-  | "BATCH_CLOSED";
+  | "BATCH_CLOSED"
+  /** A quote asked over approved designs of the project (BE `PROJECT_QUOTE_REQUESTED`). */
+  | "PROJECT_QUOTE_REQUESTED";
 
 /** The files of a submission, in the order GET /designs/{id}/files lists them. */
 export const BUNDLE_ROLES = ["CUSTOMER_PREVIEW", "PRINT_READY", "TECHNICAL_SPEC"] as const;
@@ -243,6 +247,41 @@ export type SubmissionUploadRow = {
  */
 export type ArtifactUploadRow = { designId: string; key: string; file: FileRow };
 
+/** BE `QuoteRequestStatus`. */
+export type QuoteRequestStatus = "OPEN" | "CLOSED";
+
+/**
+ * A quote request on one design (BE `design_quote_request`, docs 12 §4.8): at most one OPEN per
+ * design; asked again while open, its cartons and date change. The design's name, status, SKU and
+ * return reason are read from the design when it is answered: the request shows the design as it
+ * is now (16 BR-11).
+ */
+export type QuoteRequestRow = {
+  id: string;
+  designId: string;
+  cartons: number;
+  /** `yyyy-MM-dd`; null when none was asked. */
+  desiredDeliveryDate: string | null;
+  status: QuoteRequestStatus;
+  requestedAt: string;
+  closedAt: string | null;
+  /** Null while OPEN, and when it closed because its draft was deleted. */
+  closedBy: string | null;
+};
+
+/** A quote request over approved designs of a project (docs 12 §4.11): one OPEN per project. */
+export type ProjectQuoteRequestRow = {
+  id: string;
+  projectId: string;
+  desiredDeliveryDate: string | null;
+  status: QuoteRequestStatus;
+  requestedAt: string;
+  closedAt: string | null;
+  closedBy: string | null;
+  /** In the order asked; the answer sorts them by design id, as the BE does. */
+  lines: Array<{ designId: string; cartons: number }>;
+};
+
 /** Everything the store keeps, saved whole as `DesignMockSnapshot.rows` after every write. */
 export type DesignMockState = {
   designs: DesignRow[];
@@ -259,6 +298,10 @@ export type DesignMockState = {
   submissionUploads: SubmissionUploadRow[];
   /** Designs whose next approval fails (the reviewer simulation, Q5); each failure clears its entry. */
   failNextApproval: string[];
+  /** Quote requests on designs (A-1, A-2), oldest first. */
+  quoteRequests: QuoteRequestRow[];
+  /** Quote requests on projects (A-6), oldest first. */
+  projectQuoteRequests: ProjectQuoteRequestRow[];
   seq: { design: number; project: number };
 };
 
@@ -327,7 +370,8 @@ export * from "./design-dtos";
 
 /* ── Envelope ─────────────────────────────────────────────────────────── */
 
-export type FieldError = { field: string; message: string };
+/** `code`: the constraint the BE names (`Min`, `Max`, `Size`, or a rule's own, e.g. `FutureOrPresent`). */
+export type FieldError = { field: string; message: string; code?: string };
 
 export const ok = (data: unknown, status = 200): MockResult => ({
   status,

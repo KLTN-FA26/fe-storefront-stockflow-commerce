@@ -155,6 +155,14 @@ export function registerProjectRoutes(route: Route): void {
 
   /* ── The library: images and texts apart (F-33 … F-36) ── */
 
+  // Quote requests over approved designs of the project (WF-02 D1, plan A-6, A-7): 201 / 200.
+  const asIs = (data: unknown) => data;
+  route("POST", "/design-projects/:id/quote-requests", async (s, config) =>
+    viaBe(await s.requestProjectQuote(id(config), bodyOf(config)), asIs),
+  );
+  route("GET", "/design-projects/:id/quote-requests", async (s, config) =>
+    viaBe(await s.projectQuoteRequests(id(config)), asIs),
+  );
   route("GET", "/design-projects/:id/assets", async (s, config) =>
     viaBe(await s.listLibrary(id(config)), (items) =>
       (items as Parameters<typeof beProjectAsset>[0][])

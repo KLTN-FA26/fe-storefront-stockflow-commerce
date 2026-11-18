@@ -6,7 +6,10 @@ import { Alert } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { DialogFooter } from "@/components/ui/dialog";
 
+import { hasErrorCode } from "@/lib/api/describe-error";
+
 import { describeDesignError, isDesignGone, isDesignStateChanged } from "../../errors";
+import { describeQuoteRequestError, isCustomerInactive } from "../../quote-request-errors";
 import type { ReportedPreflightIssue } from "../../types";
 import { ExportError } from "./export-renderer";
 import { FailedIssues } from "./preflight-panel";
@@ -20,15 +23,25 @@ import type { SubmitStep } from "./use-design-submission";
 const NOT_A_DRAFT =
   "Thiết kế không còn là bản nháp (đã được gửi duyệt hoặc đã có kết quả) nên không gửi được nữa.";
 
+/** Refusals of the quote request sent with the design (A-2): the BE's own Vietnamese words. */
+const isQuoteRefusal = (error: unknown) =>
+  isCustomerInactive(error) || hasErrorCode(error, "VALIDATION_FAILED");
+
 const describeSubmissionError = (error: unknown) =>
   error instanceof ExportError
     ? error.message
     : isDesignStateChanged(error)
       ? NOT_A_DRAFT
-      : describeDesignError(error);
+      : isQuoteRefusal(error)
+        ? describeQuoteRequestError(error)
+        : describeDesignError(error);
 
-/** The design left DRAFT or was deleted: sending it again cannot succeed, only closing is left. */
-const isPastSending = (error: unknown) => isDesignStateChanged(error) || isDesignGone(error);
+/**
+ * The design left DRAFT or was deleted, or the customer cannot ask (409 `CUSTOMER_NOT_ACTIVE`):
+ * sending it again cannot succeed, only closing is left.
+ */
+const isPastSending = (error: unknown) =>
+  isDesignStateChanged(error) || isDesignGone(error) || isCustomerInactive(error);
 
 /** Fail: what is in the way; an issue on a surface selects its element (and closes the dialog). */
 export function FailBody({
@@ -75,6 +88,7 @@ export function SubmitFooter({
   confirming,
   stalled,
   canConfirm,
+  confirmLabel = "Gửi duyệt",
   onClose,
   onConfirm,
   onRetry,
@@ -84,6 +98,8 @@ export function SubmitFooter({
   confirming: boolean;
   stalled: boolean;
   canConfirm: boolean;
+  /** "Gửi duyệt", or "Gửi duyệt và yêu cầu báo giá" when a quote request goes with it. */
+  confirmLabel?: string;
   onClose: () => void;
   onConfirm: () => void;
   onRetry: () => void;
@@ -103,7 +119,7 @@ export function SubmitFooter({
       </Button>
       {confirming ? (
         <Button type="button" className={FOOTER_BUTTON} disabled={!canConfirm} onClick={onConfirm}>
-          Gửi duyệt
+          {confirmLabel}
         </Button>
       ) : null}
       {stalled && !final ? (
