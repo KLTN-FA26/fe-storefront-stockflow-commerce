@@ -1,13 +1,32 @@
 // @vitest-environment node
-import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, decodePDFRawStream } from "pdf-lib";
+import {
+  PDFArray,
+  PDFDict,
+  PDFDocument,
+  PDFHexString,
+  PDFName,
+  PDFNumber,
+  PDFRawStream,
+  PDFString,
+  decodePDFRawStream,
+} from "pdf-lib";
 import { describe, expect, it } from "vitest";
 
 import { emptyDocument } from "../document/factory";
 import type { DesignDocument } from "../document/schema";
 import { canonicalJson, documentChecksum } from "../export/checksum";
 import { MAX_BAND_PIXELS, printBands } from "../export/print-bands";
-import { buildPrintPdf, buildSheetPdf, type PrintPage } from "../export/print-pdf";
-import { drawSpecSheet } from "../export/spec-sheet";
+import { pathBounds } from "../export/pdf-path";
+import { ISO_COATED_V2, pdfxMetadata, type PrintProfiles } from "../export/pdfx";
+import {
+  buildPrintPdf,
+  buildSheetPdf,
+  PAGE_MARGIN_MM,
+  printGuides,
+  type PrintJob,
+  type PrintPage,
+} from "../export/print-pdf";
+import { drawSlug, GUIDES_LAYER_NAME, printSlugLines, SLUG_HEIGHT_MM } from "../export/slug";
 import { buildSpecSummary, specText } from "../export/summary";
 import type { PathCmd } from "../geometry/types";
 import { mmToPt } from "../geometry/units";
@@ -24,6 +43,26 @@ const rectPath: PathCmd[] = [
 ];
 
 const passReport: PreflightReport = { result: "Pass", issues: [] };
+
+/** Stand-ins for the ICC profiles: the builder embeds them as they are. */
+const PROFILES: PrintProfiles = {
+  output: { ...ISO_COATED_V2, icc: Uint8Array.from([1, 2, 3, 4]) },
+  rgb: Uint8Array.from([5, 6, 7]),
+};
+const CREATED_AT = new Date("2026-11-18T03:04:05.678Z");
+const DOCUMENT_ID = "0123456789abcdef0123456789abcdef";
+
+/** A page as the tests write it: guides and slug default to none and a 1 × 1 PNG. */
+type PageInput = Omit<PrintPage, "guides" | "slug"> & Partial<Pick<PrintPage, "guides" | "slug">>;
+
+/** A print job of `pages` with a fixed title, id, date and the stand-in profiles. */
+const job = (pages: PageInput[], title = "Ly quán A"): PrintJob => ({
+  title,
+  documentId: DOCUMENT_ID,
+  createdAt: CREATED_AT,
+  profiles: PROFILES,
+  pages: pages.map((page) => ({ guides: [], slug: PNG_1x1, ...page })),
+});
 
 /** A bag document with a mix of visible and hidden elements on FRONT, and a few on BACK. */
 function sampleDocument(): DesignDocument {
@@ -340,9 +379,11 @@ function cutOperators(content: string): PdfOp[] {
 
 /** A cut path on a `widthMm × heightMm` page (default 100 × 100), as the PDF operators it produces. */
 async function pathOperators(path: PathCmd[], widthMm = 100, heightMm = 100): Promise<PdfOp[]> {
-  const bytes = await buildPrintPdf([
-    { code: "FRONT", widthMm, heightMm, bands: [{ png: PNG_1x1, heightPx: 1 }], cutPath: path },
-  ]);
+  const bytes = await buildPrintPdf(
+    job([
+      { code: "FRONT", widthMm, heightMm, bands: [{ png: PNG_1x1, heightPx: 1 }], cutPath: path },
+    ]),
+  );
   return cutOperators(pageContent(await PDFDocument.load(bytes)));
 }
 
@@ -361,25 +402,35 @@ function expectArgs(actual: number[], expected: number[]) {
 }
 
 describe("print PDF", () => {
-  it("sizes print pages in pt and carries a CutContour cut path", async () => {
-    const bytes = await buildPrintPdf([
-      {
-        code: "FRONT",
-        widthMm: 266,
-        heightMm: 286,
-        bands: [{ png: PNG_1x1, heightPx: 1 }],
-        cutPath: rectPath,
-      },
-    ]);
+  it("sizes the bleed box in pt, puts the slug under it and carries a CutContour cut path", async () => {
+    const bytes = await buildPrintPdf(
+      job([
+        {
+          code: "FRONT",
+          widthMm: 266,
+          heightMm: 286,
+          bands: [{ png: PNG_1x1, heightPx: 1 }],
+          cutPath: rectPath,
+        },
+      ]),
+    );
     const pdf = await PDFDocument.load(bytes);
-    const { width, height } = pdf.getPage(0).getSize();
-    expect(width).toBeCloseTo((266 * 72) / 25.4, 2);
-    expect(height).toBeCloseTo((286 * 72) / 25.4, 2);
+    const page = pdf.getPage(0);
+    const [width, height, slug] = [(266 * 72) / 25.4, (286 * 72) / 25.4, mmToPt(SLUG_HEIGHT_MM)];
+    expectArgs(Object.values(page.getBleedBox()), [0, 0, width, height]);
+    // The MediaBox leaves blank paper around the bleed box, and the slug strip under it.
+    const margin = mmToPt(PAGE_MARGIN_MM);
+    expectArgs(Object.values(page.getMediaBox()), [
+      -margin,
+      -slug,
+      width + 2 * margin,
+      height + margin + slug,
+    ]);
     expect(Buffer.from(bytes).toString("latin1")).toContain("/CutContour");
   });
 
   it("writes one page per area, each with its own size", async () => {
-    const pages: PrintPage[] = [
+    const pages: PageInput[] = [
       {
         code: "FRONT",
         widthMm: 266,
@@ -395,28 +446,30 @@ describe("print PDF", () => {
         cutPath: rectPath,
       },
     ];
-    const pdf = await PDFDocument.load(await buildPrintPdf(pages));
+    const pdf = await PDFDocument.load(await buildPrintPdf(job(pages)));
     expect(pdf.getPageCount()).toBe(2);
-    expect(pdf.getPage(1).getSize().width).toBeCloseTo(mmToPt(126), 2);
-    // The PNG is on every page, drawn as an image XObject.
+    expect(pdf.getPage(1).getBleedBox().width).toBeCloseTo(mmToPt(126), 2);
+    // The raster and the slug are on every page, each drawn as an image XObject.
     for (const index of [0, 1]) {
       const resources = pdf.getPage(index).node.Resources()!;
       const xObjects = resources.lookup(PDFName.of("XObject"), PDFDict);
-      expect(xObjects.keys()).toHaveLength(1);
+      expect(xObjects.keys()).toHaveLength(2);
     }
   });
 
   it("registers a CutContour Separation colour space with a CMYK magenta tint", async () => {
     const pdf = await PDFDocument.load(
-      await buildPrintPdf([
-        {
-          code: "FRONT",
-          widthMm: 266,
-          heightMm: 286,
-          bands: [{ png: PNG_1x1, heightPx: 1 }],
-          cutPath: rectPath,
-        },
-      ]),
+      await buildPrintPdf(
+        job([
+          {
+            code: "FRONT",
+            widthMm: 266,
+            heightMm: 286,
+            bands: [{ png: PNG_1x1, heightPx: 1 }],
+            cutPath: rectPath,
+          },
+        ]),
+      ),
     );
     const resources = pdf.getPage(0).node.Resources()!;
     const spaces = resources.lookup(PDFName.of("ColorSpace"), PDFDict);
@@ -434,15 +487,17 @@ describe("print PDF", () => {
 
   it("overprints the cut line, so a RIP that skips it leaves no hairline in the artwork", async () => {
     const pdf = await PDFDocument.load(
-      await buildPrintPdf([
-        {
-          code: "FRONT",
-          widthMm: 266,
-          heightMm: 286,
-          bands: [{ png: PNG_1x1, heightPx: 1 }],
-          cutPath: rectPath,
-        },
-      ]),
+      await buildPrintPdf(
+        job([
+          {
+            code: "FRONT",
+            widthMm: 266,
+            heightMm: 286,
+            bands: [{ png: PNG_1x1, heightPx: 1 }],
+            cutPath: rectPath,
+          },
+        ]),
+      ),
     );
     const resources = pdf.getPage(0).node.Resources()!;
     const state = resources
@@ -457,15 +512,17 @@ describe("print PDF", () => {
 
   it("selects the spot colour and strokes the cut path at 0.25 pt inside q … Q", async () => {
     const pdf = await PDFDocument.load(
-      await buildPrintPdf([
-        {
-          code: "FRONT",
-          widthMm: 266,
-          heightMm: 286,
-          bands: [{ png: PNG_1x1, heightPx: 1 }],
-          cutPath: rectPath,
-        },
-      ]),
+      await buildPrintPdf(
+        job([
+          {
+            code: "FRONT",
+            widthMm: 266,
+            heightMm: 286,
+            bands: [{ png: PNG_1x1, heightPx: 1 }],
+            cutPath: rectPath,
+          },
+        ]),
+      ),
     );
     const content = pageContent(pdf);
     const cut = content.slice(content.lastIndexOf("q\n", content.indexOf("/CutContour CS")));
@@ -617,7 +674,7 @@ describe("print PDF", () => {
   });
 
   it("refuses an empty page list rather than writing an unreadable PDF", async () => {
-    await expect(buildPrintPdf([])).rejects.toThrow(/at least one page/);
+    await expect(buildPrintPdf(job([]))).rejects.toThrow(/at least one page/);
   });
 
   describe("a page drawn in bands (iOS canvas limit)", () => {
@@ -638,42 +695,47 @@ describe("print PDF", () => {
         { png: PNG_1x1, heightPx: 2622 },
         { png: PNG_1x1, heightPx: 2622 },
       ];
-      const page = (b: PrintPage["bands"]): PrintPage => ({
+      const page = (b: PrintPage["bands"]): PageInput => ({
         code: "FRONT",
         widthMm,
         heightMm,
         bands: b,
         cutPath: rectPath,
       });
-      const banded = await PDFDocument.load(await buildPrintPdf([page(bands)]));
+      const banded = await PDFDocument.load(await buildPrintPdf(job([page(bands)])));
       const whole = await PDFDocument.load(
-        await buildPrintPdf([page([{ png: PNG_1x1, heightPx: 5244 }])]),
+        await buildPrintPdf(job([page([{ png: PNG_1x1, heightPx: 5244 }])])),
       );
 
       expect(banded.getPage(0).getSize()).toEqual(whole.getPage(0).getSize());
       const [w, h] = [mmToPt(widthMm), mmToPt(heightMm)];
       const placements = imagePlacements(pageContent(banded));
-      expect(placements).toHaveLength(2);
+      expect(placements).toHaveLength(3);
       expectArgs(placements[0]!, [0, h / 2, w, h / 2]); // the first band is the top half
       expectArgs(placements[1]!, [0, 0, w, h / 2]);
+      // Last, the slug: as wide as the page, under the bleed box.
+      const slug = mmToPt(SLUG_HEIGHT_MM);
+      expectArgs(placements[2]!, [0, -slug, w, slug]);
       expectArgs(imagePlacements(pageContent(whole))[0]!, [0, 0, w, h]);
       expect(cutOperators(pageContent(banded))).toEqual(cutOperators(pageContent(whole)));
     });
 
     it("draws every band over its own share only, so translucent ink at a join keeps its opacity", async () => {
       const pdf = await PDFDocument.load(
-        await buildPrintPdf([
-          {
-            code: "FRONT",
-            widthMm: 100,
-            heightMm: 100,
-            bands: [
-              { png: PNG_1x1, heightPx: 2 },
-              { png: PNG_1x1, heightPx: 2 },
-            ],
-            cutPath: rectPath,
-          },
-        ]),
+        await buildPrintPdf(
+          job([
+            {
+              code: "FRONT",
+              widthMm: 100,
+              heightMm: 100,
+              bands: [
+                { png: PNG_1x1, heightPx: 2 },
+                { png: PNG_1x1, heightPx: 2 },
+              ],
+              cutPath: rectPath,
+            },
+          ]),
+        ),
       );
       const [w, h] = [mmToPt(100), mmToPt(100)];
       const [top, bottom] = imagePlacements(pageContent(pdf));
@@ -685,24 +747,319 @@ describe("print PDF", () => {
 
     it("gives each band its share of the page by its rows", async () => {
       const pdf = await PDFDocument.load(
-        await buildPrintPdf([
-          {
-            code: "FRONT",
-            widthMm: 100,
-            heightMm: 100,
-            bands: [
-              { png: PNG_1x1, heightPx: 3 },
-              { png: PNG_1x1, heightPx: 1 },
-            ],
-            cutPath: rectPath,
-          },
-        ]),
+        await buildPrintPdf(
+          job([
+            {
+              code: "FRONT",
+              widthMm: 100,
+              heightMm: 100,
+              bands: [
+                { png: PNG_1x1, heightPx: 3 },
+                { png: PNG_1x1, heightPx: 1 },
+              ],
+              cutPath: rectPath,
+            },
+          ]),
+        ),
       );
       const h = mmToPt(100);
       const [top, bottom] = imagePlacements(pageContent(pdf));
       expectArgs(top!, [0, h / 4, mmToPt(100), (3 * h) / 4]);
       expectArgs(bottom!, [0, 0, mmToPt(100), h / 4]);
     });
+  });
+});
+
+/** `object` as the raw stream it must be (pdf-lib's typed `lookup` takes no stream class). */
+function rawStream(object: unknown): PDFRawStream {
+  expect(object).toBeInstanceOf(PDFRawStream);
+  return object as PDFRawStream;
+}
+
+describe("print PDF/X-4", () => {
+  const cup = createSurfaces(cup12oz).byCode.BODY!;
+  const cupPage = (overrides: Partial<PageInput> = {}): PageInput => ({
+    code: "BODY",
+    widthMm: cup.flatBounds.width,
+    heightMm: cup.flatBounds.height,
+    bands: [{ png: PNG_1x1, heightPx: 1 }],
+    cutPath: cup.outline("trim"),
+    guides: printGuides(cup.guides()),
+    ...overrides,
+  });
+  const load = async (pages: PageInput[] = [cupPage()], title?: string) => {
+    const bytes = await buildPrintPdf(job(pages, title));
+    // Loading must not stamp a new ModDate: the test reads the dates the file was written with.
+    const pdf = await PDFDocument.load(bytes, { updateMetadata: false });
+    return { raw: Buffer.from(bytes).toString("latin1"), pdf };
+  };
+
+  it("draws a vector page instead of its bands: its content, images, alphas and layers", async () => {
+    const vector = {
+      content: "/OC /VL0 BDC\nq\n/VGs0 gs\n/VIm0 Do\nQ\nEMC",
+      images: [PNG_1x1],
+      alphas: [0.5],
+      layers: ["1 · Ảnh / logo"],
+    };
+    const { pdf } = await load([cupPage({ bands: [], vector })]);
+    const page = pdf.getPage(0).node;
+    const resources = page.Resources()!;
+    const sub = (key: string) => resources.lookup(PDFName.of(key), PDFDict);
+    const image = rawStream(sub("XObject").lookup(PDFName.of("VIm0")));
+    expect(image.dict.lookup(PDFName.of("ColorSpace"), PDFArray).lookup(0)).toBe(
+      PDFName.of("ICCBased"),
+    );
+    expect(sub("ExtGState").lookup(PDFName.of("VGs0"), PDFDict).get(PDFName.of("ca"))).toEqual(
+      PDFNumber.of(0.5),
+    );
+    expect(sub("ColorSpace").get(PDFName.of("VCs"))).toBeDefined();
+    expect(sub("Properties").get(PDFName.of("VL0"))).toBeDefined();
+    // The art is the page's first content stream: the slug, guides and cut line come after it.
+    const contents = page.Contents();
+    expect(contents).toBeInstanceOf(PDFArray);
+    const first = rawStream(pdf.context.lookup((contents as PDFArray).get(0)));
+    expect(new TextDecoder().decode(decodePDFRawStream(first).decode())).toBe(vector.content);
+  });
+
+  it("refuses a page with neither bands nor vectors", async () => {
+    await expect(load([cupPage({ bands: [] })])).rejects.toThrow(/needs its raster/);
+  });
+
+  it("declares PDF 1.6, the version PDF/X-4 is built on", async () => {
+    const { raw } = await load();
+    expect(raw.startsWith("%PDF-1.6")).toBe(true);
+  });
+
+  it("names the CMYK printing condition and embeds its profile as the OutputIntent", async () => {
+    const { pdf } = await load();
+    const intents = pdf.catalog.lookup(PDFName.of("OutputIntents"), PDFArray);
+    expect(intents.size()).toBe(1);
+    const intent = intents.lookup(0, PDFDict);
+    const text = (key: string) => intent.lookup(PDFName.of(key), PDFString).decodeText();
+    expect(intent.lookup(PDFName.of("S"))).toBe(PDFName.of("GTS_PDFX"));
+    expect(text("OutputConditionIdentifier")).toBe("FOGRA39");
+    expect(text("Info")).toBe("ISO Coated v2 (ECI)");
+    expect(text("RegistryName")).toBe("http://www.color.org");
+    const profile = rawStream(intent.lookup(PDFName.of("DestOutputProfile")));
+    expect(profile.dict.lookup(PDFName.of("N"), PDFNumber).asNumber()).toBe(4);
+    expect([...decodePDFRawStream(profile).decode()]).toEqual([1, 2, 3, 4]);
+  });
+
+  it("writes the XMP packet with the PDF/X version, and Info entries that agree with it", async () => {
+    const { pdf } = await load([cupPage()], "Ly <quán> & A");
+    const metadata = rawStream(pdf.catalog.lookup(PDFName.of("Metadata")));
+    expect(metadata.dict.has(PDFName.of("Filter"))).toBe(false);
+    const xmp = new TextDecoder().decode(metadata.getContents());
+    expect(xmp).toContain("<pdfxid:GTS_PDFXVersion>PDF/X-4</pdfxid:GTS_PDFXVersion>");
+    expect(xmp).toContain('<rdf:li xml:lang="x-default">Ly &#60;quán&#62; &#38; A</rdf:li>');
+    expect(xmp).toContain("<xmp:CreateDate>2026-11-18T03:04:05Z</xmp:CreateDate>");
+    expect(xmp).toContain("<xmp:ModifyDate>2026-11-18T03:04:05Z</xmp:ModifyDate>");
+    expect(xmp).toContain("<pdf:Trapped>False</pdf:Trapped>");
+    expect(xmp).toContain(
+      "<xmpMM:DocumentID>uuid:01234567-89ab-cdef-0123-456789abcdef</xmpMM:DocumentID>",
+    );
+    expect(xmp).toContain("<xmpMM:VersionID>1</xmpMM:VersionID>");
+    expect(xmp).toContain("<xmpMM:RenditionClass>default</xmpMM:RenditionClass>");
+
+    expect(pdf.getTitle()).toBe("Ly <quán> & A");
+    expect(pdf.getCreationDate()).toEqual(new Date("2026-11-18T03:04:05Z"));
+    expect(pdf.getModificationDate()).toEqual(new Date("2026-11-18T03:04:05Z"));
+    const info = pdf.context.lookup(pdf.context.trailerInfo.Info, PDFDict);
+    expect(info.lookup(PDFName.of("Trapped"))).toBe(PDFName.of("False"));
+    expect(xmp).toContain(`<pdf:Producer>${pdf.getProducer()}</pdf:Producer>`);
+  });
+
+  it("keeps the XMP packet well-formed: one packet, escaped title", () => {
+    const xmp = pdfxMetadata({
+      title: `"A" & 'B'`,
+      documentId: DOCUMENT_ID,
+      createdAt: CREATED_AT,
+    });
+    expect(xmp.match(/<\?xpacket /g)).toHaveLength(2);
+    expect(xmp).toContain(">&#34;A&#34; &#38; &#39;B&#39;<");
+  });
+
+  it("sets the trailer /ID from the document id, and refuses an id that is not 32 hex digits", async () => {
+    const { pdf } = await load();
+    const id = pdf.context.trailerInfo.ID as PDFArray;
+    expect(id.size()).toBe(2);
+    for (const i of [0, 1]) expect(id.lookup(i, PDFHexString).asString()).toBe(DOCUMENT_ID);
+    await expect(buildPrintPdf({ ...job([cupPage()]), documentId: "not-an-id" })).rejects.toThrow(
+      /32-hex-digit/,
+    );
+  });
+
+  it("tags every image with the sRGB profile (ICCBased), never DeviceRGB", async () => {
+    const { pdf, raw } = await load();
+    expect(raw).not.toContain("/DeviceRGB");
+    const xObjects = pdf.getPage(0).node.Resources()!.lookup(PDFName.of("XObject"), PDFDict);
+    const spaces = xObjects.keys().map((key) => {
+      const image = rawStream(xObjects.lookup(key));
+      return image.dict.lookup(PDFName.of("ColorSpace"), PDFArray);
+    });
+    expect(spaces).toHaveLength(2); // the raster and the slug
+    for (const space of spaces) {
+      expect(space.lookup(0)).toBe(PDFName.of("ICCBased"));
+      const profile = space.lookup(1, PDFRawStream);
+      expect(profile.dict.lookup(PDFName.of("N"), PDFNumber).asNumber()).toBe(3);
+      expect([...decodePDFRawStream(profile).decode()]).toEqual([5, 6, 7]);
+    }
+    // One profile object, shared by every image.
+    expect(spaces[0]!.get(1)).toBe(spaces[1]!.get(1));
+  });
+
+  it("boxes a cup page: TrimBox around the trim sector, inside the BleedBox", async () => {
+    const { pdf } = await load();
+    const page = pdf.getPage(0);
+    const { width, height } = cup.flatBounds;
+
+    // The trim sector sampled finely through the surface's own mapping: its two arcs end to end.
+    const [u0, u1] = cup.uRange;
+    const [v0, v1] = cup.vRange;
+    const points = Array.from({ length: 4001 }, (_, i) => u0 + ((u1 - u0) * i) / 4000).flatMap(
+      (u) => [cup.toFlat(u, v0), cup.toFlat(u, v1)],
+    );
+    const xs = points.map((p) => p.x);
+    const ys = points.map((p) => p.y);
+    const sampled = {
+      x: Math.min(...xs),
+      y: Math.min(...ys),
+      width: Math.max(...xs) - Math.min(...xs),
+      height: Math.max(...ys) - Math.min(...ys),
+    };
+    const bounds = pathBounds(cup.outline("trim"));
+    for (const key of ["x", "y", "width", "height"] as const) {
+      expect(bounds[key]).toBeCloseTo(sampled[key], 3);
+    }
+
+    const trim = page.getTrimBox();
+    expectArgs(
+      [trim.x, trim.y, trim.width, trim.height],
+      [
+        mmToPt(bounds.x),
+        mmToPt(height - bounds.y - bounds.height),
+        mmToPt(bounds.width),
+        mmToPt(bounds.height),
+      ],
+    );
+    const bleed = page.getBleedBox();
+    expectArgs(
+      [bleed.x, bleed.y, bleed.width, bleed.height],
+      [0, 0, mmToPt(width), mmToPt(height)],
+    );
+    expect(trim.x).toBeGreaterThan(bleed.x);
+    expect(trim.y).toBeGreaterThan(bleed.y);
+    expect(trim.x + trim.width).toBeLessThan(bleed.x + bleed.width);
+    expect(trim.y + trim.height).toBeLessThan(bleed.y + bleed.height);
+  });
+
+  it("puts the safe area and the seam on a layer that is off, so the press never prints them", async () => {
+    const { pdf } = await load();
+    const properties = pdf.catalog.lookup(PDFName.of("OCProperties"), PDFDict);
+    const layer = properties.lookup(PDFName.of("OCGs"), PDFArray).get(0);
+    const ocg = pdf.context.lookup(layer, PDFDict);
+    expect(ocg.lookup(PDFName.of("Type"))).toBe(PDFName.of("OCG"));
+    expect(ocg.lookup(PDFName.of("Name"), PDFHexString).decodeText()).toBe(GUIDES_LAYER_NAME);
+    const defaults = properties.lookup(PDFName.of("D"), PDFDict);
+    expect(defaults.lookup(PDFName.of("Name"), PDFHexString).decodeText()).toBe("Mặc định");
+    expect(defaults.lookup(PDFName.of("OFF"), PDFArray).asArray()).toEqual([layer]);
+    expect(defaults.has(PDFName.of("AS"))).toBe(false); // PDF/X-4 forbids auto-state
+
+    const resources = pdf.getPage(0).node.Resources()!;
+    expect(resources.lookup(PDFName.of("Properties"), PDFDict).get(PDFName.of("OCGuides"))).toBe(
+      layer,
+    );
+    const content = pageContent(pdf);
+    const [begin, end] = [content.indexOf("/OC /OCGuides BDC"), content.indexOf("EMC")];
+    expect(begin).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(begin);
+    // The cut line is drawn after the layer ends: it stays on the printed page.
+    expect(content.indexOf("/CutContour CS")).toBeGreaterThan(end);
+    const guides = content.slice(begin, end).split("\n");
+    expect(guides).toContain("1 0 0 0 K");
+    expect(guides).toContain("0.5 w");
+    // The safe area dashed, then the seam solid: one stroke each.
+    expect(guides.filter((line) => line.endsWith(" d"))).toEqual(["[ 4 2 ] 0 d", "[ ] 0 d"]);
+    expect(guides.filter((line) => line === "S")).toHaveLength(2);
+  });
+
+  it("writes no layer when no page has guides", async () => {
+    const { pdf } = await load([cupPage({ guides: [] })]);
+    expect(pdf.catalog.has(PDFName.of("OCProperties"))).toBe(false);
+    expect(pageContent(pdf)).not.toContain("BDC");
+  });
+
+  it("takes a surface's guides without its bleed and trim (they are the boxes and the cut)", () => {
+    expect(printGuides(cup.guides()).map((guide) => guide.kind)).toEqual(["safe", "seam"]);
+  });
+});
+
+describe("print slug", () => {
+  const info = {
+    title: "Ly quán A",
+    sku: "CUP-PAPER-12OZ-WHT",
+    version: 7,
+    exportedAt: "18 thg 11, 2026 10:04",
+    checksum: "ab".repeat(32),
+    profileName: "ISO Coated v2 (ECI)",
+  };
+
+  it("names the job, the page with its sizes, and how to see its guide layer", () => {
+    const lines = printSlugLines(info, {
+      code: "BODY",
+      name: "Thân ly",
+      page: 1,
+      pages: 1,
+      trimMm: { width: 279.6649, height: 120.8531 },
+      bleedMm: 3,
+      seamMm: 8,
+      guideKinds: ["safe", "seam", "safe"],
+    });
+    expect(lines).toEqual([
+      "Ly quán A · SKU CUP-PAPER-12OZ-WHT · Phiên bản 7 · Xuất 18 thg 11, 2026 10:04 · SHA-256 abababababababab",
+      "Vùng in Thân ly (BODY) · Trang 1/1 · Thành phẩm 279,7 × 120,9 mm · Lề tràn 3 mm · Mép dán 8 mm · PDF/X-4, ISO Coated v2 (ECI)",
+      `Bật lớp “${GUIDES_LAYER_NAME}” trong trình xem PDF để xem: nét đứt = vùng an toàn, nét liền = mép dán`,
+    ]);
+  });
+
+  it("leaves out the seam and the legend when the page has neither", () => {
+    const lines = printSlugLines(info, {
+      code: "FRONT",
+      name: "Mặt trước",
+      page: 2,
+      pages: 4,
+      trimMm: { width: 280, height: 444.25 },
+      bleedMm: 2.5,
+      guideKinds: [],
+    });
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toBe(
+      "Vùng in Mặt trước (FRONT) · Trang 2/4 · Thành phẩm 280 × 444,3 mm · Lề tràn 2,5 mm · PDF/X-4, ISO Coated v2 (ECI)",
+    );
+  });
+
+  it("draws each line from the margin in the caller's ink, inside save … restore", () => {
+    const rec = recordingCtx({ glyphWidth: (text) => [...text].length });
+    drawSlug(rec.ctx, ["một", "hai"], 100, 1, { ink: "ink" });
+    const drawn = rec.calls.filter(([m]) => m === "fillText");
+    expect(drawn).toEqual([
+      ["fillText", "một", 3, 1.6],
+      ["fillText", "hai", 3, 1.6 + 3.6],
+    ]);
+    expect(rec.sets.fillStyle).toEqual(["ink"]);
+    expect(rec.calls[0]![0]).toBe("save");
+    expect(rec.calls.at(-1)![0]).toBe("restore");
+    // Both lines fit: set at the full size, 2.4 mm.
+    expect((rec.sets.font as string[]).every((font) => font.includes(" 2.4px "))).toBe(true);
+  });
+
+  it("sets a line too wide for the strip smaller, then cuts it with …", () => {
+    // 1 px per char at 1 px per mm: a 46 mm strip leaves 40 px between the margins.
+    const rec = recordingCtx({ glyphWidth: (text) => [...text].length });
+    drawSlug(rec.ctx, ["x".repeat(60)], 46, 1, { ink: "ink" });
+    const [, text] = rec.calls.find(([m]) => m === "fillText")!;
+    expect(text).toBe(`${"x".repeat(39)}…`);
+    expect((rec.sets.font as string[]).at(-1)).toContain(" 1.6px ");
   });
 });
 
@@ -756,69 +1113,5 @@ describe("sheet PDF", () => {
     const { width, height } = pdf.getPage(0).getSize();
     expect(width).toBeCloseTo(mmToPt(148), 2);
     expect(height).toBeCloseTo(mmToPt(210), 2);
-  });
-});
-
-describe("drawSpecSheet", () => {
-  const summary = { title: "Ly quán A", lines: ["Mẫu: CUP12-BODY", "SKU: CUP-PAPER-12OZ-WHT"] };
-
-  it("draws the title and every line in the caller's ink with generic fonts", () => {
-    const rec = recordingCtx();
-    drawSpecSheet(rec.ctx, summary, 2, { ink: "ink-colour" });
-
-    const texts = rec.calls.filter(([m]) => m === "fillText").map((c) => c[1]);
-    expect(texts).toEqual(["Ly quán A", "Mẫu: CUP12-BODY", "SKU: CUP-PAPER-12OZ-WHT"]);
-    expect(rec.sets.fillStyle).toEqual(["ink-colour"]);
-    for (const font of rec.sets.font as string[]) expect(font).toContain("sans-serif");
-  });
-
-  it("scales the margin and type with pxPerMm and starts below the top margin", () => {
-    const at = (pxPerMm: number) => {
-      const rec = recordingCtx();
-      drawSpecSheet(rec.ctx, summary, pxPerMm, { ink: "ink" });
-      return rec.calls.find(([m]) => m === "fillText") as [string, string, number, number];
-    };
-    const [, , x1, y1] = at(1);
-    const [, , x2, y2] = at(4);
-    expect(x2).toBeCloseTo(x1 * 4, 6);
-    expect(y2).toBeCloseTo(y1 * 4, 6);
-    expect(x1).toBeGreaterThan(0);
-  });
-
-  it("restores the context so the caller's state is untouched", () => {
-    const rec = recordingCtx();
-    drawSpecSheet(rec.ctx, summary, 2, { ink: "ink" });
-    expect(rec.calls[0]![0]).toBe("save");
-    expect(rec.calls.at(-1)![0]).toBe("restore");
-  });
-
-  it("wraps a long line on spaces at the page's text width", () => {
-    // 1 px per char, 1 px per mm: the 210 mm page leaves 180 mm for text.
-    const rec = recordingCtx({ glyphWidth: (text) => [...text].length });
-    const words = Array.from({ length: 60 }, () => "abcdefghi").join(" "); // 599 chars
-    drawSpecSheet(rec.ctx, { title: "T", lines: [words] }, 1, { ink: "ink" });
-    const lines = rec.calls.filter(([m]) => m === "fillText").map((c) => String(c[1]));
-    expect(lines.slice(1).join(" ")).toBe(words);
-    for (const line of lines) expect([...line].length).toBeLessThanOrEqual(180);
-    expect(lines.length).toBeGreaterThan(3);
-  });
-
-  it("breaks a token that is wider than the page instead of running off it", () => {
-    const rec = recordingCtx({ glyphWidth: (text) => [...text].length });
-    drawSpecSheet(rec.ctx, { title: "T", lines: ["x".repeat(500)] }, 1, { ink: "ink" });
-    const lines = rec.calls.filter(([m]) => m === "fillText").map((c) => String(c[1]));
-    expect(lines.slice(1).join("")).toBe("x".repeat(500));
-    for (const line of lines) expect([...line].length).toBeLessThanOrEqual(180);
-  });
-
-  it("stops at the bottom margin with an ellipsis when the text is too long", () => {
-    const rec = recordingCtx();
-    const lines = Array.from({ length: 500 }, (_, i) => `dòng ${i}`);
-    drawSpecSheet(rec.ctx, { title: "T", lines }, 1, { ink: "ink", heightMm: 100 });
-    const drawn = rec.calls.filter(([m]) => m === "fillText") as [string, string, number, number][];
-    expect(drawn.length).toBeLessThan(50);
-    expect(drawn.at(-1)![1]).toBe("…");
-    // Nothing is drawn below the page.
-    for (const [, , , y] of drawn) expect(y).toBeLessThan(100);
   });
 });

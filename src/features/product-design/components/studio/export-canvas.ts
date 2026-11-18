@@ -5,6 +5,7 @@ export const EXPORT_MESSAGES = {
   image: "Không tải được ảnh gốc để tạo file in. Hãy kiểm tra kết nối rồi thử lại.",
   canvas: "Trình duyệt không vẽ được file in. Hãy thử lại hoặc dùng trình duyệt khác.",
   encode: "Không tạo được ảnh của file in. Hãy thử lại.",
+  profile: "Không tải được hồ sơ màu để tạo file in. Hãy kiểm tra kết nối rồi thử lại.",
 } as const;
 
 export function canvasOf(width: number, height: number) {

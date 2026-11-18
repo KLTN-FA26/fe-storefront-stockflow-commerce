@@ -22,6 +22,11 @@ import { designKeys } from "../queries";
 import type { Design, DesignEvent } from "../types";
 import { designBackend, draftIn, STUDIO_PRODUCTS } from "./design-backend";
 import { TEST_FONTS } from "./fixtures";
+// The print file needs its colour profiles: jsdom serves no `public/` files.
+vi.mock(
+  "../components/studio/print-profiles",
+  async () => (await import("./print-profiles-stub")).printProfilesStub,
+);
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -62,7 +67,9 @@ afterEach(() => {
 const fakeRenderer = () => ({
   preview: vi.fn<ExportRenderer["preview"]>(async () => PNG_1x1),
   printSurface: vi.fn<ExportRenderer["printSurface"]>(async () => [{ png: PNG_1x1, heightPx: 1 }]),
-  specSheet: vi.fn<ExportRenderer["specSheet"]>(async () => PNG_1x1),
+  printVector: vi.fn<ExportRenderer["printVector"]>(async () => null),
+  printSlug: vi.fn<ExportRenderer["printSlug"]>(async () => PNG_1x1),
+  designBrief: vi.fn<ExportRenderer["designBrief"]>(async () => [PNG_1x1]),
   release: vi.fn<ExportRenderer["release"]>(),
 });
 
@@ -256,7 +263,7 @@ describe("SubmitDialog on a preflight Pass", () => {
       SUBMISSION,
     );
     expect(stepOf(dialog, "Ảnh xem trước")).toHaveAttribute("data-state", "done");
-    expect(stepOf(dialog, "Đặc tả")).toHaveAttribute("data-state", "todo");
+    expect(stepOf(dialog, "Mô tả thiết kế")).toHaveAttribute("data-state", "todo");
     expect(stepOf(dialog, "Tải lên")).toHaveAttribute("data-state", "todo");
     expect(within(dialog).getByRole("progressbar")).toBeInTheDocument();
     // Modal while it runs: it cannot be closed, and the studio behind it is out of reach.
@@ -300,7 +307,7 @@ describe("SubmitDialog on a preflight Pass", () => {
     // The first upload failed; the retry sends the three files and the request, drawing nothing again.
     expect(urlsOf(post)).toEqual([`/designs/${id}/artifacts`, ...SENT(id)]);
     expect(renderer.printSurface).toHaveBeenCalledTimes(1);
-    expect(renderer.specSheet).toHaveBeenCalledTimes(1);
+    expect(renderer.designBrief).toHaveBeenCalledTimes(1);
     expect(await designIn(store, id)).toMatchObject({ status: "PENDING_REVIEW" });
   });
 

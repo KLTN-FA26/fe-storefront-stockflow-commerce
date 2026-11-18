@@ -14,6 +14,7 @@ import {
   emptyDocument,
   ImageCache,
   MAX_BAND_PIXELS,
+  SLUG_HEIGHT_MM,
   type DesignDocument,
   type Model3dRef,
   type ProductViewer,
@@ -335,5 +336,18 @@ describe("the customer preview", () => {
     await renderer(bagDesign(), () => viewer).preview(1600);
     expect(viewer.dispose).toHaveBeenCalled();
     expect(encoded).toEqual([{ width: 1600, height: 1600 }]);
+  });
+});
+
+describe("the print slug", () => {
+  it("draws the strip as wide as the page and SLUG_HEIGHT_MM tall at the print's resolution", async () => {
+    const png = await renderer(bagDesign()).printSlug(["Ly quán A · SKU X"], 286.5, 300 / 25.4);
+    expect(png).toEqual(PNG_1x1);
+    expect(encoded).toEqual([
+      {
+        width: Math.round((286.5 * 300) / 25.4),
+        height: Math.round((SLUG_HEIGHT_MM * 300) / 25.4),
+      },
+    ]);
   });
 });
