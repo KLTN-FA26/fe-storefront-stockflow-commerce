@@ -2,6 +2,10 @@
  * Storefront routes — same pattern as ADMIN_ROUTES but for (storefront) group.
  */
 
+/** The documents a customer may open a conversation about (BE chat ContextKind, the customer's subset). */
+export type ChatContextKind =
+  "PRODUCT" | "CUSTOMER_SKU" | "DESIGN" | "DESIGN_PROJECT" | "QUOTE" | "ORDER" | "CONTRACT";
+
 export const APP_ROUTES = {
   home: "/",
   login: "/login",
@@ -29,6 +33,14 @@ export const STORE_ROUTES = {
   chat: {
     list: "/chat",
     detail: (id: string) => `/chat/${id}`,
+    /**
+     * Opens, or reuses, a conversation about one of the customer's own documents (BE C1: the only
+     * way a customer attaches a context, BR-02). The chat page reads `kind` and `id`.
+     */
+    about: (kind: ChatContextKind, id: string) =>
+      `/chat/new?kind=${kind}&id=${encodeURIComponent(id)}`,
+    /** "Chat với Sale" about nothing in particular. */
+    new: "/chat/new",
   },
   account: {
     home: "/account",
@@ -42,6 +54,11 @@ export const STORE_ROUTES = {
     returns: {
       list: "/account/returns",
       detail: (id: string) => `/account/returns/${id}`,
+    },
+    /** The quotes Sales sent the customer (kltn-docs 14, WF-02 D2). */
+    quotes: {
+      list: "/account/quotes",
+      detail: (id: string) => `/account/quotes/${id}`,
     },
     addresses: "/account/addresses",
     security: "/account/security",

@@ -21,6 +21,9 @@ import { createMockOrderBook, seedMockOrders, type MockOrderDeps } from "./mock-
 import { registerMyPermissionsMockRoute } from "./mock-my-permissions";
 import { registerNotificationMockRoutes } from "./mock-notifications";
 import { registerOrderMockRoutes } from "./mock-orders";
+import { registerChatMockRoutes } from "./mock-chat";
+import { registerContractMockRoutes } from "./mock-contracts";
+import { registerQuoteMockRoutes } from "./mock-quotes";
 
 export function mockPasswordResponse(body: unknown) {
   const request = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
@@ -206,6 +209,12 @@ export function registerAllMockRoutes(): void {
     createMockOrderBook(MOCK_CUSTOMER_ID, seedMockOrders(MOCK_CUSTOMER_ID), deps),
   );
   registerMyPermissionsMockRoute();
+
+  // WF-02 (kltn-docs 14, 16): the customer's quotes, the contract of an order, and the chat with
+  // its document cards. The chat listens to the other two (mock-fixtures/wf02.ts).
+  registerQuoteMockRoutes();
+  registerContractMockRoutes();
+  registerChatMockRoutes();
 
   /* ====================================================================
    * Module 01 — Products / SKUs / Categories / Suppliers
