@@ -1,13 +1,9 @@
 import type { QueryClient } from "@tanstack/react-query";
 
 import {
-  A4_HEIGHT_MM,
-  A4_WIDTH_MM,
   compose,
   drawSlug,
-  drawSpecSheet,
   ImageCache,
-  mmToPx,
   printBands,
   relativeLuminance,
   renderSurface,
@@ -17,11 +13,12 @@ import {
   type Hex,
   type PrintAreaCode,
   type PrintBand,
-  type SpecSummary,
+  type DesignBrief,
   type SurfaceContent,
   type VectorPage,
 } from "../../engine";
 import { canvasOf, EXPORT_MESSAGES as MESSAGES, ExportError, pngOf } from "./export-canvas";
+import { renderDesignBrief } from "./brief-render";
 import { exportPreview, type PreviewDeps } from "./preview-export";
 import { printVectorArt } from "./print-vector";
 import { createLayer, materialOf, readChromeColors } from "./studio-paint";
@@ -61,8 +58,8 @@ export type ExportRenderer = {
   ): Promise<VectorPage | null>;
   /** The print file's slug under a page `widthMm` wide: `lines` on a transparent strip. */
   printSlug(lines: readonly string[], widthMm: number, pxPerMm: number): Promise<Uint8Array>;
-  /** The technical-spec sheet, A4 portrait. */
-  specSheet(summary: SpecSummary): Promise<Uint8Array>;
+  /** The design brief's pages (the TECHNICAL_SPEC file), A4 landscape, with the 3D `preview` on its overview. */
+  designBrief(brief: DesignBrief, preview: Uint8Array): Promise<Uint8Array[]>;
   /** Lets go of what the print surfaces loaded (the full-resolution images and their layers). */
   release(): void;
 };
@@ -72,8 +69,6 @@ export type ExportRenderer = {
  * are let go once it is (the next surface loads its own).
  */
 const FULL_IMAGE_BYTES = 512 * 1024 * 1024;
-/** The spec sheet's raster: sharp enough to read and print, small enough to send. */
-const SHEET_DPI = 200;
 const NO_CONTENT: SurfaceContent = { background: { kind: "none" }, elements: [] };
 
 type RendererDeps = PreviewDeps & { designId: string; client: QueryClient };
@@ -217,17 +212,7 @@ export function createCanvasExportRenderer(deps: RendererDeps): ExportRenderer {
       }
     },
 
-    async specSheet(summary) {
-      const pxPerMm = mmToPx(1, SHEET_DPI);
-      const canvas = canvasOf(
-        Math.round(A4_WIDTH_MM * pxPerMm),
-        Math.round(A4_HEIGHT_MM * pxPerMm),
-      );
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new ExportError(MESSAGES.canvas);
-      drawSpecSheet(ctx, summary, pxPerMm, { ink: paperInk() });
-      return pngOf(canvas);
-    },
+    designBrief: (brief, preview) => renderDesignBrief(deps, brief, preview, paperInk()),
 
     release() {
       full?.clear();

@@ -17,7 +17,7 @@ import type { DesignFile } from "../../types";
 const FILE_LABELS: Record<DesignFile["role"], string> = {
   CUSTOMER_PREVIEW: "Ảnh xem trước",
   PRINT_READY: "File in (PDF)",
-  TECHNICAL_SPEC: "Đặc tả kỹ thuật (PDF)",
+  TECHNICAL_SPEC: "Mô tả thiết kế (PDF)",
   PRODUCTION_INSTRUCTION: "Hướng dẫn sản xuất",
 };
 

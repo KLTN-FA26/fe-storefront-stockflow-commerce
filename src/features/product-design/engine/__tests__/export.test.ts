@@ -27,7 +27,6 @@ import {
   type PrintPage,
 } from "../export/print-pdf";
 import { drawSlug, GUIDES_LAYER_NAME, printSlugLines, SLUG_HEIGHT_MM } from "../export/slug";
-import { drawSpecSheet } from "../export/spec-sheet";
 import { buildSpecSummary, specText } from "../export/summary";
 import type { PathCmd } from "../geometry/types";
 import { mmToPt } from "../geometry/units";
@@ -1114,69 +1113,5 @@ describe("sheet PDF", () => {
     const { width, height } = pdf.getPage(0).getSize();
     expect(width).toBeCloseTo(mmToPt(148), 2);
     expect(height).toBeCloseTo(mmToPt(210), 2);
-  });
-});
-
-describe("drawSpecSheet", () => {
-  const summary = { title: "Ly quán A", lines: ["Mẫu: CUP12-BODY", "SKU: CUP-PAPER-12OZ-WHT"] };
-
-  it("draws the title and every line in the caller's ink with generic fonts", () => {
-    const rec = recordingCtx();
-    drawSpecSheet(rec.ctx, summary, 2, { ink: "ink-colour" });
-
-    const texts = rec.calls.filter(([m]) => m === "fillText").map((c) => c[1]);
-    expect(texts).toEqual(["Ly quán A", "Mẫu: CUP12-BODY", "SKU: CUP-PAPER-12OZ-WHT"]);
-    expect(rec.sets.fillStyle).toEqual(["ink-colour"]);
-    for (const font of rec.sets.font as string[]) expect(font).toContain("sans-serif");
-  });
-
-  it("scales the margin and type with pxPerMm and starts below the top margin", () => {
-    const at = (pxPerMm: number) => {
-      const rec = recordingCtx();
-      drawSpecSheet(rec.ctx, summary, pxPerMm, { ink: "ink" });
-      return rec.calls.find(([m]) => m === "fillText") as [string, string, number, number];
-    };
-    const [, , x1, y1] = at(1);
-    const [, , x2, y2] = at(4);
-    expect(x2).toBeCloseTo(x1 * 4, 6);
-    expect(y2).toBeCloseTo(y1 * 4, 6);
-    expect(x1).toBeGreaterThan(0);
-  });
-
-  it("restores the context so the caller's state is untouched", () => {
-    const rec = recordingCtx();
-    drawSpecSheet(rec.ctx, summary, 2, { ink: "ink" });
-    expect(rec.calls[0]![0]).toBe("save");
-    expect(rec.calls.at(-1)![0]).toBe("restore");
-  });
-
-  it("wraps a long line on spaces at the page's text width", () => {
-    // 1 px per char, 1 px per mm: the 210 mm page leaves 180 mm for text.
-    const rec = recordingCtx({ glyphWidth: (text) => [...text].length });
-    const words = Array.from({ length: 60 }, () => "abcdefghi").join(" "); // 599 chars
-    drawSpecSheet(rec.ctx, { title: "T", lines: [words] }, 1, { ink: "ink" });
-    const lines = rec.calls.filter(([m]) => m === "fillText").map((c) => String(c[1]));
-    expect(lines.slice(1).join(" ")).toBe(words);
-    for (const line of lines) expect([...line].length).toBeLessThanOrEqual(180);
-    expect(lines.length).toBeGreaterThan(3);
-  });
-
-  it("breaks a token that is wider than the page instead of running off it", () => {
-    const rec = recordingCtx({ glyphWidth: (text) => [...text].length });
-    drawSpecSheet(rec.ctx, { title: "T", lines: ["x".repeat(500)] }, 1, { ink: "ink" });
-    const lines = rec.calls.filter(([m]) => m === "fillText").map((c) => String(c[1]));
-    expect(lines.slice(1).join("")).toBe("x".repeat(500));
-    for (const line of lines) expect([...line].length).toBeLessThanOrEqual(180);
-  });
-
-  it("stops at the bottom margin with an ellipsis when the text is too long", () => {
-    const rec = recordingCtx();
-    const lines = Array.from({ length: 500 }, (_, i) => `dòng ${i}`);
-    drawSpecSheet(rec.ctx, { title: "T", lines }, 1, { ink: "ink", heightMm: 100 });
-    const drawn = rec.calls.filter(([m]) => m === "fillText") as [string, string, number, number][];
-    expect(drawn.length).toBeLessThan(50);
-    expect(drawn.at(-1)![1]).toBe("…");
-    // Nothing is drawn below the page.
-    for (const [, , , y] of drawn) expect(y).toBeLessThan(100);
   });
 });

@@ -14,7 +14,6 @@ import {
   type PrintProfiles,
 } from "./pdfx";
 import { GUIDES_LAYER_NAME, SLUG_HEIGHT_MM, type PrintGuideKind } from "./slug";
-import { A4_HEIGHT_MM, A4_WIDTH_MM } from "./spec-sheet";
 import { addVectorArt, resourceDict, type VectorPage } from "./vector-page";
 
 /** A horizontal slice of a page's raster, as a PNG of its own `heightPx` rows (`printBands`). */
@@ -76,6 +75,9 @@ const GUIDE_DASH: Record<PrintGuideKind, number[]> = {
   seam: [],
   crease: [6, 2, 1, 2],
 };
+/** ISO A4 portrait, in mm: the default sheet page. */
+export const A4_WIDTH_MM = 210;
+export const A4_HEIGHT_MM = 297;
 /** Coordinates are written to 1/10000 pt (~3.5 nm): exact for printing, and short in the stream. */
 const COORDINATE_SCALE = 1e4;
 
@@ -261,16 +263,17 @@ export const printGuides = (guides: Guide[]): PrintGuide[] =>
   guides.flatMap(({ kind, path }) => (kind === "bleed" || kind === "trim" ? [] : [{ kind, path }]));
 
 /**
- * A single page `widthMm × heightMm` (A4 by default) with `png` over all of it: the technical-spec
- * sheet, rasterised by the caller at the page's aspect ratio.
+ * A sheet of `pngs`, one page each, `widthMm × heightMm` (A4 portrait by default), every picture over
+ * its whole page: the design brief, rasterised by the caller at the page's aspect ratio.
  */
 export async function buildSheetPdf(
-  png: Uint8Array,
+  pngs: Uint8Array | Uint8Array[],
   widthMm = A4_WIDTH_MM,
   heightMm = A4_HEIGHT_MM,
 ): Promise<Uint8Array> {
   const { PDFDocument } = await import("pdf-lib");
   const pdf = await PDFDocument.create();
-  await addPngPage(pdf, png, widthMm, heightMm);
+  for (const png of Array.isArray(pngs) ? pngs : [pngs])
+    await addPngPage(pdf, png, widthMm, heightMm);
   return pdf.save(SAVE_OPTIONS);
 }

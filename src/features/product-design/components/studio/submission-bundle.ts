@@ -1,9 +1,10 @@
 import { formatDateTime } from "@/lib/format";
 
 import {
+  BRIEF_PAGE_MM,
+  buildDesignBrief,
   buildPrintPdf,
   buildSheetPdf,
-  buildSpecSummary,
   mmToPx,
   pathBounds,
   printDpi,
@@ -11,6 +12,8 @@ import {
   printSlugLines,
   type CustomizationTemplate,
   type DesignDocument,
+  type ElementSizer,
+  type FontRegistry,
   type PreflightReport,
   type PrintJobInfo,
   type PrintPage,
@@ -36,7 +39,8 @@ const breathe = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
  * The three files of a submission (spec §6.4), drawn from plain inputs: the customer preview PNG,
  * the print-ready PDF/X-4 (one page per print area at `max(minDpi, 300)` DPI: its artwork as
  * vectors, each element on its own layer, where the page allows, else its raster; its cut path,
- * guides and slug) and the technical-spec PDF.
+ * guides and slug) and the design brief (the TECHNICAL_SPEC file: what the customer meant, element
+ * by element, beside the print file).
  * `onStep` says where the work is (`fraction` 0–1 within the step). The renderer lets go of the
  * print images when the print step ends, however it ends.
  */
@@ -47,6 +51,9 @@ export async function buildSubmissionBundle(input: {
   document: DesignDocument;
   template: CustomizationTemplate;
   surfaces: SurfaceSet;
+  /** How big each element is, and the fonts by code: the design brief measures with them. */
+  sizer: ElementSizer;
+  fonts: FontRegistry;
   report: PreflightReport;
   checksum: string;
   renderer: ExportRenderer;
@@ -127,10 +134,22 @@ export async function buildSubmissionBundle(input: {
   });
 
   onStep?.("spec", 0);
-  const summary = buildSpecSummary({ name, template, document, report, checksum });
-  const sheet = await renderer.specSheet(summary);
+  // The design brief: what the producer prepresses from, beside the print file.
+  const brief = buildDesignBrief({
+    title,
+    template,
+    surfaces,
+    document,
+    report,
+    sizer: input.sizer,
+    fonts: input.fonts,
+    version: input.version,
+    exportedAt: formatDateTime(createdAt.toISOString()),
+    checksum,
+  });
+  const briefPages = await renderer.designBrief(brief, preview);
   await breathe();
-  const spec = await buildSheetPdf(sheet);
+  const spec = await buildSheetPdf(briefPages, BRIEF_PAGE_MM.width, BRIEF_PAGE_MM.height);
 
   return {
     CUSTOMER_PREVIEW: { name: "preview.png", type: "image/png", bytes: preview },

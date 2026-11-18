@@ -79,7 +79,8 @@ function SubmitBody({
       <DialogHeader>
         <DialogTitle>Gửi duyệt</DialogTitle>
         <DialogDescription>
-          Thiết kế được lưu, tạo ảnh xem trước, file in và đặc tả, rồi gửi Quản lý kinh doanh duyệt.
+          Thiết kế được lưu, tạo ảnh xem trước, file in và file mô tả thiết kế, rồi gửi Quản lý kinh
+          doanh duyệt.
         </DialogDescription>
       </DialogHeader>
 

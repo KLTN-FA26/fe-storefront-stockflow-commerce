@@ -84,7 +84,7 @@ function renderers() {
       printSurface: vi.fn(async () => [{ png: PNG_1x1, heightPx: 1 }]),
       printVector: vi.fn(async () => null),
       printSlug: vi.fn(async () => PNG_1x1),
-      specSheet: vi.fn(async () => PNG_1x1),
+      designBrief: vi.fn(async () => [PNG_1x1]),
       release: vi.fn(),
     };
     made.push(renderer);

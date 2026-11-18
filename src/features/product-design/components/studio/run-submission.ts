@@ -18,6 +18,7 @@ export type SubmissionSubject = Pick<
   | "template"
   | "surfaces"
   | "sizer"
+  | "fonts"
   | "printConfig"
   | "assetStatus"
   | "fontStatus"
@@ -64,6 +65,8 @@ export function drawBundle(
     document: checked.document,
     template: subject.template,
     surfaces: subject.surfaces,
+    sizer: subject.sizer,
+    fonts: subject.fonts,
     report: checked.report,
     checksum: checked.checksum,
     renderer: subject.exportRenderer,

@@ -164,6 +164,8 @@ export type {
 export { canonicalJson, documentChecksum, sha256Hex } from "./export/checksum";
 export { buildSpecSummary, specText, type SpecSummary } from "./export/summary";
 export {
+  A4_HEIGHT_MM,
+  A4_WIDTH_MM,
   buildPrintPdf,
   buildSheetPdf,
   PAGE_MARGIN_MM,
@@ -194,11 +196,14 @@ export {
 } from "./export/slug";
 export { MAX_BAND_PIXELS, printBands, type BandRows } from "./export/print-bands";
 export {
-  A4_HEIGHT_MM,
-  A4_WIDTH_MM,
-  drawSpecSheet,
-  type SpecSheetOptions,
-} from "./export/spec-sheet";
+  buildDesignBrief,
+  type BriefArea,
+  type BriefElement,
+  type DesignBrief,
+} from "./export/brief/model";
+export { BRIEF_PAGE_MM, briefPages, type BriefPage } from "./export/brief/layout";
+export { drawBriefPage, type BriefImages } from "./export/brief/draw";
+export type { BriefCtx, BriefStyle } from "./export/brief/pen";
 
 // Editor
 export { snapPlacement, surfaceSnapTargets, type SnapResult, type SnapTarget } from "./editor/snap";

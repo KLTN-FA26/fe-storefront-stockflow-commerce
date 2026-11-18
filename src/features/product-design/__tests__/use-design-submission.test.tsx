@@ -18,7 +18,7 @@ import {
   documentChecksum,
   emptyDocument,
 } from "../engine";
-import { cup12oz, PNG_1x1, sizer, textEl } from "../engine/__tests__/fixtures";
+import { cup12oz, FONTS, PNG_1x1, sizer, textEl } from "../engine/__tests__/fixtures";
 import * as steps from "../components/submit-set-steps";
 import { designKeys } from "../queries";
 import type { Design } from "../types";
@@ -79,7 +79,7 @@ const fakeRenderer = () => ({
   printSurface: vi.fn<ExportRenderer["printSurface"]>(async () => [{ png: PNG_1x1, heightPx: 1 }]),
   printVector: vi.fn<ExportRenderer["printVector"]>(async () => null),
   printSlug: vi.fn<ExportRenderer["printSlug"]>(async () => PNG_1x1),
-  specSheet: vi.fn<ExportRenderer["specSheet"]>(async () => PNG_1x1),
+  designBrief: vi.fn<ExportRenderer["designBrief"]>(async () => [PNG_1x1]),
   release: vi.fn<ExportRenderer["release"]>(),
 });
 
@@ -120,6 +120,7 @@ async function setup(
     template: cup12oz,
     surfaces: createSurfaces(cup12oz),
     sizer,
+    fonts: FONTS,
     assetStatus: {},
     fontStatus: {},
     autosave,
