@@ -60,6 +60,7 @@ export function drawBundle(
 ): Promise<SubmissionBundle> {
   return buildSubmissionBundle({
     name: subject.design.name,
+    version: subject.design.version,
     document: checked.document,
     template: subject.template,
     surfaces: subject.surfaces,

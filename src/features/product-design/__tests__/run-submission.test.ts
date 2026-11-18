@@ -30,6 +30,11 @@ import { designKeys, printConfigKeys } from "../queries";
 import type { DesignDocumentRecord } from "../types";
 import { cupWithText, designBackend, draftIn, STUDIO_PRODUCTS } from "./design-backend";
 import { TEST_FONTS } from "./fixtures";
+// The print file needs its colour profiles: jsdom serves no `public/` files.
+vi.mock(
+  "../components/studio/print-profiles",
+  async () => (await import("./print-profiles-stub")).printProfilesStub,
+);
 
 // These tests prove the runner's steps, not the PDFs: the bundle builder still runs every step,
 // but the two PDFs are stand-in bytes (pdf-lib loaded cold is slow under a loaded run). The real
@@ -57,6 +62,8 @@ afterEach(() => {
 const fakeRenderer = () => ({
   preview: vi.fn<ExportRenderer["preview"]>(async () => PNG_1x1),
   printSurface: vi.fn<ExportRenderer["printSurface"]>(async () => [{ png: PNG_1x1, heightPx: 1 }]),
+  printVector: vi.fn<ExportRenderer["printVector"]>(async () => null),
+  printSlug: vi.fn<ExportRenderer["printSlug"]>(async () => PNG_1x1),
   specSheet: vi.fn<ExportRenderer["specSheet"]>(async () => PNG_1x1),
   release: vi.fn<ExportRenderer["release"]>(),
 });

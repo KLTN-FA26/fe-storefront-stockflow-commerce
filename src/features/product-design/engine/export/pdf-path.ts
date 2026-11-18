@@ -1,4 +1,5 @@
-import type { PathCmd } from "../geometry/types";
+import { boundsOf } from "../geometry/polygon";
+import type { PathCmd, PointMm, RectMm } from "../geometry/types";
 import { mmToPt } from "../geometry/units";
 
 /** One PDF path-construction operator with its operands, in pt and PDF user space (y up). */
@@ -90,4 +91,30 @@ export function pathToPdf(path: PathCmd[], pageHeightMm: number): PdfSegment[] {
     }
   }
   return out;
+}
+
+const QUARTER = Math.PI / 2;
+
+/**
+ * Axis-aligned bounds of a flat path (mm, as `PathCmd` draws it): its points, the ends of its
+ * arcs, and the points where an arc turns through an axis direction (its extremes).
+ */
+export function pathBounds(path: PathCmd[]): RectMm {
+  const points: PointMm[] = [];
+  for (const cmd of path) {
+    if (cmd.c === "Z") continue;
+    if (cmd.c !== "A") {
+      points.push({ x: cmd.x, y: cmd.y });
+      continue;
+    }
+    const at = (angle: number) => ({
+      x: cmd.cx + cmd.r * Math.cos(angle),
+      y: cmd.cy + cmd.r * Math.sin(angle),
+    });
+    const end = cmd.start + canvasSweep(cmd.start, cmd.end, cmd.ccw);
+    const [lo, hi] = [Math.min(cmd.start, end), Math.max(cmd.start, end)];
+    points.push(at(cmd.start), at(end));
+    for (let k = Math.ceil(lo / QUARTER); k * QUARTER <= hi; k++) points.push(at(k * QUARTER));
+  }
+  return boundsOf(points);
 }

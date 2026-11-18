@@ -24,6 +24,11 @@ import { designKeys } from "../queries";
 import type { Design } from "../types";
 import { printConfigSchema } from "../schemas";
 import { design as designOf, documentRecordDto, printConfigDto } from "./fixtures";
+// The print file needs its colour profiles: jsdom serves no `public/` files.
+vi.mock(
+  "../components/studio/print-profiles",
+  async () => (await import("./print-profiles-stub")).printProfilesStub,
+);
 
 vi.mock("../api", () => ({
   getDesign: vi.fn(),
@@ -72,6 +77,8 @@ const label = textEl("t", {
 const fakeRenderer = () => ({
   preview: vi.fn<ExportRenderer["preview"]>(async () => PNG_1x1),
   printSurface: vi.fn<ExportRenderer["printSurface"]>(async () => [{ png: PNG_1x1, heightPx: 1 }]),
+  printVector: vi.fn<ExportRenderer["printVector"]>(async () => null),
+  printSlug: vi.fn<ExportRenderer["printSlug"]>(async () => PNG_1x1),
   specSheet: vi.fn<ExportRenderer["specSheet"]>(async () => PNG_1x1),
   release: vi.fn<ExportRenderer["release"]>(),
 });

@@ -4,12 +4,14 @@ import {
   A4_HEIGHT_MM,
   A4_WIDTH_MM,
   compose,
+  drawSlug,
   drawSpecSheet,
   ImageCache,
   mmToPx,
   printBands,
   relativeLuminance,
   renderSurface,
+  SLUG_HEIGHT_MM,
   surfacePx,
   type DesignDocument,
   type Hex,
@@ -17,9 +19,11 @@ import {
   type PrintBand,
   type SpecSummary,
   type SurfaceContent,
+  type VectorPage,
 } from "../../engine";
 import { canvasOf, EXPORT_MESSAGES as MESSAGES, ExportError, pngOf } from "./export-canvas";
 import { exportPreview, type PreviewDeps } from "./preview-export";
+import { printVectorArt } from "./print-vector";
 import { createLayer, materialOf, readChromeColors } from "./studio-paint";
 import { downloadAsset } from "./use-asset-images";
 
@@ -46,6 +50,17 @@ export type ExportRenderer = {
     document: DesignDocument,
     pxPerMm: number,
   ): Promise<PrintBand[]>;
+  /**
+   * The same print area as vectors, each element on its own layer, or `null` where the page holds
+   * something a PDF cannot draw the same way (the caller then uses `printSurface`).
+   */
+  printVector(
+    code: PrintAreaCode,
+    document: DesignDocument,
+    pxPerMm: number,
+  ): Promise<VectorPage | null>;
+  /** The print file's slug under a page `widthMm` wide: `lines` on a transparent strip. */
+  printSlug(lines: readonly string[], widthMm: number, pxPerMm: number): Promise<Uint8Array>;
   /** The technical-spec sheet, A4 portrait. */
   specSheet(summary: SpecSummary): Promise<Uint8Array>;
   /** Lets go of what the print surfaces loaded (the full-resolution images and their layers). */
@@ -112,40 +127,52 @@ export function createCanvasExportRenderer(deps: RendererDeps): ExportRenderer {
     return cache;
   }
 
+  /** A surface's print ops and the env to draw them with, its images loaded at full resolution. */
+  async function prepare(code: PrintAreaCode, doc: DesignDocument, pxPerMm: number) {
+    const surface = surfaces.byCode[code];
+    if (!surface) throw new ExportError(MESSAGES.canvas);
+    const content = doc.surfaces[code] ?? NO_CONTENT;
+    const assetIds = printedImages(content);
+    drawing = new Set(assetIds);
+    const cache = await loadFull(assetIds);
+    // Never a placeholder in a print file: every image must be there.
+    if (assetIds.some((assetId) => !cache.get(assetId, "full"))) {
+      throw new ExportError(MESSAGES.image);
+    }
+    const ops = compose({
+      surface,
+      content,
+      target: "print",
+      material: materialOf(template),
+      sizer: deps.sizer,
+      fonts: deps.fonts,
+      measure: deps.measure,
+    });
+    const env = {
+      pxPerMm,
+      chrome: readChromeColors(),
+      image: (assetId: string) => cache.get(assetId, "full"),
+      createLayer,
+      layerCache: layers,
+      // Wrapped images on the page's own pixel grid: each original is rasterised once at the
+      // source resolution (capped at its own, so a finer photo is scaled down first), then that
+      // raster is remapped once.
+      exactWarp: true,
+    };
+    return { surface, content, ops, env };
+  }
+
+  /** This surface's full images and print layers can be hundreds of MB: let them go now. */
+  function letGo() {
+    full?.clear();
+    layers = new Map();
+  }
+
   return {
     preview: (size, signal) => exportPreview(deps, size, signal),
 
     async printSurface(code, doc, pxPerMm) {
-      const surface = surfaces.byCode[code];
-      if (!surface) throw new ExportError(MESSAGES.canvas);
-      const content = doc.surfaces[code] ?? NO_CONTENT;
-      const assetIds = printedImages(content);
-      drawing = new Set(assetIds);
-      const cache = await loadFull(assetIds);
-      // Never a placeholder in a print file: every image must be there.
-      if (assetIds.some((assetId) => !cache.get(assetId, "full"))) {
-        throw new ExportError(MESSAGES.image);
-      }
-      const ops = compose({
-        surface,
-        content,
-        target: "print",
-        material: materialOf(template),
-        sizer: deps.sizer,
-        fonts: deps.fonts,
-        measure: deps.measure,
-      });
-      const env = {
-        pxPerMm,
-        chrome: readChromeColors(),
-        image: (assetId: string) => cache.get(assetId, "full"),
-        createLayer,
-        layerCache: layers,
-        // Wrapped images on the page's own pixel grid: each original is rasterised once at the
-        // source resolution (capped at its own, so a finer photo is scaled down first), then that
-        // raster is remapped once.
-        exactWarp: true,
-      };
+      const { surface, ops, env } = await prepare(code, doc, pxPerMm);
       const { width, height } = surfacePx(surface.flatBounds, pxPerMm);
       try {
         const bands: PrintBand[] = [];
@@ -164,9 +191,29 @@ export function createCanvasExportRenderer(deps: RendererDeps): ExportRenderer {
         }
         return bands;
       } finally {
-        // This surface's full images and print layers can be hundreds of MB: let them go now.
-        full?.clear();
-        layers = new Map();
+        letGo();
+      }
+    },
+
+    async printVector(code, doc, pxPerMm) {
+      const { surface, content, ops, env } = await prepare(code, doc, pxPerMm);
+      try {
+        return await printVectorArt(ops, surface, content, env, deps.fonts);
+      } finally {
+        letGo();
+      }
+    },
+
+    async printSlug(lines, widthMm, pxPerMm) {
+      const canvas = canvasOf(Math.round(widthMm * pxPerMm), Math.round(SLUG_HEIGHT_MM * pxPerMm));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new ExportError(MESSAGES.canvas);
+      drawSlug(ctx, lines, widthMm, pxPerMm, { ink: paperInk() });
+      try {
+        return await pngOf(canvas);
+      } finally {
+        canvas.width = 0;
+        canvas.height = 0;
       }
     },
 

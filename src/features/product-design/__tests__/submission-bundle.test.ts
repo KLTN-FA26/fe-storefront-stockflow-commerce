@@ -4,17 +4,25 @@ import type { ExportRenderer } from "../components/studio/export-renderer";
 import { buildSubmissionBundle, type BundleStep } from "../components/studio/submission-bundle";
 import { createSurfaces, emptyDocument, mmToPx, printDpi } from "../engine";
 import { bagM, cup12oz, PNG_1x1 } from "../engine/__tests__/fixtures";
+// The print file needs its colour profiles: jsdom serves no `public/` files.
+vi.mock(
+  "../components/studio/print-profiles",
+  async () => (await import("./print-profiles-stub")).printProfilesStub,
+);
 
 /** Export rendering stands in for the canvases jsdom lacks: every picture is a 1 × 1 PNG. */
 const fakeRenderer = () => ({
   preview: vi.fn<ExportRenderer["preview"]>(async () => PNG_1x1),
   printSurface: vi.fn<ExportRenderer["printSurface"]>(async () => [{ png: PNG_1x1, heightPx: 1 }]),
+  printVector: vi.fn<ExportRenderer["printVector"]>(async () => null),
+  printSlug: vi.fn<ExportRenderer["printSlug"]>(async () => PNG_1x1),
   specSheet: vi.fn<ExportRenderer["specSheet"]>(async () => PNG_1x1),
   release: vi.fn<ExportRenderer["release"]>(),
 });
 
 const input = (renderer: ExportRenderer, template = cup12oz) => ({
   name: "Ly giấy logo quán",
+  version: 3,
   document: emptyDocument(template),
   template,
   surfaces: createSurfaces(template),

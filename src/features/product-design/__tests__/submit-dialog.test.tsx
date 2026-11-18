@@ -22,6 +22,11 @@ import { designKeys } from "../queries";
 import type { Design, DesignEvent } from "../types";
 import { designBackend, draftIn, STUDIO_PRODUCTS } from "./design-backend";
 import { TEST_FONTS } from "./fixtures";
+// The print file needs its colour profiles: jsdom serves no `public/` files.
+vi.mock(
+  "../components/studio/print-profiles",
+  async () => (await import("./print-profiles-stub")).printProfilesStub,
+);
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -62,6 +67,8 @@ afterEach(() => {
 const fakeRenderer = () => ({
   preview: vi.fn<ExportRenderer["preview"]>(async () => PNG_1x1),
   printSurface: vi.fn<ExportRenderer["printSurface"]>(async () => [{ png: PNG_1x1, heightPx: 1 }]),
+  printVector: vi.fn<ExportRenderer["printVector"]>(async () => null),
+  printSlug: vi.fn<ExportRenderer["printSlug"]>(async () => PNG_1x1),
   specSheet: vi.fn<ExportRenderer["specSheet"]>(async () => PNG_1x1),
   release: vi.fn<ExportRenderer["release"]>(),
 });
