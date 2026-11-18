@@ -24,18 +24,19 @@ describe("mock order book mirrors the BE order rules", () => {
   it("seeds more than one page of orders covering every status", () => {
     const orders = seedMockOrders(CUSTOMER).filter((o) => o.customerId === CUSTOMER);
     expect(orders.length).toBeGreaterThan(20);
-    expect(new Set(orders.map((o) => o.status)).size).toBe(12);
+    // The 12 statuses of the cycle, and the WF-02 order awaiting its contract.
+    expect(new Set(orders.map((o) => o.status)).size).toBe(13);
   });
 
   it("pages zero-based like PageResponse, newest change first", () => {
     const first = pageOf(book().page({ page: 0, size: 10 }));
-    expect(first).toMatchObject({ page: 0, size: 10, totalElements: 24, totalPages: 3 });
+    expect(first).toMatchObject({ page: 0, size: 10, totalElements: 25, totalPages: 3 });
     expect(first).toMatchObject({ hasNext: true, hasPrevious: false });
     const stamps = first.items.map((o) => o.placedAt);
     expect(stamps).toEqual([...stamps].sort().reverse());
 
     const last = pageOf(book().page({ page: "2", size: "10" }));
-    expect(last.items).toHaveLength(4);
+    expect(last.items).toHaveLength(5);
     expect(last).toMatchObject({ hasNext: false, hasPrevious: true });
   });
 

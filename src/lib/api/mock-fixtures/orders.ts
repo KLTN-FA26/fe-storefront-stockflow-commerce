@@ -23,6 +23,7 @@ import { MOCK_COMPANY_BANK, mockInstallmentsOf, mockOrderInstallments } from "./
 
 export type MockOrderStatus =
   | "DRAFT"
+  | "PENDING_CONTRACT"
   | "PENDING_PAYMENT"
   | "CONFIRMED"
   | "IN_PRODUCTION"
@@ -173,6 +174,7 @@ const fail = (
 const CANCELLABLE = new Set<MockOrderStatus>(["DRAFT", "PENDING_PAYMENT", "CONFIRMED"]);
 // OrderStatus#canTransitionTo(CANCELLED) for the rest: the customer may ask (202).
 const REQUESTABLE = new Set<MockOrderStatus>([
+  "PENDING_CONTRACT",
   "IN_PRODUCTION",
   "READY_TO_FULFILL",
   "IN_FULFILMENT",
@@ -203,6 +205,8 @@ const CANCELLATION_REASON_CODES = [
 // BE CustomerOrdersService#statusGroup / #deliveryState.
 function statusGroup(status: MockOrderStatus): string {
   switch (status) {
+    case "PENDING_CONTRACT":
+      return "AWAITING_CONTRACT";
     case "DRAFT":
     case "PENDING_PAYMENT":
       return "AWAITING_PAYMENT";
@@ -724,6 +728,7 @@ const STATUS_CYCLE: MockOrderStatus[] = [
 /** The statuses an order went through to reach `status`, oldest first (BE status history). */
 const PATH: Record<MockOrderStatus, MockOrderStatus[]> = {
   DRAFT: ["DRAFT"],
+  PENDING_CONTRACT: ["DRAFT", "PENDING_CONTRACT"],
   PENDING_PAYMENT: ["PENDING_PAYMENT"],
   CONFIRMED: ["PENDING_PAYMENT", "CONFIRMED"],
   IN_PRODUCTION: ["PENDING_PAYMENT", "CONFIRMED", "IN_PRODUCTION"],
@@ -845,12 +850,58 @@ function seedOrder(n: number, customerId: string, status: MockOrderStatus): Mock
   };
 }
 
-/** Orders of `customerId` (more than one page) plus one order owned by somebody else. */
+/**
+ * WF-02 DS-02a's order (kltn-docs 14 §4.2–§4.3): made from the accepted quote of 60 cartons of the
+ * customer's own cup, its contract SENT and waiting to be signed. Its id is
+ * `MOCK_CONTRACT_ORDER_IDS.sent` of wf02.ts (spelled out here: wf02.ts imports this file). Placed
+ * before the cycle's orders so the history pages keep their order.
+ */
+export const MOCK_PENDING_CONTRACT_ORDER_ID = "0c0e0000-0000-4000-8000-000000000001";
+
+function seedContractOrder(customerId: string): MockOrder {
+  const placed = Date.UTC(2026, 8, 10, 3, 0);
+  return {
+    orderId: MOCK_PENDING_CONTRACT_ORDER_ID,
+    orderNumber: "SO-20260910-900001",
+    customerId,
+    status: "PENDING_CONTRACT",
+    // 60 cartons × 1.000 cups × 1.150 đ + plate fee 1.500.000 đ, VAT 8 % (plan §3 DS-02a step 3).
+    totalAmount: 76_140_000,
+    currency: "VND",
+    lines: [
+      {
+        lineId: uuid("1a2b3c4d", 9001),
+        sku: "LY-GIAY-DEMO-12OZ-XANH",
+        quantity: 60_000,
+        unitPrice: 1150,
+        lineTotal: 69_000_000,
+        reservationIds: [],
+      },
+    ],
+    placedAt: new Date(placed).toISOString(),
+    createdBy: "sales",
+    lastModifiedAt: new Date(placed + 2 * HOUR).toISOString(),
+    lastModifiedBy: "sales",
+    shippingAddress: SHIPPING,
+    fromQuote: true,
+    paymentTerm: "DEPOSIT",
+    paidAmount: 0,
+    history: [
+      { status: "DRAFT", occurredAt: new Date(placed).toISOString() },
+      { status: "PENDING_CONTRACT", occurredAt: new Date(placed + 2 * HOUR).toISOString() },
+    ],
+  };
+}
+
+/**
+ * Orders of `customerId` (more than one page, the WF-02 order awaiting its contract last) plus one
+ * order owned by somebody else.
+ */
 export function seedMockOrders(customerId: string, count = 24): MockOrder[] {
   const mine = Array.from({ length: count }, (_, n) =>
     seedOrder(n, customerId, STATUS_CYCLE[n % STATUS_CYCLE.length]!),
   );
-  return [...mine, seedOrder(count, "CUS-OTHER", "CONFIRMED")];
+  return [...mine, seedContractOrder(customerId), seedOrder(count, "CUS-OTHER", "CONFIRMED")];
 }
 
 /** Id of the n-th seeded order (its status is the n-th of the status cycle). */
