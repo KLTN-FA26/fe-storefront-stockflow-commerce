@@ -115,7 +115,13 @@ export { layoutText, type TextLayout, type TextLine } from "./render/text-layout
 export type { ComposeTarget, DrawOp } from "./render/ops";
 export { compose, KRAFT_INK_TINT, type ComposeInput } from "./render/compose";
 export { arcGlyphs, type ArcGlyph } from "./render/arc-text";
-export { execute, type ChromeColors, type Ctx2D, type RenderEnv } from "./render/execute";
+export {
+  execute,
+  type AroundOp,
+  type ChromeColors,
+  type Ctx2D,
+  type RenderEnv,
+} from "./render/execute";
 export { drawPattern } from "./render/patterns";
 export { strokePolygon } from "./render/brush";
 export {
@@ -157,14 +163,47 @@ export type {
 // Export
 export { canonicalJson, documentChecksum, sha256Hex } from "./export/checksum";
 export { buildSpecSummary, specText, type SpecSummary } from "./export/summary";
-export { buildPrintPdf, buildSheetPdf, type PrintBand, type PrintPage } from "./export/print-pdf";
-export { MAX_BAND_PIXELS, printBands, type BandRows } from "./export/print-bands";
 export {
   A4_HEIGHT_MM,
   A4_WIDTH_MM,
-  drawSpecSheet,
-  type SpecSheetOptions,
-} from "./export/spec-sheet";
+  buildPrintPdf,
+  buildSheetPdf,
+  PAGE_MARGIN_MM,
+  printGuides,
+  type PrintBand,
+  type PrintGuide,
+  type PrintJob,
+  type PrintPage,
+} from "./export/print-pdf";
+export { ISO_COATED_V2, type OutputCondition, type PrintProfiles } from "./export/pdfx";
+export { pathBounds } from "./export/pdf-path";
+export {
+  createPdfCanvas,
+  type GlyphCmd,
+  type GlyphOutliner,
+  type TextOutline,
+  type VectorArt,
+} from "./export/pdf-canvas";
+export type { VectorPage } from "./export/vector-page";
+export { elementLayerName, printLayerNames } from "./export/print-layers";
+export {
+  drawSlug,
+  GUIDES_LAYER_NAME,
+  printSlugLines,
+  SLUG_HEIGHT_MM,
+  type PrintJobInfo,
+  type SlugArea,
+} from "./export/slug";
+export { MAX_BAND_PIXELS, printBands, type BandRows } from "./export/print-bands";
+export {
+  buildDesignBrief,
+  type BriefArea,
+  type BriefElement,
+  type DesignBrief,
+} from "./export/brief/model";
+export { BRIEF_PAGE_MM, briefPages, type BriefPage } from "./export/brief/layout";
+export { drawBriefPage, type BriefImages } from "./export/brief/draw";
+export type { BriefCtx, BriefStyle } from "./export/brief/pen";
 
 // Editor
 export { snapPlacement, surfaceSnapTargets, type SnapResult, type SnapTarget } from "./editor/snap";

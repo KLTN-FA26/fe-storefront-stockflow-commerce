@@ -22,6 +22,11 @@ import {
   type DesignBackend,
 } from "./design-backend";
 import { TEST_FONTS } from "./fixtures";
+// The print file needs its colour profiles: jsdom serves no `public/` files.
+vi.mock(
+  "../components/studio/print-profiles",
+  async () => (await import("./print-profiles-stub")).printProfilesStub,
+);
 
 // "Gửi duyệt cả bộ" (spec 2026-11-12 §8) over the design mock: each design is loaded by itself,
 // checked, drawn (a stand-in renderer: jsdom has no canvas) and uploaded, then one round opens.
@@ -77,7 +82,9 @@ function renderers() {
         return PNG_1x1;
       }),
       printSurface: vi.fn(async () => [{ png: PNG_1x1, heightPx: 1 }]),
-      specSheet: vi.fn(async () => PNG_1x1),
+      printVector: vi.fn(async () => null),
+      printSlug: vi.fn(async () => PNG_1x1),
+      designBrief: vi.fn(async () => [PNG_1x1]),
       release: vi.fn(),
     };
     made.push(renderer);

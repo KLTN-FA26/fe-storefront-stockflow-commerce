@@ -13,7 +13,7 @@ export type WorkStep = (typeof WORK_STEPS)[number];
 const STEP_LABELS: Record<WorkStep, string> = {
   preview: "Ảnh xem trước",
   print: "File in",
-  spec: "Đặc tả",
+  spec: "Mô tả thiết kế",
   upload: "Tải lên",
 };
 

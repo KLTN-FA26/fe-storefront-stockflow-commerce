@@ -91,7 +91,7 @@ describe("SubmittedFiles", () => {
     expect(files.map((f) => f.textContent)).toEqual([
       expect.stringContaining("Ảnh xem trước"),
       expect.stringContaining("File in (PDF)"),
-      expect.stringContaining("Đặc tả kỹ thuật (PDF)"),
+      expect.stringContaining("Mô tả thiết kế (PDF)"),
     ]);
     const asked = () => get.mock.calls.filter(([url]) => String(url).includes("download-url"));
     expect(asked()).toHaveLength(0);

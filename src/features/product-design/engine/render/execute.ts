@@ -165,14 +165,21 @@ function run(op: DrawOp, ctx: Ctx2D, env: RenderEnv): void {
   }
 }
 
+/** Wraps the drawing of one op: a PDF context uses it to put each element on its own layer. */
+export type AroundOp = (op: DrawOp, index: number, draw: () => void) => void;
+
 /**
  * Replays composed ops (flat mm) onto a 2D context at `env.pxPerMm`, on top of the context's
  * current transform. Never throws for missing assets: an image that is not decoded yet is a
- * placeholder rectangle.
+ * placeholder rectangle. `around`, when given, runs each op through it.
  */
-export function execute(ops: DrawOp[], ctx: Ctx2D, env: RenderEnv): void {
+export function execute(ops: DrawOp[], ctx: Ctx2D, env: RenderEnv, around?: AroundOp): void {
   ctx.save();
   ctx.scale(env.pxPerMm, env.pxPerMm);
-  for (const op of ops) run(op, ctx, env);
+  ops.forEach((op, index) => {
+    const draw = () => run(op, ctx, env);
+    if (around) around(op, index, draw);
+    else draw();
+  });
   ctx.restore();
 }

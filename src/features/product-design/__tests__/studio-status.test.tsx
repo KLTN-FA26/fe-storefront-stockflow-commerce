@@ -205,7 +205,7 @@ describe("the studio per status", () => {
       [
         [/Ảnh xem trước/, "CUSTOMER_PREVIEW"],
         [/File in \(PDF\)/, "PRINT_READY"],
-        [/Đặc tả kỹ thuật \(PDF\)/, "TECHNICAL_SPEC"],
+        [/Mô tả thiết kế \(PDF\)/, "TECHNICAL_SPEC"],
       ] as const
     ).entries()) {
       await user.click(await screen.findByRole("button", { name: label }));
