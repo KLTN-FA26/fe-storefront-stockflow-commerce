@@ -37,6 +37,26 @@ export function describeApiError(error: unknown, byCode: Record<string, string> 
   return "Đã xảy ra lỗi. Vui lòng thử lại.";
 }
 
+/**
+ * For the WF-02 screens (design quote requests, quotes, contracts, chat): the BE now words every
+ * refusal of theirs in Vietnamese (`Accept-Language` defaults to vi, BE PR #365), so a 4xx shows the
+ * BE's own `message`, which names the facts (the MOQ, the line) the FE cannot rebuild. `byCode`
+ * still wins, for the few codes whose text stays English (the preflight issues) or that need other
+ * words; 401/403/429 and 5xx keep the common Vietnamese text.
+ */
+export function describeBeRefusal(error: unknown, byCode: Record<string, string> = {}): string {
+  if (
+    error instanceof ApiError &&
+    error.isClientError &&
+    !byCode[error.code] &&
+    !["UNAUTHORIZED", "FORBIDDEN", "RATE_LIMITED"].includes(error.code) &&
+    error.message.trim() !== ""
+  ) {
+    return withLookup(error.message, error);
+  }
+  return describeApiError(error, byCode);
+}
+
 export const hasErrorCode = (error: unknown, code: string): error is ApiError =>
   error instanceof ApiError && error.code === code;
 

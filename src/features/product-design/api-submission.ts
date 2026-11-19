@@ -3,6 +3,7 @@ import { z } from "zod";
 import { api } from "@/lib/api/client";
 
 import { designFromAnswer } from "./api-designs";
+import { quoteRequestBody } from "./api-quote-requests";
 import { designPath, multipart, withSignal } from "./api-request";
 import {
   designArtifactDtoSchema,
@@ -21,6 +22,7 @@ import type {
   DesignFileRole,
   DownloadLink,
   PreflightFailureInput,
+  QuoteRequestInput,
   SubmissionFile,
   SubmissionFiles,
   SubmitDesignInput,
@@ -96,26 +98,36 @@ export async function readDesignVersion(id: string, signal?: AbortSignal): Promi
 }
 
 /**
- * POST /designs/{id}/technical-review-requests `{ version }` — DRAFT → PENDING_REVIEW. The BE runs
- * the preflight itself on the saved layout and writes a failure into the design's history
- * (422 `DESIGN_PREFLIGHT_FAILED`: the studio must not record it again); 409 `DESIGN_FILES_OUTDATED`
- * names the roles to draw again. No quote request: that is another part.
+ * POST /designs/{id}/technical-review-requests `{ version, quoteRequest? }` — DRAFT → PENDING_REVIEW.
+ * The BE runs the preflight itself on the saved layout and writes a failure into the design's
+ * history (422 `DESIGN_PREFLIGHT_FAILED`: the studio must not record it again); 409
+ * `DESIGN_FILES_OUTDATED` names the roles to draw again. With `quoteRequest` it is "Gửi duyệt và
+ * yêu cầu báo giá" (A-2, docs 12 §4.8.24): the request is checked before the preflight (400
+ * `VALIDATION_FAILED` on `quoteRequest.cartons` / `quoteRequest.desiredDeliveryDate` refuses the
+ * whole submission) and opened only when the design is sent. The answer does not carry it: read it
+ * with `listDesignQuoteRequests`.
  */
-export async function requestReview(id: string, version: number): Promise<Design> {
+export async function requestReview(
+  id: string,
+  version: number,
+  quoteRequest?: QuoteRequestInput,
+): Promise<Design> {
   const { data } = await api.post<unknown>(designPath(id, "/technical-review-requests"), {
     version,
+    ...(quoteRequest ? { quoteRequest: quoteRequestBody(quoteRequest) } : {}),
   });
   return designFromAnswer(data);
 }
 
 /**
  * Sends a design the BE's way: its three files (each `POST …/artifacts`), the version read after the
- * last upload moved it, then the request for review. The layout is already saved: the studio flushes
+ * last upload moved it, then the request for review (with the quote request, when one is asked).
+ * The layout is already saved: the studio flushes
  * and verifies it before it draws (`documentChecksum` is that stored layout's).
  */
 export async function submitDesign(id: string, input: SubmitDesignInput): Promise<Design> {
   await uploadDesignFiles(id, input.files, input.documentChecksum, input.runNonce);
-  return requestReview(id, await readDesignVersion(id));
+  return requestReview(id, await readDesignVersion(id), input.quoteRequest);
 }
 
 /**

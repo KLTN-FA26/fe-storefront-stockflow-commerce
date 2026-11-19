@@ -186,6 +186,17 @@ export function registerDesignMockRoutes(store: DesignMockStore | Promise<Design
 
   /* ── Images ── */
 
+  /* ── Quote requests (WF-02 D1, plan Phụ lục B A-1, A-3; `design-store-quotes.ts`) ── */
+
+  // 201 a new request, 200 the open one asked again: the store's status goes out as it is.
+  const asIs = (data: unknown) => data;
+  route("POST", "/designs/:id/quote-requests", async (s, config) =>
+    viaBe(await s.requestQuote(id(config), bodyOf(config)), asIs),
+  );
+  route("GET", "/designs/:id/quote-requests", async (s, config) =>
+    viaBe(await s.designQuoteRequests(id(config)), asIs),
+  );
+
   // The BE's contract (rows 12-15): refusals of a file are 415 / 413 with a message only.
   const asset = (data: unknown) => data;
   route("GET", "/designs/:id/assets", async (s, config) =>

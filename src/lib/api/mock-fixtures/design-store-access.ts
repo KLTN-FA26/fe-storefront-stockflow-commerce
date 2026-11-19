@@ -29,7 +29,7 @@ export function createExclusive() {
   };
 }
 
-/** The collections of part E: a snapshot stored before them lacks them. */
+/** The collections of part E (and of the quote requests, WF-02 D1): a snapshot stored before them lacks them. */
 type LaterCollection =
   | "projects"
   | "projectEvents"
@@ -37,7 +37,9 @@ type LaterCollection =
   | "reviewRounds"
   | "submissionUploads"
   | "artifactUploads"
-  | "failNextApproval";
+  | "failNextApproval"
+  | "quoteRequests"
+  | "projectQuoteRequests";
 
 /**
  * A snapshot this store can read: the state of before design projects (part E) has none of the
@@ -63,6 +65,8 @@ function isState(rows: Record<string, unknown>): rows is StoredState {
     (rows.submissionUploads === undefined || Array.isArray(rows.submissionUploads)) &&
     (rows.artifactUploads === undefined || Array.isArray(rows.artifactUploads)) &&
     (rows.failNextApproval === undefined || Array.isArray(rows.failNextApproval)) &&
+    (rows.quoteRequests === undefined || Array.isArray(rows.quoteRequests)) &&
+    (rows.projectQuoteRequests === undefined || Array.isArray(rows.projectQuoteRequests)) &&
     (projects === undefined || projects.every(hasSeq)) &&
     typeof documents === "object" &&
     documents !== null &&
@@ -84,6 +88,8 @@ function completed(stored: StoredState): DesignMockState {
     submissionUploads: stored.submissionUploads ?? [],
     artifactUploads: stored.artifactUploads ?? [],
     failNextApproval: stored.failNextApproval ?? [],
+    quoteRequests: stored.quoteRequests ?? [],
+    projectQuoteRequests: stored.projectQuoteRequests ?? [],
     seq: { ...stored.seq, project: projectSeq },
   };
 }

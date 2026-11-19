@@ -18,6 +18,16 @@ export const PERM = {
   designsUpdate: "design-designs:UPDATE",
   /** Technical review of a design (staff). */
   designsApprove: "design-designs:APPROVE",
+  /** Ask Sales for a quote on an approved design or a project (BE design-quote-requests). */
+  designQuoteRequest: "design-quote-requests:CREATE",
+  /** The quotes Sales sent: GET /quotes, /quotes/{id}, the PDF. */
+  quotesRead: "sales-quotes:READ",
+  /** Accept a quote or ask for changes (the customer's side of sales-quotes:APPROVE). */
+  quotesApprove: "sales-quotes:APPROVE",
+  /** The customer's own conversations with Sales (BE chat-conversations, scope OWN). */
+  chatRead: "chat-conversations:READ",
+  chatCreate: "chat-conversations:CREATE",
+  chatUpdate: "chat-conversations:UPDATE",
 } as const;
 
 /**

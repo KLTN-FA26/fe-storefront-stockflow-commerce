@@ -30,6 +30,16 @@ export const MOCK_CUSTOMER_PERMISSIONS = [
     CUSTOMER_ACTIONS.map((action) => `${resource}:${action}`),
   ),
   "catalog-storefront:READ",
+  // BE baseline: the CUSTOMER role asks for a quote on its approved designs and projects (WF-02 D1).
+  "design-quote-requests:CREATE",
+  // BE: the customer reads the quotes sent to it and answers them (accept / ask for changes).
+  "sales-quotes:READ",
+  "sales-quotes:APPROVE",
+  // BE chat_foundation migration: CUSTOMER holds chat-conversations VIEW_PAGE, READ, CREATE, UPDATE.
+  "chat-conversations:CREATE",
+  "chat-conversations:READ",
+  "chat-conversations:UPDATE",
+  "chat-conversations:VIEW_PAGE",
   // BE baseline: the CUSTOMER role reads its own contract installments (GET /installments/me).
   "payment-installments:READ",
   // Hoá đơn đã phát hành của khách (V20261120000600) và hoàn tiền của đơn mình (baseline)

@@ -21,6 +21,8 @@ export const projectKeys = {
   detail: (id: string) => [...projectKeys.details(), id] as const,
   library: (id: string) => [...projectKeys.detail(id), "library"] as const,
   history: (id: string) => [...projectKeys.detail(id), "history"] as const,
+  /** Its quote requests (A-7), newest first. */
+  quoteRequests: (id: string) => [...projectKeys.detail(id), "quote-requests"] as const,
 };
 
 /** The caller's projects, a tab and a page at a time. */

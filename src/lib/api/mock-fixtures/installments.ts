@@ -11,7 +11,7 @@ const DAY_MS = 86_400_000;
 const ON_SIGNING_DAYS = 7;
 
 /** No contract was signed: no installments, and the BE answers 404 INSTALLMENT_NOT_FOUND. */
-const UNSIGNED = new Set<MockOrderStatus>(["DRAFT"]);
+const UNSIGNED = new Set<MockOrderStatus>(["DRAFT", "PENDING_CONTRACT"]);
 /** The order is ready to leave: BEFORE_DELIVERY falls due (15 §4.1). */
 const READY_OR_LATER = new Set<MockOrderStatus>([
   "READY_TO_FULFILL",

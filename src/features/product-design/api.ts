@@ -49,6 +49,12 @@ export {
   readProductCustomization,
 } from "./api-print-config";
 export {
+  listDesignQuoteRequests,
+  listProjectQuoteRequests,
+  requestDesignQuote,
+  requestProjectQuote,
+} from "./api-quote-requests";
+export {
   getArtifactDownloadUrl,
   listDesignFiles,
   readDesignVersion,

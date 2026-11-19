@@ -6,7 +6,7 @@ import {
   uploadDesignFiles,
 } from "./api";
 import { isPreflightRefusal, outdatedRolesOf } from "./errors";
-import type { Design, DesignFileRole, SubmissionFiles } from "./types";
+import type { Design, DesignFileRole, QuoteRequestInput, SubmissionFiles } from "./types";
 
 /**
  * A failed send, before it counts as one (Flows M-1): the answer to the request for review may be
@@ -28,7 +28,7 @@ async function sentAfterAll(id: string, error: unknown): Promise<Design> {
  *     flushed and verified the layout before it draws, so no second save is made here;
  *  2. the three files, one `POST /designs/{id}/artifacts` each; every upload moves the version;
  *  3. the version is read again (the uploads' answers do not carry it);
- *  4. `POST /designs/{id}/technical-review-requests {version}`.
+ *  4. `POST /designs/{id}/technical-review-requests {version, quoteRequest?}`.
  * A `409 DESIGN_FILES_OUTDATED` (a file missing, or drawn from another layout or an older template)
  * names the roles to repair: they are drawn again by `redraw` and uploaded under the new run nonce
  * it answers (the BE never makes a replayed upload current, so a redraw with equal bytes must not
@@ -47,11 +47,13 @@ export async function sendDesign(
     redraw: (
       roles: readonly DesignFileRole[],
     ) => Promise<{ files: SubmissionFiles; runNonce: string }>;
+    /** "Gửi duyệt và yêu cầu báo giá": sent with the request for review, and again after a redraw. */
+    quoteRequest?: QuoteRequestInput | undefined;
   },
 ): Promise<Design> {
-  const { documentChecksum, files, runNonce, redraw } = input;
+  const { documentChecksum, files, runNonce, redraw, quoteRequest } = input;
   try {
-    return await submitDesign(id, { documentChecksum, files, runNonce });
+    return await submitDesign(id, { documentChecksum, files, runNonce, quoteRequest });
   } catch (error) {
     const stale = outdatedRolesOf(error);
     if (stale === null) return sentAfterAll(id, error);
@@ -59,7 +61,10 @@ export async function sendDesign(
     await uploadDesignFiles(id, fresh.files, documentChecksum, fresh.runNonce, stale);
     const version = await readDesignVersion(id);
     try {
-      return await requestReview(id, version);
+      // A plain submission sends no third argument: its request is `{ version }` alone.
+      return await (quoteRequest
+        ? requestReview(id, version, quoteRequest)
+        : requestReview(id, version));
     } catch (again) {
       return sentAfterAll(id, again);
     }
