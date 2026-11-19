@@ -3,6 +3,7 @@
 import { formatDateTime } from "@/lib/format";
 
 import { isReturned } from "../../lifecycle";
+import { ChatAboutButton } from "../chat-about-button";
 import { RequestQuoteButton } from "../design-quote-request";
 import type { Design } from "../../types";
 import { ReadOnlyBanner } from "./read-only-banner";
@@ -37,6 +38,7 @@ export function StatusBanner({ design }: { design: Design }) {
         action={
           <div className="flex flex-wrap items-center gap-2">
             <RequestQuoteButton design={design} className="px-3" />
+            <ChatAboutButton kind="DESIGN" id={design.id} name={design.name} className="px-3" />
             <SubmittedFiles designId={design.id} approved />
           </div>
         }
