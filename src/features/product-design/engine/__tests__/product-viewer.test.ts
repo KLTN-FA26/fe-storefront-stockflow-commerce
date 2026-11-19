@@ -188,16 +188,21 @@ describe("createMaterials", () => {
     expect(printed.bumpMap).toBe(fibre);
   });
 
-  it("makes PET a transmissive physical material and its print a transparent decal", () => {
+  it("makes PET a visible see-through wall, not a transmissive one that vanishes on a plain backdrop", () => {
     const { base, print } = createMaterials("pet-clear");
     const clear = base as MeshPhysicalMaterial;
     expect(clear).toBeInstanceOf(MeshPhysicalMaterial);
-    expect(clear.transmission).toBe(0.9);
+    expect(clear.transmission).toBe(0);
+    expect(clear.transparent).toBe(true);
+    expect(clear.opacity).toBeGreaterThan(0.1);
+    expect(clear.opacity).toBeLessThan(0.6);
+    expect(clear.depthWrite).toBe(false);
     expect(clear.roughness).toBe(0.15);
     const texture = printTexture();
     const decal = print(texture) as MeshPhysicalMaterial;
     expect(decal.map).toBe(texture);
     expect(decal.transparent).toBe(true);
+    expect(decal.transmission).toBe(0);
   });
 
   it("applies the requested side to the base only: prints are always front-side", () => {
@@ -232,10 +237,20 @@ describe("createMaterials", () => {
       const base = createMaterials(kind).base as MeshStandardMaterial;
       expect(new Color(printUnderlay(kind) ?? "").equals(base.color)).toBe(true);
     }
-    // `compose` already multiplies kraft-brown artwork onto kraft; a PET decal stays see-through.
+    // `compose` already multiplies kraft-brown artwork onto kraft.
     expect(printUnderlay("kraft")).toBeNull();
     expect(printUnderlay("kraft-brown")).toBeNull();
-    expect(printUnderlay("pet-clear")).toBeNull();
+  });
+
+  it("paints a PET print texture's empty pixels as the wall: its tint at its opacity", () => {
+    // Without it the printed band would be ink alone, floating, while the unprinted wall shows.
+    const base = createMaterials("pet-clear").base as MeshPhysicalMaterial;
+    const underlay = printUnderlay("pet-clear") ?? "";
+    const alpha = Number(/,\s*([\d.]+)\)$/.exec(underlay)?.[1]);
+    expect(alpha).toBe(base.opacity);
+    expect(
+      new Color(underlay.replace("hsla(", "hsl(").replace(/,\s*[\d.]+\)$/, ")")).equals(base.color),
+    ).toBe(true);
   });
 
   it("disposes the base, every print material and the one-sided variants", () => {

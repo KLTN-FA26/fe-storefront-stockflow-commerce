@@ -34,7 +34,18 @@ export type MaterialOptions = { side?: Side };
 const PAPER_ROUGHNESS = 0.85;
 const KRAFT_ROUGHNESS = 0.9;
 const KRAFT_BUMP_SCALE = 0.5;
-const PET = { transmission: 0.9, roughness: 0.15, ior: 1.45, thickness: 1 };
+/**
+ * Clear PET as it reads on the studio's plain backdrop: a light tint at low opacity under a glossy
+ * coat. A transmissive material (`transmission`) only shows what is behind it, and behind the cup
+ * there is nothing, so the wall vanished and the ink floated in the air.
+ */
+const PET = {
+  color: "hsl(205, 35%, 90%)",
+  opacity: 0.3,
+  roughness: 0.15,
+  clearcoat: 1,
+  clearcoatRoughness: 0.1,
+} as const;
 
 /** How the stock looks unprinted; the shaded colours are written as HSL, the print itself is data. */
 const STOCK_COLOR = {
@@ -43,11 +54,15 @@ const STOCK_COLOR = {
   kraftWhite: "hsl(40, 25%, 87%)",
 } as const;
 
+/** The PET wall as a CSS colour, alpha included: what an unprinted pixel of its print texture shows. */
+const PET_WALL = PET.color.replace("hsl(", "hsla(").replace(")", `, ${PET.opacity})`);
+
 /**
- * The colour to paint under the artwork of an opaque stock's print texture: the print material
- * multiplies its map, so a pixel left transparent would show black. It is the base material's own
- * colour, so the band meets the unprinted wall without a seam. `null` where none is needed: kraft
- * brown (`compose` multiplies the whole print area onto kraft) and PET (the decal stays clear).
+ * The colour to paint under the artwork of a print texture: the print material multiplies its map,
+ * so a pixel left transparent would show black on an opaque stock, and nothing at all on PET. It is
+ * the base material's own look, so the band meets the unprinted wall without a seam: the stock's
+ * colour, and for PET its tint at the plastic's opacity (the ink stays opaque over it). `null` for
+ * kraft brown, where `compose` already multiplies the whole print area onto kraft.
  */
 export function printUnderlay(kind: MaterialKind): string | null {
   switch (kind) {
@@ -55,9 +70,10 @@ export function printUnderlay(kind: MaterialKind): string | null {
       return STOCK_COLOR.paper;
     case "kraft-white":
       return STOCK_COLOR.kraftWhite;
+    case "pet-clear":
+      return PET_WALL;
     case "kraft":
     case "kraft-brown":
-    case "pet-clear":
       return null;
   }
 }
@@ -177,8 +193,8 @@ function bundle(
 
 /**
  * The materials for one stock. Paper is a rough standard material, kraft adds a procedural fibre
- * texture (the artwork is already kraft-tinted by `compose`), and PET is clear, transmissive
- * plastic whose print is an opaque-ink decal over transparent, so the cup shows through.
+ * texture (the artwork is already kraft-tinted by `compose`), and PET is a lightly tinted,
+ * see-through plastic whose print is opaque ink over that same wall, so the cup shows through.
  */
 export function createMaterials(
   kind: MaterialKind,
@@ -210,10 +226,20 @@ export function createMaterials(
         fibre,
       );
     }
-    case "pet":
+    case "pet": {
+      // depthWrite off: see-through walls must not hide the far side of the cup behind them.
+      const coat = {
+        roughness: PET.roughness,
+        clearcoat: PET.clearcoat,
+        clearcoatRoughness: PET.clearcoatRoughness,
+        transparent: true,
+        depthWrite: false,
+      };
       return bundle(
-        new MeshPhysicalMaterial({ ...PET, side }),
-        (map) => new MeshPhysicalMaterial({ map, roughness: PET.roughness, transparent: true }),
+        new MeshPhysicalMaterial({ ...coat, color: PET.color, opacity: PET.opacity, side }),
+        // The texture carries the wall (`printUnderlay`) and the opaque ink over it.
+        (map) => new MeshPhysicalMaterial({ ...coat, map }),
       );
+    }
   }
 }
