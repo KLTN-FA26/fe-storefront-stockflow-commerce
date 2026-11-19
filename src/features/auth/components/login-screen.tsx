@@ -63,12 +63,13 @@ export function LoginScreen() {
 
       <form onSubmit={onSubmit} noValidate className="space-y-4">
         <div className="space-y-1.5">
-          <Label htmlFor="login-username">Email đăng nhập</Label>
+          <Label htmlFor="login-username">Tên đăng nhập</Label>
           <Input
             id="login-username"
-            type="email"
+            type="text"
             autoComplete="username"
-            inputMode="email"
+            autoCapitalize="none"
+            spellCheck={false}
             className="min-h-11"
             aria-invalid={errors.username ? true : undefined}
             aria-describedby={errors.username ? "login-username-error" : undefined}

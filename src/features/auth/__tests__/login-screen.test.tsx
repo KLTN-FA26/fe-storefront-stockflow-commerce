@@ -50,7 +50,7 @@ function backend(
 }
 
 const fill = async (user: string, password: string) => {
-  await userEvent.type(screen.getByLabelText("Email đăng nhập"), user);
+  await userEvent.type(screen.getByLabelText("Tên đăng nhập"), user);
   await userEvent.type(screen.getByLabelText("Mật khẩu"), password);
   await userEvent.click(screen.getByRole("button", { name: "Đăng nhập" }));
 };
@@ -96,7 +96,7 @@ describe("LoginScreen", () => {
     backend();
     renderWithProviders(<LoginScreen />);
     await userEvent.click(screen.getByRole("button", { name: "Đăng nhập" }));
-    expect(await screen.findByText("Vui lòng nhập email đăng nhập")).toBeInTheDocument();
+    expect(await screen.findByText("Vui lòng nhập tên đăng nhập")).toBeInTheDocument();
     expect(screen.getByText("Vui lòng nhập mật khẩu")).toBeInTheDocument();
     expect(api.post).not.toHaveBeenCalled();
   });
