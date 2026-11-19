@@ -8,20 +8,22 @@ import {
   FileSignature,
   Hourglass,
   Package,
+  PackageCheck,
   PackageSearch,
   PauseCircle,
+  RotateCcw,
   Truck,
   Undo2,
   type LucideIcon,
 } from "lucide-react";
 
 import { HOLD_REASON_LABEL } from "../labels";
-import { ORDER_STATUS_GROUP_META, orderProgressOf } from "../lifecycle";
-import type { HoldReason, OrderStatusGroup } from "../types";
+import { ORDER_DISPLAY_META, orderProgressOf, type OrderDisplayGroup } from "../lifecycle";
+import type { HoldReason } from "../types";
 import { ORDER_TONE_CLASSES } from "./order-status-badge";
 import { OrderStepper } from "./order-stepper";
 
-const GROUP_ICON: Record<OrderStatusGroup, LucideIcon> = {
+const GROUP_ICON: Record<OrderDisplayGroup, LucideIcon> = {
   AWAITING_CONTRACT: FileSignature,
   AWAITING_STOCK: PackageSearch,
   AWAITING_PAYMENT: CreditCard,
@@ -31,6 +33,8 @@ const GROUP_ICON: Record<OrderStatusGroup, LucideIcon> = {
   PREPARING: Package,
   SHIPPING: Truck,
   DELIVERED: CircleCheck,
+  RETURN_REQUESTED: RotateCcw,
+  COMPLETED: PackageCheck,
   CANCELLED: CircleX,
   RETURNED: Undo2,
   UNKNOWN: Hourglass,
@@ -41,11 +45,12 @@ export function OrderStatusHero({
   group,
   holdReason,
 }: {
-  group: OrderStatusGroup;
+  /** `displayGroup(order)`: the status group, or COMPLETED. */
+  group: OrderDisplayGroup;
   /** Why an ON_HOLD order waits (BE holdReasonPublic); replaces the generic hint. */
   holdReason?: HoldReason | null | undefined;
 }) {
-  const { label, tone, hint } = ORDER_STATUS_GROUP_META[group];
+  const { label, tone, hint } = ORDER_DISPLAY_META[group];
   const Icon = GROUP_ICON[group];
   const done = orderProgressOf(group);
 

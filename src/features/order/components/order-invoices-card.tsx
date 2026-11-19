@@ -4,7 +4,7 @@ import { Info } from "lucide-react";
 
 import { describeApiError } from "@/lib/api/describe-error";
 import { useHasPermission, useMyPermissions } from "@/lib/auth/my-permissions";
-import { replacementOf, useMyOrderEInvoices } from "@/lib/einvoices";
+import { invoiceNumberText, useMyOrderEInvoices } from "@/lib/einvoices";
 
 import { invoiceConditions } from "../selectors";
 import type { Order } from "../types";
@@ -28,6 +28,9 @@ export function OrderInvoicesCard({ order }: { order: Order }) {
   const query = useMyOrderEInvoices(order.orderId, allowed);
   const delivered = DELIVERED_STATES.has(order.deliveryState ?? "");
   const invoices = query.data ?? [];
+  // Link "thay thế" hiện số hoá đơn khách thấy trên dòng kia, không phải mã nội bộ `code` của BE
+  const numbers = new Map(invoices.map((invoice) => [invoice.id, invoiceNumberText(invoice)]));
+  const numberOf = (id: string) => numbers.get(id);
   // Until the order is completed, the card says when its invoices come (null once settled).
   const conditions = invoiceConditions(order);
   if (
@@ -59,11 +62,7 @@ export function OrderInvoicesCard({ order }: { order: Order }) {
       ) : (
         <ul className="space-y-2" aria-label="Hoá đơn của đơn">
           {invoices.map((invoice) => (
-            <InvoiceRow
-              key={invoice.id}
-              invoice={invoice}
-              replacement={replacementOf(invoice, invoices)}
-            />
+            <InvoiceRow key={invoice.id} invoice={invoice} numberOf={numberOf} />
           ))}
         </ul>
       )}

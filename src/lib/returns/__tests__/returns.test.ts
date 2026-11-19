@@ -6,7 +6,7 @@ import { ApiError } from "@/lib/api/error";
 import { addMyReturnPhoto, cancelMyReturn, getMyReturn, listMyReturns, openMyReturn } from "../api";
 import { describeReturnError } from "../errors";
 import { customerReturnDtoSchema, openReturnInputSchema } from "../schemas";
-import { canOpenReturn, claimedUnits, claimsByOrderLine } from "../selectors";
+import { canOpenReturn, canWithdrawReturn, claimedUnits, claimsByOrderLine } from "../selectors";
 import { beReturn, ORDER_ID, ORDER_LINE_ID, RETURN_ID } from "./fixtures";
 
 afterEach(() => vi.restoreAllMocks());
@@ -142,5 +142,26 @@ describe("customer returns — rules", () => {
     expect(
       describeReturnError(new ApiError(409, "RETURN_CUSTOM_ITEM_NOT_DEFECTIVE", "printed")),
     ).toContain("in theo thiết kế");
+  });
+});
+
+describe("canWithdrawReturn (BE cancel: RETURN_GOODS_PARTLY_RECEIVED, WF-05 TH-3)", () => {
+  const ret = (over: Record<string, unknown>) => customerReturnDtoSchema.parse(beReturn(over));
+  const received = (quantity: number) => [{ ...beReturn().lines[0], receivedQuantity: quantity }];
+
+  it("lets the customer withdraw while nothing of the goods is back", () => {
+    expect(canWithdrawReturn(ret({ status: "REQUESTED" }))).toBe(true);
+    expect(canWithdrawReturn(ret({ status: "AWAITING_RETURN" }))).toBe(true);
+    expect(canWithdrawReturn(ret({ status: "AWAITING_RETURN", lines: received(0) }))).toBe(true);
+  });
+
+  it("stops once a parcel reached the warehouse, though the status is still AWAITING_RETURN", () => {
+    expect(canWithdrawReturn(ret({ receivedAt: "2026-11-15T03:00:00Z" }))).toBe(false);
+    expect(canWithdrawReturn(ret({ lines: received(1) }))).toBe(false);
+  });
+
+  it("never offers it past the withdrawable statuses", () => {
+    expect(canWithdrawReturn(ret({ status: "RECEIVED" }))).toBe(false);
+    expect(canWithdrawReturn(ret({ status: "REJECTED" }))).toBe(false);
   });
 });

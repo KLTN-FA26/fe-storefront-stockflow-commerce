@@ -2,11 +2,20 @@
  * Mock of the customer's returns (BE ReturnRequestController: /orders/{id}/returns, /returns/me,
  * /returns/me/{id}, /returns/{id}/evidence, /returns/{id}/cancellation, evidence download-url).
  * Same refusals as BE `ReturnRequest.open` for what the portal can send: order not delivered,
- * window closed (7 days from delivery), a line with an open return, more units than delivered minus
- * those other returns hold, a printed line for a reason that names no fault, OTHER without a text.
+ * no delivery named on an order delivered in several (WF-05 TH-1), window closed (7 days from the
+ * delivery), a line with an open return on the same delivery, more units than the delivery brought
+ * minus what other returns hold, a printed line for a reason that names no fault, OTHER without a
+ * text. A return whose goods are partly back is not withdrawn (RETURN_GOODS_PARTLY_RECEIVED).
  */
 
-import type { MockOrder, MockResult } from "./orders";
+import {
+  MOCK_RETURN_WINDOW_DAYS,
+  endOfVnDays,
+  mockShipmentReturnable,
+  type MockOrder,
+  type MockResult,
+  type MockReturnClaim,
+} from "./orders";
 
 const ok = (data: unknown, status = 200): MockResult => ({
   status,
@@ -45,6 +54,8 @@ export interface MockReturn {
   requestId: string;
   orderId: string;
   orderNumber: string;
+  /** The delivery the goods came on; null for an order that left as a whole. */
+  shipmentId: string | null;
   customerId: string;
   status: Status;
   reasonCode: string;
@@ -61,17 +72,12 @@ export interface MockReturn {
 }
 
 const DAY = 86_400_000;
-const VN = 7 * 3_600_000;
-const WINDOW_DAYS = 7;
+const WINDOW_DAYS = MOCK_RETURN_WINDOW_DAYS;
 const DEADLINE_DAYS = 14;
 const MAX_EVIDENCE = 10;
 const OPEN: readonly Status[] = ["REQUESTED", "AWAITING_RETURN", "RECEIVED", "SETTLEMENT_PENDING"];
 const NAMED_FAULT = ["PRINT_DEFECT", "DESIGN_MISMATCH", "DAMAGED_IN_TRANSIT", "WRONG_ITEM"];
 const PORTAL_REASONS = [...NAMED_FAULT, "OTHER", "SHORT_DELIVERY", "CHANGED_MIND"];
-
-/** BE `ReturnPolicy.endOfDays`: the start of the VN day `days` whole days after `from`'s day. */
-const endOfDays = (fromIso: string, days: number) =>
-  new Date(Math.floor((Date.parse(fromIso) + VN) / DAY) * DAY + (days + 1) * DAY - VN);
 
 const deliveredAt = (order: MockOrder) =>
   [...order.history].reverse().find((h) => h.status === "DELIVERED")?.occurredAt;
@@ -94,6 +100,7 @@ function toCustomer(r: MockReturn) {
     rmaNumber: r.rmaNumber,
     orderId: r.orderId,
     orderNumber: r.orderNumber,
+    ...(r.shipmentId ? { shipmentId: r.shipmentId } : {}),
     status: r.status,
     reasonCode: r.reasonCode,
     description: r.description,
@@ -131,6 +138,7 @@ function toRow(r: MockReturn) {
     rmaNumber: r.rmaNumber,
     orderId: r.orderId,
     orderNumber: r.orderNumber,
+    ...(r.shipmentId ? { shipmentId: r.shipmentId } : {}),
     customerId: r.customerId,
     status: r.status,
     reasonCode: r.reasonCode,
@@ -173,8 +181,22 @@ export function createMockReturnBook(
     r.version += 1;
     r.history.push({ status, occurredAt: now().toISOString() });
   };
+  /** What the order's returns hold, line by line, for the order book's shipments. */
+  const claimsOf = (orderId: string): MockReturnClaim[] =>
+    returns
+      .filter((r) => r.orderId === orderId)
+      .flatMap((r) =>
+        r.lines.map((l) => ({
+          shipmentId: r.shipmentId,
+          orderLineId: l.orderLineId,
+          units: claimed(l, r.status),
+          open: OPEN.includes(r.status),
+        })),
+      );
 
   return {
+    claimsOf,
+
     /** GET /returns/me?status=&orderId=&page=&size= */
     mine(query: Record<string, unknown> = {}): MockResult {
       const page = toInt(query.page, 0);
@@ -228,12 +250,23 @@ export function createMockReturnBook(
       if (order.status === "CANCELLED") return fail(409, "ORDER_CANCELLED", "Order cancelled");
       if (order.status !== "DELIVERED" && order.status !== "COMPLETED")
         return fail(409, "RETURN_ORDER_NOT_DELIVERED", "Order not delivered");
-      const delivered = deliveredAt(order);
+      // WF-05 TH-1: a return is against one delivered shipment, named when there were several.
+      const arrived = (order.shipments ?? []).filter(
+        (s) => s.status === "DELIVERED" && s.outcomeAt,
+      );
+      const named = typeof body.shipmentId === "string" ? body.shipmentId : undefined;
+      if (!named && arrived.length > 1)
+        return fail(422, "RETURN_SHIPMENT_REQUIRED", "Name the delivery the goods came on");
+      const shipment = named ? arrived.find((s) => s.shipmentId === named) : arrived[0];
+      if (named && !shipment)
+        return fail(409, "RETURN_SHIPMENT_NOT_DELIVERED", "This shipment has not been delivered");
+      const delivered = shipment?.outcomeAt ?? deliveredAt(order);
       if (
         order.status === "COMPLETED" ||
-        (delivered && endOfDays(delivered, WINDOW_DAYS).getTime() <= now().getTime())
+        (delivered && endOfVnDays(delivered, WINDOW_DAYS).getTime() <= now().getTime())
       )
         return fail(409, "RETURN_WINDOW_CLOSED", "The return window has closed");
+      const shipmentId = shipment?.shipmentId ?? null;
       const description = typeof body.description === "string" ? body.description.trim() : "";
       if (reason === "OTHER" && !description)
         return fail(400, "VALIDATION_FAILED", "A return for OTHER must describe the problem");
@@ -242,6 +275,7 @@ export function createMockReturnBook(
         return fail(409, "RETURN_QUANTITIES_INVALID", "A return claims at least one line");
 
       const others = returns.filter((r) => r.orderId === orderId);
+      const holds = claimsOf(orderId);
       const lines: MockReturnLine[] = [];
       for (const claim of claims) {
         const line = order.lines.find((l) => l.lineId === claim.orderLineId);
@@ -250,7 +284,10 @@ export function createMockReturnBook(
           return fail(409, "RETURN_QUANTITIES_INVALID", "Invalid line or quantity");
         if (
           others.some(
-            (r) => OPEN.includes(r.status) && r.lines.some((l) => l.orderLineId === line.lineId),
+            (r) =>
+              r.shipmentId === shipmentId &&
+              OPEN.includes(r.status) &&
+              r.lines.some((l) => l.orderLineId === line.lineId),
           )
         )
           return fail(409, "RETURN_LINE_ALREADY_OPEN", `${line.sku} already has an open return`);
@@ -262,7 +299,11 @@ export function createMockReturnBook(
               .reduce((s, l) => s + claimed(l, r.status), 0),
           0,
         );
-        if (quantity > line.quantity - held)
+        // Against a shipment: what it brought of the line, less its other returns (BE TH-1).
+        const left = shipment
+          ? mockShipmentReturnable(order, shipment, line.lineId, holds).max
+          : line.quantity - held;
+        if (quantity > left)
           return fail(409, "RETURN_QUANTITY_EXCEEDED", `${line.sku}: too many units`);
         const customPrinted = !!line.designSnapshotId;
         if (customPrinted && !NAMED_FAULT.includes(reason))
@@ -293,6 +334,7 @@ export function createMockReturnBook(
         requestId,
         orderId,
         orderNumber: order.orderNumber,
+        shipmentId,
         customerId,
         status: "REQUESTED",
         reasonCode: reason,
@@ -342,9 +384,26 @@ export function createMockReturnBook(
       if (!r) return missing();
       if (r.status !== "REQUESTED" && r.status !== "AWAITING_RETURN")
         return fail(409, "RETURN_INVALID_TRANSITION", "Goods are back already");
+      // WF-05 TH-3: a parcel already in the warehouse keeps the return (Sales mark the goods complete).
+      if (r.receivedAt || r.lines.some((l) => (l.receivedQuantity ?? 0) > 0))
+        return fail(
+          409,
+          "RETURN_GOODS_PARTLY_RECEIVED",
+          "Some goods of this return are already back",
+        );
       move(r, "CANCELLED");
       r.closedAt = now().toISOString();
       return ok(toCustomer(r));
+    },
+
+    /** Test hook: one parcel of an approved return reached the warehouse; it stays AWAITING_RETURN. */
+    receiveParcel(id: string, units = 1) {
+      const r = own(id);
+      const line = r?.lines[0];
+      if (!r || !line || r.status !== "AWAITING_RETURN") return;
+      line.receivedQuantity = (line.receivedQuantity ?? 0) + units;
+      r.receivedAt = now().toISOString();
+      r.version += 1;
     },
 
     /** Test hook: Sales approve in full (REQUESTED → AWAITING_RETURN). */
@@ -352,7 +411,7 @@ export function createMockReturnBook(
       const r = own(id);
       if (!r || r.status !== "REQUESTED") return;
       for (const line of r.lines) line.approvedQuantity = line.requestedQuantity;
-      r.returnDeadline = endOfDays(now().toISOString(), DEADLINE_DAYS).toISOString();
+      r.returnDeadline = endOfVnDays(now().toISOString(), DEADLINE_DAYS).toISOString();
       move(r, "AWAITING_RETURN");
     },
   };
@@ -382,12 +441,14 @@ export function seedMockReturns(
     if (!order || !line || !delivered) return undefined;
     const at = (days: number) => new Date(Date.parse(delivered) + days * DAY).toISOString();
     const resolved = status === "RESOLVED";
+    const shipment = order.shipments?.find((s) => s.lines.some((l) => l.lineId === line.lineId));
     return {
       id: `7e7a0000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`,
       rmaNumber: `RMA-${delivered.slice(0, 10).replaceAll("-", "")}-${String(n).padStart(4, "0")}`,
       requestId: `7e7a9999-0000-4000-8000-${n.toString(16).padStart(12, "0")}`,
       orderId,
       orderNumber: order.orderNumber,
+      shipmentId: shipment?.shipmentId ?? null,
       customerId,
       status,
       reasonCode,

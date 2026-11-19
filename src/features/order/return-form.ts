@@ -7,6 +7,7 @@ import {
   RETURN_PHOTO_MAX_COUNT,
   claimsByOrderLine,
   type CustomerReturn,
+  type ReturnShipmentLine,
   type ReturnableShipment,
 } from "@/lib/returns";
 
@@ -21,9 +22,10 @@ export interface ReturnableLine {
   sku: string;
   /** In theo thiết kế của khách: chỉ trả khi có lỗi được gọi tên (BR-RMA-002). */
   printed: boolean;
+  /** Số đã giao: của lần giao đã chọn khi BE gửi hàng của nó, không thì của cả đơn. */
   delivered: number;
   unitsPerCarton: number | null;
-  /** Đã bị các yêu cầu khác giữ (BE `ReturnLine.claimedUnits`). */
+  /** Đã bị các yêu cầu khác giữ (BE `ReturnLine.claimedUnits`) — của lần giao khi biết hàng của nó. */
   claimed: number;
   max: number;
   /**
@@ -35,28 +37,74 @@ export interface ReturnableLine {
 
 /**
  * Số còn trả được của mỗi dòng. `delivery`: lần giao khách chọn — chỉ yêu cầu của lần giao đó chặn
- * dòng. BE không gửi số cái của từng dòng trong mỗi lần giao cho khách, nên tối đa vẫn tính theo cả
- * đơn; BE kiểm lại theo lần giao (`RETURN_QUANTITY_EXCEEDED`).
+ * dòng. Khi BE gửi hàng của lần giao (`delivery.lines`, WF-05 TH-1) thì chỉ các dòng lần giao đó mang
+ * mới hiện, "đã giao" là số lần giao đó mang và tối đa là `returnableQuantity` BE tính (0: khoá dòng).
+ * BE cũ không gửi: tối đa tính theo cả đơn, BE kiểm lại (`RETURN_QUANTITY_EXCEEDED`).
  */
 export function returnableLines(
   lines: readonly OrderLine[],
   returns: readonly CustomerReturn[],
-  delivery?: { shipmentId: string | null },
+  delivery?: {
+    shipmentId: string | null;
+    lines?: readonly ReturnShipmentLine[] | null | undefined;
+  },
 ): ReturnableLine[] {
   const { claimed, open } = claimsByOrderLine(returns, delivery);
-  return lines.map((line) => {
-    const held = claimed.get(line.lineId) ?? 0;
-    return {
+  const carried = delivery?.lines
+    ? new Map(delivery.lines.map((line) => [line.orderLineId, line]))
+    : null;
+  // Per shipment, "đã yêu cầu trả" counts only the returns of that shipment, like its quantity.
+  const heldHere = delivery?.lines
+    ? claimsByOrderLine(
+        returns.filter((request) => (request.shipmentId ?? null) === delivery.shipmentId),
+      ).claimed
+    : claimed;
+  return lines.flatMap((line) => {
+    const base = {
       lineId: line.lineId,
       sku: line.sku,
       printed: !!line.designSnapshotId,
-      delivered: line.quantity,
       unitsPerCarton: line.unitsPerCarton ?? null,
-      claimed: held,
-      max: Math.max(line.quantity - held, 0),
       open: open.has(line.lineId),
     };
+    if (!carried) {
+      const held = claimed.get(line.lineId) ?? 0;
+      return [
+        {
+          ...base,
+          delivered: line.quantity,
+          claimed: held,
+          max: Math.max(line.quantity - held, 0),
+        },
+      ];
+    }
+    const onShipment = carried.get(line.lineId);
+    if (!onShipment) return [];
+    return [
+      {
+        ...base,
+        delivered: onShipment.quantity,
+        claimed: heldHere.get(line.lineId) ?? 0,
+        max: Math.max(onShipment.returnableQuantity, 0),
+      },
+    ];
   });
+}
+
+/**
+ * Số lượng trên form sau khi đổi lần giao: chỉ các dòng của lần giao mới, mỗi dòng giữ số đã chọn
+ * nhưng không quá tối đa của lần giao đó (dòng bị khoá về 0).
+ */
+export function quantitiesFor(
+  lines: readonly ReturnableLine[],
+  previous: Readonly<Record<string, number | undefined>> = {},
+): Record<string, number> {
+  return Object.fromEntries(
+    lines.map((line) => [
+      line.lineId,
+      line.open ? 0 : Math.min(Math.max(previous[line.lineId] ?? 0, 0), line.max),
+    ]),
+  );
 }
 
 /**

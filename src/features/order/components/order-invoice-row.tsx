@@ -14,6 +14,7 @@ import {
   invoiceTypeLabel,
   type CustomerEInvoice,
   type EInvoiceFileKind,
+  type EInvoiceReference,
 } from "@/lib/einvoices";
 import { formatDate } from "@/lib/format/date";
 import { formatMoney } from "@/lib/format/money";
@@ -22,16 +23,40 @@ import { ORDER_TONE_CLASSES } from "./order-status-badge";
 
 export const invoiceAnchor = (invoice: Pick<CustomerEInvoice, "id">) => `einvoice-${invoice.id}`;
 
+const LINK =
+  "text-accent focus-visible:ring-accent rounded-sm font-mono font-medium underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:outline-none";
+
+/**
+ * Liên kết tới một hoá đơn khác của đơn mà BE nêu (`replaces` / `replacedBy`). Hiện số hoá đơn
+ * khách thấy trên dòng kia (`numberOf`); `code` của BE là mã nội bộ, chỉ dùng khi dòng kia không
+ * có trong danh sách.
+ */
+function InvoiceLink({
+  reference,
+  numberOf,
+}: {
+  reference: EInvoiceReference;
+  numberOf?: ((id: string) => string | undefined) | undefined;
+}) {
+  return (
+    <a href={`#${invoiceAnchor(reference)}`} className={LINK}>
+      {numberOf?.(reference.id) ?? reference.code}
+    </a>
+  );
+}
+
 /**
  * Một hoá đơn của đơn: số, loại, ngày, trạng thái, tải PDF / XML. Hoá đơn "Đã bị thay thế" chỉ tới
- * hoá đơn thay thế nó (`replacement`) trong cùng danh sách.
+ * hoá đơn đã thay nó (`replacedBy`), hoá đơn thay thế chỉ về hoá đơn nó thay (`replaces`) — BE nêu
+ * từng mắt xích, không suy đoán.
  */
 export function InvoiceRow({
   invoice,
-  replacement,
+  numberOf,
 }: {
   invoice: CustomerEInvoice;
-  replacement: CustomerEInvoice | undefined;
+  /** Số hiển thị của một hoá đơn khác cùng đơn, theo id (undefined khi không có trong danh sách). */
+  numberOf?: ((id: string) => string | undefined) | undefined;
 }) {
   const [busy, setBusy] = useState<EInvoiceFileKind | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -75,18 +100,18 @@ export function InvoiceRow({
       <p className="text-ink-primary font-semibold tabular-nums">
         Tổng có thuế: {formatMoney(invoice.grandTotal)}
       </p>
+      {invoice.replaces ? (
+        <p className="text-ink-secondary">
+          Thay thế cho <InvoiceLink reference={invoice.replaces} numberOf={numberOf} />.
+        </p>
+      ) : null}
       {invoice.status === "REPLACED" ? (
         <p className="text-ink-secondary">
-          {replacement ? (
+          {invoice.replacedBy ? (
             <>
               Đã được thay thế bởi{" "}
-              <a
-                href={`#${invoiceAnchor(replacement)}`}
-                className="text-accent focus-visible:ring-accent rounded-sm font-mono font-medium underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:outline-none"
-              >
-                {invoiceNumberText(replacement)}
-              </a>
-              . Hoá đơn thay thế là hoá đơn có hiệu lực.
+              <InvoiceLink reference={invoice.replacedBy} numberOf={numberOf} />. Hoá đơn thay thế
+              là hoá đơn có hiệu lực.
             </>
           ) : (
             "Hoá đơn này đã được thay thế; hoá đơn thay thế là hoá đơn có hiệu lực."

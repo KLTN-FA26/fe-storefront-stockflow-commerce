@@ -85,15 +85,21 @@ export function ReturnRequestScreen({ orderId: raw }: { orderId: string }) {
   const [uploading, setUploading] = useState(false);
   const returnWindow = useReturnWindowDays(orderId);
   const orderLines = order.data?.lines;
+  const orderShipments = order.data?.shipments;
   const linesOf = useCallback(
-    // Undefined: several deliveries and none chosen yet - every open return still counts.
-    (shipmentId: string | undefined) =>
-      returnableLines(
-        orderLines ?? [],
-        returns.data ?? [],
-        shipmentId === undefined ? undefined : { shipmentId: shipmentId || null },
-      ),
-    [orderLines, returns.data],
+    (shipmentId: string | undefined) => {
+      // Undefined: several deliveries and none chosen yet - every open return still counts.
+      if (shipmentId === undefined) return returnableLines(orderLines ?? [], returns.data ?? []);
+      // "" names the order's only delivery: the one the BE made up when none was recorded.
+      const shipment = orderShipments?.find(
+        (s) => s.status === "DELIVERED" && (s.shipmentId ?? "") === shipmentId,
+      );
+      return returnableLines(orderLines ?? [], returns.data ?? [], {
+        shipmentId: shipmentId || null,
+        lines: shipment?.lines,
+      });
+    },
+    [orderLines, orderShipments, returns.data],
   );
 
   if (!valid || isNotFound(order.error)) notFound();

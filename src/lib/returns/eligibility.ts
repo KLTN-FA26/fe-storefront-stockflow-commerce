@@ -18,12 +18,23 @@ const RETURNABLE_WITH_DELIVERED_SHIPMENT: ReadonlySet<string> = new Set([
   "DELIVERY_FAILED",
 ]);
 
+/**
+ * Một dòng đơn trong một lần giao (BE `CustomerOrderShipmentLine`): `returnableQuantity` là số tối
+ * đa một yêu cầu mở bây giờ cho lần giao này được trả — 0 là không trả thêm được.
+ */
+export interface ReturnShipmentLine {
+  orderLineId: string;
+  quantity: number;
+  returnableQuantity: number;
+}
+
 /** Một lần giao của đơn như trang khách đọc (BE `CustomerOrderShipment`). */
 export interface ReturnShipmentSource {
   shipmentId?: string | null | undefined;
   shipmentCode?: string | null | undefined;
   status: string;
   outcomeAt?: string | null | undefined;
+  lines?: readonly ReturnShipmentLine[] | null | undefined;
 }
 
 /** Một lần giao đã đến: hàng của nó trả được tới `windowEnd` (hạn tính từ ngày giao của chính nó). */
@@ -34,6 +45,8 @@ export interface ReturnableShipment {
   deliveredAt: string;
   windowEnd: Date;
   windowOpen: boolean;
+  /** Hàng của lần giao theo dòng đơn; null khi BE không gửi (BE cũ) — tối đa tính theo cả đơn. */
+  lines: readonly ReturnShipmentLine[] | null;
 }
 
 export type ReturnClosedReason = "NOT_DELIVERED" | "WINDOW_CLOSED" | "NOT_RETURNABLE";
@@ -86,6 +99,7 @@ export function returnEligibility(
       deliveredAt: shipment.outcomeAt,
       windowEnd,
       windowOpen: windowEnd.getTime() > now.getTime(),
+      lines: shipment.lines ?? null,
     });
   }
   if (delivered.length === 0) return { kind: "closed", reason: "NOT_DELIVERED" };

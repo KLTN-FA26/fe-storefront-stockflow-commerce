@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error";
+import { invoiceNumberText } from "@/lib/einvoices";
 import { beInvoice } from "@/lib/einvoices/__tests__/fixtures";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
@@ -41,18 +42,10 @@ afterEach(() => {
 });
 
 describe("OrderInvoicesCard (kltn-docs 21 §4.3)", () => {
-  it("lists only this order's issued invoices, with PDF and XML downloads", async () => {
+  it("asks the BE for this order's issued invoices only, with PDF and XML downloads", async () => {
     const open = vi.spyOn(window, "open").mockReturnValue(null);
-    backend(["einvoices:READ"], {
-      "/einvoices/me": () =>
-        page([
-          beInvoice(),
-          beInvoice({
-            id: "5e1a0000-0000-4000-8000-000000000009",
-            orderId: "0b7d3c1e-0000-4000-8000-000000000009",
-            invoiceNumber: 99,
-          }),
-        ]),
+    const get = backend(["einvoices:READ"], {
+      "/einvoices/me": () => page([beInvoice()]),
       [`/einvoices/me/${beInvoice().id}/files/PDF`]: () => ({
         url: "https://files/x.pdf",
         expiresAt: "2026-11-10T03:05:00Z",
@@ -60,6 +53,11 @@ describe("OrderInvoicesCard (kltn-docs 21 §4.3)", () => {
     });
     renderWithProviders(<OrderInvoicesCard order={order({ deliveryState: "DELIVERED" })} />);
     const list = await screen.findByRole("list", { name: "Hoá đơn của đơn" });
+    // BE CustomerEInvoiceController.list filters by orderId; the FE no longer scans every invoice.
+    expect(get).toHaveBeenCalledWith(
+      "/einvoices/me",
+      expect.objectContaining({ params: { page: 0, size: 200, orderId: beOrder.orderId } }),
+    );
     expect(within(list).getAllByRole("listitem")).toHaveLength(1);
     expect(within(list).getByText("1C26TAA-0000042")).toBeInTheDocument();
     await userEvent.click(within(list).getByRole("button", { name: /Tải PDF/ }));
@@ -88,24 +86,64 @@ describe("OrderInvoicesCard (kltn-docs 21 §4.3)", () => {
 });
 
 describe("OrderInvoicesCard — HT-1", () => {
-  const ORIGINAL = beInvoice({ status: "REPLACED" });
+  const ORIGINAL_ID = beInvoice().id;
+  const REPLACEMENT_ID = "5e1a0000-0000-4000-8000-000000000002";
+  // BE CustomerEInvoiceResponse names each link of the chain by id and code (D5).
+  const ORIGINAL = beInvoice({
+    status: "REPLACED",
+    replacedBy: { id: REPLACEMENT_ID, code: "EINV-20261112-0003" },
+  });
   const REPLACEMENT = beInvoice({
-    id: "5e1a0000-0000-4000-8000-000000000002",
+    id: REPLACEMENT_ID,
     type: "REPLACEMENT",
     invoiceNumber: 57,
     issueDate: "2026-11-12",
     issuedAt: "2026-11-12T03:00:00Z",
+    replaces: { id: ORIGINAL_ID, code: "EINV-20261110-0001" },
   });
 
-  it("links a replaced invoice to the invoice that replaced it", async () => {
+  it("links a replaced invoice to the invoice that replaced it, and back, by the shown number", async () => {
     backend(["einvoices:READ"], {
       "/einvoices/me": () =>
         page([REPLACEMENT, ORIGINAL].map((i) => ({ ...i, orderId: beOrder.orderId }))),
     });
     renderWithProviders(<OrderInvoicesCard order={order({ deliveryState: "DELIVERED" })} />);
-    const link = await screen.findByRole("link", { name: "1C26TAA-0000057" });
-    expect(link).toHaveAttribute("href", `#einvoice-${REPLACEMENT.id}`);
-    expect(document.getElementById(`einvoice-${REPLACEMENT.id}`)).not.toBeNull();
+    // `code` is the BE's internal id; the link reads the number the customer sees on that row
+    const forward = await screen.findByRole("link", { name: invoiceNumberText(REPLACEMENT) });
+    expect(forward).toHaveAttribute("href", `#einvoice-${REPLACEMENT_ID}`);
+    expect(document.getElementById(`einvoice-${REPLACEMENT_ID}`)).not.toBeNull();
+    const back = screen.getByRole("link", { name: invoiceNumberText(ORIGINAL) });
+    expect(back).toHaveAttribute("href", `#einvoice-${ORIGINAL_ID}`);
+    expect(back.closest("p")).toHaveTextContent(`Thay thế cho ${invoiceNumberText(ORIGINAL)}.`);
+  });
+
+  it("falls back to the BE code when the linked invoice is not in the list", async () => {
+    backend(["einvoices:READ"], {
+      "/einvoices/me": () => page([{ ...REPLACEMENT, orderId: beOrder.orderId }]),
+    });
+    renderWithProviders(<OrderInvoicesCard order={order({ deliveryState: "DELIVERED" })} />);
+    const back = await screen.findByRole("link", { name: "EINV-20261110-0001" });
+    expect(back).toHaveAttribute("href", `#einvoice-${ORIGINAL_ID}`);
+  });
+
+  it("does not guess a replacement the BE has not named yet", async () => {
+    // Another REPLACEMENT of the same shipment is listed, but `replacedBy` is still absent.
+    backend(["einvoices:READ"], {
+      "/einvoices/me": () =>
+        page(
+          [beInvoice({ status: "REPLACED" }), { ...REPLACEMENT, replaces: undefined }].map((i) => ({
+            ...i,
+            orderId: beOrder.orderId,
+          })),
+        ),
+    });
+    renderWithProviders(<OrderInvoicesCard order={order({ deliveryState: "DELIVERED" })} />);
+    expect(
+      await screen.findByText(
+        "Hoá đơn này đã được thay thế; hoá đơn thay thế là hoá đơn có hiệu lực.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link")).toBeNull();
   });
 
   it("explains when invoices come while the order is not completed", async () => {

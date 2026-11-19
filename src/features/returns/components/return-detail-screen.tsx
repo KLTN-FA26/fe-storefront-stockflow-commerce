@@ -14,6 +14,7 @@ import {
   RETURN_REASON_LABEL,
   RETURN_STATUS_META,
   describeReturnError,
+  canWithdrawReturn,
   isReturnNotFound,
   isWithdrawable,
   useCancelMyReturn,
@@ -131,7 +132,7 @@ export function ReturnDetailScreen({ returnId: raw }: { returnId: string }) {
         <div className="space-y-5">
           <ReturnMoneyCard request={request} />
           <ReturnHistoryCard request={request} />
-          {isWithdrawable(request.status) ? (
+          {canWithdrawReturn(request) ? (
             <Button
               type="button"
               variant="outline"
@@ -141,6 +142,11 @@ export function ReturnDetailScreen({ returnId: raw }: { returnId: string }) {
             >
               {withdraw.isPending ? "Đang rút..." : "Rút yêu cầu trả hàng"}
             </Button>
+          ) : isWithdrawable(request.status) ? (
+            // A parcel is already in the warehouse (WF-05 TH-3): Sales settle what came back.
+            <p className="text-ink-secondary text-sm">
+              Kho đã nhận một phần hàng nên không rút được yêu cầu.
+            </p>
           ) : null}
         </div>
       </div>

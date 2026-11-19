@@ -12,6 +12,7 @@ import { returnEligibility } from "@/lib/returns";
 
 import { useReturnWindowDays } from "../contract-queries";
 import { describeCancelError, isNotFound } from "../errors";
+import { displayGroup } from "../lifecycle";
 import { useCancelMyOrder } from "../mutations";
 import { useKnownCancellationRequest, useOrder } from "../queries";
 import { isValidOrderId } from "../schemas";
@@ -117,7 +118,7 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
         <div className="min-w-0 space-y-5">
-          <OrderStatusHero group={order.statusGroup} holdReason={order.holdReasonPublic} />
+          <OrderStatusHero group={displayGroup(order)} holdReason={order.holdReasonPublic} />
           <OrderCompletionHint order={order} windowDays={returnWindow.days} />
           <OrderLinesCard order={order} />
           <OrderContractCard orderId={order.orderId} />

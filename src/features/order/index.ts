@@ -3,9 +3,12 @@ export { useCancelMyOrder } from "./mutations";
 export {
   isOrderCancellable,
   isOrderTerminal,
+  ORDER_DISPLAY_META,
   ORDER_STATUS_GROUP_META,
+  displayGroup,
   orderProgressOf,
 } from "./lifecycle";
+export type { OrderDisplayGroup } from "./lifecycle";
 export { describeError } from "./errors";
 export { ORDER_STATUSES, ORDER_STATUS_GROUPS } from "./schemas";
 export type {

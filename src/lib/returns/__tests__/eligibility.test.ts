@@ -73,6 +73,19 @@ describe("returnEligibility (BE ReturnRequest.deliveredShipment + requireReturna
     });
   });
 
+  it("carries what each delivery brought, or null from a BE that does not send it", () => {
+    const lines = [{ orderLineId: ORDER_LINE_ID, quantity: 2, returnableQuantity: 1 }];
+    const result = returnEligibility(
+      {
+        status: "DELIVERED",
+        shipments: [{ ...delivered(S1, FIRST), lines }, delivered(S2, SECOND)],
+      },
+      7,
+      NOW,
+    );
+    expect(result.kind === "open" && result.shipments.map((s) => s.lines)).toEqual([lines, null]);
+  });
+
   it("sends the customer to Sales when several deliveries carry no id to name", () => {
     expect(
       returnEligibility(
@@ -104,5 +117,17 @@ describe("per-delivery claims and refusals", () => {
     expect(describeReturnError(new ApiError(409, "RETURN_GOODS_PARTLY_RECEIVED", "x"))).toContain(
       "không thể rút",
     );
+  });
+
+  it("explains the evidence, goods, rate-limit and conflict refusals in Vietnamese", () => {
+    const text = (status: number, code: string) =>
+      describeReturnError(new ApiError(status, code, "English developer text"));
+    expect(text(409, "RETURN_EVIDENCE_REQUIRED")).toContain("ít nhất một ảnh");
+    expect(text(409, "RETURN_GOODS_REQUIRED")).toContain("gửi về kho trước khi hoàn tiền");
+    expect(text(429, "RATE_LIMITED")).toContain("thao tác quá nhanh");
+    expect(text(409, "CONFLICT")).toContain("tải lại trang");
+    for (const code of ["RETURN_EVIDENCE_REQUIRED", "RETURN_GOODS_REQUIRED", "CONFLICT"]) {
+      expect(text(409, code)).not.toContain("English");
+    }
   });
 });

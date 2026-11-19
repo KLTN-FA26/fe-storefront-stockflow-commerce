@@ -1,6 +1,6 @@
 import type { SemanticTone } from "@/lib/domain/types";
 
-import type { OrderStatus, OrderStatusGroup } from "./types";
+import type { Order, OrderStatus, OrderStatusGroup } from "./types";
 
 /**
  * Source: BE order.api.OrderStatus#customerMayCancelDirectly (main), which is false for every status
@@ -111,6 +111,12 @@ export const ORDER_STATUS_GROUP_META: Record<
     tone: "positive",
     hint: "Đơn đã được giao. Đơn hoàn tất khi hết hạn đổi trả và các đợt thanh toán đã đủ.",
   },
+  // Apart from RETURNED: the goods are still with the customer while the return is decided.
+  RETURN_REQUESTED: {
+    label: "Đang yêu cầu trả hàng",
+    tone: "warning",
+    hint: "Yêu cầu trả hàng của đơn đang được xử lý. Theo dõi từng bước trong mục Trả hàng.",
+  },
   CANCELLED: { label: "Đã huỷ", tone: "danger", hint: "Đơn đã bị huỷ và sẽ không được giao." },
   RETURNED: { label: "Đã trả hàng", tone: "special", hint: "Đơn hàng đã được trả lại." },
   // A group newer than this FE (see ORDER_STATUS_GROUP_UNKNOWN): neutral wording.
@@ -120,6 +126,28 @@ export const ORDER_STATUS_GROUP_META: Record<
     hint: "Đơn hàng đang được xử lý. Hãy chat với chúng tôi nếu bạn cần hỗ trợ.",
   },
 };
+
+/**
+ * What the badge and the status hero show: the status group, except a COMPLETED order. The BE folds
+ * COMPLETED into the DELIVERED group (CustomerOrders.StatusGroup), so read alone the customer would
+ * never see that the order is done — its return window over and its installments paid.
+ */
+export type OrderDisplayGroup = OrderStatusGroup | "COMPLETED";
+
+export const ORDER_DISPLAY_META: Record<
+  OrderDisplayGroup,
+  { label: string; tone: SemanticTone; hint: string }
+> = {
+  ...ORDER_STATUS_GROUP_META,
+  COMPLETED: {
+    label: "Hoàn tất",
+    tone: "positive",
+    hint: "Đơn đã hoàn tất: hết hạn đổi trả và các đợt thanh toán đã đủ.",
+  },
+};
+
+export const displayGroup = (order: Pick<Order, "status" | "statusGroup">): OrderDisplayGroup =>
+  order.status === "COMPLETED" ? "COMPLETED" : order.statusGroup;
 
 /**
  * Fulfilment progress derived from the status group alone — the BE order has no per-status timestamps.
@@ -133,7 +161,7 @@ export const ORDER_PROGRESS_STEPS = [
   { id: "received", label: "Đã nhận" },
 ] as const;
 
-const DONE_STEPS: Record<OrderStatusGroup, number | null> = {
+const DONE_STEPS: Record<OrderDisplayGroup, number | null> = {
   AWAITING_CONTRACT: 1,
   AWAITING_STOCK: 2,
   AWAITING_PAYMENT: 1,
@@ -143,10 +171,13 @@ const DONE_STEPS: Record<OrderStatusGroup, number | null> = {
   PREPARING: 2,
   SHIPPING: 3,
   DELIVERED: 5,
+  // The goods reached the customer; a return of them is being decided.
+  RETURN_REQUESTED: 5,
+  COMPLETED: 5,
   CANCELLED: null,
   RETURNED: null,
   // Unknown to this FE, so where it sits on the happy path is unknown too: no stepper.
   UNKNOWN: null,
 };
 
-export const orderProgressOf = (group: OrderStatusGroup) => DONE_STEPS[group];
+export const orderProgressOf = (group: OrderDisplayGroup) => DONE_STEPS[group];

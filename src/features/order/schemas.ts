@@ -69,6 +69,8 @@ export const ORDER_STATUS_GROUPS = [
   "PREPARING",
   "SHIPPING",
   "DELIVERED",
+  // A return of the delivered goods is being decided; the goods are still the customer's (BE #380).
+  "RETURN_REQUESTED",
   "CANCELLED",
   "RETURNED",
 ] as const;
@@ -200,6 +202,19 @@ export const DELIVERY_FAILURE_REASONS = [
 export const deliveryFailureReasonSchema = tolerantEnum(DELIVERY_FAILURE_REASONS);
 
 /**
+ * What one shipment carried of an order line (BE CustomerOrderShipmentLine, WF-05 TH-1).
+ * `returnableQuantity` is the most a return opened now against this shipment may claim — the bound
+ * the BE enforces (RETURN_QUANTITY_EXCEEDED); 0 when none can be claimed now (not delivered, window
+ * closed, a return of the line already open on this shipment, every unit claimed).
+ */
+export const orderShipmentLineDtoSchema = z.object({
+  orderLineId: beId(),
+  sku: z.string().nullish(),
+  quantity: z.number().int().nonnegative(),
+  returnableQuantity: z.number().int().nonnegative(),
+});
+
+/**
  * One handed-over shipment of the order detail (BE CustomerOrderShipment, G4-2a): HANDED_OVER,
  * DELIVERED, DELIVERY_FAILED or RETURNED. `shipmentId` (BE PR #369, WF-05 TH-1) is what a return on
  * an order delivered in several shipments must name; null only for the one shipment the BE makes up
@@ -217,6 +232,9 @@ export const orderShipmentDtoSchema = z.object({
   // Set once a delivery failed; kept after a retry delivered it.
   failureReason: deliveryFailureReasonSchema.nullish(),
   deliveryMode: deliveryModeSchema.nullish(),
+  // What it carried, line by line (for an order that left as a whole: the order's lines). Absent
+  // on an older BE: the return form then bounds each line by the whole order.
+  lines: z.array(orderShipmentLineDtoSchema).nullish(),
 });
 
 /**

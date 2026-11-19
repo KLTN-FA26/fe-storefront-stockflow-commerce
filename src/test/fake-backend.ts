@@ -52,7 +52,7 @@ export function fakeBackend(deps: {
       if (url === "/orders/credit-position/me") return settle(orders().creditPosition());
       if (url === "/orders/me") return settle(orders().page(params));
       if (url === "/installments/me") return settle(orders().myInstallments(params));
-      if (url === "/einvoices/me") return settle(orders().myEInvoices());
+      if (url === "/einvoices/me") return settle(orders().myEInvoices(params));
       const refund = /^\/refunds\/me\/orders\/([^/]+)$/.exec(url);
       if (refund) return settle(orders().myOrderRefund(decodeURIComponent(refund[1]!)));
       const plan = /^\/installments\/me\/orders\/([^/]+)$/.exec(url);
