@@ -61,6 +61,8 @@ export const returnRowDtoSchema = z.object({
   rmaNumber: z.string(),
   orderId: beId(),
   orderNumber: z.string().nullish(),
+  /** Lần giao hàng trả về đã đến (WF-05 TH-1); null với đơn giao một lần không ghi lần giao. */
+  shipmentId: beId().nullish(),
   status: returnStatusSchema,
   reasonCode: returnReasonSchema,
   requestedResolution: z.string().nullish(),
@@ -101,6 +103,8 @@ export const customerReturnDtoSchema = z.object({
   rmaNumber: z.string(),
   orderId: beId(),
   orderNumber: z.string().nullish(),
+  /** BE `CustomerReturnResponse.shipmentId`: lần giao của hàng trả; null với đơn giao một lần. */
+  shipmentId: beId().nullish(),
   status: returnStatusSchema,
   reasonCode: returnReasonSchema,
   description: z.string().nullish(),
@@ -146,6 +150,11 @@ export const openReturnInputSchema = z
       .array(z.object({ orderLineId: beId(), quantity: z.number().int().min(1) }))
       .min(1)
       .max(100),
+    /**
+     * Lần giao đã đến mà hàng trả thuộc về (WF-05 TH-1, BE `ReturnRequests.Open.shipmentId`). Bỏ trống:
+     * lần giao duy nhất của đơn; bắt buộc khi đơn đã giao nhiều lần (`RETURN_SHIPMENT_REQUIRED`).
+     */
+    shipmentId: beId().optional(),
   })
   // BE `ReturnRequest.open`: lý do "Khác" phải mô tả vấn đề.
   .refine((input) => input.reasonCode !== "OTHER" || !!input.description, {

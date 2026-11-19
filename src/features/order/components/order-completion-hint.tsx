@@ -3,7 +3,7 @@
 import { CalendarCheck2 } from "lucide-react";
 
 import { Alert } from "@/components/shared";
-import { returnWindowEnd, lastReturnDay } from "@/lib/domain/return-window";
+import { RETURN_WINDOW_DAYS, returnWindowEnd, lastReturnDay } from "@/lib/domain/return-window";
 import { formatDate } from "@/lib/format/date";
 import { isNoInstallments, useMyOrderInstallments } from "@/lib/installments";
 
@@ -16,21 +16,31 @@ export function deliveredAtOf(order: Pick<Order, "timeline">): string | undefine
 }
 
 /**
- * Vì sao đơn đã giao chưa "Hoàn tất" (kltn-docs 17 §4.6 bước 21): hạn đổi / trả 7 ngày và các đợt
+ * Vì sao đơn đã giao chưa "Hoàn tất" (kltn-docs 17 §4.6 bước 21): hạn đổi / trả (hợp đồng, mặc định
+ * 7 ngày) và các đợt
  * thanh toán còn nợ. Chỉ với đơn đang `DELIVERED`; đơn hoàn tất / đóng không cần giải thích.
  */
-export function OrderCompletionHint({ order, now = new Date() }: { order: Order; now?: Date }) {
+export function OrderCompletionHint({
+  order,
+  windowDays = RETURN_WINDOW_DAYS,
+  now = new Date(),
+}: {
+  order: Order;
+  /** The contract's complaint period, else the BE default (WF-05 TH-1). */
+  windowDays?: number;
+  now?: Date;
+}) {
   const deliveredAt = order.status === "DELIVERED" ? deliveredAtOf(order) : undefined;
   const plan = useMyOrderInstallments(order.orderId, !!deliveredAt);
   if (!deliveredAt) return null;
 
-  const windowOpen = returnWindowEnd(deliveredAt).getTime() > now.getTime();
+  const windowOpen = returnWindowEnd(deliveredAt, windowDays).getTime() > now.getTime();
   const owing = plan.data?.installments.filter(
     (installment) => installment.outstanding > 0 && installment.status !== "CANCELLED",
   );
   const lines = [
     windowOpen
-      ? `Bạn có thể yêu cầu đổi / trả hàng đến hết ngày ${formatDate(lastReturnDay(deliveredAt).toISOString())}.`
+      ? `Bạn có thể yêu cầu đổi / trả hàng đến hết ngày ${formatDate(lastReturnDay(deliveredAt, windowDays).toISOString())}.`
       : "Đã hết thời hạn đổi / trả hàng.",
     owing && owing.length > 0
       ? `Còn ${owing.length} đợt thanh toán chưa trả đủ — xem mục Thanh toán.`

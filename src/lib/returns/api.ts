@@ -51,17 +51,21 @@ export async function getMyReturn(returnId: string, signal?: AbortSignal): Promi
 }
 
 /**
- * POST /orders/{orderId}/returns (sales-rmas:CREATE OWN). `requestId` sinh một lần cho mỗi form:
+ * POST /orders/{orderId}/returns (sales-rmas:CREATE OWN), kèm `shipmentId` của lần giao khi đơn giao
+ * nhiều lần. `requestId` sinh một lần cho mỗi form:
  * gửi lại (mất mạng, bấm hai lần) nhận về đúng yêu cầu đã mở (BE idempotent theo `requestId`).
  */
 export async function openMyReturn(input: OpenReturnInput): Promise<CustomerReturn> {
-  const { orderId, requestId, reasonCode, description, lines } = openReturnInputSchema.parse(input);
+  const { orderId, requestId, reasonCode, description, lines, shipmentId } =
+    openReturnInputSchema.parse(input);
   const { data } = await api.post<unknown>(`/orders/${enc(orderId)}/returns`, {
     requestId,
     reasonCode,
     description: description || undefined,
     requestedResolution: "REFUND",
     lines,
+    // Đơn giao nhiều lần: BE cần biết hàng đến ở lần giao nào (WF-05 TH-1).
+    shipmentId,
   });
   return customerReturnDtoSchema.parse(data);
 }

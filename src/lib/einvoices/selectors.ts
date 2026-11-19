@@ -29,3 +29,31 @@ export function invoiceStatusMeta(invoice: Pick<CustomerEInvoice, "status" | "ad
   if (invoice.adjusted) return { label: "Đã phát hành — có điều chỉnh", tone: "info" };
   return { label: "Đã phát hành", tone: "positive" };
 }
+
+/** Sorts by invoice date, then by the instant it was issued (absent on an older BE). */
+const issuedOn = (invoice: Pick<CustomerEInvoice, "issuedAt" | "issueDate">) =>
+  `${invoice.issueDate}|${invoice.issuedAt ?? ""}`;
+
+/**
+ * Hoá đơn đã thay thế `invoice` (đang "Đã bị thay thế"), trong các hoá đơn của đơn. BE
+ * `CustomerEInvoiceResponse` không gửi id hoá đơn gốc / thay thế, nên suy ra như BE lập hoá đơn
+ * thay thế (`EInvoice.drawUpReplacement`): cùng đơn, cùng lần giao (`shipmentCode`), loại
+ * `REPLACEMENT`, phát hành sau — hoá đơn sớm nhất như vậy (mỗi lúc chỉ một hoá đơn thay thế).
+ */
+export function replacementOf(
+  invoice: CustomerEInvoice,
+  invoices: readonly CustomerEInvoice[],
+): CustomerEInvoice | undefined {
+  if (invoice.status !== "REPLACED") return undefined;
+  const after = issuedOn(invoice);
+  return invoices
+    .filter(
+      (other) =>
+        other.id !== invoice.id &&
+        other.type === "REPLACEMENT" &&
+        other.orderId === invoice.orderId &&
+        (other.shipmentCode ?? null) === (invoice.shipmentCode ?? null) &&
+        issuedOn(other) >= after,
+    )
+    .sort((a, b) => issuedOn(a).localeCompare(issuedOn(b)))[0];
+}

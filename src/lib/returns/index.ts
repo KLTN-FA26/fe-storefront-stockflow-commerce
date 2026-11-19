@@ -8,6 +8,13 @@ export {
 } from "./api";
 export type { MyReturnsParams } from "./api";
 export { describeReturnError, isReturnNotFound } from "./errors";
+export { returnEligibility } from "./eligibility";
+export type {
+  ReturnClosedReason,
+  ReturnEligibility,
+  ReturnShipmentSource,
+  ReturnableShipment,
+} from "./eligibility";
 export { useAddMyReturnPhoto, useCancelMyReturn, useOpenMyReturn } from "./mutations";
 export { returnKeys, useMyOrderReturns, useMyReturn, useMyReturns } from "./queries";
 export {

@@ -7,6 +7,7 @@ import {
   RETURN_PHOTO_MAX_COUNT,
   claimsByOrderLine,
   type CustomerReturn,
+  type ReturnableShipment,
 } from "@/lib/returns";
 
 import type { OrderLine } from "./types";
@@ -25,15 +26,24 @@ export interface ReturnableLine {
   /** Đã bị các yêu cầu khác giữ (BE `ReturnLine.claimedUnits`). */
   claimed: number;
   max: number;
-  /** Dòng đang có yêu cầu trả hàng khác chưa xong (BE `RETURN_LINE_ALREADY_OPEN`). */
+  /**
+   * Dòng đang có yêu cầu trả hàng khác chưa xong (BE `RETURN_LINE_ALREADY_OPEN`) — của cùng lần giao
+   * khi đã biết lần giao.
+   */
   open: boolean;
 }
 
+/**
+ * Số còn trả được của mỗi dòng. `delivery`: lần giao khách chọn — chỉ yêu cầu của lần giao đó chặn
+ * dòng. BE không gửi số cái của từng dòng trong mỗi lần giao cho khách, nên tối đa vẫn tính theo cả
+ * đơn; BE kiểm lại theo lần giao (`RETURN_QUANTITY_EXCEEDED`).
+ */
 export function returnableLines(
   lines: readonly OrderLine[],
   returns: readonly CustomerReturn[],
+  delivery?: { shipmentId: string | null },
 ): ReturnableLine[] {
-  const { claimed, open } = claimsByOrderLine(returns);
+  const { claimed, open } = claimsByOrderLine(returns, delivery);
   return lines.map((line) => {
     const held = claimed.get(line.lineId) ?? 0;
     return {
@@ -54,10 +64,18 @@ export function returnableLines(
  * mô tả khi "Khác", và ít nhất một ảnh — Sales chỉ duyệt khi có ảnh của vấn đề (BE
  * `RETURN_EVIDENCE_REQUIRED`, `ReturnPolicy.evidenceRequired`).
  */
-export function returnFormSchema(lines: readonly ReturnableLine[]) {
+export function returnFormSchema(
+  lines: readonly ReturnableLine[],
+  delivery: { shipments: readonly ReturnableShipment[]; needsChoice: boolean } = {
+    shipments: [],
+    needsChoice: false,
+  },
+) {
   const byId = new Map(lines.map((line) => [line.lineId, line]));
   return z
     .object({
+      /** Lần giao có hàng muốn trả — bắt buộc khi đơn đã giao nhiều lần (WF-05 TH-1). */
+      shipmentId: z.string().optional(),
       quantities: z.record(z.string(), z.number().int().min(0)),
       reasonCode: z.enum(CUSTOMER_RETURN_REASONS, { message: "Chọn lý do trả hàng." }),
       description: z.string().trim().max(RETURN_DESCRIPTION_MAX, "Mô tả tối đa 2000 ký tự."),
@@ -67,6 +85,18 @@ export function returnFormSchema(lines: readonly ReturnableLine[]) {
         .max(RETURN_PHOTO_MAX_COUNT, `Tối đa ${RETURN_PHOTO_MAX_COUNT} ảnh.`),
     })
     .superRefine((values, ctx) => {
+      if (delivery.needsChoice) {
+        const shipment = delivery.shipments.find((s) => s.shipmentId === values.shipmentId);
+        if (!shipment || !shipment.windowOpen) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["shipmentId"],
+            message: shipment
+              ? "Lần giao này đã quá hạn đổi / trả."
+              : "Chọn lần giao có hàng muốn trả.",
+          });
+        }
+      }
       const chosen = Object.entries(values.quantities).filter(([, qty]) => qty > 0);
       if (chosen.length === 0) {
         ctx.addIssue({
