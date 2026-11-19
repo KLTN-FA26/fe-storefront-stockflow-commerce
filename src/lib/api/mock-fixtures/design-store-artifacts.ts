@@ -227,9 +227,10 @@ export function createArtifactOps(ctx: StoreContext, files: DesignFiles) {
       if (!row) return notFound();
       const { version } = asRecord(body);
       if (!isVersion(version)) return invalid("version", "version must be a whole number ≥ 0");
-      // Version first, as the BE (`DesignWorkflow`): a stale tab meets CONFLICT.
-      if (row.version !== version) return versionConflict();
+      // Status first, as the BE (S-6, `requireSubmittable`): a design sent elsewhere says so
+      // rather than CONFLICT, whatever version the caller holds.
       if (row.status !== "DRAFT") return invalidState();
+      if (row.version !== version) return versionConflict();
 
       const refuse = async (found: Array<ReturnType<typeof beIssue>>) => {
         // On the record, the design and its version untouched (the studio must not record it again).

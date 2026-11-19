@@ -221,8 +221,19 @@ export function batchRefusalOf(error: unknown): BatchFailure[] | null {
  */
 export function refusedDesignIdsOf(error: unknown): string[] | null {
   if (!hasErrorCode(error, "CONFLICT") && !isDesignStateChanged(error)) return null;
+  return namedDesignIdsOf(error);
+}
+
+/**
+ * The designs a batch refusal names: every refused design with its own code (`details.designs`,
+ * S-1), else those of the answer's code (`details.designIds`). Null when it names none.
+ */
+function namedDesignIdsOf(error: unknown): string[] | null {
+  if (!(error instanceof ApiError)) return null;
   const parsed = batchDesignIdsDetailsSchema.safeParse(error.details);
-  return parsed.success ? parsed.data.designIds : null;
+  if (!parsed.success) return null;
+  const ids = parsed.data.designs?.map((design) => design.designId) ?? parsed.data.designIds ?? [];
+  return ids.length > 0 ? ids : null;
 }
 
 /**
@@ -231,6 +242,5 @@ export function refusedDesignIdsOf(error: unknown): string[] | null {
  */
 export function goneDesignIdsOf(error: unknown): string[] | null {
   if (!(error instanceof ApiError) || error.status !== 404) return null;
-  const parsed = batchDesignIdsDetailsSchema.safeParse(error.details);
-  return parsed.success ? parsed.data.designIds : null;
+  return namedDesignIdsOf(error);
 }

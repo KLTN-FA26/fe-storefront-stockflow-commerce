@@ -101,9 +101,10 @@ export function useAutosave(
       return await send(version);
     } catch (error) {
       if (!isDesignConflict(error)) throw error;
-      // The BE checks the version before the status, so a design submitted or answered elsewhere
-      // is a CONFLICT too: read it, and when it is no longer a DRAFT take the status path (the
-      // studio follows the status, nothing more is sent) instead of the reload dialog.
+      // The BE checks the status before the version (BE-15), so a design submitted or answered
+      // elsewhere answers DESIGN_NOT_DRAFT; an older BE answered CONFLICT for it too. Read it, and
+      // when it is no longer a DRAFT take the status path (the studio follows the status, nothing
+      // more is sent) instead of the reload dialog.
       const fresh = await client
         .fetchQuery({ ...designQuery(designId), staleTime: 0 })
         .catch(() => null);

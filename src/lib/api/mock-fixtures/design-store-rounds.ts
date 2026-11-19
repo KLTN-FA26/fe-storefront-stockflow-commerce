@@ -69,6 +69,18 @@ const refusedDesigns = (
 
 const idsOf = (items: readonly { designId: string }[]) => items.map((item) => item.designId);
 
+/**
+ * The batch's answer when several designs are refused: the most severe code first (S-1), in the
+ * store's words. `details.designs` carries each one's code in the BE's words, as the contract layer
+ * turns the answer's own code.
+ */
+const SEVERITY = ["NOT_FOUND", "INVALID_STATE", "VERSION_CONFLICT"];
+const BE_CODE_OF: Record<string, string> = {
+  NOT_FOUND: "NOT_FOUND",
+  INVALID_STATE: "DESIGN_NOT_DRAFT",
+  VERSION_CONFLICT: "CONFLICT",
+};
+
 /** The upload's files are the ones `sums` names. */
 const holds = (upload: SubmissionUploadRow, sums: Readonly<Record<BundleRole, string>>) => {
   const stored = new Map(upload.files.map((file) => [file.role, file.sha256]));
@@ -312,32 +324,47 @@ export function createRoundOps(ctx: StoreContext) {
         );
       }
       if (project.status !== "ACTIVE") return projectArchived();
-      const rows = items.map((item) => ctx.find(String(item.id)));
-      if (rows.some((row) => !row || row.projectId !== project.id)) return notFound();
-      const members = rows as DesignRow[];
-      // The BE's planning loop (`DesignBatchSubmissionService.submit`, d47ed4ae, BE-4) goes through
-      // every design: version first, as `DesignWorkflow` (a stale tab meets CONFLICT), then the
-      // status. The first refusal met sets the code, and `details.designIds` lists every design
-      // refused with that same code (one refused with the other code is not listed).
-      let refused: MockResult | null = null;
-      const refusedIds: string[] = [];
-      for (const [i, row] of members.entries()) {
+      // The BE's planning loop (`DesignBatchSubmissionService.submit`, S-1/S-3/S-6) goes through
+      // every design: gone or out of the project (NOT_FOUND), then the status (DESIGN_NOT_DRAFT),
+      // then the version (CONFLICT). It names every refused design with its own code in
+      // `details.designs`, answers with the most severe code, and lists that code's designs in
+      // `details.designIds`.
+      const refusals: Array<{ id: string; result: MockResult }> = [];
+      for (const item of items) {
+        const id = String(item.id);
+        const row = ctx.find(id);
         const refusal =
-          row.version !== items[i]!.version
-            ? versionConflict()
+          !row || row.projectId !== project.id
+            ? notFound()
             : row.status !== "DRAFT"
               ? invalidState()
-              : null;
-        if (!refusal) continue;
-        refused ??= refusal;
-        if (asRecord(refusal.data).errorCode === asRecord(refused.data).errorCode) {
-          refusedIds.push(row.id);
-        }
+              : row.version !== item.version
+                ? versionConflict()
+                : null;
+        if (refusal) refusals.push({ id, result: refusal });
       }
-      if (refused) {
-        const { errorCode, message } = asRecord(refused.data);
-        return refusedDesigns(refused.status, String(errorCode), String(message), refusedIds);
+      if (refusals.length > 0) {
+        const codeOf = (refusal: { result: MockResult }) =>
+          String(asRecord(refusal.result.data).errorCode);
+        const chosen = refusals.reduce((worst, refusal) =>
+          SEVERITY.indexOf(codeOf(refusal)) < SEVERITY.indexOf(codeOf(worst)) ? refusal : worst,
+        );
+        const code = codeOf(chosen);
+        const { message } = asRecord(chosen.result.data);
+        return refusedDesigns(
+          chosen.result.status,
+          code,
+          String(message),
+          refusals.filter((refusal) => codeOf(refusal) === code).map((refusal) => refusal.id),
+          {
+            designs: refusals.map((refusal) => ({
+              designId: refusal.id,
+              errorCode: BE_CODE_OF[codeOf(refusal)] ?? codeOf(refusal),
+            })),
+          },
+        );
       }
+      const members = items.map((item) => ctx.find(String(item.id))) as DesignRow[];
       const failures: Array<{
         row: DesignRow;
         plan: NonNullable<Awaited<ReturnType<typeof planOf>>>;

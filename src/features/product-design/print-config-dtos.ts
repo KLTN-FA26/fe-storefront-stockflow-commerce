@@ -29,10 +29,15 @@ export const templateDtoSchema = z.object({
   allowedFontCodes: z.array(z.string().min(1)).nullish(),
   model: productModelSchema,
   printAreas: z.array(printAreaSchema).min(1),
-  /** Only the customization read has it (A-2); the design's template read does not. */
+  /** The customization read (A-2) and, since BE-11, the design's template read. */
   hasCartonSpec: z.boolean().optional(),
   /** Only the design's template read has it. */
   active: z.boolean().optional(),
+  /**
+   * The design's template read (BE-11): the variant still takes a submission, by the rule the
+   * submission's preflight uses (`false` exactly when it would fail with VARIANT_UNAVAILABLE).
+   */
+  designable: z.boolean().optional(),
   model3d: z.unknown().optional(),
 });
 export type TemplateDto = z.infer<typeof templateDtoSchema>;

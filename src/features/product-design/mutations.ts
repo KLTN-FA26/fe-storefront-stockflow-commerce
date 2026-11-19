@@ -67,8 +67,8 @@ const reReadDrafts = (client: QueryClient) =>
 
 /**
  * A write refused because the design moved on (another tab submitted it, the reviewer answered) or
- * is gone (another tab deleted it): 409 `DESIGN_NOT_DRAFT`, 404, and the plain 409 `CONFLICT` the BE
- * answers a stale tab first, since it checks the version before the status (`DesignWorkflow`).
+ * is gone (another tab deleted it): 409 `DESIGN_NOT_DRAFT` (the BE checks the status before the
+ * version, BE-15), 404, and the plain 409 `CONFLICT` an older BE answered a stale tab first.
  * Re-read it, so the studio follows its new status, or says it is gone (spec §9). A write that
  * handles a CONFLICT itself (the autosaver) passes `conflict: false`.
  */
