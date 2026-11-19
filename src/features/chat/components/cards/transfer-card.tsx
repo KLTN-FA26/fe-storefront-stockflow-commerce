@@ -9,6 +9,7 @@ import { TransferInstructionsBlock } from "@/components/storefront/transfer-inst
 import type { TransferCardPayload } from "../../card-payloads";
 import { installmentStatusMeta } from "../../labels";
 import { CARD_LINK, CardFrame, Fact, Facts, cardMoney } from "./card-frame";
+import { VietQrCode } from "./viet-qr-code";
 
 const SETTLED = new Set(["PAID", "CANCELLED"]);
 
@@ -33,7 +34,8 @@ function asTransfer(payload: TransferCardPayload): InstallmentTransfer | null {
 
 /**
  * PAYMENT_INFO / PAYMENT_REMINDER (plan B.7.5, 16 BR-06): the shop's account, what is still owed
- * and the transfer content, each copyable. No action: the customer pays outside the system.
+ * and the transfer content, each copyable, and the VietQR code that fills them in when the BE sends
+ * one (plan E1). No action: the customer pays outside the system.
  */
 export function TransferCard({
   payload,
@@ -87,7 +89,10 @@ export function TransferCard({
             : "Đợt thanh toán này đã huỷ, bạn không cần chuyển khoản."}
         </p>
       ) : transfer && payload.amount > 0 ? (
-        <TransferInstructionsBlock transfer={transfer} />
+        <>
+          {payload.vietQr ? <VietQrCode payload={payload.vietQr} /> : null}
+          <TransferInstructionsBlock transfer={transfer} />
+        </>
       ) : payload.amount > 0 ? (
         <Alert tone="warning" title="Chưa có thông tin chuyển khoản.">
           Cửa hàng chưa cấu hình tài khoản nhận tiền, vui lòng nhắn Sale để được hướng dẫn.
