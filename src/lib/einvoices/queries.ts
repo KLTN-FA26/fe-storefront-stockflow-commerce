@@ -6,7 +6,7 @@ import { retryTransient } from "@/lib/api/retry";
 
 import { listMyEInvoices } from "./api";
 
-/** Cỡ trang lớn nhất BE cho (`Pages` ≤ 200): đủ cho hoá đơn của một khách tới khi BE lọc theo đơn. */
+/** Cỡ trang lớn nhất BE cho (`Pages` ≤ 200): đủ cho mọi hoá đơn của một đơn. */
 export const MY_EINVOICES_SCAN_SIZE = 200;
 
 export const einvoiceKeys = {
@@ -14,15 +14,19 @@ export const einvoiceKeys = {
   ofOrder: (orderId: string) => [...einvoiceKeys.all, "order", orderId] as const,
 };
 
-/** Hoá đơn đã phát hành của một đơn của khách, cũ nhất trước (lần giao đầu trước). */
+/**
+ * Hoá đơn đã phát hành của một đơn của khách — BE lọc theo `orderId` — cũ nhất trước (lần giao đầu
+ * trước; BE trả mới nhất trước).
+ */
 export function useMyOrderEInvoices(orderId: string, enabled = true) {
   return useQuery({
     queryKey: einvoiceKeys.ofOrder(orderId),
     queryFn: async ({ signal }) => {
-      const page = await listMyEInvoices({ page: 0, size: MY_EINVOICES_SCAN_SIZE }, signal);
-      return page.items
-        .filter((invoice) => invoice.orderId === orderId)
-        .sort((a, b) => a.issueDate.localeCompare(b.issueDate));
+      const page = await listMyEInvoices(
+        { page: 0, size: MY_EINVOICES_SCAN_SIZE, orderId },
+        signal,
+      );
+      return [...page.items].sort((a, b) => a.issueDate.localeCompare(b.issueDate));
     },
     enabled,
     retry: retryTransient,

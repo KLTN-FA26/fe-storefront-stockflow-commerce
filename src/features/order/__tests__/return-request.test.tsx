@@ -10,7 +10,7 @@ import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { OrderHelpCard } from "../components/order-help-card";
 import { ReturnRequestScreen } from "../components/return-request-screen";
-import { returnFormSchema, returnableLines } from "../return-form";
+import { quantitiesFor, returnFormSchema, returnableLines } from "../return-form";
 import { orderDtoSchema } from "../schemas";
 import { beOrder, orderId } from "./fixtures";
 
@@ -100,6 +100,50 @@ describe("return form rules (BE ReturnRequest.open)", () => {
       description: "Không thích",
     });
     expect(result.error?.issues.map((issue) => issue.path.join("."))).toContain("reasonCode");
+  });
+});
+
+describe("per-shipment limits (BE CustomerOrderShipmentLine.returnableQuantity, WF-05 TH-1)", () => {
+  const order = orderDtoSchema.parse(delivered());
+  const S1 = "5e000000-0000-4000-8000-000000000001";
+  const onS1 = [
+    { orderLineId: TEE, quantity: 1, returnableQuantity: 1 },
+    { orderLineId: MUG, quantity: 1, returnableQuantity: 0 },
+  ];
+
+  it("bounds each line by what the chosen shipment may still return, not the whole order", () => {
+    const lines = returnableLines(order.lines, [], { shipmentId: S1, lines: onS1 });
+    expect(lines.find((l) => l.lineId === TEE)).toMatchObject({ delivered: 1, max: 1 });
+    // 0 locks the line ("Không trả thêm được").
+    expect(lines.find((l) => l.lineId === MUG)).toMatchObject({ delivered: 1, max: 0 });
+  });
+
+  it("offers only the lines the shipment carried", () => {
+    const lines = returnableLines(order.lines, [], {
+      shipmentId: S1,
+      lines: [{ orderLineId: TEE, quantity: 2, returnableQuantity: 2 }],
+    });
+    expect(lines.map((l) => l.lineId)).toEqual([TEE]);
+  });
+
+  it("falls back to the whole order when the BE sends no shipment lines", () => {
+    const lines = returnableLines(order.lines, [], { shipmentId: S1 });
+    expect(lines.map((l) => [l.lineId, l.max])).toEqual([
+      [TEE, 2],
+      [MUG, 1],
+    ]);
+  });
+
+  it("keeps what still fits after the shipment changes, and drops the rest", () => {
+    const lines = returnableLines(order.lines, [], {
+      shipmentId: S1,
+      lines: [
+        { orderLineId: TEE, quantity: 2, returnableQuantity: 1 },
+        { orderLineId: MUG, quantity: 1, returnableQuantity: 0 },
+      ],
+    });
+    expect(quantitiesFor(lines, { [TEE]: 2, [MUG]: 1, other: 3 })).toEqual({ [TEE]: 1, [MUG]: 0 });
+    expect(quantitiesFor(lines)).toEqual({ [TEE]: 0, [MUG]: 0 });
   });
 });
 
@@ -216,6 +260,53 @@ describe("ReturnRequestScreen — an order delivered in several shipments (WF-05
     renderWithProviders(<ReturnRequestScreen orderId={orderId} />);
     expect(await screen.findByText(/Vui lòng liên hệ Sale/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Gửi yêu cầu trả hàng" })).toBeNull();
+  });
+
+  it("limits each line to the chosen delivery and refits the quantities when it changes", async () => {
+    backend({
+      ...delivered(),
+      shipments: [
+        {
+          ...shipment(S1, 1, 3),
+          lines: [
+            { orderLineId: TEE, sku: "TEE-CLASSIC-WHT-M", quantity: 1, returnableQuantity: 1 },
+            { orderLineId: MUG, sku: "MUG-CERAMIC-11OZ", quantity: 1, returnableQuantity: 0 },
+          ],
+        },
+        {
+          ...shipment(S2, 2, 1),
+          lines: [
+            { orderLineId: TEE, sku: "TEE-CLASSIC-WHT-M", quantity: 1, returnableQuantity: 0 },
+          ],
+        },
+      ],
+    });
+    const post = vi.spyOn(api, "post");
+    renderWithProviders(<ReturnRequestScreen orderId={orderId} />);
+
+    await userEvent.click(await screen.findByRole("radio", { name: /Lần giao 1/ }));
+    expect(screen.getByText(/tính theo lần giao đã chọn/)).toBeInTheDocument();
+    const mugRow = screen.getByText("MUG-CERAMIC-11OZ").closest("li")!;
+    expect(within(mugRow).getByText("Không trả thêm được")).toBeInTheDocument();
+    const teeRow = screen.getByText("TEE-CLASSIC-WHT-M").closest("li")!;
+    await userEvent.click(within(teeRow).getByRole("button", { name: "Tăng số lượng" }));
+    expect(within(teeRow).getByRole("button", { name: "Tăng số lượng" })).toBeDisabled();
+
+    // The second delivery brought no mug, and its tee is already claimed: nothing is left chosen.
+    await userEvent.click(screen.getByRole("radio", { name: /Lần giao 2/ }));
+    expect(screen.queryByText("MUG-CERAMIC-11OZ")).toBeNull();
+    const teeOnS2 = screen.getByText("TEE-CLASSIC-WHT-M").closest("li")!;
+    expect(within(teeOnS2).getByText("Không trả thêm được")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: /Giao sai hàng/ }));
+    await userEvent.upload(
+      screen.getByLabelText("Ảnh chụp lỗi hoặc hư hỏng"),
+      new File(["x"], "sai.jpg", { type: "image/jpeg" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Gửi yêu cầu trả hàng" }));
+    expect(
+      await screen.findByText("Chọn ít nhất một sản phẩm và số lượng muốn trả."),
+    ).toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
   });
 
   it("shows the BE refusal of a missing delivery in Vietnamese", async () => {

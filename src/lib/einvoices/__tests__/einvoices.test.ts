@@ -36,8 +36,11 @@ describe("customer e-invoices (kltn-docs 21 §4.3, §5.2)", () => {
       .mockResolvedValueOnce({
         data: { url: "https://x/a.pdf", expiresAt: "2026-11-10T03:05:00Z" },
       });
-    await listMyEInvoices({ page: 0, size: 200 });
-    expect(get).toHaveBeenNthCalledWith(1, "/einvoices/me", { params: { page: 0, size: 200 } });
+    // BE CustomerEInvoiceController.list narrows to one of the customer's orders by `orderId`.
+    await listMyEInvoices({ page: 0, size: 200, orderId: beInvoice().orderId });
+    expect(get).toHaveBeenNthCalledWith(1, "/einvoices/me", {
+      params: { page: 0, size: 200, orderId: beInvoice().orderId },
+    });
     await getMyEInvoiceFile(beInvoice().id, "PDF");
     expect(get).toHaveBeenLastCalledWith(`/einvoices/me/${beInvoice().id}/files/PDF`);
   });

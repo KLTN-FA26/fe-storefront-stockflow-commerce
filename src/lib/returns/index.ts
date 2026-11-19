@@ -12,6 +12,7 @@ export { returnEligibility } from "./eligibility";
 export type {
   ReturnClosedReason,
   ReturnEligibility,
+  ReturnShipmentLine,
   ReturnShipmentSource,
   ReturnableShipment,
 } from "./eligibility";
@@ -48,6 +49,7 @@ export {
   RETURN_STATUS_META,
   acceptsPhotos,
   canOpenReturn,
+  canWithdrawReturn,
   claimedUnits,
   claimsByOrderLine,
   isReturnOpen,

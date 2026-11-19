@@ -31,6 +31,15 @@ const RETURN_MESSAGES: Record<string, string> = {
   RETURN_INVALID_TRANSITION:
     "Yêu cầu trả hàng vừa chuyển sang bước khác nên không thực hiện được. Trang đã được cập nhật.",
   RETURN_EVIDENCE_LIMIT_REACHED: "Yêu cầu đã có đủ số ảnh tối đa.",
+  // Sales duyệt lỗi dựa trên ảnh: cần ít nhất một ảnh của vấn đề.
+  RETURN_EVIDENCE_REQUIRED:
+    "Yêu cầu cần ít nhất một ảnh chụp vấn đề trước khi được duyệt. Hãy thêm ảnh ở trang yêu cầu.",
+  // 17 BR-18: hàng của yêu cầu đã duyệt phải gửi về kho trước khi hoàn tiền.
+  RETURN_GOODS_REQUIRED:
+    "Hàng của yêu cầu này cần được gửi về kho trước khi hoàn tiền. Hãy gửi hàng kèm số RMA trên kiện.",
+  RATE_LIMITED: "Bạn thao tác quá nhanh. Vui lòng đợi một lát rồi thử lại.",
+  CONFLICT:
+    "Yêu cầu vừa thay đổi ở nơi khác nên chưa thực hiện được. Hãy tải lại trang và thử lại.",
   PAYLOAD_TOO_LARGE: "Ảnh lớn hơn 15 MB hoặc quá nhiều điểm ảnh.",
   UNSUPPORTED_MEDIA_TYPE: "Chỉ nhận ảnh JPEG, PNG hoặc WebP.",
   IDEMPOTENCY_KEY_REUSED: "Yêu cầu không hợp lệ. Vui lòng tải lại trang và thử lại.",

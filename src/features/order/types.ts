@@ -16,6 +16,7 @@ import type {
   orderDtoSchema,
   orderLineDtoSchema,
   orderShipmentDtoSchema,
+  orderShipmentLineDtoSchema,
   orderStatusGroupSchema,
   orderTimelineEntryDtoSchema,
   orderVehicleDtoSchema,
@@ -37,6 +38,8 @@ export type OrderAddress = z.infer<typeof orderAddressDtoSchema>;
 export type OrderLine = z.infer<typeof orderLineDtoSchema>;
 /** One handed-over shipment of the order (BE CustomerOrderShipment). */
 export type OrderShipment = z.infer<typeof orderShipmentDtoSchema>;
+/** What one shipment carried of an order line, and what a return of it may still claim. */
+export type OrderShipmentLine = z.infer<typeof orderShipmentLineDtoSchema>;
 export type DeliveryFailureReason = z.infer<typeof deliveryFailureReasonSchema>;
 /** One row of the order list (BE CustomerOrderCardResponse). */
 export type OrderCard = z.infer<typeof orderCardDtoSchema>;

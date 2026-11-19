@@ -22,6 +22,7 @@ import {
 
 import {
   RETURN_REASON_HELP,
+  quantitiesFor,
   returnFormSchema,
   type ReturnFormInput,
   type ReturnFormValues,
@@ -107,13 +108,15 @@ export function ReturnRequestForm({
     control,
     register,
     handleSubmit,
+    getValues,
+    setValue,
     formState: { errors },
   } = useForm<ReturnFormInput, unknown, ReturnFormValues>({
     // The resolver is read on every render, so it follows the shipment chosen below.
     resolver: (values, context, options) => zodResolver(schema)(values, context, options),
     defaultValues: {
       shipmentId: defaultShipmentId,
-      quantities: Object.fromEntries(linesOf(defaultShipmentId).map((line) => [line.lineId, 0])),
+      quantities: quantitiesFor(linesOf(defaultShipmentId)),
       description: "",
       photos: [],
     },
@@ -127,11 +130,21 @@ export function ReturnRequestForm({
     needsChoice,
   });
   const choosing = needsChoice && !shipmentId;
+  // BE sends what the chosen delivery carried: the limits are that delivery's own.
+  const perShipment = shipments.some(
+    (shipment) => (shipment.shipmentId ?? "") === (shipmentId ?? "") && shipment.lines,
+  );
+  // Another delivery offers other lines and other limits: keep what still fits, drop the rest.
+  const refitQuantities = (next: string) =>
+    setValue("quantities", quantitiesFor(linesOf(next), getValues("quantities")));
   // Step numbers shift by one when the delivery is chosen first.
   const step = (n: number) => (needsChoice ? n + 1 : n);
-  // `quantities` holds both its own message (nothing chosen) and one per line id.
+  // `quantities` holds both its own message (nothing chosen) and one per line id. The resolver
+  // files the own message under `root` when a line id starts with a digit (it reads that as an
+  // array index), so both places are read.
   const quantityErrors = errors.quantities as
     ({ message?: string } & Record<string, { message?: string } | undefined>) | undefined;
+  const nothingChosen = quantityErrors?.message ?? quantityErrors?.root?.message;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
@@ -151,7 +164,10 @@ export function ReturnRequestForm({
               <ReturnShipmentPicker
                 shipments={shipments}
                 value={field.value}
-                onChange={field.onChange}
+                onChange={(next) => {
+                  field.onChange(next);
+                  refitQuantities(next);
+                }}
                 error={errors.shipmentId?.message}
                 disabled={pending}
               />
@@ -184,14 +200,19 @@ export function ReturnRequestForm({
             ))}
           </ul>
         )}
-        {needsChoice && !choosing ? (
+        {!choosing && perShipment ? (
           <p className="text-ink-tertiary text-xs">
-            Số lượng tối đa tính theo cả đơn. Chỉ trả số hàng đã nhận trong lần giao đã chọn.
+            Số lượng tối đa tính theo lần giao đã chọn: số hàng lần giao đó mang tới, trừ phần đã
+            yêu cầu trả.
+          </p>
+        ) : needsChoice && !choosing ? (
+          <p className="text-ink-tertiary text-xs">
+            Chỉ trả số hàng đã nhận trong lần giao đã chọn.
           </p>
         ) : null}
-        {typeof quantityErrors?.message === "string" ? (
+        {typeof nothingChosen === "string" ? (
           <p role="alert" className="text-danger text-sm">
-            {quantityErrors.message}
+            {nothingChosen}
           </p>
         ) : null}
       </section>

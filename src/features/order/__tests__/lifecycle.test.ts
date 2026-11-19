@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   allowedCancellation,
+  displayGroup,
   isCancellationRequestable,
   isOrderCancellable,
   isOrderTerminal,
+  ORDER_DISPLAY_META,
   ORDER_STATUS_GROUP_META,
   orderProgressOf,
 } from "../lifecycle";
@@ -30,8 +32,9 @@ describe("order lifecycle mirrors BE OrderStatus / CustomerOrders.StatusGroup", 
   });
 
   it("has wording for every status group the BE sends, plus UNKNOWN", () => {
-    // CustomerOrders.StatusGroup: AWAITING_CONTRACT and AWAITING_STOCK came with the rescope.
-    expect(ORDER_STATUS_GROUPS).toHaveLength(11);
+    // CustomerOrders.StatusGroup: AWAITING_CONTRACT and AWAITING_STOCK came with the rescope,
+    // RETURN_REQUESTED with BE #380.
+    expect(ORDER_STATUS_GROUPS).toHaveLength(12);
     expect(Object.keys(ORDER_STATUS_GROUP_META).sort()).toEqual(
       [...ORDER_STATUS_GROUPS, "UNKNOWN"].sort(),
     );
@@ -125,6 +128,41 @@ describe("order lifecycle mirrors BE OrderStatus / CustomerOrders.StatusGroup", 
     for (const group of ORDER_STATUS_GROUPS) {
       expect(ORDER_STATUS_GROUP_META[group].label).not.toBe(group);
       expect(ORDER_STATUS_GROUP_META[group].hint.length).toBeGreaterThan(0);
+    }
+  });
+
+  // BE #380: a return being decided is its own group, between DELIVERED and CANCELLED, and not
+  // RETURNED (whose tone is special): the goods are still with the customer.
+  it("reads RETURN_REQUESTED as a return being decided, not as goods already returned", () => {
+    expect(ORDER_STATUS_GROUPS.indexOf("RETURN_REQUESTED")).toBe(
+      ORDER_STATUS_GROUPS.indexOf("DELIVERED") + 1,
+    );
+    expect(ORDER_STATUS_GROUPS.indexOf("CANCELLED")).toBe(
+      ORDER_STATUS_GROUPS.indexOf("RETURN_REQUESTED") + 1,
+    );
+    expect(ORDER_STATUS_GROUP_META.RETURN_REQUESTED).toMatchObject({
+      label: "Đang yêu cầu trả hàng",
+      tone: "warning",
+    });
+    expect(ORDER_STATUS_GROUP_META.RETURN_REQUESTED.tone).not.toBe(
+      ORDER_STATUS_GROUP_META.RETURNED.tone,
+    );
+    // The goods reached the customer: the stepper stays full.
+    expect(orderProgressOf("RETURN_REQUESTED")).toBe(5);
+  });
+
+  // BE CustomerOrders folds COMPLETED into DELIVERED; the badge and hero still say it is done (A9).
+  it("shows a COMPLETED order as Hoàn tất, every other order by its group", () => {
+    expect(displayGroup({ status: "COMPLETED", statusGroup: "DELIVERED" })).toBe("COMPLETED");
+    expect(ORDER_DISPLAY_META.COMPLETED).toMatchObject({ label: "Hoàn tất", tone: "positive" });
+    expect(orderProgressOf("COMPLETED")).toBe(5);
+    expect(displayGroup({ status: "DELIVERED", statusGroup: "DELIVERED" })).toBe("DELIVERED");
+    expect(displayGroup({ status: "RETURN_REQUESTED", statusGroup: "RETURN_REQUESTED" })).toBe(
+      "RETURN_REQUESTED",
+    );
+    expect(displayGroup({ status: "UNKNOWN", statusGroup: "UNKNOWN" })).toBe("UNKNOWN");
+    for (const group of [...ORDER_STATUS_GROUPS, "UNKNOWN"] as const) {
+      expect(ORDER_DISPLAY_META[group]).toBe(ORDER_STATUS_GROUP_META[group]);
     }
   });
 

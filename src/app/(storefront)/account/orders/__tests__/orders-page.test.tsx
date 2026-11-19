@@ -50,7 +50,8 @@ function fakeBackend() {
       return { data: { roles: ["CUSTOMER"], permissions: [...permissions], dataScope: "OWN" } };
     }
     if (url === "/orders/me") return settle(book.page(config?.params as Record<string, unknown>));
-    if (url === "/einvoices/me") return settle(book.myEInvoices());
+    if (url === "/einvoices/me")
+      return settle(book.myEInvoices(config?.params as Record<string, unknown>));
     const refund = /^\/refunds\/me\/orders\/([^/]+)$/.exec(url);
     if (refund) return settle(book.myOrderRefund(refund[1]!));
     const plan = /^\/installments\/me\/orders\/([^/]+)$/.exec(url);
@@ -289,6 +290,13 @@ describe("OrderDetailScreen", () => {
   it("explains why an order already with the warehouse or carrier cannot be cancelled", async () => {
     renderWithProviders(<OrderDetailScreen orderId={seeded("SHIPPED").orderId} />);
     expect(await screen.findByText(/nên không thể huỷ/)).toBeInTheDocument();
+  });
+
+  // BE folds COMPLETED into the DELIVERED group; the hero still tells the customer it is done (A9).
+  it("says a completed order is Hoàn tất, not just delivered", async () => {
+    renderWithProviders(<OrderDetailScreen orderId={seeded("COMPLETED").orderId} />);
+    expect(await screen.findByRole("heading", { name: "Hoàn tất" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Đã giao hàng" })).not.toBeInTheDocument();
   });
 
   it("drops the stepper once an order leaves the happy path", async () => {

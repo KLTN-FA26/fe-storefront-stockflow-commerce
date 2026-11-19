@@ -1,42 +1,35 @@
 import { describe, expect, it } from "vitest";
 
 import { customerEInvoiceDtoSchema } from "../schemas";
-import { replacementOf } from "../selectors";
 import { beInvoice } from "./fixtures";
 
-const invoice = (over: Record<string, unknown>) => customerEInvoiceDtoSchema.parse(beInvoice(over));
+const ORIGINAL = { id: "5e1a0000-0000-4000-8000-000000000001", code: "EINV-20261110-0001" };
+const REPLACEMENT = { id: "5e1a0000-0000-4000-8000-000000000002", code: "EINV-20261112-0003" };
 
-describe("replacementOf (BE EInvoice.drawUpReplacement: same order and shipment)", () => {
-  const original = invoice({ status: "REPLACED" });
-  const first = invoice({
-    id: "5e1a0000-0000-4000-8000-000000000002",
-    type: "REPLACEMENT",
-    status: "REPLACED",
-    issueDate: "2026-11-12",
-    issuedAt: "2026-11-12T03:00:00Z",
-  });
-  const second = invoice({
-    id: "5e1a0000-0000-4000-8000-000000000003",
-    type: "REPLACEMENT",
-    issueDate: "2026-11-14",
-    issuedAt: "2026-11-14T03:00:00Z",
-  });
-  const otherShipment = invoice({
-    id: "5e1a0000-0000-4000-8000-000000000004",
-    type: "REPLACEMENT",
-    shipmentCode: "SO-20260907-000431-S2",
-    issueDate: "2026-11-11",
-    issuedAt: "2026-11-11T03:00:00Z",
-  });
-  const all = [original, first, second, otherShipment];
-
-  it("follows a chain of replacements one step at a time", () => {
-    expect(replacementOf(original, all)?.id).toBe(first.id);
-    expect(replacementOf(first, all)?.id).toBe(second.id);
+describe("replacement chain (BE CustomerEInvoiceResponse.replaces / replacedBy, TT 91 Điều 10)", () => {
+  it("reads the invoice a replacement replaces, and the one that replaced a replaced invoice", () => {
+    const replaced = customerEInvoiceDtoSchema.parse(
+      beInvoice({ status: "REPLACED", replacedBy: REPLACEMENT }),
+    );
+    expect(replaced.replacedBy).toEqual(REPLACEMENT);
+    expect(replaced.replaces).toBeUndefined();
+    const replacement = customerEInvoiceDtoSchema.parse(
+      beInvoice({ id: REPLACEMENT.id, type: "REPLACEMENT", replaces: ORIGINAL }),
+    );
+    expect(replacement.replaces).toEqual(ORIGINAL);
   });
 
-  it("has none for an invoice in force, or when the replacement is not listed", () => {
-    expect(replacementOf(second, all)).toBeUndefined();
-    expect(replacementOf(original, [original, otherShipment])).toBeUndefined();
+  it("has no link while no replacement is issued (NON_NULL omits it, or sends null)", () => {
+    expect(customerEInvoiceDtoSchema.parse(beInvoice({ status: "REPLACED" })).replacedBy).toBe(
+      undefined,
+    );
+    expect(customerEInvoiceDtoSchema.parse(beInvoice({ replacedBy: null })).replacedBy).toBeNull();
+  });
+
+  it("refuses a link that does not name an invoice id", () => {
+    expect(
+      customerEInvoiceDtoSchema.safeParse(beInvoice({ replacedBy: { id: "x", code: "c" } }))
+        .success,
+    ).toBe(false);
   });
 });

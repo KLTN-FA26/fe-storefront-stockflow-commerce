@@ -12,10 +12,11 @@ const BASE = "/einvoices/me";
 
 /**
  * GET /einvoices/me (einvoices:READ scope OWN): hoá đơn đã phát hành của khách, ngày lập mới nhất
- * trước. BE chưa lọc theo đơn (task BE-01) — trang đơn đọc một trang lớn rồi lọc theo `orderId`.
+ * trước. `orderId` thu về một đơn của khách (BE `CustomerEInvoiceController.list`); đơn của khách
+ * khác hay đơn không có thì BE trả trang rỗng.
  */
 export async function listMyEInvoices(
-  params: { page?: number; size?: number } = {},
+  params: { page?: number; size?: number; orderId?: string } = {},
   signal?: AbortSignal,
 ): Promise<CustomerEInvoicePage> {
   const { data } = await api.get<unknown>(BASE, { params, ...(signal ? { signal } : {}) });

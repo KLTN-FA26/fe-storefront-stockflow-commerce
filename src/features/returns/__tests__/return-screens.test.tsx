@@ -101,6 +101,31 @@ describe("ReturnDetailScreen (kltn-docs 17 §4.10)", () => {
     );
   });
 
+  it("offers no withdrawal once a parcel is back, and says why", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({
+      data: beReturn({
+        receivedAt: "2026-11-15T03:00:00Z",
+        lines: [{ ...beReturn().lines[0], receivedQuantity: 1 }],
+      }),
+    });
+    renderWithProviders(<ReturnDetailScreen returnId={RETURN_ID} />);
+    expect(
+      await screen.findByText("Kho đã nhận một phần hàng nên không rút được yêu cầu."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Rút yêu cầu trả hàng" })).toBeNull();
+  });
+
+  it("explains the BE refusal when goods arrived after the page was loaded", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ data: beReturn() });
+    vi.spyOn(api, "post").mockRejectedValue(
+      new ApiError(409, "RETURN_GOODS_PARTLY_RECEIVED", "Some goods are back"),
+    );
+    renderWithProviders(<ReturnDetailScreen returnId={RETURN_ID} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Rút yêu cầu trả hàng" }));
+    await userEvent.click(screen.getByRole("button", { name: "Rút yêu cầu" }));
+    expect(await screen.findByText(/không thể rút yêu cầu nữa/)).toBeInTheDocument();
+  });
+
   it("shows why a return was refused, and offers no withdrawal once closed", async () => {
     vi.spyOn(api, "get").mockResolvedValue({
       data: beReturn({ status: "REJECTED", rejectionReason: "Ảnh không thấy lỗi in." }),

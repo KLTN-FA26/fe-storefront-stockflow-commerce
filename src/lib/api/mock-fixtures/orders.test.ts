@@ -134,3 +134,44 @@ interface DetailBody {
   timeline: Array<{ status: string; reasonCode?: string }>;
   lines: Array<{ designSnapshotId?: string; production?: { state: string } }>;
 }
+
+describe("mock e-invoices (BE CustomerEInvoiceController.list)", () => {
+  type Invoice = {
+    id: string;
+    orderId: string;
+    status: string;
+    type: string;
+    shipmentCode: string;
+    issueDate: string;
+    replaces?: { id: string; code: string };
+    replacedBy?: { id: string; code: string };
+  };
+  const invoices = (query: { orderId?: unknown } = {}) =>
+    (dataOf(book().myEInvoices(query)) as { items: Invoice[] }).items;
+
+  it("narrows to one order with orderId, and finds nothing for another customer's order", () => {
+    const delivered = byStatus("DELIVERED");
+    const mine = invoices({ orderId: delivered.orderId });
+    expect(mine.length).toBeGreaterThan(0);
+    expect(mine.every((invoice) => invoice.orderId === delivered.orderId)).toBe(true);
+    expect(invoices({ orderId: foreignMockOrderId() })).toEqual([]);
+    expect(invoices().length).toBeGreaterThan(mine.length);
+  });
+
+  it("invoices each delivery of an order delivered in two, newest first", () => {
+    const mine = invoices({ orderId: byStatus("DELIVERED").orderId });
+    expect(mine.map((invoice) => invoice.shipmentCode.slice(-2))).toEqual(["S2", "S1"]);
+  });
+
+  it("names both ends of a replacement, and omits the links elsewhere (NON_NULL)", () => {
+    const chain = invoices({ orderId: byStatus("COMPLETED").orderId });
+    const replaced = chain.find((invoice) => invoice.status === "REPLACED")!;
+    const replacement = chain.find((invoice) => invoice.type === "REPLACEMENT")!;
+    expect(replaced.replacedBy?.id).toBe(replacement.id);
+    expect(replacement.replaces?.id).toBe(replaced.id);
+    expect(replacement.replaces?.code).toMatch(/^EINV-/);
+    expect(replaced).not.toHaveProperty("replaces");
+    expect(replacement).not.toHaveProperty("replacedBy");
+    expect(invoices({ orderId: byStatus("DELIVERED").orderId })[0]).not.toHaveProperty("code");
+  });
+});

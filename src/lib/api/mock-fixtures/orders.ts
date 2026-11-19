@@ -62,6 +62,33 @@ export interface MockOrderLine {
 
 export type MockPaymentTerm = "PREPAID" | "DEPOSIT" | "CREDIT";
 
+/** What one shipment carried of an order line (BE `CustomerOrderShipmentLine`, before returns). */
+export interface MockShipmentLine {
+  lineId: string;
+  quantity: number;
+}
+
+/** One handed-over shipment of the order (BE `CustomerOrderShipment`, WF-05 TH-1). */
+export interface MockShipment {
+  shipmentId: string;
+  shipmentCode: string;
+  status: "HANDED_OVER" | "DELIVERED" | "DELIVERY_FAILED" | "RETURNED";
+  packageCount: number;
+  carrierName: string;
+  handedOverAt: string;
+  outcomeAt?: string;
+  lines: MockShipmentLine[];
+}
+
+/** What one return line holds of an order line (BE `ReturnLine.claimedUnits`), for its shipment. */
+export interface MockReturnClaim {
+  shipmentId: string | null;
+  orderLineId: string;
+  units: number;
+  /** The return is still open: no second return of the line on the same shipment. */
+  open: boolean;
+}
+
 export interface MockHistoryEntry {
   status: MockOrderStatus;
   occurredAt: string;
@@ -114,6 +141,8 @@ export interface MockOrder {
   pendingCancellation?: MockCancellationRequest;
   /** Stock was held by this mock when the order was placed, so cancelling gives it back. */
   stockHeld?: boolean;
+  /** Handed-over shipments, oldest first; absent: the order left as a whole with none recorded. */
+  shipments?: MockShipment[];
 }
 
 /** The customer's commercial terms, as the BE's CreditTerms (the customer reads them at GET /orders/payment-terms). */
@@ -231,6 +260,38 @@ function deliveryState(status: MockOrderStatus): string {
   return status === "RETURNED" ? "RETURNED" : "NOT_SHIPPED";
 }
 
+const DAY = 86_400_000;
+const VN = 7 * 3_600_000;
+/** BE `ReturnPolicy.windowDays` default; the contract may set another. */
+export const MOCK_RETURN_WINDOW_DAYS = 7;
+
+/** BE `ReturnPolicy.endOfDays`: the start of the VN day `days` whole days after `from`'s day. */
+export const endOfVnDays = (fromIso: string, days: number) =>
+  new Date(Math.floor((Date.parse(fromIso) + VN) / DAY) * DAY + (days + 1) * DAY - VN);
+
+/**
+ * How many units of an order line a return opened now against `shipment` may claim (BE
+ * `CustomerOrderShipmentLine.returnableQuantity`): what the shipment delivered less what its other
+ * returns hold, bounded by what the line's returns hold in all; `open` when a return of the line is
+ * open on this shipment. The order status and the window are the caller's.
+ */
+export function mockShipmentReturnable(
+  order: Pick<MockOrder, "lines">,
+  shipment: Pick<MockShipment, "shipmentId" | "lines">,
+  lineId: string,
+  claims: readonly MockReturnClaim[],
+): { open: boolean; max: number } {
+  const carried = shipment.lines.find((line) => line.lineId === lineId)?.quantity ?? 0;
+  const ordered = order.lines.find((line) => line.lineId === lineId)?.quantity ?? 0;
+  const ofLine = claims.filter((claim) => claim.orderLineId === lineId);
+  const here = ofLine.filter((claim) => claim.shipmentId === shipment.shipmentId);
+  const sum = (list: readonly MockReturnClaim[]) => list.reduce((s, c) => s + c.units, 0);
+  return {
+    open: here.some((claim) => claim.open),
+    max: Math.max(0, Math.min(carried - sum(here), ordered - sum(ofLine))),
+  };
+}
+
 /** CustomerOrdersService#production: every line has one; stock goods are NOT_REQUIRED. */
 function production(order: MockOrder, line: MockOrderLine) {
   if (!line.designSnapshotId) return { state: "NOT_REQUIRED", goodQuantity: 0 };
@@ -261,8 +322,41 @@ const toCard = (order: MockOrder) => ({
   deliveryState: deliveryState(order.status),
 });
 
+/** What the detail needs beyond the order: the clock and what the customer's returns hold. */
+interface DetailContext {
+  now: Date;
+  claims: readonly MockReturnClaim[];
+}
+
+/** BE `CustomerOrderShipment` with its lines and what a return of each may still claim. */
+function toShipment(order: MockOrder, shipment: MockShipment, context: DetailContext) {
+  const windowOpen =
+    order.status === "DELIVERED" &&
+    shipment.status === "DELIVERED" &&
+    !!shipment.outcomeAt &&
+    endOfVnDays(shipment.outcomeAt, MOCK_RETURN_WINDOW_DAYS).getTime() > context.now.getTime();
+  return {
+    shipmentId: shipment.shipmentId,
+    shipmentCode: shipment.shipmentCode,
+    status: shipment.status,
+    packageCount: shipment.packageCount,
+    carrierName: shipment.carrierName,
+    handedOverAt: shipment.handedOverAt,
+    ...(shipment.outcomeAt ? { outcomeAt: shipment.outcomeAt } : {}),
+    lines: shipment.lines.map((line) => {
+      const { open, max } = mockShipmentReturnable(order, shipment, line.lineId, context.claims);
+      return {
+        orderLineId: line.lineId,
+        sku: order.lines.find((l) => l.lineId === line.lineId)?.sku ?? "",
+        quantity: line.quantity,
+        returnableQuantity: windowOpen && !open ? max : 0,
+      };
+    }),
+  };
+}
+
 /** CustomerOrderDetailResponse: no reservations, checksums, actors or contact block. */
-const toDetail = (order: MockOrder) => {
+const toDetail = (order: MockOrder, context: DetailContext) => {
   const { lineCount: _lineCount, ...card } = toCard(order);
   return {
     ...card,
@@ -321,6 +415,9 @@ const toDetail = (order: MockOrder) => {
       // Only the cancellation step carries a reason code; the free-text note is never exposed.
       ...(entry.reasonCode ? { reasonCode: entry.reasonCode } : {}),
     })),
+    ...(order.shipments
+      ? { shipments: order.shipments.map((shipment) => toShipment(order, shipment, context)) }
+      : {}),
   };
 };
 
@@ -366,6 +463,66 @@ const orderNumberFor = (placed: Date, sequence: number) => {
   return `SO-${day}-${String(sequence).padStart(6, "0")}`;
 };
 
+const ymd = (iso: string) => iso.slice(0, 10).replaceAll("-", "");
+
+/**
+ * The issued invoices of a delivered order (BE `CustomerEInvoiceResponse`): one per delivered
+ * shipment (one for an order that left as a whole), 8 % VAT. A completed order's first invoice was
+ * replaced two days later (TT 91 Điều 10), each naming the other by id and code.
+ */
+function mockInvoicesOf(order: MockOrder, index: number) {
+  const deliveredAt =
+    order.history.find((h) => h.status === "DELIVERED")?.occurredAt ?? order.lastModifiedAt;
+  const priceOf = (lineId: string) => order.lines.find((l) => l.lineId === lineId)?.unitPrice ?? 0;
+  const deliveries = order.shipments
+    ? order.shipments
+        .filter((s) => s.status === "DELIVERED")
+        .map((s) => ({
+          code: s.shipmentCode,
+          at: s.outcomeAt ?? deliveredAt,
+          subtotal: s.lines.reduce((sum, l) => sum + priceOf(l.lineId) * l.quantity, 0),
+        }))
+    : [{ code: `${order.orderNumber}-S1`, at: deliveredAt, subtotal: order.totalAmount }];
+  const invoices = deliveries.map((delivery, k) => {
+    const tax = Math.round(delivery.subtotal * 0.08);
+    return {
+      id: `5e1a000${k}${order.orderId.slice(8)}`,
+      code: `EINV-${ymd(delivery.at)}-${String(100 + index * 10 + k).padStart(4, "0")}`,
+      type: "ORIGINAL",
+      status: "ISSUED",
+      adjusted: false,
+      orderId: order.orderId,
+      orderNumber: order.orderNumber,
+      shipmentCode: delivery.code,
+      issueDate: delivery.at.slice(0, 10),
+      templateCode: "1",
+      symbol: "C26TAA",
+      invoiceNumber: 100 + index * 10 + k,
+      subtotal: delivery.subtotal,
+      taxTotal: tax,
+      grandTotal: delivery.subtotal + tax,
+      issuedAt: delivery.at,
+    };
+  });
+  const original = invoices[0];
+  if (order.status !== "COMPLETED" || !original) return invoices.map(({ code: _code, ...i }) => i);
+  const at = new Date(Date.parse(original.issuedAt) + 2 * 86_400_000).toISOString();
+  const replacement = {
+    ...original,
+    id: `5e1a00f0${order.orderId.slice(8)}`,
+    code: `EINV-${ymd(at)}-${String(900 + index).padStart(4, "0")}`,
+    type: "REPLACEMENT",
+    issueDate: at.slice(0, 10),
+    invoiceNumber: 900 + index,
+    issuedAt: at,
+  };
+  return [
+    ...invoices.slice(1),
+    { ...original, status: "REPLACED", replacedBy: { id: replacement.id, code: replacement.code } },
+    { ...replacement, replaces: { id: original.id, code: original.code } },
+  ].map(({ code: _code, ...i }) => i);
+}
+
 /** What the book needs from the rest of the mock BE: stock, prices, and the address book. */
 export interface MockOrderDeps {
   catalog?: MockCatalog;
@@ -374,6 +531,8 @@ export interface MockOrderDeps {
   /** The customer's default SHIPPING address id, if any. */
   defaultShippingAddressId?: () => string | undefined;
   terms?: MockCreditTerms;
+  /** The clock the return windows run on (tests pin it). */
+  now?: () => Date;
 }
 
 export function createMockOrderBook(
@@ -383,6 +542,9 @@ export function createMockOrderBook(
 ) {
   const orders = seed.map((order) => structuredClone(order));
   const terms = deps.terms ?? DEFAULT_MOCK_TERMS;
+  const now = deps.now ?? (() => new Date());
+  // What the customer's returns hold, per order; the returns mock attaches itself (mock-orders.ts).
+  let returnClaims: (orderId: string) => readonly MockReturnClaim[] = () => [];
   let sequence = 1000;
   const own = (orderId: string) =>
     orders.find((o) => o.orderId === orderId && o.customerId === customerId);
@@ -427,42 +589,27 @@ export function createMockOrderBook(
     /** GET /orders/me/{orderId} */
     get(orderId: string): MockResult {
       const order = own(orderId);
-      return order ? ok(toDetail(order)) : notFound(orderId);
+      return order
+        ? ok(toDetail(order, { now: now(), claims: returnClaims(order.orderId) }))
+        : notFound(orderId);
     },
 
     /**
-     * GET /einvoices/me (BE CustomerEInvoiceController): one issued invoice per delivered order, dated
-     * the delivery day (kltn-docs 21 §4.1), newest first.
+     * GET /einvoices/me?orderId= (BE CustomerEInvoiceController): one issued invoice per delivery of a
+     * delivered order, dated the delivery day (kltn-docs 21 §4.1), newest first; `orderId` narrows it
+     * to one of the customer's orders (any other id: an empty page). A completed order's invoice was
+     * replaced once, so the chain (`replaces` / `replacedBy`, omitted when null) is on screen.
      */
-    myEInvoices(): MockResult {
+    myEInvoices(query: { orderId?: unknown } = {}): MockResult {
       const items = orders
         .filter(
           (o) =>
             o.customerId === customerId && (o.status === "DELIVERED" || o.status === "COMPLETED"),
         )
-        .map((o, index) => {
-          const delivered =
-            o.history.find((h) => h.status === "DELIVERED")?.occurredAt ?? o.lastModifiedAt;
-          const tax = Math.round(o.totalAmount * 0.08);
-          return {
-            id: `5e1a0000${o.orderId.slice(8)}`,
-            type: "ORIGINAL",
-            status: "ISSUED",
-            adjusted: false,
-            orderId: o.orderId,
-            orderNumber: o.orderNumber,
-            shipmentCode: `${o.orderNumber}-S1`,
-            issueDate: delivered.slice(0, 10),
-            templateCode: "1",
-            symbol: "C26TAA",
-            invoiceNumber: 100 + index,
-            subtotal: o.totalAmount,
-            taxTotal: tax,
-            grandTotal: o.totalAmount + tax,
-            issuedAt: delivered,
-          };
-        })
-        .sort((a, b) => b.issueDate.localeCompare(a.issueDate));
+        .flatMap((o, index) => mockInvoicesOf(o, index))
+        .filter((invoice) => query.orderId == null || invoice.orderId === query.orderId)
+        // Newest invoice date first; the same day, the later issued first.
+        .sort((a, b) => `${b.issueDate}${b.issuedAt}`.localeCompare(`${a.issueDate}${a.issuedAt}`));
       return ok({
         items,
         page: 0,
@@ -665,6 +812,11 @@ export function createMockOrderBook(
     /** The customer's own order as stored (returns mock reads its lines and delivery). */
     ownOrder: (orderId: string): Readonly<MockOrder> | undefined => own(orderId),
 
+    /** The returns mock tells the book what its returns hold, so shipments say what is left. */
+    attachReturnClaims(claimsOf: (orderId: string) => readonly MockReturnClaim[]) {
+      returnClaims = claimsOf;
+    },
+
     /** Test hook: the order's latest cancellation request, as Sales see it (with its id). */
     pendingCancellationOf: (orderId: string) => own(orderId)?.pendingCancellation,
 
@@ -767,6 +919,39 @@ const PATH: Record<MockOrderStatus, MockOrderStatus[]> = {
 
 const HOUR = 3_600_000;
 
+/**
+ * A delivered order of several lines left in two shipments (WF-05 TH-1, G4-Q3): the first line is
+ * split across both, the others alternate. The first arrived an hour before the second.
+ */
+function seedShipments(
+  n: number,
+  orderNumber: string,
+  placed: Date,
+  lines: readonly MockOrderLine[],
+): MockShipment[] {
+  const at = (hours: number) => new Date(placed.getTime() + hours * HOUR).toISOString();
+  const carried = (k: 1 | 2): MockShipmentLine[] =>
+    lines.flatMap((line, i) => {
+      if (i === 0) {
+        const quantity =
+          k === 1 ? line.quantity - Math.floor(line.quantity / 2) : Math.floor(line.quantity / 2);
+        return quantity > 0 ? [{ lineId: line.lineId, quantity }] : [];
+      }
+      return (i % 2 === 1) === (k === 1) ? [{ lineId: line.lineId, quantity: line.quantity }] : [];
+    });
+  return ([1, 2] as const).map((k) => ({
+    shipmentId: uuid("5b1d0e00", n * 10 + k),
+    shipmentCode: `${orderNumber}-S${k}`,
+    status: "DELIVERED",
+    packageCount: k,
+    carrierName: "Giao Hàng Nhanh",
+    // Both left with the order's SHIPPED step (placed + 8 h); the second arrived at its DELIVERED step.
+    handedOverAt: at(8),
+    outcomeAt: at(k === 1 ? 9 : 10),
+    lines: carried(k),
+  }));
+}
+
 function seedOrder(n: number, customerId: string, status: MockOrderStatus): MockOrder {
   const placed = new Date(Date.UTC(2026, 9, 7, 3, 0) - n * 26 * HOUR);
   const lineCount = (n % 3) + 1;
@@ -799,9 +984,10 @@ function seedOrder(n: number, customerId: string, status: MockOrderStatus): Mock
         : paymentTerm === "DEPOSIT" && !finished
           ? depositRequired
           : totalAmount;
+  const orderNumber = orderNumberFor(placed, 431 + n);
   return {
     orderId: uuid("0b7d3c1e", n),
-    orderNumber: orderNumberFor(placed, 431 + n),
+    orderNumber,
     customerId,
     status,
     totalAmount,
@@ -836,6 +1022,9 @@ function seedOrder(n: number, customerId: string, status: MockOrderStatus): Mock
         ? { reasonCode: n % 2 === 0 ? "CUSTOMER_REQUEST" : "PAYMENT_NOT_RECEIVED" }
         : {}),
     })),
+    ...(status === "DELIVERED" && lines.length > 1
+      ? { shipments: seedShipments(n, orderNumber, placed, lines) }
+      : {}),
     // Older orders were placed before contact/billing were captured — NON_NULL omits them.
     ...(n % 5 === 4
       ? {}

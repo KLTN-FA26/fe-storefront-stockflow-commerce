@@ -63,6 +63,18 @@ export const RETURN_REASON_LABEL: Record<ReturnReason, string> = {
 export const isWithdrawable = (status: ReturnStatus) =>
   status === "REQUESTED" || status === "AWAITING_RETURN";
 
+/**
+ * Khách rút được yêu cầu này không: trạng thái còn rút được và chưa kiện hàng trả nào về kho. Mỗi
+ * kiện kho nhận ghi `receivedAt` và `lines[].receivedQuantity` trong khi yêu cầu vẫn
+ * `AWAITING_RETURN`; khi đó BE từ chối rút (`RETURN_GOODS_PARTLY_RECEIVED`, WF-05 TH-3).
+ */
+export const canWithdrawReturn = (
+  request: Pick<CustomerReturn, "status" | "receivedAt" | "lines">,
+): boolean =>
+  isWithdrawable(request.status) &&
+  !request.receivedAt &&
+  !request.lines.some((line) => (line.receivedQuantity ?? 0) > 0);
+
 /** Ảnh vấn đề chỉ thêm được khi yêu cầu còn chờ duyệt. */
 export const acceptsPhotos = (status: ReturnStatus) => status === "REQUESTED";
 

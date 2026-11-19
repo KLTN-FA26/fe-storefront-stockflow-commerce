@@ -10,7 +10,7 @@ import { ListPagination } from "@/components/storefront/list-pagination";
 import { OrderCard } from "@/components/storefront/order-card";
 import { formatDate } from "@/lib/format/date";
 
-import { ORDER_STATUS_GROUP_META } from "../lifecycle";
+import { ORDER_DISPLAY_META, displayGroup } from "../lifecycle";
 import { ORDER_PAGE_SIZE, useMyOrders } from "../queries";
 import { OrderStatusBadge } from "./order-status-badge";
 import {
@@ -90,8 +90,8 @@ export function OrdersScreen() {
                     <OrderCard
                       href={STORE_ROUTES.account.orders.detail(order.orderId)}
                       orderCode={order.orderNumber}
-                      status={ORDER_STATUS_GROUP_META[order.statusGroup].label}
-                      statusBadge={<OrderStatusBadge group={order.statusGroup} />}
+                      status={ORDER_DISPLAY_META[displayGroup(order)].label}
+                      statusBadge={<OrderStatusBadge group={displayGroup(order)} />}
                       itemCount={order.lineCount}
                       total={order.total}
                       currency={order.currency}
@@ -100,7 +100,7 @@ export function OrdersScreen() {
                         // A "mặt hàng" is an order line (one SKU), same wording as the detail.
                         <p className="tabular-nums">{order.lineCount} mặt hàng</p>
                       }
-                      hint={ORDER_STATUS_GROUP_META[order.statusGroup].hint}
+                      hint={ORDER_DISPLAY_META[displayGroup(order)].hint}
                     />
                   </li>
                 ))}

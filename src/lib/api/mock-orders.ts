@@ -66,7 +66,9 @@ export function registerOrderMockRoutes(
   registerMockRoute("GET", "/orders/me/:orderId", (config) =>
     respond(book.get(pathParams(config).orderId ?? "")),
   );
-  registerMockRoute("GET", "/einvoices/me", () => respond(book.myEInvoices()));
+  registerMockRoute("GET", "/einvoices/me", (config) =>
+    respond(book.myEInvoices(queryParams(config))),
+  );
   registerMockRoute("GET", "/einvoices/me/:id/files/:kind", (config) =>
     respond(book.myEInvoiceFile(pathParams(config).id ?? "", pathParams(config).kind ?? "PDF")),
   );
@@ -90,7 +92,7 @@ export function registerOrderMockRoutes(
 
 function defaultReturnBook(book: MockOrderBook): MockReturnBook {
   const orderOf = (orderId: string) => book.ownOrder(orderId);
-  return createMockReturnBook(
+  const returns = createMockReturnBook(
     book.customerId,
     orderOf,
     seedMockReturns(book.customerId, orderOf, {
@@ -98,6 +100,9 @@ function defaultReturnBook(book: MockOrderBook): MockReturnBook {
       resolved: seededMockOrderId(seededMockOrderIndex("RETURNED")),
     }),
   );
+  // The order detail's shipments say what a return may still claim, net of these returns.
+  book.attachReturnClaims(returns.claimsOf);
+  return returns;
 }
 
 export function registerReturnMockRoutes(returns: MockReturnBook): void {
