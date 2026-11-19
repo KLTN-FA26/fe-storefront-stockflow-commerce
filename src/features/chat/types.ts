@@ -12,6 +12,7 @@ import type {
   chatReadMarkerDtoSchema,
   chatUnreadDtoSchema,
   openConversationInputSchema,
+  quotePricingDtoSchema,
   rateInputSchema,
   requestChangesInputSchema,
   sendTextInputSchema,
@@ -27,6 +28,7 @@ export type ChatMessagePage = z.infer<typeof chatMessagePageDtoSchema>;
 export type ChatReadMarker = z.infer<typeof chatReadMarkerDtoSchema>;
 export type ChatUnread = z.infer<typeof chatUnreadDtoSchema>;
 export type ChatDownloadLink = z.infer<typeof chatDownloadLinkDtoSchema>;
+export type QuotePricing = z.infer<typeof quotePricingDtoSchema>;
 
 export type OpenConversationInput = z.input<typeof openConversationInputSchema>;
 export type SendTextInput = z.input<typeof sendTextInputSchema>;

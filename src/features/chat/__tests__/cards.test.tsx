@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error";
@@ -13,6 +13,7 @@ import { chatMessageDtoSchema } from "../schemas";
 import {
   CONVERSATION_ID,
   LINE_ID,
+  QUOTE_ID,
   cardMessageJson,
   designRequestPayload,
   quotePayload,
@@ -92,7 +93,33 @@ describe("TC-F13-02: card buttons are the customer's only", () => {
   });
 });
 
+/** GET /quotes/{id} as the BE answers it for the DS-02a quote: MOQ 20, tiers 20/50/100, VAT 8 %, plate fee. */
+const quotePricingJson = () => ({
+  id: QUOTE_ID,
+  lines: [
+    {
+      id: LINE_ID,
+      lineNo: 1,
+      sku: "LY-GIAY-DEMO-12OZ-XANH",
+      cartons: 60,
+      unitsPerCarton: 1000,
+      moq: 20,
+      tiers: [
+        { minQuantity: 20, unitPrice: 1250 },
+        { minQuantity: 50, unitPrice: 1150 },
+        { minQuantity: 100, unitPrice: 1050 },
+      ],
+      taxRate: 8,
+    },
+  ],
+  fees: [{ amount: 1_500_000, tax: 120_000, taxRate: 8 }],
+});
+
 describe("accepting a quote on its card (C10)", () => {
+  // Without the quote's pricing the dialog still works: the BE checks the MOQ.
+  beforeEach(() => {
+    vi.spyOn(api, "get").mockRejectedValue(new ApiError(503, "SERVICE_UNAVAILABLE", "offline"));
+  });
   const open = () =>
     renderCard(
       cardMessageJson("QUOTE", quotePayload(), { customerActions: ["ACCEPT", "REQUEST_CHANGES"] }),
@@ -145,6 +172,38 @@ describe("accepting a quote on its card (C10)", () => {
     expect(input.closest("[data-refused]")).not.toBeNull();
   });
 
+  it("WF-02 audit item 4: shows the MOQ, tier price, line total and total with tax from the quote", async () => {
+    const user = userEvent.setup();
+    const get = vi.spyOn(api, "get").mockResolvedValue({ data: quotePricingJson() });
+    open();
+    await user.click(screen.getByRole("button", { name: "Chấp nhận" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(get.mock.calls[0]?.[0]).toBe(`/quotes/${QUOTE_ID}`);
+    expect(await within(dialog).findByText("20 thùng")).toBeInTheDocument();
+    // 60 cartons × 1.000 × 1.150 = 69.000.000; + plate fee 1.500.000; VAT 5.520.000 + 120.000 → 76.140.000.
+    // Line total and goods subtotal.
+    expect(within(dialog).getAllByText(/69\.000\.000/)).toHaveLength(2);
+    expect(within(dialog).getByText(/76\.140\.000/)).toBeInTheDocument();
+  });
+
+  it("WF-02 audit item 4: below the MOQ is refused in the dialog before anything is sent", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, "get").mockResolvedValue({ data: quotePricingJson() });
+    const post = vi.spyOn(api, "post");
+    open();
+    await user.click(screen.getByRole("button", { name: "Chấp nhận" }));
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByText("20 thùng");
+    const input = within(dialog).getByLabelText(/Dòng 1/);
+    await user.clear(input);
+    await user.type(input, "10");
+    await user.click(within(dialog).getByRole("button", { name: "Chấp nhận báo giá" }));
+    expect(
+      await within(dialog).findByText("Dòng 1: tối thiểu 20 thùng (MOQ)."),
+    ).toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
+  });
+
   it("keeps the typed cartons when polling refreshes the card while the dialog is open", async () => {
     const user = userEvent.setup();
     const linesOf = () => quoteCardPayloadSchema.parse(quotePayload()).lines;
@@ -154,6 +213,8 @@ describe("accepting a quote on its card (C10)", () => {
       pending: false,
       error: null,
       badLine: null,
+      pricing: undefined,
+      pricingFailed: false,
       onAccept: () => undefined,
     };
     const view = render(<AcceptQuoteDialog {...props} lines={linesOf()} />);

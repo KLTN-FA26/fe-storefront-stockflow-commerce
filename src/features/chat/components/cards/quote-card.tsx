@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 
 import type { QuoteCardPayload } from "../../card-payloads";
 import { closedCardMeta, quoteStatusMeta } from "../../labels";
+import { useQuotePricing } from "../../queries";
 import { isPastValidity, quoteButtonsOf } from "../../selectors";
 import type { ChatCard } from "../../types";
 import { AcceptQuoteDialog, RequestChangesDialog } from "./quote-dialogs";
@@ -43,6 +44,8 @@ export function QuoteCard({ conversationId, messageId, card, payload, canAct }: 
   const cartonLines = payload.lines.filter(
     (line) => line.cartons !== null && line.cartons !== undefined,
   );
+  // The card has no MOQ / tiers / fees: read them from the quote while the acceptance dialog is open.
+  const pricing = useQuotePricing(payload.quoteId, dialog === "ACCEPT");
   const close = (open: boolean) => {
     if (!open) {
       setDialog(null);
@@ -156,6 +159,9 @@ export function QuoteCard({ conversationId, messageId, card, payload, canAct }: 
         pending={action.pending}
         error={action.error}
         badLine={action.badLine}
+        pricing={pricing.data}
+        pricingFailed={pricing.isError}
+        currency={payload.currency}
         onAccept={(cartons) =>
           action.submit({ action: "ACCEPT", version: payload.version, cartons }, () =>
             setDialog(null),

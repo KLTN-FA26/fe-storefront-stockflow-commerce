@@ -7,7 +7,13 @@ import {
 
 import { QUERY_TIMES } from "@/lib/api/query-client";
 
-import { getMessages, getMyConversation, getMyUnread, listMyConversations } from "./api";
+import {
+  getMessages,
+  getMyConversation,
+  getMyUnread,
+  getQuotePricing,
+  listMyConversations,
+} from "./api";
 import { newestSeqOf, upsertMessages, type MessagePages } from "./selectors";
 import type { ChatListParams, ChatMessage } from "./types";
 
@@ -20,18 +26,20 @@ export const chatKeys = {
   messages: (id: string) => [...chatKeys.all, "messages", id] as const,
   catchUp: (id: string) => [...chatKeys.all, "catch-up", id] as const,
   unread: () => [...chatKeys.all, "unread"] as const,
+  quotePricing: (quoteId: string) => [...chatKeys.all, "quote-pricing", quoteId] as const,
 };
 
 /**
  * Realtime is polling for now: the BE pushes over STOMP at `/ws` (plan B.5), which needs a client
  * library the storefront does not have yet. New messages are caught up with `since=<last seq>`
  * every 5 s (plan E1); card state changes (an edit, a quote superseded, a contract signed) arrive
- * with the slower refetch of the loaded pages.
+ * with the slower refetch of the loaded pages — every 10 s: at 30 s a card the customer had just acted on, or
+ * a contract Sales had just recorded as signed, looked stale for half a minute (WF-02 audit).
  */
 export const CHAT_POLL = {
   catchUpMs: 5_000,
-  pagesMs: 30_000,
-  detailMs: 15_000,
+  pagesMs: 10_000,
+  detailMs: 10_000,
   listMs: 30_000,
   unreadMs: 30_000,
 } as const;
@@ -120,5 +128,19 @@ export function useChatUnread(enabled: boolean) {
     enabled,
     refetchInterval: CHAT_POLL.unreadMs,
     staleTime: CHAT_POLL.unreadMs,
+  });
+}
+
+/**
+ * MOQ, tiers, tax rates and fees of a QUOTE card's quote, read while its acceptance dialog is open (WF-02 audit
+ * item 4). Fresh on every opening: Sales may have sent a revision since.
+ */
+export function useQuotePricing(quoteId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: chatKeys.quotePricing(quoteId),
+    queryFn: ({ signal }) => getQuotePricing(quoteId, signal),
+    enabled,
+    staleTime: 0,
+    retry: 1,
   });
 }

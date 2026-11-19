@@ -5,6 +5,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
+import { previewAcceptance, type QuotePreview } from "@/lib/domain/quote-pricing";
 import { formatNumber } from "@/lib/format/number";
 import { cn } from "@/lib/cn";
 
@@ -14,7 +15,9 @@ import { Textarea } from "@/components/ui/textarea";
 
 import type { QuoteCardLine } from "../../card-payloads";
 import { QUOTE_FEEDBACK_MAX, requestChangesInputSchema } from "../../schemas";
+import type { QuotePricing } from "../../types";
 import { CardDialog } from "./card-dialog";
+import { cardMoney } from "./card-frame";
 
 const acceptFormSchema = z.object({
   lines: z.array(
@@ -37,10 +40,21 @@ interface AcceptDialogProps {
   error: string | null;
   /** `lineNo` the BE refused (QUOTE_BELOW_MOQ `details.lineNo`). */
   badLine: number | null;
+  /** MOQ, tiers, tax and fees from `GET /quotes/{id}`; undefined while loading or when it failed. */
+  pricing: QuotePricing | undefined;
+  pricingFailed: boolean;
+  currency?: string | null | undefined;
   onAccept: (cartons: Record<string, number>) => void;
 }
 
-/** ACCEPT: cartons per line, the proposal by default (16 §4.3 step 7, plan B.2 C10). */
+const cartonsOf = (lines: readonly QuoteCardLine[], values: AcceptForm["lines"] | undefined) =>
+  Object.fromEntries(lines.map((line, i) => [line.id, values?.[i]?.cartons ?? Number.NaN]));
+
+/**
+ * ACCEPT: cartons per line, the proposal by default (16 §4.3 step 7, plan B.2 C10), with the same live MOQ, tier
+ * price, line total and total with tax as the quote page (F-03.1: below the MOQ is refused here first; the BE
+ * refuses it too). The figures are a preview: the BE's are the official ones.
+ */
 export function AcceptQuoteDialog({
   open,
   onOpenChange,
@@ -48,10 +62,13 @@ export function AcceptQuoteDialog({
   pending,
   error,
   badLine,
+  pricing,
+  pricingFailed,
+  currency,
   onAccept,
 }: AcceptDialogProps) {
   const defaults = { lines: lines.map((line) => ({ cartons: line.cartons ?? 1 })) };
-  const { control, register, handleSubmit, reset, formState } = useForm<AcceptForm>({
+  const { control, register, handleSubmit, reset, setError, formState } = useForm<AcceptForm>({
     resolver: zodResolver(acceptFormSchema),
     defaultValues: defaults,
   });
@@ -66,9 +83,30 @@ export function AcceptQuoteDialog({
     wasOpen.current = open;
   }, [open, lines, reset]);
 
-  const submit = handleSubmit((values) =>
-    onAccept(Object.fromEntries(lines.map((line, i) => [line.id, values.lines[i]?.cartons ?? 1]))),
-  );
+  const preview: QuotePreview | null = pricing
+    ? previewAcceptance(pricing, cartonsOf(lines, chosen))
+    : null;
+  const previewOf = (lineId: string) => preview?.lines.find((entry) => entry.lineId === lineId);
+
+  const submit = handleSubmit((values) => {
+    if (pricing) {
+      const checked = previewAcceptance(pricing, cartonsOf(lines, values.lines));
+      let belowMoq = false;
+      lines.forEach((line, i) => {
+        const entry = checked.lines.find((candidate) => candidate.lineId === line.id);
+        if (!entry?.belowMoq || entry.moq == null) return;
+        belowMoq = true;
+        setError(`lines.${i}.cartons`, {
+          type: "moq",
+          message: `Dòng ${line.lineNo}: tối thiểu ${formatNumber(entry.moq)} thùng (MOQ).`,
+        });
+      });
+      if (belowMoq) return;
+    }
+    onAccept(Object.fromEntries(lines.map((line, i) => [line.id, values.lines[i]?.cartons ?? 1])));
+  });
+  const money = (amount: number | null | undefined) =>
+    amount == null ? "—" : cardMoney(amount, currency);
 
   return (
     <CardDialog
@@ -90,6 +128,7 @@ export function AcceptQuoteDialog({
             ? (cartons ?? 0) * line.unitsPerCarton
             : null;
         const id = `accept-line-${line.id}`;
+        const linePreview = previewOf(line.id);
         return (
           <div
             key={line.id}
@@ -118,6 +157,20 @@ export function AcceptQuoteDialog({
                 thùng{units !== null ? ` = ${formatNumber(units)} cái` : ""}
               </span>
             </div>
+            {linePreview ? (
+              <dl className="text-ink-secondary grid grid-cols-2 gap-x-3 gap-y-0.5 text-sm tabular-nums">
+                <dt>MOQ</dt>
+                <dd className="text-ink-primary text-right">
+                  {linePreview.moq == null ? "—" : `${formatNumber(linePreview.moq)} thùng`}
+                </dd>
+                <dt>Đơn giá / cái</dt>
+                <dd className="text-ink-primary text-right">{money(linePreview.unitPrice)}</dd>
+                <dt>Thành tiền</dt>
+                <dd className="text-ink-primary text-right font-medium">
+                  {money(linePreview.lineTotal)}
+                </dd>
+              </dl>
+            ) : null}
             {fieldError ? (
               <p id={`${id}-error`} role="alert" className="text-danger text-sm">
                 {fieldError}
@@ -126,6 +179,32 @@ export function AcceptQuoteDialog({
           </div>
         );
       })}
+      {preview ? (
+        <dl className="border-border-default space-y-1 border-t pt-3 text-sm">
+          <div className="flex justify-between gap-4">
+            <dt className="text-ink-secondary">Tiền hàng</dt>
+            <dd className="text-ink-primary tabular-nums">{money(preview.subtotal)}</dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-ink-secondary">Phí</dt>
+            <dd className="text-ink-primary tabular-nums">{money(preview.fees)}</dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-ink-secondary">Thuế VAT</dt>
+            <dd className="text-ink-primary tabular-nums">{money(preview.tax)}</dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-ink-primary font-semibold">Tổng có thuế (tạm tính)</dt>
+            <dd className="text-ink-primary font-semibold tabular-nums">{money(preview.total)}</dd>
+          </div>
+        </dl>
+      ) : (
+        <p className="text-ink-tertiary text-sm" role={pricingFailed ? "status" : undefined}>
+          {pricingFailed
+            ? "Chưa tải được MOQ và giá tạm tính. Hệ thống vẫn kiểm MOQ khi bạn chấp nhận."
+            : "Đang tải MOQ và giá tạm tính…"}
+        </p>
+      )}
     </CardDialog>
   );
 }
