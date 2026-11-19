@@ -69,21 +69,22 @@ api.interceptors.request.use((cfg) => {
 
 interface ApiSuccessEnvelope {
   success: true;
-  data: unknown;
+  data?: unknown;
 }
 
 function isApiSuccessEnvelope(value: unknown): value is ApiSuccessEnvelope {
   return (
-    typeof value === "object" &&
-    value !== null &&
-    "success" in value &&
-    value.success === true &&
-    "data" in value
+    typeof value === "object" && value !== null && "success" in value && value.success === true
   );
 }
 
+/**
+ * BE bỏ trường null khỏi JSON (Jackson non_null): `{success: true}` không có `data` nghĩa là `data: null`, không phải
+ * envelope để đem đi parse.
+ */
 function unwrapSuccess(response: AxiosResponse<unknown>): AxiosResponse<unknown> {
-  if (isApiSuccessEnvelope(response.data)) response.data = response.data.data;
+  if (isApiSuccessEnvelope(response.data))
+    response.data = "data" in response.data ? response.data.data : null;
   return response;
 }
 
