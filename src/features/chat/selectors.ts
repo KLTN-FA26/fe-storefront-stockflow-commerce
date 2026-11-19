@@ -109,8 +109,16 @@ export function quoteButtonsOf(
     .map((action) => ({ action, disabled: expired }));
 }
 
-/** Where a context of the conversation opens in the customer's own pages; null when nowhere. */
-export function contextHref(context: Pick<ChatContext, "kind" | "refId">): string | null {
+/**
+ * Where a context of the conversation opens in the customer's own pages; null when nowhere. A DRAFT quote or order
+ * is not the customer's to see yet (BE: a draft quote answers 404 to the customer; 17 §5.2 for orders), so its chip
+ * is not a link — it used to open a 404 page (WF-02 audit, item 6). `status` comes with the conversation detail only.
+ */
+export function contextHref(
+  context: Pick<ChatContext, "kind" | "refId"> & { status?: string | null | undefined },
+): string | null {
+  if ((context.kind === "QUOTE" || context.kind === "ORDER") && context.status === "DRAFT")
+    return null;
   switch (context.kind) {
     case "DESIGN":
       return STORE_ROUTES.design.detail(context.refId);

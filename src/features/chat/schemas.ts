@@ -196,6 +196,41 @@ export const sendTextInputSchema = z.object({
 });
 
 /** C10 ACCEPT: cartons per quote LINE id (`payload.lines[].id`); lines not named keep the proposal. */
+/**
+ * The pricing of a quote, read from `GET /quotes/{id}` (BE QuoteResponse) when the QUOTE card's acceptance dialog
+ * opens: the card payload (B.7.3) has no MOQ, tiers, tax rate or fees, so without it the dialog could not show
+ * the MOQ or a total until the BE refused (WF-02 audit, item 4). Only what the preview needs; the quote page
+ * parses the whole response.
+ */
+export const quotePricingDtoSchema = z.object({
+  id,
+  lines: z.array(
+    z.object({
+      id,
+      lineNo: z.number().int(),
+      sku: z.string(),
+      cartons: z.number().int().nullish(),
+      unitsPerCarton: z.number().int().nullish(),
+      moq: z.number().int().nullish(),
+      tiers: z
+        .array(z.object({ minQuantity: z.number().int().positive(), unitPrice: z.number() }))
+        .nullish()
+        .transform((tiers) => tiers ?? []),
+      taxRate: z.number().nullish(),
+    }),
+  ),
+  fees: z
+    .array(
+      z.object({
+        amount: z.number().nullish(),
+        tax: z.number().nullish(),
+        taxRate: z.number().nullish(),
+      }),
+    )
+    .nullish()
+    .transform((fees) => fees ?? []),
+});
+
 export const acceptQuoteInputSchema = z.object({
   version: z.number().int().nonnegative(),
   cartons: z.record(

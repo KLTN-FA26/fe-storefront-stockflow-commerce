@@ -13,6 +13,7 @@ import { allowedActions, isReturned } from "../lifecycle";
 import { designCardView } from "../selectors";
 import { mayHaveQuoteRequest } from "../quote-request-rules";
 import type { Design } from "../types";
+import { ChatAboutButton } from "./chat-about-button";
 import { DesignQuoteSummary, RequestQuoteButton } from "./design-quote-request";
 import { DesignStatusBadge } from "./design-status-badge";
 
@@ -133,6 +134,10 @@ export function DesignCard({
             </Button>
           ) : null}
           {actions.includes("requestQuote") ? <RequestQuoteButton design={design} /> : null}
+          {/* A design Sales has seen (sent for review, approved or returned) can be talked over in chat. */}
+          {design.status !== "DRAFT" || isReturned(design) ? (
+            <ChatAboutButton kind="DESIGN" id={design.id} name={title} />
+          ) : null}
           {onClone ? (
             <Button
               type="button"

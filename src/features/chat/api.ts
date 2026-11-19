@@ -16,6 +16,7 @@ import {
   chatReadMarkerDtoSchema,
   chatUnreadDtoSchema,
   openConversationInputSchema,
+  quotePricingDtoSchema,
   rateInputSchema,
   requestChangesInputSchema,
   sendTextInputSchema,
@@ -32,6 +33,7 @@ import type {
   ChatReadMarker,
   ChatUnread,
   OpenConversationInput,
+  QuotePricing,
   RateInput,
   SendAttachmentInput,
   SendTextInput,
@@ -234,4 +236,19 @@ export async function getContractDocumentLink(
 ): Promise<ChatDownloadLink> {
   const { data } = await api.get<unknown>(contractDocumentPath(documentPath, orderId));
   return chatDownloadLinkDtoSchema.parse(data);
+}
+
+/**
+ * The pricing of the quote a QUOTE card shows (BE QuoteController `GET /quotes/{id}`: the customer reads
+ * their own sent quote), for the acceptance dialog's MOQ and preview — the card payload does not carry it.
+ */
+export async function getQuotePricing(
+  quoteId: string,
+  signal?: AbortSignal,
+): Promise<QuotePricing> {
+  const { data } = await api.get<unknown>(
+    `/quotes/${encodeURIComponent(quoteId)}`,
+    withSignal(signal),
+  );
+  return quotePricingDtoSchema.parse(data);
 }

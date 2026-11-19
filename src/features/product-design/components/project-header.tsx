@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import type { Gate, ProjectActions } from "../project-rules";
 import { PROJECT_DESIGN_LIMIT } from "../project-schemas";
 import type { DesignProject } from "../types";
+import { ChatAboutButton } from "./chat-about-button";
 import { CloseProjectDialog } from "./close-project-dialog";
 import { ProjectStatusBadge } from "./project-status-badge";
 import { ProjectTitle } from "./project-title";
@@ -75,6 +76,7 @@ export function ProjectHeader({ project, actions, onCreate, onAdd }: Props) {
           <span className="text-ink-secondary text-sm tabular-nums">
             {project.designCount}/{PROJECT_DESIGN_LIMIT} bản
           </span>
+          <ChatAboutButton kind="DESIGN_PROJECT" id={project.id} name={project.name} />
         </div>
       </div>
       {open ? (

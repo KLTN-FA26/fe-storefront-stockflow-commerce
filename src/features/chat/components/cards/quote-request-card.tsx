@@ -15,23 +15,24 @@ import { CARD_LINK, CardFrame, Fact, Facts } from "./card-frame";
  * the quote up is Sales' (`staffActions: CREATE_QUOTE`), which the storefront never reads.
  */
 
-function QuoteDrawnUp({
-  quoteId,
-  quoteNumber,
-}: {
-  quoteId: string;
-  quoteNumber: string | null | undefined;
-}) {
+/**
+ * Sales drew a quote up from the request. The payload does not say whether it was sent: a quote still DRAFT answers
+ * 404 to the customer, so this is no link (WF-02 audit, item 6) — once sent, the QUOTE card arrives in the thread with
+ * its own "Xem chi tiết báo giá".
+ */
+function QuoteDrawnUp({ quoteNumber }: { quoteNumber: string | null | undefined }) {
   return (
     <p className="text-ink-secondary">
-      Sale đã lập báo giá{" "}
-      <Link
-        href={STORE_ROUTES.account.quotes.detail(quoteId)}
-        className="text-accent font-mono font-semibold tabular-nums hover:underline"
-      >
-        {quoteNumber ?? "từ yêu cầu này"}
-      </Link>
-      .
+      Sale đã lập báo giá
+      {quoteNumber ? (
+        <>
+          {" "}
+          <span className="text-ink-primary font-mono font-semibold tabular-nums">
+            {quoteNumber}
+          </span>
+        </>
+      ) : null}{" "}
+      từ yêu cầu này. Báo giá sẽ hiện trong cuộc trò chuyện khi Sale gửi.
     </p>
   );
 }
@@ -76,9 +77,7 @@ export function DesignQuoteRequestCard({ payload }: { payload: DesignQuoteReques
       {payload.designStatus === "PENDING_REVIEW" ? (
         <p className="text-ink-secondary">Sale sẽ lập báo giá ngay khi bản thiết kế được duyệt.</p>
       ) : null}
-      {payload.quoteId ? (
-        <QuoteDrawnUp quoteId={payload.quoteId} quoteNumber={payload.quoteNumber} />
-      ) : null}
+      {payload.quoteId ? <QuoteDrawnUp quoteNumber={payload.quoteNumber} /> : null}
     </CardFrame>
   );
 }
@@ -118,9 +117,7 @@ export function ProjectQuoteRequestCard({ payload }: { payload: ProjectQuoteRequ
           );
         })}
       </ul>
-      {payload.quoteId ? (
-        <QuoteDrawnUp quoteId={payload.quoteId} quoteNumber={payload.quoteNumber} />
-      ) : null}
+      {payload.quoteId ? <QuoteDrawnUp quoteNumber={payload.quoteNumber} /> : null}
     </CardFrame>
   );
 }
