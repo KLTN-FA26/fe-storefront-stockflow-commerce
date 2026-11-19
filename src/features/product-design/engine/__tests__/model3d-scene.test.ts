@@ -6,6 +6,7 @@ import {
   BackSide,
   BufferAttribute,
   BufferGeometry,
+  DoubleSide,
   FrontSide,
   Group,
   Mesh,
@@ -202,6 +203,25 @@ describe("buildGlbScene (cup)", () => {
       "rim",
       "wall",
     ]);
+  });
+
+  it("on clear PET gives the meshes that are not printed the stock's wall, so the cup reads as one plastic", async () => {
+    const root = await loadGlb(sampleBytes());
+    const fileRim = root.getObjectByName("rim") as Mesh;
+    const fileMaterial = fileRim.material as MeshStandardMaterial;
+    const dispose = vi.spyOn(fileMaterial, "dispose");
+    const scene = buildGlbScene(root, bodyRef, { ...cupModel, material: "pet-clear" }, cupSurfaces);
+
+    const wall = scene.materials.onlySide(DoubleSide);
+    for (const name of ["rim", "bottom", "inner", "wall"]) {
+      expect(scene.meshes.find((m) => m.name === name)?.material).toBe(wall);
+    }
+    expect(wall.transparent).toBe(true);
+    // The print band keeps the base (it takes the print material once the artwork arrives).
+    expect(scene.printMeshes[0]?.mesh.material).toBe(scene.materials.base);
+    // The file's own material is no longer used, and is still freed with the scene.
+    disposeGlbScene(scene);
+    expect(dispose).toHaveBeenCalled();
   });
 
   it("keeps the file's own materials and millimetre size on the meshes that are not printed", async () => {

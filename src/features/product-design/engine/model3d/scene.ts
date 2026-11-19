@@ -88,8 +88,9 @@ function withFileMaterials(
  * success the scene owns it (`disposeGlbScene`, or `materials.dispose()` plus the geometries).
  * Children of a mapped print node are kept: they are re-attached to its parent, in place.
  *
- * Result: `group` holds the loaded tree as it is (rim, bottom, inner, ... keep the file's materials
- * and their place) plus one new mesh per mapped print mesh, which carries the geometry of
+ * Result: `group` holds the loaded tree as it is (rim, bottom, inner, ... keep their place, and the
+ * file's materials except on clear PET, where they take the stock's wall so the cup reads as one
+ * plastic) plus one new mesh per mapped print mesh, which carries the geometry of
  * `printGeometry` (world space, so on an identity transform; the file's own mesh of that name is
  * taken out and its geometry and material freed). Print meshes start on `materials.base` (a printed
  * bag face on `onlySide(FrontSide)` with an `-inside` twin, as `buildModelScene` does); the viewer
@@ -158,6 +159,16 @@ export function buildGlbScene(
     materialsOf(mesh).forEach((m) => fileMaterials.has(m) || unused.add(m));
   }
   disposeMaterials(unused, keptTextures);
+
+  // Clear PET is one plastic: the file's rim and bottom take the stock's wall too, double-sided as a
+  // thin shell, instead of whatever the author set in Blender (a tint, an opacity of their own) that
+  // made the cup look like separate parts. Their own materials stay in `fileMaterials`, freed with it.
+  if (model.material === "pet-clear") {
+    const wall = productMaterials.onlySide(DoubleSide);
+    root.traverse((object) => {
+      if (object instanceof Mesh) object.material = wall;
+    });
+  }
 
   const meshes: Mesh[] = [];
   group.traverse((object) => {
