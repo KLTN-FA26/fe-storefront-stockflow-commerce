@@ -55,4 +55,5 @@ export const footerColumns: FooterColumn[] = [
   },
 ];
 
-export const paymentMethods = ["VietQR", "Visa", "Mastercard", "COD"] as const;
+// No COD: a customer pays the instalments of the signed contract by bank transfer (WF-02, kltn-docs 15 BR-01).
+export const paymentMethods = ["VietQR", "Visa", "Mastercard"] as const;
