@@ -23,10 +23,17 @@ import { isTokenExpired } from "@/lib/auth/jwt";
 import { endSession, redirectToLogin } from "@/lib/auth/session";
 import { useAppStore } from "@/lib/store/use-app-store";
 
+/**
+ * Language of the BE's `message` / `fieldErrors[].message` (BE `I18nConfig`, AcceptHeaderLocaleResolver). The
+ * storefront is Vietnamese only, so every call says `vi` instead of passing on the browser's language: through the
+ * /api rewrite an en-US browser used to get English errors (WF-02 audit, item 3).
+ */
+export const BACKEND_ACCEPT_LANGUAGE = "vi";
+
 export const api = axios.create({
   baseURL: "/api",
   timeout: 15_000,
-  headers: { "Content-Type": "application/json" },
+  headers: { "Content-Type": "application/json", "Accept-Language": BACKEND_ACCEPT_LANGUAGE },
 });
 
 /* ── Request interceptor ─────────────────────────────────────────────── */

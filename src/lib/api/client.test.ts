@@ -33,6 +33,27 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("BE language", () => {
+  it("always asks the BE for Vietnamese messages, whatever the browser language (WF-02 audit item 3)", async () => {
+    let sent: string | undefined;
+    api.defaults.adapter = async (config) => {
+      sent = config.headers.get("Accept-Language") as string | undefined;
+      return {
+        data: { success: true, data: null },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config,
+      };
+    };
+
+    await api.get("/quotes");
+    await api.post("/quotes/q-1/acceptance", { version: 1 });
+
+    expect(sent).toBe("vi");
+  });
+});
+
 describe("API authentication semantics", () => {
   it("unwraps a successful backend ApiResponse envelope once", async () => {
     api.defaults.adapter = async (config) => ({
