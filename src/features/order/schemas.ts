@@ -188,12 +188,34 @@ export const orderLineDtoSchema = z.object({
     .nullish(),
 });
 
+/** BE order.api.DeliveryFailureReason: why staff recorded a delivery as failed. */
+export const DELIVERY_FAILURE_REASONS = [
+  "CUSTOMER_ABSENT",
+  "REFUSED",
+  "WRONG_ADDRESS",
+  "LOST",
+  "DAMAGED",
+  "OTHER",
+] as const;
+export const deliveryFailureReasonSchema = tolerantEnum(DELIVERY_FAILURE_REASONS);
+
 /**
- * One handed-over shipment of the order detail (BE CustomerOrderShipment). Only what the customer
- * page reads: the mode the coordinator chose. The customer never picks it.
+ * One handed-over shipment of the order detail (BE CustomerOrderShipment, G4-2a): HANDED_OVER,
+ * DELIVERED, DELIVERY_FAILED or RETURNED. `shipmentId` (BE PR #369, WF-05 TH-1) is what a return on
+ * an order delivered in several shipments must name; null only for the one shipment the BE makes up
+ * from the order's milestones. Every field but the status may be absent (NON_NULL, older BE).
  */
 export const orderShipmentDtoSchema = z.object({
+  shipmentId: beId().nullish(),
+  shipmentCode: z.string().nullish(),
   status: z.string(),
+  packageCount: z.number().int().nullish(),
+  carrierName: z.string().nullish(),
+  handedOverAt: instantSchema.nullish(),
+  // When staff recorded the latest outcome; the return window of a DELIVERED shipment runs from it.
+  outcomeAt: instantSchema.nullish(),
+  // Set once a delivery failed; kept after a retry delivered it.
+  failureReason: deliveryFailureReasonSchema.nullish(),
   deliveryMode: deliveryModeSchema.nullish(),
 });
 

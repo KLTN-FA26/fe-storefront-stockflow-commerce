@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { notFound, useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
@@ -13,13 +13,16 @@ import { useHasPermission } from "@/lib/auth/my-permissions";
 import { formatDate } from "@/lib/format/date";
 import { lastReturnDay } from "@/lib/domain/return-window";
 import {
-  canOpenReturn,
   describeReturnError,
+  returnEligibility,
   useAddMyReturnPhoto,
   useMyOrderReturns,
   useOpenMyReturn,
+  type ReturnClosedReason,
+  type ReturnEligibility,
 } from "@/lib/returns";
 
+import { useReturnWindowDays } from "../contract-queries";
 import { isNotFound } from "../errors";
 import { useOrder } from "../queries";
 import { RETURN_CREATE_PERMISSION, returnableLines, type ReturnFormValues } from "../return-form";
@@ -27,6 +30,27 @@ import { isValidOrderId } from "../schemas";
 import { deliveredAtOf } from "./order-completion-hint";
 import { OrderDetailSkeleton, OrderLoadError } from "./order-states";
 import { ReturnRequestForm } from "./return-request-form";
+
+/** Why the customer cannot open a return themselves (BE `ReturnRequest.requireReturnable`). */
+const CLOSED_TEXT: Record<ReturnClosedReason, (days: number) => string> = {
+  NOT_DELIVERED: () =>
+    "Chỉ gửi được yêu cầu trả hàng cho hàng đã giao tới bạn. Khi một lần giao của đơn đã đến, bạn có thể yêu cầu trả hàng của lần giao đó.",
+  WINDOW_CLOSED: (days) =>
+    `Đã quá hạn đổi / trả ${days} ngày kể từ ngày giao. Nếu hàng có lỗi phát hiện muộn, hãy chat với Sales.`,
+  NOT_RETURNABLE: () =>
+    "Đơn này đã được tất toán hoặc đã đóng. Hãy chat với Sales nếu bạn cần trả thêm hàng.",
+};
+
+/**
+ * The delivery the form starts on: "" names none (the order's only delivery, or the order as a
+ * whole); several deliveries start on the only one still in its window, else on none.
+ */
+function defaultDelivery(eligibility: ReturnEligibility): string | undefined {
+  if (eligibility.kind !== "open") return undefined;
+  if (!eligibility.needsChoice) return eligibility.shipments[0]?.shipmentId ?? "";
+  const inWindow = eligibility.shipments.filter((shipment) => shipment.windowOpen);
+  return inWindow.length === 1 ? (inWindow[0]?.shipmentId ?? undefined) : undefined;
+}
 
 function Closed({ orderId, children }: { orderId: string; children: React.ReactNode }) {
   return (
@@ -59,13 +83,25 @@ export function ReturnRequestScreen({ orderId: raw }: { orderId: string }) {
   const open = useOpenMyReturn();
   const photo = useAddMyReturnPhoto();
   const [uploading, setUploading] = useState(false);
-  const lines = useMemo(
-    () => (order.data ? returnableLines(order.data.lines, returns.data ?? []) : []),
-    [order.data, returns.data],
+  const returnWindow = useReturnWindowDays(orderId);
+  const orderLines = order.data?.lines;
+  const linesOf = useCallback(
+    // Undefined: several deliveries and none chosen yet - every open return still counts.
+    (shipmentId: string | undefined) =>
+      returnableLines(
+        orderLines ?? [],
+        returns.data ?? [],
+        shipmentId === undefined ? undefined : { shipmentId: shipmentId || null },
+      ),
+    [orderLines, returns.data],
   );
 
   if (!valid || isNotFound(order.error)) notFound();
-  if (order.isPending || (returns.isPending && returns.fetchStatus !== "idle")) {
+  if (
+    order.isPending ||
+    (returns.isPending && returns.fetchStatus !== "idle") ||
+    returnWindow.isPending
+  ) {
     return <OrderDetailSkeleton />;
   }
   if (!order.data || returns.error) {
@@ -79,7 +115,16 @@ export function ReturnRequestScreen({ orderId: raw }: { orderId: string }) {
     );
   }
   const current = order.data;
-  const deliveredAt = deliveredAtOf(current);
+  const eligibility = returnEligibility(
+    { status: current.status, shipments: current.shipments, deliveredAt: deliveredAtOf(current) },
+    returnWindow.days,
+  );
+  const single =
+    eligibility.kind === "open" && !eligibility.needsChoice ? eligibility.shipments[0] : undefined;
+  const deliveredAt =
+    eligibility.kind === "open" && !eligibility.needsChoice
+      ? (single?.deliveredAt ?? eligibility.deliveredAt)
+      : undefined;
 
   const submit = async (values: ReturnFormValues) => {
     const chosen = Object.entries(values.quantities)
@@ -92,6 +137,7 @@ export function ReturnRequestScreen({ orderId: raw }: { orderId: string }) {
         reasonCode: values.reasonCode,
         description: values.description || undefined,
         lines: chosen,
+        shipmentId: values.shipmentId || undefined,
       })
       .catch(() => null);
     if (!opened) return;
@@ -128,7 +174,8 @@ export function ReturnRequestScreen({ orderId: raw }: { orderId: string }) {
       </h1>
       {deliveredAt ? (
         <p className="text-ink-secondary mt-1 text-sm">
-          Hạn đổi / trả đến hết ngày {formatDate(lastReturnDay(deliveredAt).toISOString())}.
+          Hạn đổi / trả đến hết ngày{" "}
+          {formatDate(lastReturnDay(deliveredAt, returnWindow.days).toISOString())}.
         </p>
       ) : null}
     </div>
@@ -145,13 +192,25 @@ export function ReturnRequestScreen({ orderId: raw }: { orderId: string }) {
       </div>
     );
   }
-  if (!canOpenReturn(current.status, deliveredAt)) {
+  if (eligibility.kind === "contactSales") {
+    // Delivered in several shipments, but this BE names none of them: the customer cannot say
+    // which delivery the goods came on (RETURN_SHIPMENT_REQUIRED), so Sales open it for them.
     return (
       <div className="space-y-5">
         {header}
         <Closed orderId={current.orderId}>
-          Chỉ gửi được yêu cầu trả hàng cho đơn đã giao, trong 7 ngày kể từ ngày giao. Nếu hàng có
-          lỗi phát hiện muộn, hãy chat với Sales.
+          Đơn này được giao làm nhiều lần nhưng chưa xác định được lần giao của hàng muốn trả. Vui
+          lòng liên hệ Sale để được mở yêu cầu trả hàng.
+        </Closed>
+      </div>
+    );
+  }
+  if (eligibility.kind === "closed") {
+    return (
+      <div className="space-y-5">
+        {header}
+        <Closed orderId={current.orderId}>
+          {CLOSED_TEXT[eligibility.reason](returnWindow.days)}
         </Closed>
       </div>
     );
@@ -161,7 +220,10 @@ export function ReturnRequestScreen({ orderId: raw }: { orderId: string }) {
     <div className="space-y-5">
       {header}
       <ReturnRequestForm
-        lines={lines}
+        linesOf={linesOf}
+        shipments={eligibility.shipments}
+        needsChoice={eligibility.needsChoice}
+        defaultShipmentId={defaultDelivery(eligibility)}
         pending={open.isPending || uploading}
         error={open.error ? describeReturnError(open.error) : undefined}
         onSubmit={(values) => void submit(values)}

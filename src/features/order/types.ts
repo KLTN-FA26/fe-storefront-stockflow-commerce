@@ -6,6 +6,7 @@ import type {
   cancellationRequestStatusSchema,
   cancellationReasonCodeSchema,
   cancellationResultDtoSchema,
+  deliveryFailureReasonSchema,
   deliveryModeSchema,
   deliveryStateSchema,
   holdReasonSchema,
@@ -14,6 +15,7 @@ import type {
   orderCardDtoSchema,
   orderDtoSchema,
   orderLineDtoSchema,
+  orderShipmentDtoSchema,
   orderStatusGroupSchema,
   orderTimelineEntryDtoSchema,
   orderVehicleDtoSchema,
@@ -33,6 +35,9 @@ export type CancellationRequestStatus = z.infer<typeof cancellationRequestStatus
 export type CancellationRequest = z.infer<typeof cancellationRequestDtoSchema>;
 export type OrderAddress = z.infer<typeof orderAddressDtoSchema>;
 export type OrderLine = z.infer<typeof orderLineDtoSchema>;
+/** One handed-over shipment of the order (BE CustomerOrderShipment). */
+export type OrderShipment = z.infer<typeof orderShipmentDtoSchema>;
+export type DeliveryFailureReason = z.infer<typeof deliveryFailureReasonSchema>;
 /** One row of the order list (BE CustomerOrderCardResponse). */
 export type OrderCard = z.infer<typeof orderCardDtoSchema>;
 export type OrderTimelineEntry = z.infer<typeof orderTimelineEntryDtoSchema>;

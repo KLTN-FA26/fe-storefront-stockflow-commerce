@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -18,6 +17,7 @@ import {
   RETURN_PHOTO_MAX_COUNT,
   RETURN_PHOTO_TYPES,
   RETURN_REASON_LABEL,
+  type ReturnableShipment,
 } from "@/lib/returns";
 
 import {
@@ -27,13 +27,20 @@ import {
   type ReturnFormValues,
   type ReturnableLine,
 } from "../return-form";
+import { ReturnShipmentPicker } from "./return-shipment-picker";
 
 const CARD =
   "rounded-[var(--r-lg)] border border-border-default bg-bg-surface p-[var(--card-pad)] shadow-[var(--card-shadow)] space-y-4";
 const HEADING = "font-display text-ink-primary text-base font-semibold";
 
 interface ReturnRequestFormProps {
-  lines: readonly ReturnableLine[];
+  /** What is left to return of each line, for the delivery chosen (undefined: none chosen yet). */
+  linesOf: (shipmentId: string | undefined) => readonly ReturnableLine[];
+  /** The delivered shipments (WF-05 TH-1); empty for an order returned as a whole. */
+  shipments: readonly ReturnableShipment[];
+  /** Delivered in several shipments: the customer names the one the goods came on. */
+  needsChoice: boolean;
+  defaultShipmentId: string | undefined;
   pending: boolean;
   /** Why the last attempt failed (Vietnamese, by BE code). */
   error: string | undefined;
@@ -87,49 +94,101 @@ function LineRow({
 }
 
 /** Chọn hàng, lý do, mô tả và ảnh cho một yêu cầu trả hàng (kltn-docs 17 §4.10 bước 37–38). */
-export function ReturnRequestForm({ lines, pending, error, onSubmit }: ReturnRequestFormProps) {
-  const schema = useMemo(() => returnFormSchema(lines), [lines]);
+export function ReturnRequestForm({
+  linesOf,
+  shipments,
+  needsChoice,
+  defaultShipmentId,
+  pending,
+  error,
+  onSubmit,
+}: ReturnRequestFormProps) {
   const {
     control,
     register,
     handleSubmit,
     formState: { errors },
   } = useForm<ReturnFormInput, unknown, ReturnFormValues>({
-    resolver: zodResolver(schema),
+    // The resolver is read on every render, so it follows the shipment chosen below.
+    resolver: (values, context, options) => zodResolver(schema)(values, context, options),
     defaultValues: {
-      quantities: Object.fromEntries(lines.map((line) => [line.lineId, 0])),
+      shipmentId: defaultShipmentId,
+      quantities: Object.fromEntries(linesOf(defaultShipmentId).map((line) => [line.lineId, 0])),
       description: "",
       photos: [],
     },
   });
   const reasonCode = useWatch({ control, name: "reasonCode" });
+  const shipmentId: string | undefined = useWatch({ control, name: "shipmentId" });
+  // The React Compiler memoizes these; the annotations break the type cycle with the resolver.
+  const lines: readonly ReturnableLine[] = linesOf(shipmentId);
+  const schema: ReturnType<typeof returnFormSchema> = returnFormSchema(lines, {
+    shipments,
+    needsChoice,
+  });
+  const choosing = needsChoice && !shipmentId;
+  // Step numbers shift by one when the delivery is chosen first.
+  const step = (n: number) => (needsChoice ? n + 1 : n);
   // `quantities` holds both its own message (nothing chosen) and one per line id.
   const quantityErrors = errors.quantities as
     ({ message?: string } & Record<string, { message?: string } | undefined>) | undefined;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
+      {needsChoice ? (
+        <section className={CARD} aria-labelledby="return-shipment-heading">
+          <h2 id="return-shipment-heading" className={HEADING}>
+            1. Lần giao có hàng muốn trả
+          </h2>
+          <p className="text-ink-secondary text-sm">
+            Đơn được giao làm nhiều lần. Mỗi yêu cầu trả hàng dành cho một lần giao; hạn đổi / trả
+            tính từ ngày giao của lần đó.
+          </p>
+          <Controller
+            control={control}
+            name="shipmentId"
+            render={({ field }) => (
+              <ReturnShipmentPicker
+                shipments={shipments}
+                value={field.value}
+                onChange={field.onChange}
+                error={errors.shipmentId?.message}
+                disabled={pending}
+              />
+            )}
+          />
+        </section>
+      ) : null}
       <section className={CARD} aria-labelledby="return-lines-heading">
         <h2 id="return-lines-heading" className={HEADING}>
-          1. Sản phẩm muốn trả
+          {step(1)}. Sản phẩm muốn trả
         </h2>
-        <ul className="divide-border-default divide-y">
-          {lines.map((line) => (
-            <Controller
-              key={line.lineId}
-              control={control}
-              name={`quantities.${line.lineId}`}
-              render={({ field }) => (
-                <LineRow
-                  line={line}
-                  value={field.value ?? 0}
-                  onChange={field.onChange}
-                  error={quantityErrors?.[line.lineId]?.message}
-                />
-              )}
-            />
-          ))}
-        </ul>
+        {choosing ? (
+          <p className="text-ink-secondary text-sm">Chọn lần giao ở trên để chọn sản phẩm.</p>
+        ) : (
+          <ul className="divide-border-default divide-y">
+            {lines.map((line) => (
+              <Controller
+                key={line.lineId}
+                control={control}
+                name={`quantities.${line.lineId}`}
+                render={({ field }) => (
+                  <LineRow
+                    line={line}
+                    value={field.value ?? 0}
+                    onChange={field.onChange}
+                    error={quantityErrors?.[line.lineId]?.message}
+                  />
+                )}
+              />
+            ))}
+          </ul>
+        )}
+        {needsChoice && !choosing ? (
+          <p className="text-ink-tertiary text-xs">
+            Số lượng tối đa tính theo cả đơn. Chỉ trả số hàng đã nhận trong lần giao đã chọn.
+          </p>
+        ) : null}
         {typeof quantityErrors?.message === "string" ? (
           <p role="alert" className="text-danger text-sm">
             {quantityErrors.message}
@@ -139,7 +198,7 @@ export function ReturnRequestForm({ lines, pending, error, onSubmit }: ReturnReq
 
       <section className={CARD} aria-labelledby="return-reason-heading">
         <h2 id="return-reason-heading" className={HEADING}>
-          2. Lý do
+          {step(2)}. Lý do
         </h2>
         <Controller
           control={control}
@@ -200,7 +259,7 @@ export function ReturnRequestForm({ lines, pending, error, onSubmit }: ReturnReq
 
       <section className={CARD} aria-labelledby="return-photos-heading">
         <h2 id="return-photos-heading" className={HEADING}>
-          3. Ảnh vấn đề
+          {step(3)}. Ảnh vấn đề
         </h2>
         <Controller
           control={control}

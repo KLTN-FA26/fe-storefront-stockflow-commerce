@@ -1,5 +1,5 @@
 import type { SemanticTone } from "@/lib/domain/types";
-import { returnWindowEnd } from "@/lib/domain/return-window";
+import { RETURN_WINDOW_DAYS, returnWindowEnd } from "@/lib/domain/return-window";
 
 import type { CustomerReturn, ReturnReason, ReturnStatus } from "./schemas";
 
@@ -75,17 +75,18 @@ export const isReturnOpen = (status: ReturnStatus) =>
 
 /**
  * Khách tự mở yêu cầu được không (BE `ReturnRequest.requireReturnable`, BR-RMA-001): đơn
- * `DELIVERED` / `RETURN_REQUESTED`, còn trong hạn 7 ngày từ ngày giao. Ngoài hạn hay đơn đã tất toán
+ * `DELIVERED` / `RETURN_REQUESTED`, còn trong hạn (`windowDays`, mặc định 7) từ ngày giao. Ngoài hạn hay đơn đã tất toán
  * do trả hàng thì phải nhờ Sales. BE vẫn kiểm lại.
  */
 export function canOpenReturn(
   orderStatus: string,
   deliveredAt: string | undefined,
   now: Date = new Date(),
+  windowDays: number = RETURN_WINDOW_DAYS,
 ): boolean {
   if (orderStatus !== "DELIVERED" && orderStatus !== "RETURN_REQUESTED") return false;
   if (!deliveredAt) return orderStatus === "RETURN_REQUESTED";
-  return returnWindowEnd(deliveredAt).getTime() > now.getTime();
+  return returnWindowEnd(deliveredAt, windowDays).getTime() > now.getTime();
 }
 
 /**
@@ -115,18 +116,26 @@ export function claimedUnits(
   }
 }
 
-/** Đơn vị đã bị các yêu cầu khác giữ, theo dòng đơn; và các dòng đang có yêu cầu mở. */
-export function claimsByOrderLine(returns: readonly CustomerReturn[]): {
+/**
+ * Đơn vị đã bị các yêu cầu khác giữ, theo dòng đơn (mọi lần giao); và các dòng đang có yêu cầu mở.
+ * Có `delivery`: chỉ yêu cầu của cùng lần giao đó chặn dòng (BE `ReturnRequestService.openOwn`,
+ * WF-05 TH-1 — `Objects.equals(other.shipmentId, shipmentId)`, null là đơn giao một lần).
+ */
+export function claimsByOrderLine(
+  returns: readonly CustomerReturn[],
+  delivery?: { shipmentId: string | null },
+): {
   claimed: Map<string, number>;
   open: Set<string>;
 } {
   const claimed = new Map<string, number>();
   const open = new Set<string>();
   for (const request of returns) {
+    const sameDelivery = !delivery || (request.shipmentId ?? null) === delivery.shipmentId;
     for (const line of request.lines) {
       const units = claimedUnits(line, request.status);
       claimed.set(line.orderLineId, (claimed.get(line.orderLineId) ?? 0) + units);
-      if (isReturnOpen(request.status)) open.add(line.orderLineId);
+      if (sameDelivery && isReturnOpen(request.status)) open.add(line.orderLineId);
     }
   }
   return { claimed, open };

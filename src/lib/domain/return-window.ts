@@ -1,6 +1,7 @@
 /**
  * Hạn đổi / trả của đơn đã giao (kltn-docs 17 §4.6 bước 21, BR-RMA-001): BE `ReturnPolicy.endOfDays`
- * — ngày giao theo lịch Việt Nam + 7 ngày trọn, hết lúc 0 giờ (giờ VN) ngày kế tiếp.
+ * — ngày giao theo lịch Việt Nam + N ngày trọn, hết lúc 0 giờ (giờ VN) ngày kế tiếp. N là thời hạn
+ * khiếu nại hợp đồng ghi (`returnWindowDays`, WF-05 TH-1), không có thì 7 ngày cấu hình của BE.
  */
 
 const DAY_MS = 86_400_000;
@@ -16,6 +17,6 @@ export function returnWindowEnd(deliveredAtIso: string, days = RETURN_WINDOW_DAY
 }
 
 /** Ngày cuối còn đổi / trả được (ngày trước thời điểm hết hạn), dạng ISO giờ VN. */
-export function lastReturnDay(deliveredAtIso: string): Date {
-  return new Date(returnWindowEnd(deliveredAtIso).getTime() - 1);
+export function lastReturnDay(deliveredAtIso: string, days = RETURN_WINDOW_DAYS): Date {
+  return new Date(returnWindowEnd(deliveredAtIso, days).getTime() - 1);
 }

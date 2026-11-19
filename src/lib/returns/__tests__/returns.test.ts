@@ -68,6 +68,20 @@ describe("customer returns — contract (BE ReturnRequestController)", () => {
     });
   });
 
+  it("names the delivery the goods came on (WF-05 TH-1, RETURN_SHIPMENT_REQUIRED)", async () => {
+    const shipmentId = "5e000000-0000-4000-8000-000000000002";
+    const post = vi.spyOn(api, "post").mockResolvedValueOnce({ data: beReturn({ shipmentId }) });
+    const opened = await openMyReturn({
+      orderId: ORDER_ID,
+      requestId: REQUEST_ID,
+      reasonCode: "WRONG_ITEM",
+      lines: [{ orderLineId: ORDER_LINE_ID, quantity: 1 }],
+      shipmentId,
+    });
+    expect(post.mock.calls[0]?.[1]).toMatchObject({ shipmentId });
+    expect(opened.shipmentId).toBe(shipmentId);
+  });
+
   it("refuses OTHER without a description before anything is sent (BE ReturnRequest.open)", () => {
     const result = openReturnInputSchema.safeParse({
       orderId: ORDER_ID,
@@ -124,7 +138,7 @@ describe("customer returns — rules", () => {
   it("explains the BE refusals in Vietnamese, by code", () => {
     expect(
       describeReturnError(new ApiError(409, "RETURN_WINDOW_CLOSED", "The return window closed")),
-    ).toContain("quá hạn 7 ngày");
+    ).toContain("quá hạn đổi / trả");
     expect(
       describeReturnError(new ApiError(409, "RETURN_CUSTOM_ITEM_NOT_DEFECTIVE", "printed")),
     ).toContain("in theo thiết kế");

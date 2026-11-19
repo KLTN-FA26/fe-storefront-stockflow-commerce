@@ -10,7 +10,14 @@ const RETURN_MESSAGES: Record<string, string> = {
   RETURN_ORDER_NOT_RETURNABLE:
     "Đơn này đã được tất toán bằng một lần trả hàng. Hãy chat với Sales nếu bạn cần trả thêm.",
   RETURN_WINDOW_CLOSED:
-    "Đã quá hạn 7 ngày đổi / trả kể từ ngày giao. Hãy chat với Sales nếu hàng có lỗi phát hiện muộn.",
+    "Đã quá hạn đổi / trả kể từ ngày giao của lần giao này. Hãy chat với Sales nếu hàng có lỗi phát hiện muộn.",
+  // WF-05 TH-1: đơn giao nhiều lần — mỗi yêu cầu trả hàng gắn với một lần giao đã đến.
+  RETURN_SHIPMENT_REQUIRED:
+    "Đơn này được giao làm nhiều lần — hãy chọn lần giao có hàng muốn trả. Không thấy lần giao đó? Vui lòng liên hệ Sale.",
+  RETURN_SHIPMENT_NOT_DELIVERED:
+    "Lần giao bạn chọn chưa giao thành công nên chưa thể trả hàng của lần giao đó. Hãy chọn lần giao đã nhận hàng.",
+  RETURN_GOODS_PARTLY_RECEIVED:
+    "Kho đã nhận một phần hàng trả về nên không thể rút yêu cầu nữa. Sales sẽ hoàn tiền theo số hàng đã nhận — hãy chat với Sales nếu cần.",
   RETURN_LINE_ALREADY_OPEN:
     "Một sản phẩm bạn chọn đang có yêu cầu trả hàng khác chưa xong. Hãy theo dõi yêu cầu đó.",
   RETURN_QUANTITY_EXCEEDED: "Số lượng trả vượt quá số đã giao còn lại của sản phẩm.",

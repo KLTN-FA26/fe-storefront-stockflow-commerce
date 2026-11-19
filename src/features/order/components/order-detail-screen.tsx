@@ -8,8 +8,9 @@ import { ChevronLeft } from "lucide-react";
 import { STORE_ROUTES } from "@/constants";
 import { useHasPermission } from "@/lib/auth/my-permissions";
 import { formatDateTime } from "@/lib/format/date";
-import { canOpenReturn } from "@/lib/returns";
+import { returnEligibility } from "@/lib/returns";
 
+import { useReturnWindowDays } from "../contract-queries";
 import { describeCancelError, isNotFound } from "../errors";
 import { useCancelMyOrder } from "../mutations";
 import { useKnownCancellationRequest, useOrder } from "../queries";
@@ -59,6 +60,7 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
   const known = useKnownCancellationRequest(orderId);
   const mayCancel = useHasPermission("sales-orders:UPDATE");
   const mayReturn = useHasPermission(RETURN_CREATE_PERMISSION);
+  const returnWindow = useReturnWindowDays(orderId);
 
   // Not a UUID: the BE would answer 400 UNSUPPORTED_PARAMETER, and to the customer it is simply an
   // order that does not exist. The query is disabled for it, so nothing is sent.
@@ -116,7 +118,7 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
         <div className="min-w-0 space-y-5">
           <OrderStatusHero group={order.statusGroup} holdReason={order.holdReasonPublic} />
-          <OrderCompletionHint order={order} />
+          <OrderCompletionHint order={order} windowDays={returnWindow.days} />
           <OrderLinesCard order={order} />
           <OrderContractCard orderId={order.orderId} />
           <OrderTimelineCard order={order} />
@@ -140,7 +142,16 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
             }}
             mayCancel={mayCancel}
             returnHref={
-              mayReturn && canOpenReturn(order.status, deliveredAtOf(order))
+              // Also when Sales must open it (several deliveries, no id): the page says so.
+              mayReturn &&
+              returnEligibility(
+                {
+                  status: order.status,
+                  shipments: order.shipments,
+                  deliveredAt: deliveredAtOf(order),
+                },
+                returnWindow.days,
+              ).kind !== "closed"
                 ? STORE_ROUTES.account.orders.newReturn(order.orderId)
                 : null
             }

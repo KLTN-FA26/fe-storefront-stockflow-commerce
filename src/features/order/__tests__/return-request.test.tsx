@@ -154,6 +154,88 @@ describe("ReturnRequestScreen (kltn-docs 17 §4.10)", () => {
   });
 });
 
+describe("ReturnRequestScreen — an order delivered in several shipments (WF-05 TH-1)", () => {
+  const S1 = "5e000000-0000-4000-8000-000000000001";
+  const S2 = "5e000000-0000-4000-8000-000000000002";
+  const shipment = (shipmentId: string | null, n: number, days: number) => ({
+    shipmentId,
+    shipmentCode: `SO-20261002-000436-S${n}`,
+    status: "DELIVERED",
+    packageCount: 1,
+    handedOverAt: daysAgo(days + 1),
+    outcomeAt: daysAgo(days),
+  });
+
+  it("asks which delivery the goods came on and sends its shipmentId", async () => {
+    backend({ ...delivered(), shipments: [shipment(S1, 1, 3), shipment(S2, 2, 1)] });
+    const post = vi.spyOn(api, "post").mockImplementation(async () => ({
+      data: beReturn({ status: "REQUESTED", orderId, shipmentId: S2 }),
+    }));
+    renderWithProviders(<ReturnRequestScreen orderId={orderId} />);
+
+    expect(await screen.findByText("Chọn lần giao ở trên để chọn sản phẩm.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: /Lần giao 2/ }));
+    const teeRow = (await screen.findByText("TEE-CLASSIC-WHT-M")).closest("li")!;
+    await userEvent.click(within(teeRow).getByRole("button", { name: "Tăng số lượng" }));
+    await userEvent.click(screen.getByRole("radio", { name: /Giao sai hàng/ }));
+    await userEvent.upload(
+      screen.getByLabelText("Ảnh chụp lỗi hoặc hư hỏng"),
+      new File(["x"], "sai.jpg", { type: "image/jpeg" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Gửi yêu cầu trả hàng" }));
+
+    await vi.waitFor(() => expect(post).toHaveBeenCalled());
+    expect(post.mock.calls[0]?.[1]).toMatchObject({
+      shipmentId: S2,
+      lines: [{ orderLineId: TEE, quantity: 1 }],
+    });
+  });
+
+  it("keeps a delivery past its window out of reach", async () => {
+    backend({ ...delivered(), shipments: [shipment(S1, 1, 10), shipment(S2, 2, 1)] });
+    renderWithProviders(<ReturnRequestScreen orderId={orderId} />);
+    expect(await screen.findByRole("radio", { name: /Lần giao 1/ })).toBeDisabled();
+    // The only delivery still in its window is chosen for the customer.
+    expect(screen.getByRole("radio", { name: /Lần giao 2/ })).toBeChecked();
+  });
+
+  it("opens a return on a delivered shipment while the next one is still on its way", async () => {
+    backend({
+      ...delivered(),
+      status: "SHIPPED",
+      statusGroup: "SHIPPING",
+      shipments: [shipment(S1, 1, 1), { shipmentId: S2, status: "HANDED_OVER" }],
+    });
+    renderWithProviders(<ReturnRequestScreen orderId={orderId} />);
+    expect(await screen.findByRole("button", { name: "Gửi yêu cầu trả hàng" })).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /Lần giao/ })).toBeNull();
+  });
+
+  it("sends the customer to Sales when the deliveries carry no id", async () => {
+    backend({ ...delivered(), shipments: [shipment(null, 1, 2), shipment(null, 2, 1)] });
+    renderWithProviders(<ReturnRequestScreen orderId={orderId} />);
+    expect(await screen.findByText(/Vui lòng liên hệ Sale/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Gửi yêu cầu trả hàng" })).toBeNull();
+  });
+
+  it("shows the BE refusal of a missing delivery in Vietnamese", async () => {
+    backend({ ...delivered(), shipments: [shipment(S1, 1, 1)] });
+    vi.spyOn(api, "post").mockRejectedValue(
+      new ApiError(422, "RETURN_SHIPMENT_REQUIRED", "Name the delivery"),
+    );
+    renderWithProviders(<ReturnRequestScreen orderId={orderId} />);
+    const teeRow = (await screen.findByText("TEE-CLASSIC-WHT-M")).closest("li")!;
+    await userEvent.click(within(teeRow).getByRole("button", { name: "Tăng số lượng" }));
+    await userEvent.click(screen.getByRole("radio", { name: /Giao sai hàng/ }));
+    await userEvent.upload(
+      screen.getByLabelText("Ảnh chụp lỗi hoặc hư hỏng"),
+      new File(["x"], "sai.jpg", { type: "image/jpeg" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Gửi yêu cầu trả hàng" }));
+    expect(await screen.findByText(/hãy chọn lần giao có hàng muốn trả/)).toBeInTheDocument();
+  });
+});
+
 describe("OrderHelpCard return button", () => {
   it("links to the return form when the order may be returned", () => {
     renderWithProviders(
