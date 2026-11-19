@@ -1,5 +1,8 @@
 "use client";
 
+import { Alert } from "@/components/shared";
+import { Button } from "@/components/ui/button";
+import { describeApiError } from "@/lib/api/describe-error";
 import { useHasPermission, useMyPermissions } from "@/lib/auth/my-permissions";
 import { formatDate } from "@/lib/format/date";
 import { formatMoney } from "@/lib/format/money";
@@ -22,7 +25,8 @@ function Row({ label, value }: { label: string; value: string }) {
 
 /**
  * Hoàn tiền của đơn (kltn-docs 15 §4.5): số phải hoàn do huỷ, đóng phần còn lại hay trả hàng, số đã
- * hoàn và các lần Kế toán đã chuyển. Chỉ hiện khi có khoản phải hoàn.
+ * hoàn và các lần Kế toán đã chuyển. Chỉ hiện khi có khoản phải hoàn — hoặc khi không đọc được, để
+ * khách biết thông tin hoàn tiền chưa tải được thay vì tưởng là không có (HT-1).
  */
 export function OrderRefundCard({ order }: { order: Order }) {
   // Không hỏi gì khi danh sách quyền chưa về: tài khoản thiếu quyền không thấy thẻ nháy lên
@@ -30,6 +34,30 @@ export function OrderRefundCard({ order }: { order: Order }) {
   const allowed = useHasPermission(REFUNDS_PERMISSION) && !permissions.isPending;
   const query = useMyOrderRefund(order.orderId, allowed);
   const refund = query.data;
+  if (allowed && query.isError && !refund) {
+    return (
+      <section className={`${CARD} space-y-3`} aria-labelledby="order-refund-heading">
+        <h2
+          id="order-refund-heading"
+          className="font-display text-ink-primary text-base font-semibold"
+        >
+          Hoàn tiền
+        </h2>
+        <Alert tone="danger" title="Chưa tải được thông tin hoàn tiền">
+          {describeApiError(query.error)}
+        </Alert>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11 w-full rounded-[var(--r-md)]"
+          disabled={query.isFetching}
+          onClick={() => void query.refetch()}
+        >
+          {query.isFetching ? "Đang tải lại…" : "Thử lại"}
+        </Button>
+      </section>
+    );
+  }
   if (!allowed || !refund) return null;
   const money = (amount: number) => formatMoney(amount, refund.currency);
 

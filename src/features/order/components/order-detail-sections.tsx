@@ -6,6 +6,7 @@ import { DELIVERY_MODE_LABEL, DELIVERY_MODE_PENDING_LABEL, DELIVERY_STATE_LABEL 
 import { deliveryModes } from "../selectors";
 import type { Order, OrderAddress } from "../types";
 import { LineProduction } from "./line-production";
+import { OrderDeliveryFailures } from "./order-delivery-failures";
 
 const CARD =
   "rounded-[var(--r-lg)] border border-border-default bg-bg-surface p-[var(--card-pad)] shadow-[var(--card-shadow)]";
@@ -113,6 +114,7 @@ export function OrderDeliveryCard({ order }: { order: Order }) {
         </p>
       ) : null}
       <DeliveryMethod order={order} />
+      <OrderDeliveryFailures shipments={order.shipments ?? []} />
       {ship ? (
         <div className="flex gap-3">
           <MapPin aria-hidden className="text-ink-tertiary mt-0.5 size-5 shrink-0" />

@@ -37,3 +37,45 @@ export function deliveryModes(order: Pick<Order, "shipments" | "deliveryMode">):
   }
   return modes;
 }
+
+/** An order whose invoices are all settled, or that will have none: no conditions to explain. */
+const INVOICES_SETTLED: ReadonlySet<Order["status"]> = new Set([
+  "COMPLETED",
+  "CLOSED",
+  "CANCELLED",
+  "RETURNED",
+]);
+
+/**
+ * When the order's VAT invoices come, shown while it is not completed (kltn-docs 21 §4.1–4.2; BE
+ * `IssueDeadline`, WF-05 HĐ-3): one invoice per successful delivery, dated the delivery day and
+ * issued by the end of the next working day; a failed delivery gets none, and an invoice already
+ * issued for it is reduced in full or voided. Null once the order is completed, closed or cancelled.
+ */
+export function invoiceConditions(
+  order: Pick<Order, "status" | "deliveryState" | "shipments">,
+): string[] | null {
+  if (INVOICES_SETTLED.has(order.status)) return null;
+  const shipments = order.shipments ?? [];
+  const delivered =
+    order.deliveryState === "DELIVERED" ||
+    order.deliveryState === "PARTIALLY_DELIVERED" ||
+    shipments.some((shipment) => shipment.status === "DELIVERED");
+  const notes = [
+    "Hoá đơn VAT được lập cho từng lần giao thành công, ghi ngày giao, và phát hành chậm nhất vào ngày làm việc tiếp theo.",
+  ];
+  if (!delivered) {
+    notes.push("Đơn chưa có lần giao thành công nên chưa có hoá đơn.");
+  } else if (
+    order.deliveryState === "PARTIALLY_DELIVERED" ||
+    shipments.some((shipment) => shipment.status === "HANDED_OVER")
+  ) {
+    notes.push("Các lần giao còn lại sẽ có hoá đơn riêng khi giao thành công.");
+  }
+  if (shipments.some((shipment) => shipment.status === "DELIVERY_FAILED")) {
+    notes.push(
+      "Lần giao không thành công không được xuất hoá đơn; hoá đơn đã phát hành cho lần giao đó sẽ được điều chỉnh giảm hoặc huỷ.",
+    );
+  }
+  return notes;
+}
