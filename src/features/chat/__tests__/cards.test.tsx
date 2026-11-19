@@ -236,3 +236,49 @@ describe("accepting a quote on its card (C10)", () => {
     expect(post).not.toHaveBeenCalled();
   });
 });
+
+describe("PAYMENT_INFO: the VietQR code (plan E1)", () => {
+  const transferPayload = (overrides: Record<string, unknown> = {}) => ({
+    installmentId: "77777777-7777-4777-8777-777777777777",
+    contractNumber: "HD-20261120-000001-1",
+    orderId: "88888888-8888-4888-8888-888888888888",
+    orderNumber: "SO-20261120-000001",
+    seq: 1,
+    name: "Đặt cọc khi ký",
+    amount: 22_842_000,
+    installmentAmount: 22_842_000,
+    currency: "VND",
+    status: "DUE",
+    transferContent: "HD20261120000001 DOT1",
+    bank: {
+      bankName: "DEMO BANK",
+      bankBin: "970000",
+      accountNumber: "0000000000",
+      accountName: "DEMO STOCKFLOW CO LTD",
+    },
+    vietQr:
+      "00020101021238530010A0000007270123000697000001090000000000208QRIBFTTA53037045408228420005802VN6304ABCD",
+    ...overrides,
+  });
+
+  it("draws the code the BE sent above the transfer details", () => {
+    renderCard(cardMessageJson("PAYMENT_INFO", transferPayload()));
+
+    expect(screen.getByRole("img", { name: "Mã VietQR chuyển khoản" })).toBeInTheDocument();
+    expect(
+      screen.getByText(/tài khoản, số tiền và nội dung chuyển khoản được điền sẵn/),
+    ).toBeInTheDocument();
+  });
+
+  it("draws no code when the BE sent none (no BIN configured)", () => {
+    renderCard(cardMessageJson("PAYMENT_INFO", transferPayload({ vietQr: null })));
+
+    expect(screen.queryByRole("img", { name: "Mã VietQR chuyển khoản" })).not.toBeInTheDocument();
+  });
+
+  it("draws no code for an installment already paid", () => {
+    renderCard(cardMessageJson("PAYMENT_INFO", transferPayload({ status: "PAID", amount: 0 })));
+
+    expect(screen.queryByRole("img", { name: "Mã VietQR chuyển khoản" })).not.toBeInTheDocument();
+  });
+});

@@ -54,6 +54,22 @@ describe("BE language", () => {
   });
 });
 
+describe("success envelope without data", () => {
+  it("reads a success envelope without `data` (BE drops nulls) as null, not as the envelope", async () => {
+    api.defaults.adapter = async (config) => ({
+      data: { success: true, timestamp: "2026-11-20T00:00:00Z" },
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      config,
+    });
+
+    const { data } = await api.get("/orders/o-1/completion-hold");
+
+    expect(data).toBeNull();
+  });
+});
+
 describe("API authentication semantics", () => {
   it("unwraps a successful backend ApiResponse envelope once", async () => {
     api.defaults.adapter = async (config) => ({
