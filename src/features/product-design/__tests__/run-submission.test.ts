@@ -63,6 +63,12 @@ const fakeRenderer = () => ({
   preview: vi.fn<ExportRenderer["preview"]>(async () => PNG_1x1),
   printSurface: vi.fn<ExportRenderer["printSurface"]>(async () => [{ png: PNG_1x1, heightPx: 1 }]),
   printVector: vi.fn<ExportRenderer["printVector"]>(async () => null),
+  printSheetFace: vi.fn<ExportRenderer["printSheetFace"]>(async () => ({
+    content: "",
+    images: [],
+    alphas: [],
+    layers: [],
+  })),
   printSlug: vi.fn<ExportRenderer["printSlug"]>(async () => PNG_1x1),
   designBrief: vi.fn<ExportRenderer["designBrief"]>(async () => [PNG_1x1]),
   release: vi.fn<ExportRenderer["release"]>(),

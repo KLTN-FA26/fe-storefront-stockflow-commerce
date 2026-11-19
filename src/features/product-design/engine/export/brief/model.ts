@@ -1,4 +1,5 @@
 import type { DesignDocument, DesignElement, Hex, SurfaceContent } from "../../document/schema";
+import { bagSheet, type BagSheet } from "../../surfaces/bag-sheet";
 import { elementOutline, type ElementSizer } from "../../geometry/element";
 import type { PointMm } from "../../geometry/types";
 import type { PreflightLevel, PreflightReport } from "../../preflight/types";
@@ -60,6 +61,8 @@ export type DesignBrief = {
    */
   formed: boolean;
   dimensions: string;
+  /** A paper bag's flat sheet: its print file is one page with the four sides laid on it. */
+  sheet?: BagSheet;
   version: number;
   exportedAt: string;
   checksum: string;
@@ -99,7 +102,8 @@ function dimensionsOf(template: CustomizationTemplate): string {
     return `Miệng Ø${mm(model.topDiameterMm)} · đáy Ø${mm(model.bottomDiameterMm)} · cao ${mm(model.heightMm)} mm; dải in cách miệng ${mm(model.bandTopOffsetMm)} mm, cách đáy ${mm(model.bandBottomOffsetMm)} mm; mép dán ${mm(model.seamMm)} mm`;
   }
   if (model.kind === "parametric-bag") {
-    return `Rộng ${mm(model.widthMm)} · hông ${mm(model.gussetMm)} · cao ${mm(model.heightMm)} mm; gấp miệng ${mm(model.topFoldMm)} mm`;
+    const sheet = bagSheet(model, template.printAreas);
+    return `Rộng ${mm(model.widthMm)} · hông ${mm(model.gussetMm)} · cao ${mm(model.heightMm)} mm; gấp miệng ${mm(model.topFoldMm)} mm, mép dán ${mm(sheet.glueFlapMm)} mm, gấp đáy ${mm(sheet.bottomFoldMm)} mm${sheet.assumed ? " (giả định)" : ""}`;
   }
   return "Theo mô hình của mẫu";
 }
@@ -235,6 +239,9 @@ export function buildDesignBrief(input: {
     materialNote: material?.note ?? "",
     formed: cup?.material === "pet-clear",
     dimensions: dimensionsOf(template),
+    ...(template.model.kind === "parametric-bag"
+      ? { sheet: bagSheet(template.model, template.printAreas) }
+      : {}),
     version: input.version,
     exportedAt: input.exportedAt,
     checksum: input.checksum,

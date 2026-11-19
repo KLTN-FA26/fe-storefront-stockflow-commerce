@@ -163,6 +163,38 @@ describe("briefPages", () => {
   });
 });
 
+describe("a bag's flat sheet in the brief", () => {
+  it("gives the sheet its own page after the overview, its folds named as assumed", () => {
+    const result = brief(bagM, emptyDocument(bagM));
+
+    expect(result.sheet).toMatchObject({ trimWidthMm: 780, trimHeightMm: 392, assumed: true });
+    expect(result.dimensions).toContain("mép dán 20 mm, gấp đáy 72 mm (giả định)");
+    expect(briefPages(result).slice(0, 2)).toEqual([{ kind: "overview" }, { kind: "sheet" }]);
+    expect(briefPages(brief(cup12oz, cupDocument())).map((p) => p.kind)).not.toContain("sheet");
+  });
+
+  it("draws each side's art, the die line and the folds, with the sheet's sizes", () => {
+    const result = brief(bagM, emptyDocument(bagM));
+    const pages = briefPages(result);
+    const rec = recordingCtx({ glyphWidth: (text) => text.length * 5 });
+    const style = {
+      ink: "ink",
+      guides: { trim: "trim-c", safe: "safe-c", seam: "seam-c", crease: "crease-c" },
+    };
+    const art = {} as CanvasImageSource;
+    drawBriefPage(rec.ctx, result, pages, 1, 4, style, { art: () => art });
+
+    const texts = rec.calls.filter(([m]) => m === "fillText").map(([, t]) => String(t));
+    expect(texts).toContain("Tấm trải phẳng (file in)");
+    expect(texts).toContain("Tấm trải phẳng 780 × 392 mm");
+    expect(texts).toEqual(
+      expect.arrayContaining(["Mặt trước", "Hông phải", "Mặt sau", "Hông trái"]),
+    );
+    expect(rec.calls.filter(([m]) => m === "drawImage")).toHaveLength(4);
+    expect(rec.sets.strokeStyle).toEqual(expect.arrayContaining(["trim-c", "crease-c"]));
+  });
+});
+
 describe("drawBriefPage", () => {
   it("draws every page, positions as the shop measures them, with the guides in the editor's colours", () => {
     const result = brief(cup12oz, cupDocument());

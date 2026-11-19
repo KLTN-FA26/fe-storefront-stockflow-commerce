@@ -1,4 +1,5 @@
 import { BRIEF_PAGE_MM, type BriefPage } from "./layout";
+import { drawSheetPage } from "./draw-sheet";
 import type { BriefArea, BriefElement, DesignBrief } from "./model";
 import { createPen, type BriefCtx, type BriefStyle, type Pen } from "./pen";
 
@@ -426,6 +427,17 @@ export function drawBriefPage(
       areaPage(pen, brief, page, images, ctx, style);
       break;
     }
+    case "sheet":
+      frame(
+        pen,
+        brief,
+        index,
+        count,
+        "Tấm trải phẳng (file in)",
+        "File in của túi là một tấm: bốn mặt khách thiết kế được đặt lên tấm như dưới đây. Hình thu nhỏ; số đo là mm thật.",
+      );
+      if (brief.sheet) drawSheetPage(pen, ctx, brief, brief.sheet, images.art, style);
+      break;
     case "colors":
       frame(
         pen,

@@ -20,7 +20,7 @@ import {
 import { canvasOf, EXPORT_MESSAGES as MESSAGES, ExportError, pngOf } from "./export-canvas";
 import { renderDesignBrief } from "./brief-render";
 import { exportPreview, type PreviewDeps } from "./preview-export";
-import { printVectorArt } from "./print-vector";
+import { printVectorArt, rasterSheetArt, type SheetPlacement } from "./print-vector";
 import { createLayer, materialOf, readChromeColors } from "./studio-paint";
 import { downloadAsset } from "./use-asset-images";
 
@@ -57,6 +57,17 @@ export type ExportRenderer = {
     pxPerMm: number,
     options?: { underlay?: boolean },
   ): Promise<VectorPage | null>;
+  /**
+   * One print area laid onto a page it shares (a bag's side on its flat sheet, `placement`): as
+   * vectors, each element on its own layer named after the side, or as its raster where it cannot
+   * be drawn as vectors. Always in the shared page's coordinates.
+   */
+  printSheetFace(
+    code: PrintAreaCode,
+    document: DesignDocument,
+    pxPerMm: number,
+    placement: SheetPlacement,
+  ): Promise<VectorPage>;
   /** The print file's slug under a page `widthMm` wide: `lines` on a transparent strip. */
   printSlug(lines: readonly string[], widthMm: number, pxPerMm: number): Promise<Uint8Array>;
   /** The design brief's pages (the TECHNICAL_SPEC file), A4 landscape, with the 3D `preview` on its overview. */
@@ -195,6 +206,26 @@ export function createCanvasExportRenderer(deps: RendererDeps): ExportRenderer {
       const { surface, content, ops, env } = await prepare(code, doc, pxPerMm);
       try {
         return await printVectorArt(ops, surface, content, env, deps.fonts, options);
+      } finally {
+        letGo();
+      }
+    },
+
+    async printSheetFace(code, doc, pxPerMm, placement) {
+      const { surface, content, ops, env } = await prepare(code, doc, pxPerMm);
+      try {
+        const vector = await printVectorArt(ops, surface, content, env, deps.fonts, { placement });
+        if (vector) return vector;
+        const { width, height } = surfacePx(surface.flatBounds, pxPerMm);
+        const canvas = canvasOf(width, height);
+        if (!canvas.getContext("2d")) throw new ExportError(MESSAGES.canvas);
+        try {
+          renderSurface(canvas, ops, env, surface.flatBounds, { y0Px: 0, heightPx: height });
+          return await rasterSheetArt(canvas, surface, pxPerMm, placement);
+        } finally {
+          canvas.width = 0;
+          canvas.height = 0;
+        }
       } finally {
         letGo();
       }

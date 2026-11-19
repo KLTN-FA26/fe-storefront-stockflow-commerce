@@ -19,6 +19,7 @@ import {
   type PrintPage,
   type SurfaceSet,
 } from "../../engine";
+import { bagSheetPage } from "./bag-sheet-page";
 import type { ExportRenderer } from "./export-renderer";
 import { loadPrintProfiles } from "./print-profiles";
 
@@ -88,7 +89,27 @@ export async function buildSubmissionBundle(input: {
     template.model.kind === "parametric-cup" && template.model.material === "pet-clear";
   const pages: PrintPage[] = [];
   try {
-    for (const [i, code] of surfaces.order.entries()) {
+    // A paper bag prints as one flat sheet with its four sides on it (spec 2026-11-18 §3).
+    if (template.model.kind === "parametric-bag") {
+      pages.push(
+        await bagSheetPage({
+          model: template.model,
+          template,
+          surfaces,
+          document,
+          renderer,
+          pxPerMm,
+          info,
+          onSide: async (i, count) => {
+            onStep?.("print", i / count);
+            await breathe();
+          },
+        }),
+      );
+    }
+    // Any other product: one page per print area.
+    const perArea = template.model.kind === "parametric-bag" ? [] : [...surfaces.order.entries()];
+    for (const [i, code] of perArea) {
       onStep?.("print", i / surfaces.order.length);
       await breathe();
       const surface = surfaces.byCode[code]!;

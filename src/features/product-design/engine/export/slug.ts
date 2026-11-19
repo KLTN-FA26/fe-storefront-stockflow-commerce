@@ -52,6 +52,8 @@ export type SlugArea = {
   formed?: boolean;
   /** Whether the page carries a white-ink underlay, where its stock needs one. */
   underlay?: boolean;
+  /** A bag's flat sheet: the page is the whole sheet, with its glue flap and folds. */
+  sheet?: { glueFlapMm: number; topFoldMm: number; bottomFoldMm: number; assumed: boolean };
   guideKinds: PrintGuideKind[];
 };
 
@@ -65,6 +67,7 @@ const mm = (value: number) => String(Math.round(value * 10) / 10).replace(".", "
 export function printSlugLines(info: PrintJobInfo, area: SlugArea): string[] {
   const legend = [...new Set(area.guideKinds)].map((kind) => GUIDE_LEGEND[kind]);
   const { width, height } = area.trimMm;
+  const { sheet } = area;
   return [
     [
       info.title,
@@ -74,11 +77,18 @@ export function printSlugLines(info: PrintJobInfo, area: SlugArea): string[] {
       `SHA-256 ${info.checksum.slice(0, 16)}`,
     ].join(" · "),
     [
-      `Vùng in ${area.name} (${area.code})`,
+      sheet ? `${area.name} (4 mặt túi)` : `Vùng in ${area.name} (${area.code})`,
       `Trang ${area.page}/${area.pages}`,
       `${area.formed ? "Vùng in trải phẳng" : "Thành phẩm"} ${mm(width)} × ${mm(height)} mm`,
       `Lề tràn ${mm(area.bleedMm)} mm`,
       ...(area.seamMm ? [`Mép dán ${mm(area.seamMm)} mm`] : []),
+      ...(sheet
+        ? [
+            `Mép dán ${mm(sheet.glueFlapMm)} mm`,
+            `Gấp miệng ${mm(sheet.topFoldMm)} mm`,
+            `Gấp đáy ${mm(sheet.bottomFoldMm)} mm${sheet.assumed ? " (mép dán, gấp đáy: giả định)" : ""}`,
+          ]
+        : []),
       ...(area.formed ? ["In lên ly đã thành hình, không bế"] : []),
       ...(area.underlay === undefined
         ? []
