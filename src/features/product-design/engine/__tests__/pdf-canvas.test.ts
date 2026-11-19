@@ -136,6 +136,24 @@ describe("createPdfCanvas", () => {
     expect(named.finish().unsupported).toMatch(/rebeccapurple/);
   });
 
+  it("records the white ink under the artwork: every shape in 100 % White, images by their alpha", () => {
+    const pdf = createPdfCanvas(FLIP, squares, "underlay");
+    pdf.ctx.globalAlpha = 0.5;
+    pdf.ctx.fillStyle = "#5B3A1E";
+    pdf.ctx.fillRect(0, 0, 10, 10);
+    const logo = image(20, 20);
+    pdf.ctx.drawImage(logo, 0, 0, 5, 5);
+    const art = pdf.finish();
+    const out = lines(art.content);
+    expect(out).toContain("/VWh cs");
+    expect(out).toContain("1 sc");
+    expect(out).toContain("/VWg0 gs");
+    expect(out).toContain("/VMk0 Do");
+    expect(out.join(" ")).not.toMatch(/VCs|VGs|VIm/);
+    expect(art.images).toEqual([logo]);
+    expect(art.alphas).toEqual([0.5]);
+  });
+
   it("marks a layer as optional content", () => {
     const pdf = createPdfCanvas(FLIP, squares);
     pdf.beginLayer("Nền");

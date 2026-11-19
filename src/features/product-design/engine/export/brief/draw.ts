@@ -1,4 +1,5 @@
 import { BRIEF_PAGE_MM, type BriefPage } from "./layout";
+import { drawSheetPage } from "./draw-sheet";
 import type { BriefArea, BriefElement, DesignBrief } from "./model";
 import { createPen, type BriefCtx, type BriefStyle, type Pen } from "./pen";
 
@@ -245,7 +246,7 @@ function areaPage(
   const legendY = origin[1] + flatBounds.height * scale + 6;
   let lx = M;
   for (const [kind, label, dash] of [
-    ["trim", "Đường cắt thành phẩm", undefined],
+    ["trim", brief.formed ? "Mép vùng in (không bế)" : "Đường cắt thành phẩm", undefined],
     ["safe", "Vùng an toàn", [1.4, 0.9]],
     ["seam", "Mép dán", undefined],
     ["crease", "Nếp gấp", [2, 0.8, 0.4, 0.8]],
@@ -329,7 +330,9 @@ function notesPage(pen: Pen, brief: DesignBrief) {
   for (const [name, what] of [
     [
       "print-ready.pdf",
-      "File in PDF/X-4: kích thước thật, lề tràn, đường cắt CutContour; mỗi phần tử một lớp, đánh số như tài liệu này",
+      brief.formed
+        ? "File in PDF/X-4: kích thước thật, lớp lót trắng (mực White) dưới phần có màu, không có đường cắt (in lên ly đã thành hình); mỗi phần tử một lớp"
+        : "File in PDF/X-4: kích thước thật, lề tràn, đường cắt CutContour; mỗi phần tử một lớp, đánh số như tài liệu này",
     ],
     ["Tài liệu này", "Ý đồ thiết kế: vị trí, kích thước, màu từng phần tử"],
     ["Tệp gốc", "Ảnh và logo khách tải lên, độ phân giải gốc"],
@@ -424,6 +427,17 @@ export function drawBriefPage(
       areaPage(pen, brief, page, images, ctx, style);
       break;
     }
+    case "sheet":
+      frame(
+        pen,
+        brief,
+        index,
+        count,
+        "Tấm trải phẳng (file in)",
+        "File in của túi là một tấm: bốn mặt khách thiết kế được đặt lên tấm như dưới đây. Hình thu nhỏ; số đo là mm thật.",
+      );
+      if (brief.sheet) drawSheetPage(pen, ctx, brief, brief.sheet, images.art, style);
+      break;
     case "colors":
       frame(
         pen,

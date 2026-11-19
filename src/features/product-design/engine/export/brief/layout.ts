@@ -11,6 +11,7 @@ export const COLORS_PER_PAGE = 12;
 /** One page of the brief, in order. */
 export type BriefPage =
   | { kind: "overview" }
+  | { kind: "sheet" }
   | { kind: "area"; area: number; from: number; to: number; continued: boolean }
   | { kind: "colors"; from: number; to: number }
   | { kind: "notes" };
@@ -21,7 +22,10 @@ export type BriefPage =
  * need; the notes and sign-off. Fixed row counts, so the pages are known before anything is drawn.
  */
 export function briefPages(brief: DesignBrief): BriefPage[] {
-  const pages: BriefPage[] = [{ kind: "overview" }];
+  // A bag's flat sheet comes right after the overview: how its sides make one print file.
+  const pages: BriefPage[] = brief.sheet
+    ? [{ kind: "overview" }, { kind: "sheet" }]
+    : [{ kind: "overview" }];
   brief.areas.forEach((area, index) => {
     // The background is the table's first row.
     const rows = area.elements.length + 1;

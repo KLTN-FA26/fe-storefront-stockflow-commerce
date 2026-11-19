@@ -229,9 +229,10 @@ export function createArtifactOps(ctx: StoreContext, files: DesignFiles) {
       if (!row) return notFound();
       const { version, quoteRequest } = asRecord(body);
       if (!isVersion(version)) return invalid("version", "version must be a whole number ≥ 0");
-      // Version first, as the BE (`DesignWorkflow`): a stale tab meets CONFLICT.
-      if (row.version !== version) return versionConflict();
+      // Status first, as the BE (S-6, `requireSubmittable`): a design sent elsewhere says so
+      // rather than CONFLICT, whatever version the caller holds.
       if (row.status !== "DRAFT") return invalidState();
+      if (row.version !== version) return versionConflict();
       // "Gửi duyệt và yêu cầu báo giá" (A-2): the request is checked before the preflight, so a
       // request that could not be asked refuses the whole submission.
       let quote: Ask | null = null;

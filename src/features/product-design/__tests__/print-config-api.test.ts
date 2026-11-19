@@ -150,7 +150,7 @@ describe("a design's print configuration, from its own template (F-23)", () => {
     template: unknown = { ...templateDto(), active: true },
   ) => backend({ customization, template });
 
-  it("reads the design's template (no hasCartonSpec on it) and the carton spec from the customization", async () => {
+  it("reads the design's template and, from a BE before BE-11, the carton spec from the customization", async () => {
     const get = answers(customizationDto([templateDto({ hasCartonSpec: false })]));
 
     const config = await getDesignPrintConfig(draft);
@@ -173,6 +173,31 @@ describe("a design's print configuration, from its own template (F-23)", () => {
     answers(customizationDto([templateDto({ sku: "OTHER" })]));
     expect(await getDesignPrintConfig(draft)).toMatchObject({
       variantStatus: "BLOCKED",
+      hasCartonSpec: false,
+    });
+  });
+
+  it("takes designable and hasCartonSpec from the design's template read when it has them (BE-11)", async () => {
+    // The customization still lists the variant, but the template read is the preflight's rule.
+    answers(customizationDto([templateDto({ hasCartonSpec: false })]), {
+      ...templateDto(),
+      active: true,
+      designable: false,
+      hasCartonSpec: true,
+    });
+    expect(await getDesignPrintConfig(draft)).toMatchObject({
+      variantStatus: "BLOCKED",
+      hasCartonSpec: true,
+    });
+
+    answers(customizationDto([templateDto({ sku: "OTHER" })]), {
+      ...templateDto(),
+      active: true,
+      designable: true,
+      hasCartonSpec: false,
+    });
+    expect(await getDesignPrintConfig(draft)).toMatchObject({
+      variantStatus: "ACTIVE",
       hasCartonSpec: false,
     });
   });

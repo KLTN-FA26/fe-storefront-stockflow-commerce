@@ -107,13 +107,17 @@ export const batchFailureDetailsSchema = z.object({
 });
 
 /**
- * `details` of a round refused with 409 `CONFLICT` (a stale version) or `DESIGN_NOT_DRAFT`
- * (`DesignBatchSubmissionService.submit`, BE-4, `origin/develop` d47ed4ae): every design of the
- * batch with that refusal. The BE lists only the designs of the first code it met, so a batch with
- * both a stale design and one no longer a draft names the ones of one code only.
+ * `details` of a round refused with 404, 409 `DESIGN_NOT_DRAFT` or 409 `CONFLICT`
+ * (`DesignBatchSubmissionService.submit`, S-1…S-6): `designs` names every refused design with its
+ * own code (the answer's code is the most severe: NOT_FOUND, then DESIGN_NOT_DRAFT, then CONFLICT);
+ * `designIds` lists those of the answer's code (all an older BE sent).
  */
 export const batchDesignIdsDetailsSchema = z.object({
-  designIds: z.array(z.string().min(1)).min(1),
+  designIds: z.array(z.string().min(1)).optional(),
+  /** Every design the batch refused, each with its own code (S-1; codes across the batch). */
+  designs: z
+    .array(z.object({ designId: z.string().min(1), errorCode: z.string().min(1) }))
+    .optional(),
 });
 
 /** `DesignCloneResponse`: the new draft, and why it is in no project when its source had one. */

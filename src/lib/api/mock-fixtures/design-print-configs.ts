@@ -126,6 +126,9 @@ interface BagSpec {
   /** Width, gusset and height of the bag; the printable height is the height minus the top fold. */
   size: [width: number, gusset: number, height: number];
   topFoldMm: number;
+  /** The flat sheet's glue flap and bottom fold; left out, the template reads as one saved before them. */
+  glueFlapMm?: number;
+  bottomFoldMm?: number;
   material: BagModel["material"];
 }
 
@@ -159,6 +162,8 @@ function bagTemplate(spec: BagSpec): CustomizationTemplate {
       gussetMm,
       heightMm,
       topFoldMm: spec.topFoldMm,
+      ...(spec.glueFlapMm === undefined ? {} : { glueFlapMm: spec.glueFlapMm }),
+      ...(spec.bottomFoldMm === undefined ? {} : { bottomFoldMm: spec.bottomFoldMm }),
       handle: "twisted",
       material: spec.material,
     },
@@ -250,6 +255,8 @@ const TEMPLATES: CustomizationTemplate[] = [
     sku: "BAG-KRAFT-M",
     size: [260, 120, 320],
     topFoldMm: 40,
+    glueFlapMm: 20,
+    bottomFoldMm: 72,
     material: "kraft-brown",
   }),
 ];

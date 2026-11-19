@@ -206,12 +206,18 @@ describe("design mock routes", () => {
     });
   });
 
-  it("GET /designs/:id/template answers the design's template in the BE's shape: active, no hasCartonSpec, the .glb when it has one", async () => {
+  it("GET /designs/:id/template answers the design's template in the BE's shape: active, designable, hasCartonSpec, the .glb when it has one", async () => {
     const { data } = await api.get<Record<string, unknown>>(
       `/designs/${MOCK_DESIGN_IDS.draft}/template`,
     );
-    expect(data).toMatchObject({ active: true, code: expect.any(String), sku: expect.any(String) });
-    expect(data).not.toHaveProperty("hasCartonSpec");
+    // BE-11: the template read says whether the variant takes a submission, and its carton spec.
+    expect(data).toMatchObject({
+      active: true,
+      designable: true,
+      hasCartonSpec: expect.any(Boolean),
+      code: expect.any(String),
+      sku: expect.any(String),
+    });
     expect(Object.values(data)).not.toContain(null); // a null is left out, never sent
 
     // CUP12 is the one variant with a `.glb`: its design's template carries it.

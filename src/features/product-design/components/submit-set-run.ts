@@ -355,9 +355,9 @@ export function createSetRun(deps: SetRunDeps) {
   }
 
   /**
-   * 409 `CONFLICT` / `DESIGN_NOT_DRAFT`. The BE names every design of the batch with that refusal
-   * (`details.designIds`, BE-4), but not why: it checks the version before the status, so a design
-   * sent, approved or returned elsewhere is a `CONFLICT` too. The named designs are read again and
+   * 409 `CONFLICT` / `DESIGN_NOT_DRAFT`. The BE names every refused design with its own code
+   * (`details.designs`, S-1), the answer's code being the most severe. The named designs are read
+   * again (a design sent, approved or returned elsewhere, or a stale one) and
    * each row says what the read shows (`whyRefused`). When the BE names none of the set (an older
    * BE, or a refusal met after its planning step), every design of the set is read instead.
    */

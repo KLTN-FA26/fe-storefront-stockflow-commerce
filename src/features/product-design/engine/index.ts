@@ -28,6 +28,18 @@ export {
   type SurfaceRegion,
   type SurfaceSet,
 } from "./surfaces";
+export {
+  BAG_SIDES,
+  bagSheet,
+  DEFAULT_BOTTOM_FOLD_SHARE,
+  DEFAULT_GLUE_FLAP_MM,
+  defaultBottomFoldMm,
+  onSheet,
+  sheetFlatSize,
+  sheetLines,
+  type BagSheet,
+  type BagSide,
+} from "./surfaces/bag-sheet";
 
 // Design document
 export {
@@ -169,6 +181,7 @@ export {
   buildPrintPdf,
   buildSheetPdf,
   PAGE_MARGIN_MM,
+  WHITE_LAYER_NAME,
   printGuides,
   type PrintBand,
   type PrintGuide,
@@ -184,7 +197,8 @@ export {
   type TextOutline,
   type VectorArt,
 } from "./export/pdf-canvas";
-export type { VectorPage } from "./export/vector-page";
+export type { AlphaMask, VectorPage } from "./export/vector-page";
+export { mergeVectorPages } from "./export/vector-merge";
 export { elementLayerName, printLayerNames } from "./export/print-layers";
 export {
   drawSlug,

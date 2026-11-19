@@ -148,22 +148,33 @@ describe("openReviewRound", () => {
     expect(batchRefusalOf(stale)).toBeNull(); // not a preflight refusal
     expect(refusedDesignIdsOf(stale)).toEqual([b]); // only b's version moved
 
-    // The BE checks the version before the status: a design sent elsewhere is a plain CONFLICT to
-    // a caller holding the version from before, and DESIGN_NOT_DRAFT only to one holding the new.
+    // The BE checks the status before the version (S-6): a design sent elsewhere is
+    // DESIGN_NOT_DRAFT whatever version the caller holds, the more severe answer of the two, and
+    // `details.designs` still names the stale one with its own code.
     await submitElsewhere(store, a);
     const behind = await openReviewRound(projectId, { designs }).catch((error: unknown) => error);
-    expect(behind).toMatchObject({ status: 409, code: "CONFLICT" });
-    expect(refusedDesignIdsOf(behind)).toEqual([a, b]); // both stale now: every one is named
+    expect(behind).toMatchObject({
+      status: 409,
+      code: "DESIGN_NOT_DRAFT",
+      details: {
+        designIds: [a],
+        designs: [
+          { designId: a, errorCode: "DESIGN_NOT_DRAFT" },
+          { designId: b, errorCode: "CONFLICT" },
+        ],
+      },
+    });
+    expect(batchRefusalOf(behind)).toBeNull();
+    expect(refusedDesignIdsOf(behind)).toEqual([a, b]); // every refused design is named
     const current = [await entryOf(a), await entryOf(b)];
     const notDraft = await openReviewRound(projectId, { designs: current }).catch(
       (error: unknown) => error,
     );
     expect(notDraft).toMatchObject({ status: 409, code: "DESIGN_NOT_DRAFT" });
-    expect(batchRefusalOf(notDraft)).toBeNull();
     expect(refusedDesignIdsOf(notDraft)).toEqual([a]);
   });
 
-  it("names the designs of the first refusal met only, as the BE does with a stale design and one no longer a draft", async () => {
+  it("answers the most severe code of a mixed batch and names every refused design in request order (S-1)", async () => {
     const { store } = backend;
     const { projectId, designIds } = await projectWith(store, "Ly A", "Ly B");
     const [a, b] = designIds as [string, string];
@@ -176,17 +187,26 @@ describe("openReviewRound", () => {
     await submitElsewhere(store, b);
     const currentB = { id: b, version: await readDesignVersion(b) };
 
-    const staleFirst = await openReviewRound(projectId, { designs: [staleA, currentB] }).catch(
-      (error: unknown) => error,
-    );
-    expect(staleFirst).toMatchObject({ status: 409, code: "CONFLICT" });
-    expect(refusedDesignIdsOf(staleFirst)).toEqual([a]);
-
-    const notDraftFirst = await openReviewRound(projectId, { designs: [currentB, staleA] }).catch(
-      (error: unknown) => error,
-    );
-    expect(notDraftFirst).toMatchObject({ status: 409, code: "DESIGN_NOT_DRAFT" });
-    expect(refusedDesignIdsOf(notDraftFirst)).toEqual([b]);
+    for (const [order, names] of [
+      [
+        [staleA, currentB],
+        [a, b],
+      ],
+      [
+        [currentB, staleA],
+        [b, a],
+      ],
+    ] as const) {
+      const refusal = await openReviewRound(projectId, { designs: [...order] }).catch(
+        (error: unknown) => error,
+      );
+      expect(refusal).toMatchObject({
+        status: 409,
+        code: "DESIGN_NOT_DRAFT",
+        details: { designIds: [b] },
+      });
+      expect(refusedDesignIdsOf(refusal)).toEqual(names);
+    }
   });
 
   it("names each design a 422 DESIGN_BATCH_PREFLIGHT_FAILED is about: its findings, in Vietnamese, or the files outdated", async () => {
@@ -262,6 +282,18 @@ describe("openReviewRound", () => {
     expect(refusedDesignIdsOf(withDetails(409, "CONFLICT", { designIds: "d-a" }))).toBeNull();
     expect(refusedDesignIdsOf(withDetails(409, "CONFLICT", { designIds: [1] }))).toBeNull();
     expect(refusedDesignIdsOf(new ApiError(409, "CONFLICT", "x"))).toBeNull();
+    // S-1: every refused design with its own code wins over the answer code's own list.
+    const designs = [
+      { designId: a, errorCode: "DESIGN_NOT_DRAFT" },
+      { designId: b, errorCode: "CONFLICT" },
+    ];
+    expect(
+      refusedDesignIdsOf(withDetails(409, "DESIGN_NOT_DRAFT", { designIds: [a], designs })),
+    ).toEqual([a, b]);
+    expect(goneDesignIdsOf(withDetails(404, "NOT_FOUND", { designs }))).toEqual([a, b]);
+    expect(
+      refusedDesignIdsOf(withDetails(409, "CONFLICT", { designs: [{ designId: a }] })),
+    ).toBeNull();
     // Only these two refusals name designs this way.
     expect(
       refusedDesignIdsOf(withDetails(409, "DESIGN_PROJECT_ARCHIVED", { designIds: [a] })),

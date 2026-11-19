@@ -1,8 +1,8 @@
 // The design API of spec 2026-11-09 §4.2 (/api/v1/designs/**; the /v1 prefix lives in API_URL),
 // the one module the feature imports it from. Each answer is parsed once, where it is read. Every
-// write sends the design's `version` (docs 12 BR-11): a stale one answers 409 CONFLICT (checked
-// before the status, so a design in another status answers it too, and 409 DESIGN_NOT_DRAFT only to
-// a caller holding its current version).
+// write sends the design's `version` (docs 12 BR-11): a stale one answers 409 CONFLICT. The status is
+// checked first (BE-15): a design that is no longer a draft answers 409 DESIGN_NOT_DRAFT whatever
+// version the caller holds.
 
 export {
   deleteLibraryItem,

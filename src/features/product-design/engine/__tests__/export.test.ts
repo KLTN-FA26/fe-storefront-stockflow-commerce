@@ -1,6 +1,7 @@
 // @vitest-environment node
 import {
   PDFArray,
+  PDFBool,
   PDFDict,
   PDFDocument,
   PDFHexString,
@@ -9,6 +10,7 @@ import {
   PDFRawStream,
   PDFString,
   decodePDFRawStream,
+  type PDFRef,
 } from "pdf-lib";
 import { describe, expect, it } from "vitest";
 
@@ -23,6 +25,7 @@ import {
   buildSheetPdf,
   PAGE_MARGIN_MM,
   printGuides,
+  WHITE_LAYER_NAME,
   type PrintJob,
   type PrintPage,
 } from "../export/print-pdf";
@@ -821,6 +824,54 @@ describe("print PDF/X-4", () => {
     expect(new TextDecoder().decode(decodePDFRawStream(first).decode())).toBe(vector.content);
   });
 
+  it("prints white ink under the art of clear stock: a White plate the art overprints", async () => {
+    const vector = {
+      content: "/OC /VL0 BDC\nq\n/VGs0 gs\n/VIm0 Do\nQ\nEMC",
+      images: [PNG_1x1],
+      alphas: [1],
+      layers: ["1 · Ảnh / logo"],
+      underlay: {
+        content: "q\n/VWg0 gs\n/VMk0 Do\nQ",
+        alphas: [1],
+        masks: [{ width: 2, height: 1, alpha: new Uint8Array([255, 0]) }],
+      },
+    };
+    const { pdf, raw } = await load([cupPage({ bands: [], vector, cut: false })]);
+    const page = pdf.getPage(0).node;
+    const sub = (key: string) => page.Resources()!.lookup(PDFName.of(key), PDFDict);
+    const mask = rawStream(sub("XObject").lookup(PDFName.of("VMk0")));
+    const space = mask.dict.lookup(PDFName.of("ColorSpace"), PDFArray);
+    expect(space.lookup(0)).toBe(PDFName.of("Separation"));
+    expect(space.lookup(1)).toBe(PDFName.of("White"));
+    const shape = rawStream(mask.dict.lookup(PDFName.of("SMask")));
+    expect([...decodePDFRawStream(shape).decode()]).toEqual([255, 0]);
+    // The art overprints, so the White plate is kept under it.
+    const art = sub("ExtGState").lookup(PDFName.of("VGs0"), PDFDict);
+    expect(art.get(PDFName.of("OP"))).toBe(PDFBool.True);
+    // Under the art: the underlay is the page's first content stream, on a layer that prints.
+    const contents = page.Contents() as PDFArray;
+    const first = rawStream(pdf.context.lookup(contents.get(0)));
+    expect(new TextDecoder().decode(decodePDFRawStream(first).decode())).toMatch(/^\/OC \/VWL BDC/);
+    const properties = pdf.catalog.lookup(PDFName.of("OCProperties"), PDFDict);
+    const layers = properties.lookup(PDFName.of("OCGs"), PDFArray).asArray();
+    const nameOf = (ref: unknown) =>
+      pdf.context
+        .lookup(ref as PDFRef, PDFDict)
+        .lookup(PDFName.of("Name"), PDFHexString)
+        .decodeText();
+    expect(nameOf(layers[0])).toBe(WHITE_LAYER_NAME);
+    const off = properties.lookup(PDFName.of("D"), PDFDict).lookup(PDFName.of("OFF"), PDFArray);
+    expect(off.asArray().map(nameOf)).not.toContain(WHITE_LAYER_NAME);
+    // Not die-cut: no CutContour line is drawn.
+    expect(raw).not.toContain("/CutContour CS");
+  });
+
+  it("makes the trim an edge guide where the piece is not die-cut", () => {
+    const kinds = (cut: boolean) => printGuides(cup.guides(), { cut }).map((g) => g.kind);
+    expect(kinds(true)).not.toContain("edge");
+    expect(kinds(false)).toContain("edge");
+  });
+
   it("refuses a page with neither bands nor vectors", async () => {
     await expect(load([cupPage({ bands: [] })])).rejects.toThrow(/needs its raster/);
   });
@@ -1020,6 +1071,26 @@ describe("print slug", () => {
       "Vùng in Thân ly (BODY) · Trang 1/1 · Thành phẩm 279,7 × 120,9 mm · Lề tràn 3 mm · Mép dán 8 mm · PDF/X-4, ISO Coated v2 (ECI)",
       `Bật lớp “${GUIDES_LAYER_NAME}” trong trình xem PDF để xem: nét đứt = vùng an toàn, nét liền = mép dán`,
     ]);
+  });
+
+  it("says a formed cup is printed on the cup, not die-cut, and whether it has its white ink", () => {
+    const area = {
+      code: "BODY" as const,
+      name: "Thân ly",
+      page: 1,
+      pages: 1,
+      trimMm: { width: 284.78, height: 148.64 },
+      bleedMm: 2,
+      guideKinds: ["edge" as const],
+      formed: true,
+    };
+    const [, withInk, legend] = printSlugLines(info, { ...area, underlay: true });
+    expect(withInk).toContain("Vùng in trải phẳng 284,8 × 148,6 mm");
+    expect(withInk).toContain("In lên ly đã thành hình, không bế · Lót trắng: lớp White");
+    expect(legend).toContain("chấm = mép vùng in");
+    expect(printSlugLines(info, { ...area, underlay: false })[1]).toContain(
+      "Chưa có lớp lót trắng",
+    );
   });
 
   it("leaves out the seam and the legend when the page has neither", () => {

@@ -113,12 +113,13 @@ const isNotListed = (error: unknown) =>
 
 /**
  * The print configuration of one design (F-23): the template it is drawn on (the current one for a
- * draft, the frozen one once approved, with its `.glb`), and from the customization what the
- * template read lacks:
- *  - `hasCartonSpec` of the listed variant; `false` when it is not listed (a submit cannot pass);
- *  - `variantStatus`: ACTIVE when listed, else BLOCKED (the preflight's "no longer takes designs");
- *  - `product.status`: PUBLISHED when the product answered, else UNPUBLISHED; `product.title` is the
- *    design's own `productName`.
+ * draft, the frozen one once approved, with its `.glb`) and whether a submission can pass, as the
+ * template read says (BE-11, the very rule the submission's preflight uses):
+ *  - `variantStatus`: ACTIVE when `designable`, else BLOCKED ("no longer takes designs");
+ *  - `hasCartonSpec` as the template read gives it.
+ * A backend from before BE-11 sends neither: the customization read stands in (ACTIVE when the
+ * variant is listed, its `hasCartonSpec`). `product.status` is PUBLISHED when the customization
+ * answered, else UNPUBLISHED; `product.title` is the design's own `productName`.
  */
 export async function getDesignPrintConfig(
   design: Pick<Design, "id" | "product" | "variant">,
@@ -133,10 +134,12 @@ export async function getDesignPrintConfig(
     }),
   ]);
   const listed = customization?.templates.find((candidate) => candidate.sku === design.variant.sku);
+  const dto = templateDtoSchema.parse(template.data);
+  const designable = dto.designable ?? listed !== undefined;
   return toPrintConfig({
-    template: templateDtoSchema.parse(template.data),
+    template: dto,
     product: { slug, title, status: customization ? "PUBLISHED" : "UNPUBLISHED" },
-    variantStatus: listed ? "ACTIVE" : "BLOCKED",
-    hasCartonSpec: listed?.hasCartonSpec ?? false,
+    variantStatus: designable ? "ACTIVE" : "BLOCKED",
+    hasCartonSpec: dto.hasCartonSpec ?? listed?.hasCartonSpec ?? false,
   });
 }

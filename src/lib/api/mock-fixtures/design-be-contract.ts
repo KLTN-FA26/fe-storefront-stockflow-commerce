@@ -260,7 +260,14 @@ export function customizationOf(
  */
 export const designTemplateOf = (config: PrintConfigRow | null): MockResult =>
   config
-    ? ok(omitNulls({ ...templateShape(config), active: true }))
+    ? ok(
+        omitNulls({
+          ...templateShape(config),
+          active: true,
+          designable: true,
+          hasCartonSpec: config.hasCartonSpec,
+        }),
+      )
     : fail(404, "PRINT_CONFIG_NOT_FOUND", "Customization template not found");
 
 /** The product a BE `productId` names: the mock catalogue's, or one a customization read named. */
