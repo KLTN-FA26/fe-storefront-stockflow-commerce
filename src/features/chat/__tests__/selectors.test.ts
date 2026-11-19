@@ -8,6 +8,7 @@ import {
 import {
   acceptsMessages,
   canTakeBack,
+  contextHref,
   newestSeqOf,
   quoteButtonsOf,
   timelineOf,
@@ -107,5 +108,17 @@ describe("conversation state", () => {
     expect(canTakeBack(own, new Date("2026-11-18T00:03:00Z"))).toBe(false);
     const agent = chatMessageDtoSchema.parse(messageJson({ sentAt: "2026-11-17T23:59:00Z" }));
     expect(canTakeBack(agent, now)).toBe(false);
+  });
+});
+
+describe("context links (WF-02 audit item 6)", () => {
+  it("a DRAFT quote or order is no link: the customer would get a 404", () => {
+    expect(contextHref({ kind: "QUOTE", refId: "q-1", status: "DRAFT" })).toBeNull();
+    expect(contextHref({ kind: "ORDER", refId: "o-1", status: "DRAFT" })).toBeNull();
+  });
+  it("a sent quote, or one whose status is unknown, opens its page", () => {
+    expect(contextHref({ kind: "QUOTE", refId: "q-1", status: "SENT" })).toContain("q-1");
+    expect(contextHref({ kind: "QUOTE", refId: "q-1" })).toContain("q-1");
+    expect(contextHref({ kind: "DESIGN", refId: "d-1", status: "DRAFT" })).toContain("d-1");
   });
 });
