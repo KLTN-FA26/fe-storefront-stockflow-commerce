@@ -54,8 +54,12 @@ export const PATTERNS: Array<{ name: string; test: (line: string) => boolean }> 
   { name: "a role display name", test: (l) => quoted(HUMAN_ROLES).test(l) },
   {
     name: "a role code",
-    // "CUSTOMER" is also a catalog price source (customer-specific price): not a role.
-    test: (l) => quoted(CODE_ROLES).test(l) && !/\bsource\b|PRICE_SOURCES/.test(l),
+    // "CUSTOMER" is also a catalog price source (customer-specific price), and in the chat (BE
+    // 16) the side of a message: who wrote it (`senderType`), who may see it (`visibility`), whose
+    // read marker it is (`side`). None of those is a role.
+    test: (l) =>
+      quoted(CODE_ROLES).test(l) &&
+      !/\bsource\b|PRICE_SOURCES|\bsenderType\b|\bvisibility\b|\bside\b/.test(l),
   },
 ];
 
@@ -180,6 +184,8 @@ describe("the scanner itself", () => {
     'source: "CUSTOMER",',
     'export const PRICE_SOURCES = ["CUSTOMER", "SEGMENT", "BASE"] as const;',
     'const mayCancel = useHasPermission("sales-orders:UPDATE");',
+    'const mine = message.senderType === "CUSTOMER";',
+    'visibility: "CUSTOMER",',
     "const label = user.roles.join(', ');",
   ])("lets %s through", (line) => expect(flagged(line)).toBe(false));
 

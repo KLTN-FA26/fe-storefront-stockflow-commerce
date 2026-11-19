@@ -22,6 +22,15 @@ import type {
   textStyleSchema,
 } from "./library-schemas";
 import type {
+  designQuoteRequestDtoSchema,
+  projectQuoteFormSchema,
+  projectQuoteRequestDtoSchema,
+  projectQuoteRequestInputSchema,
+  quoteRequestFormSchema,
+  quoteRequestInputSchema,
+  quoteRequestStatusSchema,
+} from "./quote-request-schemas";
+import type {
   cloneDesignInputSchema,
   cloneResultSchema,
   createDesignInputSchema,
@@ -105,7 +114,25 @@ export type SubmitDesignInput = {
   files: SubmissionFiles;
   /** The run's nonce (`newRunNonce`): part of every file's idempotency key. */
   runNonce: string;
+  /** "Gửi duyệt và yêu cầu báo giá" (docs 12 §4.8.24): absent for a plain submission. */
+  quoteRequest?: QuoteRequestInput | undefined;
 };
+
+export type QuoteRequestStatus = z.infer<typeof quoteRequestStatusSchema>;
+/** A design's quote request and the design as it is now (plan WF-02 §A.3). */
+export type DesignQuoteRequest = z.infer<typeof designQuoteRequestDtoSchema>;
+/** A project's quote request: one line per approved design, one delivery date. */
+export type ProjectQuoteRequest = z.infer<typeof projectQuoteRequestDtoSchema>;
+export type QuoteRequestInput = z.infer<typeof quoteRequestInputSchema>;
+export type ProjectQuoteRequestInput = z.infer<typeof projectQuoteRequestInputSchema>;
+/** What the quote fields hold while typed: text, turned into `QuoteRequestInput` on submit. */
+export type QuoteRequestFormValues = z.input<typeof quoteRequestFormSchema>;
+export type ProjectQuoteFormValues = z.input<typeof projectQuoteFormSchema>;
+/**
+ * The answer to an ask: 201 opened a new request (`created`), 200 changed the one still open —
+ * one open request per design or project (A-1, A-6).
+ */
+export type QuoteRequestOutcome<T> = { request: T; created: boolean };
 
 /**
  * A set sent for review: each design's files are uploaded as in a single submission, then one

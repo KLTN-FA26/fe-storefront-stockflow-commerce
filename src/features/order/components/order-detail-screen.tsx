@@ -22,6 +22,7 @@ import { OrderDeliveryCard, OrderLinesCard, OrderTotalCard } from "./order-detai
 import { OrderHelpCard } from "./order-help-card";
 import { OrderReorder } from "./order-reorder";
 import { OrderCompletionHint, deliveredAtOf } from "./order-completion-hint";
+import { OrderContractCard } from "./order-contract-card";
 import { OrderInvoicesCard } from "./order-invoices-card";
 import { OrderPaymentCard } from "./order-payment-card";
 import { OrderRefundCard } from "./order-refund-card";
@@ -117,6 +118,7 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
           <OrderStatusHero group={order.statusGroup} holdReason={order.holdReasonPublic} />
           <OrderCompletionHint order={order} />
           <OrderLinesCard order={order} />
+          <OrderContractCard orderId={order.orderId} />
           <OrderTimelineCard order={order} />
         </div>
         <div className="space-y-5 lg:sticky lg:top-[var(--sticky-top)] lg:-mx-1 lg:max-h-[calc(100dvh-var(--sticky-top)-1rem)] lg:self-start lg:overflow-y-auto lg:px-1">

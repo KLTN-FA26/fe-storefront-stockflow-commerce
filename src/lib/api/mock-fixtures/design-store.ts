@@ -28,7 +28,8 @@
  * simulation (`design-store-simulation.ts`), images and file reads (`design-store-files.ts`) and
  * the submission (`design-store-submission.ts`), the projects (`design-store-projects.ts`), their
  * library (`design-store-library.ts`) and review rounds (`design-store-rounds.ts`), and copies to
- * another variant (`design-store-clones.ts`), over what they share (`design-store-context.ts`);
+ * another variant (`design-store-clones.ts`), and the quote requests of designs and projects
+ * (`design-store-quotes.ts`, WF-02 D1), over what they share (`design-store-context.ts`);
  * rows and envelope are in `design-rows.ts`.
  *
  * The mock runs the product-design engine's own rules (document schema, checksum, the variant
@@ -56,6 +57,7 @@ import { createDesignFiles } from "./design-store-files";
 import { createLibraryOps } from "./design-store-library";
 import { createListOps } from "./design-store-list";
 import { createProjectOps } from "./design-store-projects";
+import { createQuoteOps } from "./design-store-quotes";
 import { createRoundOps } from "./design-store-rounds";
 import { createSimulationOps } from "./design-store-simulation";
 import { createDesignSubmission } from "./design-store-submission";
@@ -111,6 +113,7 @@ export async function createDesignMockStore(deps: DesignMockDeps) {
   const library = createLibraryOps(ctx);
   const clones = createCloneOps(ctx, uploads);
   const artifacts = createArtifactOps(ctx, uploads);
+  const quotes = createQuoteOps(ctx);
 
   return {
     /** false for memory storage: the simulation panel says data is lost on reload. */
@@ -159,6 +162,10 @@ export async function createDesignMockStore(deps: DesignMockDeps) {
     openReviewRound: operation(rounds.openRound),
     submitBatch: operation(rounds.submitBatch),
     recordSetPreflightFailure: operation(rounds.recordFailures),
+    requestQuote: operation(quotes.requestDesign),
+    designQuoteRequests: operation(quotes.listDesign),
+    requestProjectQuote: operation(quotes.requestProject),
+    projectQuoteRequests: operation(quotes.listProject),
     simulateApprove: operation(simulation.simulateApprove),
     simulateReturn: operation(simulation.simulateReturn),
     simulateApproveRound: operation(simulation.simulateApproveRound),
