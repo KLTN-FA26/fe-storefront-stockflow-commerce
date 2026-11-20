@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/design-seed";
+import { settle } from "@/test/fake-backend";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { addDesignToProject, archiveProject, createProject } from "../api";
@@ -187,6 +188,42 @@ describe("ProjectScreen", () => {
     // Page 1 holds the 20 designs of the other project; the free ones are on page 2.
     expect(await within(dialog).findByText(n.approved, undefined, WAIT)).toBeInTheDocument();
     expect(within(dialog).queryByText("Không có bản nào để thêm")).toBeNull();
+    // No page counter over rows it hides, and no way back to a page it would skip again.
+    expect(within(dialog).queryByRole("button", { name: "Trang trước" })).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: "Trang sau" })).toBeNull();
+  });
+
+  it("reads another page only on 'Xem thêm', and through a page with nothing to add", async () => {
+    const { store } = backend;
+    const taken = await createProject({ name: "Đã có chỗ" });
+    const target = await createProject({ name: "Trống" });
+    const n = await names();
+    // Newest first: 20 free designs; before them 20 in another project; then the seeded ones.
+    for (let i = 0; i < 20; i += 1) {
+      settle(
+        await store.create({ ...STUDIO_PRODUCTS.cup, name: `Đã có ${i}`, projectId: taken.id }),
+      );
+    }
+    for (let i = 0; i < 20; i += 1) {
+      settle(await store.create({ ...STUDIO_PRODUCTS.cup, name: `Tự do ${i}` }));
+    }
+    show(target.id);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Thêm bản sẵn có" }, WAIT));
+    const dialog = await screen.findByRole("dialog", { name: "Thêm bản sẵn có" });
+    expect(
+      await within(dialog).findAllByRole("button", { name: /^Thêm Tự do/ }, WAIT),
+    ).toHaveLength(20);
+    expect(within(dialog).queryByText(n.approved)).toBeNull(); // on a page not read yet
+
+    // The second page is all in the other project: one click reads past it, to the seeded designs.
+    await userEvent.click(within(dialog).getByRole("button", { name: "Xem thêm" }));
+    expect(await within(dialog).findByText(n.approved, undefined, WAIT)).toBeInTheDocument();
+    // Nothing more to read: the button is gone, and the 20 first rows are still there.
+    await waitFor(() =>
+      expect(within(dialog).queryByRole("button", { name: "Xem thêm" })).toBeNull(),
+    );
+    expect(within(dialog).getAllByRole("button", { name: /^Thêm Tự do/ })).toHaveLength(20);
   });
 
   it("starts a new design in the project: the new-design flow carries the project id", async () => {

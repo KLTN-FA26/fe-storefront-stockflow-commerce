@@ -29,8 +29,9 @@ const blockedReason = (gate: Gate, chosen: number) => {
  */
 export function SubmitSetBar({ projectId, chosen, gate }: SubmitSetBarProps) {
   const reason = blockedReason(gate, chosen.length);
-  // The same test as the gate: a tablet in landscape is wide enough and still told.
-  const needsComputer = useDeviceFit() !== "desktop";
+  // The same test as the gate: a tablet in landscape is wide enough and still told. Not while the
+  // fit is unknown (the server render): the sentence would be in the HTML and then vanish on a computer.
+  const needsComputer = useDeviceFit() === "unsupported";
   const reasonId = "submit-set-reason";
   return (
     <div className="bg-bg-surface border-border-default sticky bottom-0 z-30 -mx-4 mt-6 border-t px-4 py-3 shadow-[var(--sh-md)] sm:mx-0 sm:rounded-[var(--r-lg)] sm:border">

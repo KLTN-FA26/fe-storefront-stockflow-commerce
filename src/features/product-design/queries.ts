@@ -1,6 +1,7 @@
 import {
   keepPreviousData,
   queryOptions,
+  useInfiniteQuery,
   skipToken,
   useQueries,
   useQuery,
@@ -40,6 +41,8 @@ export const designKeys = {
   all: ["designs"] as const,
   lists: () => [...designKeys.all, "list"] as const,
   list: (p: DesignListParams) => [...designKeys.lists(), p] as const,
+  /** The same list read page after page on demand (`useDesignPages`), whatever the status. */
+  pages: (size: number) => [...designKeys.lists(), "pages", size] as const,
   draftCount: () => [...designKeys.all, "draft-count"] as const,
   details: () => [...designKeys.all, "detail"] as const,
   detail: (id: string) => [...designKeys.details(), id] as const,
@@ -76,6 +79,23 @@ export function useDesignList(params: DesignListParams) {
     queryKey: designKeys.list(params),
     queryFn: ({ signal }) => listDesigns(params, signal),
     placeholderData: keepPreviousData, // no flash between pages or tabs
+    retry: retryTransient,
+    ...QUERY_TIMES.list,
+  });
+}
+
+/**
+ * The customer's designs read a page at a time, the next page on request (`fetchNextPage`). For a
+ * screen that filters what it shows (the box that adds designs to a project): the BE cannot filter
+ * by project (BE-15), so a page may hold nothing the screen offers, and the screen reads on instead
+ * of showing a page counter that counts rows it hides.
+ */
+export function useDesignPages(size: number) {
+  return useInfiniteQuery({
+    queryKey: designKeys.pages(size),
+    initialPageParam: 1,
+    queryFn: ({ pageParam, signal }) => listDesigns({ page: pageParam, size }, signal),
+    getNextPageParam: (last) => (last.hasNext ? last.page + 1 : undefined),
     retry: retryTransient,
     ...QUERY_TIMES.list,
   });

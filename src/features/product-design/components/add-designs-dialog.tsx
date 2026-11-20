@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import { Alert, EmptyState } from "@/components/shared";
 import { Button } from "@/components/ui/button";
@@ -14,13 +14,13 @@ import {
 
 import { describeDesignError } from "../errors";
 import { useAddDesignToProject } from "../mutations";
-import { useDesignList } from "../queries";
-import type { Design } from "../types";
+import { useDesignPages } from "../queries";
+import type { Design, DesignPage } from "../types";
 import { DesignListSkeleton, DesignLoadError } from "./design-list-states";
 import { DesignStatusBadge } from "./design-status-badge";
 import { isReturned } from "../lifecycle";
 
-/** Designs read a page at a time; the ones that already belong to a project are left out of it. */
+/** Designs read a page at a time, on request; the ones that already belong to a project are left out. */
 const PAGE_SIZE = 20;
 
 /** docs 12 BR-17: a design joins one project at most, and a deleted one joins none. */
@@ -60,17 +60,46 @@ function DesignRow({
   );
 }
 
+/** The designs of the pages read so far that can join a project, each once, newest first. */
+function joinableOf(pages: readonly DesignPage[]): Design[] {
+  const seen = new Set<string>();
+  return pages
+    .flatMap((page) => page.items)
+    .filter((design) => isJoinable(design) && !seen.has(design.id) && seen.add(design.id));
+}
+
 function AddDesignsList({ projectId }: { projectId: string }) {
-  const [page, setPage] = useState(1);
-  const list = useDesignList({ page, size: PAGE_SIZE });
+  const list = useDesignPages(PAGE_SIZE);
   const add = useAddDesignToProject(projectId);
-  const { data, isPending, error, isFetching, isPlaceholderData, refetch } = list;
-  const rows = (data?.items ?? []).filter(isJoinable);
-  // A page with nothing to offer reads on: the empty state is for when every page has been read.
-  // While the next page loads, the hook still answers the previous one (placeholder): that is
-  // "reading" too, not an empty list.
-  const reading = data !== undefined && rows.length === 0 && data.hasNext;
-  if (reading && !isPlaceholderData) setPage(page + 1); // adjusted while rendering: no wasted paint
+  const { data, isPending, error, isFetching, isFetchingNextPage, hasNextPage, refetch } = list;
+  const { fetchNextPage, isFetchNextPageError } = list;
+  const rows = joinableOf(data?.pages ?? []);
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+
+  /** One more page, and on while the pages read hold nothing new to add (never an empty-looking page). */
+  const loadMore = useCallback(async () => {
+    let known = rows.length;
+    while (alive.current) {
+      const result = await fetchNextPage();
+      if (result.isError || !result.hasNextPage) return;
+      const now = joinableOf(result.data?.pages ?? []).length;
+      if (now > known) return;
+      known = now;
+    }
+  }, [fetchNextPage, rows.length]);
+
+  // Nothing to offer on the pages read yet and more to read: read on before saying there is none.
+  const reading = data !== undefined && rows.length === 0 && hasNextPage && !isFetchNextPageError;
+  useEffect(() => {
+    if (reading && !isFetchingNextPage) void fetchNextPage();
+  }, [reading, isFetchingNextPage, fetchNextPage]);
+
   if (isPending || reading) return <DesignListSkeleton />;
   if (error && !data) {
     return <DesignLoadError error={error} onRetry={() => void refetch()} retrying={isFetching} />;
@@ -96,30 +125,17 @@ function AddDesignsList({ projectId }: { projectId: string }) {
           ))}
         </ul>
       )}
-      {data && data.totalPages > 1 ? (
-        <div className="flex items-center justify-between gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11 rounded-[var(--r-md)] px-4"
-            disabled={!data.hasPrevious || isFetching}
-            onClick={() => setPage(page - 1)}
-          >
-            Trang trước
-          </Button>
-          <span className="text-ink-secondary text-sm tabular-nums">
-            {data.page}/{data.totalPages}
-          </span>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11 rounded-[var(--r-md)] px-4"
-            disabled={!data.hasNext || isFetching}
-            onClick={() => setPage(page + 1)}
-          >
-            Trang sau
-          </Button>
-        </div>
+      {isFetchNextPageError ? <Alert tone="danger">{describeDesignError(list.error)}</Alert> : null}
+      {hasNextPage ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11 w-full rounded-[var(--r-md)] px-4"
+          disabled={isFetchingNextPage}
+          onClick={() => void loadMore()}
+        >
+          {isFetchingNextPage ? "Đang tải…" : isFetchNextPageError ? "Thử lại" : "Xem thêm"}
+        </Button>
       ) : null}
     </div>
   );
