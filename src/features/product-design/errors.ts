@@ -237,10 +237,19 @@ function namedDesignIdsOf(error: unknown): string[] | null {
 }
 
 /**
- * The designs a 404 to a round names as gone or out of the project, should the BE say which in
- * `details.designIds` (d47ed4ae sends no `details` with it: null then).
+ * The designs a 404 to a round names as gone or out of the project. A 404 answer is the batch's
+ * heaviest refusal: `details.designs` lists every refused design, the ones with another code
+ * (`DESIGN_NOT_DRAFT`, `CONFLICT`) included, so only those coded `NOT_FOUND` are gone. Without
+ * `designs`, `details.designIds` are the answer's own code, so all NOT_FOUND. Null when it names
+ * none (d47ed4ae sends no `details`).
  */
 export function goneDesignIdsOf(error: unknown): string[] | null {
   if (!(error instanceof ApiError) || error.status !== 404) return null;
-  return namedDesignIdsOf(error);
+  const parsed = batchDesignIdsDetailsSchema.safeParse(error.details);
+  if (!parsed.success) return null;
+  const { designs, designIds } = parsed.data;
+  const ids = designs
+    ? designs.filter((design) => design.errorCode === "NOT_FOUND").map((design) => design.designId)
+    : (designIds ?? []);
+  return ids.length > 0 ? ids : null;
 }

@@ -37,7 +37,8 @@ export const designSchema = z.object({
   id: beId(),
   name: z.string().min(1).max(NAME_MAX),
   status: designStatusSchema,
-  product: z.object({ slug: code, title: z.string().min(1) }),
+  /** The slug is null once the product is gone (BE leaves `productSlug` out): no link, no catalogue read. */
+  product: z.object({ slug: code.nullable(), title: z.string().min(1) }),
   variant: z.object({ sku: code, label: z.string().min(1) }),
   /** The optimistic-lock token every write echoes back (docs 12 BR-11). */
   version,

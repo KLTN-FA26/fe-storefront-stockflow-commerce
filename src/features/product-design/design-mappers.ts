@@ -33,7 +33,10 @@ export function toDesign(dto: DesignDraftDto, project: ProjectRefDto | null): De
     id: dto.id,
     name: dto.name,
     status: dto.status,
-    product: { slug: dto.productSlug, title: dto.productName?.trim() || dto.productSlug },
+    product: {
+      slug: dto.productSlug ?? null,
+      title: dto.productName?.trim() || dto.productSlug || dto.sku,
+    },
     variant: { sku: dto.sku, label: dto.variantName?.trim() || dto.sku },
     version: dto.version,
     projectId: dto.projectId ?? null,

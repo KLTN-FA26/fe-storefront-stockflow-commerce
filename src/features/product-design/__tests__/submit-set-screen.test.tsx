@@ -934,6 +934,32 @@ describe("Gửi duyệt cả bộ: refusals the run cannot act on", () => {
     // The set is read again (fresh), which is how a design that is gone would be named.
     await waitFor(() => expect(readsOfB()).toBeGreaterThan(readsBefore));
   });
+
+  it("marks only the designs coded NOT_FOUND on a 404 that also lists a design refused with another code", async () => {
+    const { store } = backend;
+    const projectId = await newProject(store);
+    const a = await draftOf(store, projectId, "Ly A");
+    const b = await draftOf(store, projectId, "Ly B");
+    refuseRound(
+      () =>
+        new ApiError(404, "NOT_FOUND", "Not found", undefined, undefined, {
+          designIds: [a],
+          designs: [
+            { designId: a, errorCode: "NOT_FOUND" },
+            { designId: b, errorCode: "DESIGN_NOT_DRAFT" },
+          ],
+        }),
+    );
+    const user = userEvent.setup();
+
+    open(projectId, [a, b], renderers().factory);
+    await user.click(await screen.findByRole("button", { name: "Gửi duyệt 2 bản" }, SLOW));
+
+    expect(
+      await within(await rowOf("Ly A")).findByText("Bản này không còn thuộc dự án.", {}, SLOW),
+    ).toBeInTheDocument();
+    expect(within(await rowOf("Ly B")).queryByText("Bản này không còn thuộc dự án.")).toBeNull();
+  });
 });
 
 describe("Gửi duyệt cả bộ: when there is no set to send", () => {

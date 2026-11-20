@@ -255,7 +255,8 @@ export function customizationOf(
 
 /**
  * `GET /designs/{id}/template`: the template a design is drawn on, in the shape of one customization
- * template (no `hasCartonSpec`) plus `active`. The mock keeps no frozen copy: an approved design
+ * template plus `active`, and BE-11's `designable` (the variant still takes designs: false for
+ * `MOCK_BLOCKED_SKU`, so the studio shows `VARIANT_UNAVAILABLE`) and `hasCartonSpec`. The mock keeps no frozen copy: an approved design
  * reads the template it was made on, which the fixtures never change.
  */
 export const designTemplateOf = (config: PrintConfigRow | null): MockResult =>
@@ -264,7 +265,7 @@ export const designTemplateOf = (config: PrintConfigRow | null): MockResult =>
         omitNulls({
           ...templateShape(config),
           active: true,
-          designable: true,
+          designable: config.variantStatus === "ACTIVE",
           hasCartonSpec: config.hasCartonSpec,
         }),
       )

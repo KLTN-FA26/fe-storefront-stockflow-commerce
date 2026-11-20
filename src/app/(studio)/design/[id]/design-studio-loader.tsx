@@ -18,9 +18,8 @@ const DesignStudio = dynamic(
 );
 
 /** The catalogue photo of the design's variant, beside the flat preview. */
-const productPhoto = (design: Design) => (
-  <ProductPhoto slug={design.product.slug} sku={design.variant.sku} />
-);
+const productPhoto = (design: Design) =>
+  design.product.slug ? <ProductPhoto slug={design.product.slug} sku={design.variant.sku} /> : null;
 
 /** `ssr: false` is only allowed in a client component, so the page renders the studio through this. */
 export function DesignStudioLoader({ designId, fonts }: { designId: string; fonts: FontRegistry }) {

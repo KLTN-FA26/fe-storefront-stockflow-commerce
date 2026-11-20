@@ -235,7 +235,7 @@ export function designPrintConfigQuery(design: Pick<Design, "id" | "product" | "
 /** The print configuration a design is drawn on, once the design is read; `null` when it has none. */
 export function useDesignPrintConfig(design: Design | undefined) {
   const query = designPrintConfigQuery(
-    design ?? { id: "", product: { slug: "", title: "" }, variant: { sku: "", label: "" } },
+    design ?? { id: "", product: { slug: null, title: "" }, variant: { sku: "", label: "" } },
   );
   return useQuery({ ...query, enabled: design !== undefined });
 }

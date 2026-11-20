@@ -129,6 +129,18 @@ describe("a design as the BE sends it", () => {
     refuses(designDraftDto({ version: -1 }));
   });
 
+  it("keeps a design whose product is gone (no productSlug) and the rest of its page, with no product link", () => {
+    const page = designDraftPageDtoSchema.parse(
+      pageDto([designDraftDto({ id: ids.design }), designDraftDto({ productSlug: undefined })]),
+    );
+    expect(page.items).toHaveLength(2);
+    expect(toDesign(page.items[1]!, null).product).toEqual({
+      slug: null,
+      title: "Ly giấy 2 lớp 12oz", // productName, kept once the product is gone
+    });
+    expect(toDesign(page.items[0]!, null).product.slug).toEqual(expect.any(String));
+  });
+
   it("parses a page whose items carry no null, 0-based", () => {
     const page = designDraftPageDtoSchema.parse(
       pageDto([designDraftDto()], { page: 2, hasPrevious: true }),

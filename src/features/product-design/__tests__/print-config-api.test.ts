@@ -4,8 +4,11 @@ import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error";
 
 import { getDesignPrintConfig, getPrintConfig } from "../api";
+import { preflightVariant } from "../components/studio/use-preflight";
+import { variantIssues } from "../engine/preflight/rules/variant";
 import { templateDtoSchema } from "../print-config-dtos";
 import { toPrintConfig } from "../print-config-mappers";
+import { isPrintConfigUsable } from "../selectors";
 import { customizationDto, design, ids, templateDto } from "./fixtures";
 
 // The BE has no print-config object: a variant's comes from the product's customization, a
@@ -200,6 +203,49 @@ describe("a design's print configuration, from its own template (F-23)", () => {
       variantStatus: "ACTIVE",
       hasCartonSpec: false,
     });
+  });
+
+  it("an approved product not yet listed still takes a submission: designable on the template read decides, not the listing (BE-11)", async () => {
+    answers(new ApiError(404, "NOT_FOUND", "x"), {
+      ...templateDto(),
+      active: true,
+      designable: true,
+      hasCartonSpec: true,
+    });
+    const config = await getDesignPrintConfig(draft);
+
+    expect(config).toMatchObject({ variantStatus: "ACTIVE", product: { status: "APPROVED" } });
+    expect(isPrintConfigUsable(config)).toBe(true);
+    expect(variantIssues(preflightVariant(config))).toEqual([]);
+  });
+
+  it("designable false blocks the submission with its sentence, even when the product is listed", async () => {
+    answers(customizationDto(), {
+      ...templateDto(),
+      active: true,
+      designable: false,
+      hasCartonSpec: true,
+    });
+    const config = await getDesignPrintConfig(draft);
+
+    expect(isPrintConfigUsable(config)).toBe(false);
+    expect(variantIssues(preflightVariant(config))).toEqual([
+      expect.objectContaining({
+        ruleId: "VARIANT_UNAVAILABLE",
+        message: "Quy cách này hiện không còn nhận thiết kế.",
+      }),
+    ]);
+  });
+
+  it("reads no customization for a design whose product is gone (no slug), and still decides by designable", async () => {
+    const get = answers(customizationDto(), { ...templateDto(), active: true, designable: false });
+    const gone = design({ product: { slug: null, title: "Ly" } });
+
+    expect(await getDesignPrintConfig(gone)).toMatchObject({
+      variantStatus: "BLOCKED",
+      product: { slug: null, status: "UNPUBLISHED" },
+    });
+    expect(get.mock.calls.map(([url]) => String(url))).toEqual([`/designs/${ids.design}/template`]);
   });
 
   it("marks the product UNPUBLISHED when the customization read answers 404 or 409", async () => {

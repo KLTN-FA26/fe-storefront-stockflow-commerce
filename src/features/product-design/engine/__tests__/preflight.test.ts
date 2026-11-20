@@ -195,9 +195,9 @@ describe("OUTSIDE_PRINT_AREA (BR-02)", () => {
     expect(ruleIds(runPreflight(input(doc)).issues)).toEqual(["OUTSIDE_PRINT_AREA"]);
   });
 
-  it("element past print area + bleed fails OUTSIDE_PRINT_AREA; one inside the bleed only (text) fails CROSSES_SAFE_AREA, not OUTSIDE", () => {
-    // Inside the left bleed strip (u = -1.5 → flat x ≈ 1.5; trim starts at 3): nothing of it is in
-    // the trim, yet it is inside the bleed.
+  it("element past print area + bleed fails OUTSIDE_PRINT_AREA; an element wholly in the bleed strip (image, or text anchored there) fails OUTSIDE too", () => {
+    // Inside the left bleed strip (u = -1.5 → flat x ≈ 1.5; trim starts at 3): nothing of an image
+    // there is in the trim, so it covers none of it (BE overlapsTrim) and is cut off.
     const speck = onFront(
       imageEl("speck", {
         widthMm: 2,
@@ -207,7 +207,7 @@ describe("OUTSIDE_PRINT_AREA (BR-02)", () => {
         placement: { u: -1.5, v: 140, rotationDeg: 0, scale: 1 },
       }),
     );
-    expect(ruleIds(runPreflight(input(speck)).issues)).toEqual(["CROSSES_SAFE_AREA"]);
+    expect(ruleIds(runPreflight(input(speck)).issues)).toEqual(["OUTSIDE_PRINT_AREA"]);
 
     const word = (u: number) =>
       onFront(
@@ -218,7 +218,7 @@ describe("OUTSIDE_PRINT_AREA (BR-02)", () => {
         }),
       );
     const inBleed = runPreflight(input(word(-1.5)));
-    expect(ruleIds(inBleed.issues)).toEqual(["CROSSES_SAFE_AREA"]);
+    expect(ruleIds(inBleed.issues)).toEqual(["OUTSIDE_PRINT_AREA"]);
     expect(inBleed.result).toBe("Fail");
     expect(ruleIds(runPreflight(input(word(-10))).issues)).toEqual(["OUTSIDE_PRINT_AREA"]);
   });
@@ -485,14 +485,25 @@ describe("FONT_NOT_ALLOWED (BR-DSG-001)", () => {
     elementId,
   });
 
-  it('FONT_NOT_ALLOWED fails only when fontStatus is "error"; a font outside allowedFontCodes passes', () => {
+  it("FONT_NOT_ALLOWED fails a font outside a non-empty allowedFontCodes (BE LayoutPreflight)", () => {
     const doc = onFront(textEl("txt", { fontCode: "lobster" }));
-    expect(runPreflight(input(doc, { allowedFontCodes: ["be-vietnam-pro"] })).issues).toEqual([]);
+    const outside = runPreflight(input(doc, { allowedFontCodes: ["be-vietnam-pro"] }));
+    expect(only(outside.issues, "FONT_NOT_ALLOWED")).toEqual([
+      {
+        ...issue("FRONT", "txt"),
+        message: "Phông chữ này không có trong danh sách của mẫu in, hãy đổi phông khác.",
+      },
+    ]);
+    expect(outside.result).toBe("Fail");
+    expect(runPreflight(input(doc, { allowedFontCodes: ["lobster"] })).issues).toEqual([]);
     expect(runPreflight(input(doc, { allowedFontCodes: null })).issues).toEqual([]);
     expect(runPreflight(input(doc, { allowedFontCodes: [] })).issues).toEqual([]);
+  });
 
+  it('FONT_NOT_ALLOWED also fails an allowed font whose fontStatus is "error"', () => {
+    const doc = onFront(textEl("txt", { fontCode: "lobster" }));
     const failed = runPreflight(
-      input(doc, { allowedFontCodes: ["be-vietnam-pro"] }, { fontStatus: { lobster: "error" } }),
+      input(doc, { allowedFontCodes: ["lobster"] }, { fontStatus: { lobster: "error" } }),
     );
     expect(only(failed.issues, "FONT_NOT_ALLOWED")).toEqual([issue("FRONT", "txt")]);
     expect(failed.result).toBe("Fail");

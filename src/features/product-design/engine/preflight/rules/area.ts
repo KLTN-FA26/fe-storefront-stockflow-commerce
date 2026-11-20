@@ -1,6 +1,8 @@
 import type { DesignElement } from "../../document/schema";
 import { containmentPoints, elementOutline } from "../../geometry/element";
+import { alongEdges, pointInPolygon } from "../../geometry/polygon";
 import type { PointMm } from "../../geometry/types";
+import type { PrintSurface } from "../../surfaces/types";
 import type { PreflightIssue, SurfaceScope } from "../types";
 
 // BR-02 (docs 12 §6): content must not leave the print area + bleed. CROSSES_SAFE_AREA and ON_SEAM
@@ -26,7 +28,23 @@ function pulledIn(outline: PointMm[]): PointMm[] {
 }
 
 /**
- * Where an element sits on its surface. `OUTSIDE_PRINT_AREA` when any of it passes the bleed. For
+ * Whether the element covers any of the trim: an edge runs through it, or it encloses the surface's
+ * centre (BE `LayoutPreflight.overlapsTrim`). A full-bleed background has every corner in the bleed
+ * strip yet covers the whole trim, so the corners alone are not enough.
+ */
+function overlapsTrim(surface: PrintSurface, outline: PointMm[]): boolean {
+  const centre = surface.toFlat(
+    (surface.uRange[0] + surface.uRange[1]) / 2,
+    (surface.vRange[0] + surface.vRange[1]) / 2,
+  );
+  return (
+    alongEdges(outline).some((p) => surface.contains(p, "trim")) || pointInPolygon(centre, outline)
+  );
+}
+
+/**
+ * Where an element sits on its surface. `OUTSIDE_PRINT_AREA` when any of it passes the bleed or it
+ * covers none of the trim (BE `LayoutPreflight.areaIssue`). For
  * text and images (never a drawing): otherwise `CROSSES_SAFE_AREA` when any of it is outside the
  * safe line (between safe line and trim, or in the bleed, where it is cut off), and `ON_SEAM` when
  * any of it is on the cup's glue flap. `CROSSES_SAFE_AREA` is not reported for an element that
@@ -41,7 +59,7 @@ export function areaIssues(scope: SurfaceScope, el: DesignElement): PreflightIss
   const at = { surfaceCode: code, elementId: el.id };
 
   const issues: PreflightIssue[] = [];
-  if (points.some((p) => !surface.contains(p, "bleed"))) {
+  if (points.some((p) => !surface.contains(p, "bleed")) || !overlapsTrim(surface, outline)) {
     issues.push({
       ruleId: "OUTSIDE_PRINT_AREA",
       level: "fail",

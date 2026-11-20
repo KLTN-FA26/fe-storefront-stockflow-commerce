@@ -40,7 +40,18 @@ const at = (scope: SurfaceScope, el: DesignElement) => ({
 function fontIssues(scope: SurfaceScope, el: DesignElement): PreflightIssue[] {
   if (el.type !== "text") return [];
 
-  // Only a font that did not load fails: the allow-list is later scope (docs 01 §4.10 step 6).
+  // BE `LayoutPreflight`: a code outside a non-empty allow-list fails (null or empty = any font).
+  const allowed = scope.input.template.allowedFontCodes;
+  if (allowed && allowed.length > 0 && !allowed.includes(el.fontCode)) {
+    return [
+      {
+        ruleId: "FONT_NOT_ALLOWED",
+        level: "fail",
+        message: "Phông chữ này không có trong danh sách của mẫu in, hãy đổi phông khác.",
+        ...at(scope, el),
+      },
+    ];
+  }
   if (scope.input.fontStatus[el.fontCode] !== "error") return [];
   return [
     {

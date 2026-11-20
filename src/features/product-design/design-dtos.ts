@@ -20,9 +20,9 @@ export const designDraftDtoSchema = z.object({
   status: designStatusSchema,
   /** The optimistic-lock token every write echoes back (BR-11). */
   version,
-  // ASSUMPTION: a customer's own design always has its product and SKU; the BE leaves them out only
-  // for a design staff started, which is never in a customer's list. A miss is a contract bug.
-  productSlug: z.string().min(1),
+  // The BE writes `productSlug` null (omitted) once the product is gone (`DesignWorkflowService`):
+  // one such design must not fail the parse of the whole page. A customer's own design always has a SKU.
+  productSlug: z.string().min(1).nullish(),
   sku: z.string().min(1),
   /** The product's name, kept once it is no longer published; the SKU stands in for a missing variant name. */
   productName: z.string().nullish(),
