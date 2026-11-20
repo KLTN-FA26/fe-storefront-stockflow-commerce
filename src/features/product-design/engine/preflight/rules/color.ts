@@ -3,7 +3,8 @@ import type { CustomizationTemplate } from "../../template/schema";
 import type { PreflightIssue, SurfaceScope } from "../types";
 
 // WHITE_ON_KRAFT and TOO_MANY_COLORS: docs 12 §3 (print colour count and limits), no numbered BR.
-// CMYK_CONVERSION: docs 12 §6 (screen colours can differ from the printed result; the source of that notice is `.claude/rules/mode-b-storefront.md`, Module 12).
+// CMYK_CONVERSION: docs 12 §6 (screen colours can differ from the printed result).
+// The notice itself is sourced from `.claude/rules/mode-b-storefront.md` (Module 12).
 
 /** WCAG relative luminance above which a colour counts as white on kraft paper. */
 const NEAR_WHITE_LUMINANCE = 0.92;

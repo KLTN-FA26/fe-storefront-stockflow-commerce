@@ -923,7 +923,7 @@ describe("TOO_MANY_COLORS", () => {
   });
 });
 
-describe("CMYK_CONVERSION (BR-07)", () => {
+describe("CMYK_CONVERSION", () => {
   it("adds a single document-level info issue for a CMYK template", () => {
     const report = runPreflight(input(cleanDoc, { colorMode: "CMYK" }));
     expect(report.issues).toEqual([
