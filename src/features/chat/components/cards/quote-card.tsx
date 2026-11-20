@@ -140,12 +140,14 @@ export function QuoteCard({ conversationId, messageId, card, payload, canAct }: 
         </p>
       ) : null}
       {payload.convertedOrderId ? (
-        <Link
-          href={STORE_ROUTES.account.orders.detail(payload.convertedOrderId)}
-          className={CARD_LINK}
-        >
-          Đã lên đơn {payload.convertedOrderNumber ?? ""}
-        </Link>
+        // Text only, until the BE hides a draft order from this card (audit item 22): the order is
+        // still a draft when the card is drawn, and the customer's order page answers 404 for it.
+        // The contract card links to the order once the contract is sent.
+        <p className="text-ink-secondary">
+          Đã lên đơn{" "}
+          <span className="font-mono tabular-nums">{payload.convertedOrderNumber ?? ""}</span>. Sale
+          sẽ gửi hợp đồng để ký trong cuộc trò chuyện này; xem đơn từ thẻ hợp đồng.
+        </p>
       ) : null}
       {action.error && dialog === null ? (
         <p role="alert" className="text-danger">

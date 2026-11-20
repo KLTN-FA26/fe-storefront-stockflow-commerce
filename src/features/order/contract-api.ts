@@ -41,8 +41,17 @@ export async function getMyOrderContract(
   }
 }
 
-/** GET /orders/me/{orderId}/contract/document — a short-lived link: the signed file, else as sent. */
-export async function getMyOrderContractDocument(orderId: string): Promise<ContractDocument> {
-  const { data } = await api.get<unknown>(`${base(orderId)}/document`);
+/**
+ * GET /orders/me/{orderId}/contract/document — a short-lived link: the signed file, else as sent.
+ * `copy: "sent"` asks for the PDF as sent even once the contract is signed.
+ */
+export async function getMyOrderContractDocument(
+  orderId: string,
+  copy?: "sent",
+): Promise<ContractDocument> {
+  const { data } = await api.get<unknown>(
+    `${base(orderId)}/document`,
+    copy ? { params: { copy } } : {},
+  );
   return contractDocumentDtoSchema.parse(data);
 }

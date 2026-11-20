@@ -108,11 +108,24 @@ const STATUS_LABEL: Record<MockQuoteStatus, string> = {
   CONVERTED: "Đã tạo đơn",
 };
 
-/** BE Quote.statusAt. */
-export const mockQuoteStatusAt = (quote: MockQuote, now: Date): MockQuoteStatus =>
-  quote.status === "SENT" && now.getTime() >= Date.parse(quote.validUntil)
+/**
+ * A sent quote Sales reopened to revise (BE PR #388): stored DRAFT with a `sentAt`. The customer
+ * still sees it, as CHANGES_REQUESTED with the figures of the last sent revision.
+ */
+export const mockIsRevising = (quote: MockQuote): boolean =>
+  quote.status === "DRAFT" && quote.sentAt !== undefined;
+
+/** The revision the customer was last offered: the last row that entered SENT. */
+const lastSentRevision = (quote: MockQuote): number =>
+  quote.history.findLast((row) => row.toStatus === "SENT")?.revision ?? quote.revision;
+
+/** BE Quote.statusAt, as the customer reads it. */
+export const mockQuoteStatusAt = (quote: MockQuote, now: Date): MockQuoteStatus => {
+  if (mockIsRevising(quote)) return "CHANGES_REQUESTED";
+  return quote.status === "SENT" && now.getTime() >= Date.parse(quote.validUntil)
     ? "EXPIRED"
     : quote.status;
+};
 
 /** BE QuoteLine.priceFor: the break with the highest start not above `skuCartons`; null below MOQ. */
 export function mockPriceFor(line: MockQuoteLine, skuCartons: number): number | null {
@@ -216,7 +229,7 @@ export function mockQuoteView(quote: MockQuote, now: Date) {
     quoteNumber: quote.quoteNumber,
     customerId: quote.customerId,
     status,
-    revision: quote.revision,
+    revision: mockIsRevising(quote) ? lastSentRevision(quote) : quote.revision,
     validUntil: quote.validUntil,
     ...(quote.terms ? { terms: quote.terms } : {}),
     ...(quote.requestedDeliveryDate ? { requestedDeliveryDate: quote.requestedDeliveryDate } : {}),
@@ -245,7 +258,7 @@ const toRow = (quote: MockQuote, now: Date) => ({
   quoteNumber: quote.quoteNumber,
   customerId: quote.customerId,
   status: mockQuoteStatusAt(quote, now),
-  revision: quote.revision,
+  revision: mockIsRevising(quote) ? lastSentRevision(quote) : quote.revision,
   validUntil: quote.validUntil,
   ...(quote.sentAt ? { sentAt: quote.sentAt } : {}),
   ...(quote.convertedOrder ? { convertedOrderId: quote.convertedOrder.orderId } : {}),
@@ -293,7 +306,7 @@ export function createMockQuoteBook(
       (q) =>
         q.id === quoteId.toLowerCase() &&
         q.customerId === customerId &&
-        q.status !== "DRAFT" &&
+        (q.status !== "DRAFT" || mockIsRevising(q)) &&
         !(q.status === "CANCELLED" && !q.sentAt),
     );
   const notFound = (quoteId: string) =>
@@ -312,6 +325,16 @@ export function createMockQuoteBook(
           409,
           "INVALID_QUOTE_TRANSITION",
           `Báo giá ${quote.quoteNumber} đã bị huỷ: ${quote.cancellationReason ?? ""}`,
+        ),
+      };
+    }
+    // BE lockToAnswer checks the revision in progress before the version (refusal.quote.beingRevised).
+    if (mockIsRevising(quote)) {
+      return {
+        refusal: fail(
+          409,
+          "INVALID_QUOTE_TRANSITION",
+          `Báo giá ${quote.quoteNumber} đang được Sale sửa theo yêu cầu của bạn: chưa thể trả lời, hãy chờ bản sửa mới.`,
         ),
       };
     }
@@ -592,6 +615,8 @@ const VAT = { taxClass: "STANDARD", taxRate: 8 };
 export const MOCK_QUOTE_SEED_IDS = {
   ...MOCK_QUOTE_IDS,
   draft: "5a1e0000-0000-4000-8000-000000000005",
+  /** Sent, asked to change, then reopened by Sale: the customer reads it as CHANGES_REQUESTED. */
+  revising: "5a1e0000-0000-4000-8000-000000000008",
   foreign: "5a1e0000-0000-4000-8000-000000000006",
 };
 
@@ -793,6 +818,44 @@ export function mockQuoteSeed(
       fees: [],
       history: [{ revision: 1, toStatus: "DRAFT", changedAt: at(0) }],
       version: 1,
+    },
+    {
+      // Reopened by Sale after the customer asked for changes (BE PR #388): stored DRAFT with a
+      // `sentAt`, revision 2; the customer reads it as CHANGES_REQUESTED, revision 1, validity of the
+      // sent revision, and the history carries the DRAFT rows the page must hide.
+      id: ids.revising,
+      quoteNumber: "QT-20261110-0092",
+      customerId,
+      status: "DRAFT",
+      revision: 2,
+      ...sent(-8, 14),
+      respondedAt: at(-5),
+      customerFeedback: "Xin thêm mốc giá cho 200 thùng.",
+      lines: [
+        {
+          id: lineId(8),
+          lineNo: 1,
+          sku: "LY-GIAY-DEMO-12OZ-XANH",
+          cartons: 40,
+          unitsPerCarton: 1000,
+          tiers: CUP_TIERS,
+          ...VAT,
+        },
+      ],
+      fees: [],
+      history: [
+        { revision: 1, toStatus: "DRAFT", changedAt: at(-9) },
+        { revision: 1, fromStatus: "DRAFT", toStatus: "SENT", changedAt: at(-8) },
+        {
+          revision: 1,
+          fromStatus: "SENT",
+          toStatus: "CHANGES_REQUESTED",
+          reason: "Xin thêm mốc giá cho 200 thùng.",
+          changedAt: at(-5),
+        },
+        { revision: 2, fromStatus: "CHANGES_REQUESTED", toStatus: "DRAFT", changedAt: at(-1) },
+      ],
+      version: 5,
     },
     {
       // Another customer's quote: 404 to this one.

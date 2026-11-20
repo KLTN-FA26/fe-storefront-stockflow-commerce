@@ -5,7 +5,7 @@ import { formatDate, formatDateTime } from "@/lib/format/date";
 import { formatMoney } from "@/lib/format/money";
 
 import { QUOTE_STATUS_META } from "../lifecycle";
-import { shownTotals } from "../selectors";
+import { customerHistory, shownTotals } from "../selectors";
 import type { Quote, QuoteStatus } from "../types";
 import { Fact, QUOTE_CARD } from "./quote-lines";
 
@@ -59,13 +59,20 @@ export function QuoteInfoCard({ quote, status }: { quote: Quote; status: QuoteSt
         Thông tin báo giá
       </h2>
       <dl className="grid grid-cols-2 gap-3">
-        <Fact label="Hiệu lực đến">{formatDateTime(quote.validUntil)}</Fact>
+        {status === "CHANGES_REQUESTED" ? null : (
+          <Fact label="Hiệu lực đến">{formatDateTime(quote.validUntil)}</Fact>
+        )}
         <Fact label="Ngày giao yêu cầu">
           {quote.requestedDeliveryDate ? formatDate(quote.requestedDeliveryDate) : "Chưa có"}
         </Fact>
         <Fact label="Ngày gửi">{quote.sentAt ? formatDate(quote.sentAt) : "—"}</Fact>
         <Fact label="Bản sửa">Số {quote.revision}</Fact>
       </dl>
+      {status === "CHANGES_REQUESTED" ? (
+        <p className="text-ink-secondary text-sm">
+          Sale đang soạn bản sửa theo yêu cầu của bạn. Hạn hiệu lực sẽ có trên bản sửa mới.
+        </p>
+      ) : null}
       {quote.terms ? (
         <div>
           <h3 className="text-ink-tertiary text-xs">Điều khoản</h3>
@@ -97,8 +104,9 @@ export function QuoteInfoCard({ quote, status }: { quote: Quote; status: QuoteSt
 }
 
 /** Status changes, oldest first, in the customer's words (BE history rows). */
-export function QuoteHistory({ quote }: { quote: Pick<Quote, "history"> }) {
-  if (quote.history.length === 0) return null;
+export function QuoteHistory({ quote }: { quote: Pick<Quote, "history" | "revision"> }) {
+  const history = customerHistory(quote.history, quote.revision);
+  if (history.length === 0) return null;
   return (
     <section className={QUOTE_CARD} aria-labelledby="quote-history-heading">
       <h2
@@ -108,16 +116,15 @@ export function QuoteHistory({ quote }: { quote: Pick<Quote, "history"> }) {
         Lịch sử
       </h2>
       <ol className="space-y-2 text-sm">
-        {quote.history.map((entry) => {
+        {history.map((entry) => {
           const meta = QUOTE_STATUS_META[entry.toStatus];
           return (
-            <li
-              key={`${entry.revision}-${entry.toStatus}-${entry.changedAt}`}
-              className="flex justify-between gap-3"
-            >
+            <li key={`${entry.toStatus}-${entry.changedAt}`} className="flex justify-between gap-3">
               <span className="text-ink-primary">
                 {meta.label}
-                <span className="text-ink-tertiary"> · bản sửa {entry.revision}</span>
+                {entry.revision == null ? null : (
+                  <span className="text-ink-tertiary"> · bản sửa {entry.revision}</span>
+                )}
               </span>
               <span className="text-ink-secondary shrink-0 tabular-nums">
                 {formatDateTime(entry.changedAt)}

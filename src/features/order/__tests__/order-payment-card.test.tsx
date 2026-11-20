@@ -109,3 +109,47 @@ describe("OrderPaymentCard", () => {
     expect(await screen.findByRole("list", { name: "Các đợt thanh toán" })).toBeInTheDocument();
   });
 });
+
+describe("OrderPaymentCard on a cancelled order (audit item 26)", () => {
+  const cancelled = () => orderWith({ status: "CANCELLED", statusGroup: "CANCELLED" });
+  const cancelledPlan = (over: Record<string, unknown> = {}) =>
+    beOrderInstallments({
+      paymentStatus: undefined,
+      total: 0,
+      paid: 10_000_000,
+      outstanding: 0,
+      ...over,
+    });
+
+  it("đơn huỷ, mọi đợt huỷ: hiện Bạn đã thanh toán 10.000.000 ₫, không hiện Tổng theo hợp đồng / Còn phải thanh toán", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ data: cancelledPlan() });
+    renderWithProviders(<OrderPaymentCard order={cancelled()} />);
+
+    expect(await screen.findByText("Bạn đã thanh toán")).toBeInTheDocument();
+    expect(screen.getByText("Bạn đã thanh toán").nextElementSibling).toHaveTextContent(
+      /10\.000\.000/,
+    );
+    expect(screen.queryByText("Tổng theo hợp đồng")).not.toBeInTheDocument();
+    expect(screen.queryByText("Còn phải thanh toán")).not.toBeInTheDocument();
+    expect(screen.getByText(/Khoản hoàn \(nếu có\) ở mục Hoàn tiền/)).toBeInTheDocument();
+  });
+
+  it("đơn huỷ còn phí huỷ chưa trả: vẫn hiện Còn phải thanh toán", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({
+      data: beOrderInstallments({ paymentStatus: "PARTIALLY_PAID", outstanding: 500_000 }),
+    });
+    renderWithProviders(<OrderPaymentCard order={cancelled()} />);
+
+    expect(await screen.findByText("Còn phải thanh toán")).toBeInTheDocument();
+    expect(screen.getByText("Tổng theo hợp đồng")).toBeInTheDocument();
+  });
+
+  it("đơn đang chạy: giữ ba dòng", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ data: beOrderInstallments() });
+    renderWithProviders(<OrderPaymentCard order={orderWith()} />);
+
+    expect(await screen.findByText("Tổng theo hợp đồng")).toBeInTheDocument();
+    expect(screen.getByText("Đã thanh toán", { selector: "dt" })).toBeInTheDocument();
+    expect(screen.getByText("Còn phải thanh toán")).toBeInTheDocument();
+  });
+});

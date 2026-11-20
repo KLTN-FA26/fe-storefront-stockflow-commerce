@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { quoteDtoSchema } from "../schemas";
-import { previewAcceptance, shownLine, tierFor, vatOf } from "../selectors";
+import { customerHistory, previewAcceptance, shownLine, tierFor, vatOf } from "../selectors";
 import { beSentQuote, beTwoLineQuote, cupLineId, lidLineId } from "./fixtures";
 
 const quote = quoteDtoSchema.parse(beSentQuote);
@@ -94,5 +94,40 @@ describe("price helpers", () => {
       unitPrice: 1050,
       lineTotal: 105_000_000,
     });
+  });
+});
+
+describe("customerHistory", () => {
+  const row = (revision: number, fromStatus: string | undefined, toStatus: string) => ({
+    revision,
+    ...(fromStatus ? { fromStatus } : {}),
+    toStatus,
+    changedAt: "2099-11-20T02:00:00Z",
+  });
+
+  it("customerHistory bỏ dòng Nháp (lập báo giá và Sale mở lại)", () => {
+    const history = quoteDtoSchema.parse({
+      ...beSentQuote,
+      history: [
+        row(1, undefined, "DRAFT"),
+        row(1, "DRAFT", "SENT"),
+        row(1, "SENT", "CHANGES_REQUESTED"),
+        row(2, "CHANGES_REQUESTED", "DRAFT"),
+      ],
+    }).history;
+    expect(customerHistory(history, 1).map((entry) => entry.toStatus)).toEqual([
+      "SENT",
+      "CHANGES_REQUESTED",
+    ]);
+  });
+
+  it("Sale bỏ bản sửa: dòng Đã huỷ không ghi bản sửa 2", () => {
+    const history = quoteDtoSchema.parse({
+      ...beSentQuote,
+      history: [row(1, "DRAFT", "SENT"), row(2, "DRAFT", "CANCELLED")],
+    }).history;
+    const [sent, cancelled] = customerHistory(history, 1);
+    expect(sent?.revision).toBe(1);
+    expect(cancelled).toMatchObject({ toStatus: "CANCELLED", revision: null });
   });
 });

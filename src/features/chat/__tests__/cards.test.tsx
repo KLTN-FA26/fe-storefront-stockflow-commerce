@@ -79,6 +79,25 @@ describe("TC-F13-02: card buttons are the customer's only", () => {
     expect(screen.getByText("Hết hiệu lực")).toBeInTheDocument();
   });
 
+  it("thẻ QUOTE đã lên đơn hiện số đơn nhưng không có link tới trang đơn", () => {
+    renderCard(
+      cardMessageJson(
+        "QUOTE",
+        quotePayload({
+          status: "CONVERTED",
+          convertedOrderId: "0c0e0000-0000-4000-8000-000000000001",
+          convertedOrderNumber: "SO-20260910-900001",
+        }),
+        { state: "ACTED" },
+      ),
+    );
+    expect(screen.getByText("SO-20260910-900001")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Đã lên đơn/ })).not.toBeInTheDocument();
+    expect(
+      document.querySelector('a[href*="/account/orders/0c0e0000-0000-4000-8000-000000000001"]'),
+    ).toBeNull();
+  });
+
   it("a SUPERSEDED quote card says it was replaced and offers nothing", () => {
     renderCard(cardMessageJson("QUOTE", quotePayload(), { state: "SUPERSEDED" }));
     expect(screen.getByText("Đã thay bằng bản mới")).toBeInTheDocument();

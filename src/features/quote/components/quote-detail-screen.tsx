@@ -13,7 +13,7 @@ import { PERM } from "@/lib/auth/permission-codes";
 import { useHasPermission } from "@/lib/auth/my-permissions";
 
 import { describeQuoteError, isQuoteNotFound } from "../errors";
-import { allowedQuoteActions, effectiveStatus, QUOTE_STATUS_META } from "../lifecycle";
+import { allowedQuoteActions, effectiveStatus, quoteStatusHint } from "../lifecycle";
 import { useAcceptQuote, useRequestQuoteChanges } from "../mutations";
 import { useQuote } from "../queries";
 import { isValidQuoteId } from "../schemas";
@@ -85,7 +85,7 @@ export function QuoteDetailScreen({ quoteId: rawQuoteId }: { quoteId: string }) 
               </h1>
               <QuoteStatusBadge status={status} />
             </div>
-            <p className="text-ink-secondary text-sm">{QUOTE_STATUS_META[status].hint}</p>
+            <p className="text-ink-secondary text-sm">{quoteStatusHint(status, quote)}</p>
           </div>
           <div className="flex flex-wrap items-start gap-2">
             <QuoteDocumentButton quoteId={quote.id} quoteNumber={quote.quoteNumber} />

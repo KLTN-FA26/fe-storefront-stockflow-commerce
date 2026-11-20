@@ -143,11 +143,54 @@ describe("OrderContractCard (WF-02 D3)", () => {
     renderWithProviders(<OrderContractCard orderId={orderId} />);
 
     expect(await screen.findByText("Đã ký")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Tải hợp đồng HD-20260910-900001-1" }));
+    await user.click(screen.getByRole("button", { name: "Tải bản đã ký HD-20260910-900001-1" }));
     await waitFor(() =>
       expect(tab.location.replace).toHaveBeenCalledWith("https://files.example/contracts/HD.pdf"),
     );
     expect(tab.opener).toBeNull();
+  });
+});
+
+describe("OrderContractCard downloads (audit item 27)", () => {
+  const link = { url: "https://files.example/c.pdf", expiresAt: "2026-11-18T10:05:00Z" };
+  const setup = (contract: Record<string, unknown>) => {
+    const get = vi.spyOn(api, "get").mockImplementation(async (url: string) => ({
+      data: url.endsWith("/document") ? link : contract,
+    }));
+    vi.spyOn(window, "open").mockReturnValue({
+      opener: {},
+      location: { replace: vi.fn() },
+      close: vi.fn(),
+    } as unknown as Window);
+    return get;
+  };
+  const documentCalls = (get: ReturnType<typeof setup>) =>
+    get.mock.calls.filter(([url]) => String(url).endsWith("/document"));
+
+  it("hợp đồng đã ký có thêm nút Tải bản gửi ký gọi document?copy=sent", async () => {
+    const get = setup({ ...beContract, status: "SIGNED", signedOn: "2026-11-18" });
+    const user = userEvent.setup();
+    renderWithProviders(<OrderContractCard orderId={orderId} />);
+
+    await user.click(await screen.findByRole("button", { name: /Tải bản gửi ký/ }));
+    await waitFor(() => expect(documentCalls(get)).toHaveLength(1));
+    expect(documentCalls(get)[0]).toEqual([
+      `/orders/me/${orderId}/contract/document`,
+      { params: { copy: "sent" } },
+    ]);
+
+    await user.click(screen.getByRole("button", { name: /Tải bản đã ký/ }));
+    await waitFor(() => expect(documentCalls(get)).toHaveLength(2));
+    expect(documentCalls(get)[1]?.[0]).toBe(`/orders/me/${orderId}/contract/document`);
+    expect(documentCalls(get)[1]?.[1] ?? {}).toEqual({});
+  });
+
+  it("hợp đồng chưa ký chỉ có Tải hợp đồng", async () => {
+    setup(beContract);
+    renderWithProviders(<OrderContractCard orderId={orderId} />);
+
+    expect(await screen.findByRole("button", { name: /Tải hợp đồng/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Tải bản/ })).not.toBeInTheDocument();
   });
 });
 

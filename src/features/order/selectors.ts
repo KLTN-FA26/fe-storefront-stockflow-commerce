@@ -1,3 +1,5 @@
+import type { OrderInstallments } from "@/lib/installments";
+
 import type { DeliveryMode, Order, OrderTimelineEntry } from "./types";
 
 /**
@@ -78,4 +80,29 @@ export function invoiceConditions(
     );
   }
   return notes;
+}
+
+export interface PaymentSummary {
+  /** The sums shown, in order: Tổng theo hợp đồng / Đã thanh toán / Còn phải thanh toán, or fewer. */
+  rows: readonly ("total" | "paid" | "outstanding")[];
+  /** A cancelled order whose installments are all cancelled: what was paid is what the refund is about. */
+  cancelledAndSettled: boolean;
+}
+
+/**
+ * Which sums the payment card shows. When the order is CANCELLED and every installment is cancelled
+ * (the BE then sends no `paymentStatus`) the contract total and the amount still due are both 0 and
+ * mean nothing: only what the customer paid is shown, beside the refund. A cancellation fee still
+ * owed keeps "Còn phải thanh toán" (`outstanding > 0`, or an order whose payment status is known).
+ */
+export function paymentSummary(
+  order: Pick<Order, "status">,
+  plan: Pick<OrderInstallments, "paymentStatus" | "outstanding">,
+): PaymentSummary {
+  const allCancelled = order.status === "CANCELLED" && plan.paymentStatus == null;
+  if (!allCancelled) return { rows: ["total", "paid", "outstanding"], cancelledAndSettled: false };
+  return {
+    rows: plan.outstanding > 0 ? ["paid", "outstanding"] : ["paid"],
+    cancelledAndSettled: true,
+  };
 }

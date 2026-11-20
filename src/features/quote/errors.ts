@@ -10,9 +10,8 @@ const QUOTE_MESSAGE_BY_CODE: Record<string, string> = {
   NOT_FOUND: "Không tìm thấy báo giá, hoặc báo giá không thuộc tài khoản của bạn.",
   CUSTOMER_NOT_FOUND: "Tài khoản chưa được liên kết với hồ sơ khách hàng.",
   OPTIMISTIC_LOCK: "Dữ liệu vừa thay đổi, đã tải lại. Hãy xem lại báo giá rồi thử lại.",
-  // The PDF arrives as a blob, so its refusals carry only the HTTP status.
-  HTTP_404: "Không tìm thấy báo giá, hoặc báo giá không thuộc tài khoản của bạn.",
-  HTTP_503: "Chưa tạo được file PDF lúc này. Vui lòng thử lại sau.",
+  // The PDF's 503: describeBeRefusal never shows the BE's own text for a 5xx.
+  SELLER_PROFILE_UNAVAILABLE: "Chưa tạo được file PDF lúc này. Vui lòng thử lại sau.",
 };
 
 export function describeQuoteError(error: unknown): string {
