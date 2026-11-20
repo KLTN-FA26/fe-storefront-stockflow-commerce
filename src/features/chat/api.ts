@@ -19,6 +19,7 @@ import {
   quotePricingDtoSchema,
   rateInputSchema,
   requestChangesInputSchema,
+  requestReprintInputSchema,
   sendTextInputSchema,
   chatTextSchema,
 } from "./schemas";
@@ -161,6 +162,12 @@ export function cardActionBody(body: CardActionBody): Record<string, unknown> {
     case "REQUEST_CHANGES": {
       const { version, note } = requestChangesInputSchema.parse(body);
       return { action: "REQUEST_CHANGES", version, note };
+    }
+    case "APPROVE":
+      return { action: "APPROVE" };
+    case "REQUEST_REPRINT": {
+      const { note } = requestReprintInputSchema.parse(body);
+      return { action: "REQUEST_REPRINT", note };
     }
     case "RATE": {
       const { score, comment } = rateInputSchema.parse(body);

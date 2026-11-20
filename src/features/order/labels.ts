@@ -3,7 +3,6 @@ import type { SemanticTone } from "@/lib/domain/types";
 import type {
   CancellationReasonCode,
   CancellationRequestStatus,
-  DeliveryFailureReason,
   DeliveryMode,
   DeliveryState,
   HoldReason,
@@ -22,17 +21,6 @@ export const PRODUCTION_STATE_LABEL: Record<ProductionState, string> = {
   DONE: "Đã sản xuất xong",
   CANCELLED: "Đã huỷ sản xuất",
   UNKNOWN: "Đang cập nhật tiến độ",
-};
-
-/** Why staff recorded a delivery as failed (BE DeliveryFailureReason), in the customer's words. */
-export const DELIVERY_FAILURE_REASON_LABEL: Record<DeliveryFailureReason, string> = {
-  CUSTOMER_ABSENT: "Không gặp được người nhận",
-  REFUSED: "Người nhận từ chối nhận hàng",
-  WRONG_ADDRESS: "Địa chỉ giao hàng không đúng",
-  LOST: "Hàng thất lạc khi vận chuyển",
-  DAMAGED: "Hàng hư hỏng khi vận chuyển",
-  OTHER: "Lý do khác",
-  UNKNOWN: "Đang cập nhật lý do",
 };
 
 export const DELIVERY_STATE_LABEL: Record<DeliveryState, string> = {

@@ -104,6 +104,23 @@ const MILESTONE: Record<string, string> = {
 };
 export const milestoneLabel = (milestone: string) => MILESTONE[milestone] ?? "Theo hợp đồng";
 
+/** ORDER_STATUS card: what happened to a shipment (BE shipmentChanged). */
+const SHIPMENT_STATUS: Record<string, StatusMeta> = {
+  HANDED_OVER: { label: "Đã bàn giao cho đơn vị vận chuyển", tone: "info" },
+  DELIVERED: { label: "Đã giao", tone: "positive" },
+  DELIVERY_FAILED: { label: "Giao không thành công", tone: "danger" },
+};
+export const shipmentStatusMeta = (status: string) =>
+  meta(SHIPMENT_STATUS, status, "Cập nhật giao hàng");
+
+/** SAMPLE_APPROVAL card: the round of print samples waiting for the customer's answer. */
+const SAMPLE_STATUS: Record<string, StatusMeta> = {
+  WAITING: { label: "Chờ bạn duyệt", tone: "warning" },
+  APPROVED: { label: "Đã duyệt", tone: "positive" },
+  REPRINT_REQUESTED: { label: "Đã yêu cầu in lại", tone: "info" },
+};
+export const sampleStatusMeta = (status: string) => meta(SAMPLE_STATUS, status, "Mẫu in");
+
 /** A card that no longer waits for anyone (plan B.7): what replaces its own status badge. */
 const CLOSED_CARD_STATE: Record<string, StatusMeta> = {
   SUPERSEDED: { label: "Đã thay bằng bản mới", tone: "muted" },
