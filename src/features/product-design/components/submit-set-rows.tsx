@@ -37,9 +37,9 @@ function statusOf(row: RowState): Status {
     case "drawing":
       return { label: DRAW_LABELS[row.step], ...busy };
     case "uploading":
-      return { label: "Đang tải lên…", ...busy };
+      return { label: "Đang chuẩn bị…", ...busy };
     case "uploaded":
-      return { label: "Đã tải lên", icon: CircleCheck, tone: "text-positive" };
+      return { label: "Sẵn sàng gửi", icon: CircleCheck, tone: "text-positive" };
     case "stopped":
       return { label: "Đã dừng", icon: CircleAlert, tone: "text-danger" };
   }

@@ -104,9 +104,19 @@ export function describeFileRefusal(
   return null;
 }
 
+/**
+ * 429 `RATE_LIMITED` with the BE's `Retry-After`: how long to wait, in minutes (rounded up, at least
+ * one). Null for any other error, and for a 429 that names no wait.
+ */
+function describeWait(error: unknown): string | null {
+  if (!hasErrorCode(error, "RATE_LIMITED") || error.retryAfterSeconds === undefined) return null;
+  const minutes = Math.max(1, Math.ceil(error.retryAfterSeconds / 60));
+  return `Bạn đã tải lên nhiều lần; thử lại sau ${minutes} phút.`;
+}
+
 /** Customer-facing text for any failure reaching the design UI. */
 export function describeDesignError(error: unknown): string {
-  return describeApiError(error, MESSAGE_BY_CODE);
+  return describeWait(error) ?? describeApiError(error, MESSAGE_BY_CODE);
 }
 
 const PROJECT_MESSAGE_BY_CODE: Record<string, string> = {
@@ -117,7 +127,7 @@ const PROJECT_MESSAGE_BY_CODE: Record<string, string> = {
 
 /** Customer-facing text for a failure on a project screen: the generic codes name the project. */
 export function describeProjectError(error: unknown): string {
-  return describeApiError(error, PROJECT_MESSAGE_BY_CODE);
+  return describeWait(error) ?? describeApiError(error, PROJECT_MESSAGE_BY_CODE);
 }
 
 /** A write sent a stale version (409): the editor stops and offers a reload. */

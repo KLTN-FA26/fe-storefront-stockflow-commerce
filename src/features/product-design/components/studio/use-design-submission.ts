@@ -48,10 +48,11 @@ class TemplateChangedError extends ExportError {
 export type SubmitStep = "idle" | "checking" | BundleStep | "upload" | "done" | "error";
 
 /**
- * What a run has made, kept so a retry resumes at the upload without drawing again. `runNonce` is
+ * What a run has made, kept so a retry does not repeat it. The check comes first; the files are
+ * drawn only when the BE says some are outdated (`bundle` stays null until then). `runNonce` is
  * part of every file's idempotency key: the run keeps it for its retries, and a redraw replaces it.
  */
-type Work = Checked & { bundle: SubmissionBundle; runNonce: string };
+type Work = Checked & { bundle: SubmissionBundle | null; runNonce: string | null };
 
 type State = {
   step: SubmitStep;
@@ -64,8 +65,9 @@ const IDLE: State = { step: "idle", fraction: 0, issues: null };
 
 /**
  * "Gửi duyệt" (spec §6.4): saves what is pending, runs the preflight on exactly what is stored,
- * records a client-side Fail (no files are made), else draws the bundle, checks the stored
- * document is still the drawn one and submits. A failed upload is retried with the same bundle.
+ * records a client-side Fail (no files are made), else asks the BE to take the design at once; only
+ * when it says files are outdated is the bundle drawn and the named files uploaded (`sendDesign`).
+ * A failed upload is retried with the same bundle.
  * `check()` is the first half alone, for the dialog to confirm before anything is drawn. The check
  * and the drawing are the runner's (`run-submission.ts`), run on the open design.
  */
@@ -100,17 +102,14 @@ export function useDesignSubmission(design: Design) {
     return null;
   }
 
-  /** Flush, preflight, and (when it passes) draw the bundle. Null when the preflight failed. */
+  /** Flush and preflight; nothing is drawn yet. Null when the preflight failed. */
   async function prepare(): Promise<Work | null> {
     const checked = await inspect();
     if (!checked) return null;
     // Saved, yet not what is stored (another tab or device saved since this one loaded it), or
-    // already edited again: nothing is drawn.
+    // already edited again: nothing is sent.
     await assertStoredIs(ctx, checked);
-    const bundle = await drawBundle(subject, checked, (step, fraction) =>
-      setState({ step, fraction, issues: null }),
-    );
-    return { ...checked, bundle, runNonce: newRunNonce() };
+    return { ...checked, bundle: null, runNonce: null };
   }
 
   async function execute() {
@@ -124,10 +123,10 @@ export function useDesignSubmission(design: Design) {
       await assertStoredIs(ctx, w); // the stored layout is still the drawn one
       const submitted = await sendDesign(design.id, {
         documentChecksum: w.checksum,
-        files: w.bundle,
-        runNonce: w.runNonce,
+        files: w.bundle ?? undefined,
+        runNonce: w.runNonce ?? undefined,
         quoteRequest: quote.current ?? undefined,
-        // The BE named files to draw again. The design's template is read afresh first, so a
+        // The BE named files to draw (none sent yet, or outdated). The design's template is read afresh first, so a
         // template edited on the server is drawn with its new values: when it differs from the
         // studio's, a session of its own is loaded on it (as a set's designs are); otherwise the
         // same checked document is drawn again here.
@@ -157,6 +156,9 @@ export function useDesignSubmission(design: Design) {
           } else {
             w.bundle = await drawBundle(subject, w, progress);
           }
+          // Drawn while this tab edited or another saved? Then these files are not the stored
+          // layout's: nothing is uploaded (the next run checks and draws the new one).
+          await assertStoredIs(ctx, w);
           // New files, new upload: another nonce, so a bundle equal to an earlier one is not a replay.
           w.runNonce = newRunNonce();
           setState({ step: "upload", fraction: 0, issues: null });

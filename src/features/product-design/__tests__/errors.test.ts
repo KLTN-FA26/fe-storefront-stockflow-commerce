@@ -18,6 +18,27 @@ import {
 const apiError = (status: number, code: string, details?: Record<string, unknown>) =>
   new ApiError(status, code, "dev text", undefined, undefined, details);
 
+describe("describeDesignError: 429 with Retry-After", () => {
+  const limited = (retryAfterSeconds?: number) =>
+    new ApiError(429, "RATE_LIMITED", "x", undefined, undefined, undefined, retryAfterSeconds);
+
+  it("429 with Retry-After 600 reads 'thử lại sau 10 phút'", () => {
+    expect(describeDesignError(limited(600))).toBe(
+      "Bạn đã tải lên nhiều lần; thử lại sau 10 phút.",
+    );
+    expect(describeProjectError(limited(600))).toContain("thử lại sau 10 phút");
+  });
+
+  it("rounds up to whole minutes, at least one", () => {
+    expect(describeDesignError(limited(61))).toContain("sau 2 phút");
+    expect(describeDesignError(limited(1))).toContain("sau 1 phút");
+  });
+
+  it("keeps the general sentence when the 429 names no wait", () => {
+    expect(describeDesignError(limited())).toContain("Vui lòng thử lại sau ít phút");
+  });
+});
+
 describe("describeDesignError", () => {
   // The BE's own codes (F-2): each reads as the old code it replaces.
   it.each([

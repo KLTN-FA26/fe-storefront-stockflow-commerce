@@ -53,8 +53,8 @@ export type SetState = {
 export const ANNOUNCE = {
   checking: (name: string, at: number, of: number) => `Đang kiểm tra ${name} (${at}/${of})`,
   checked: (name: string, passed: boolean) => `${name}: ${passed ? "đạt" : "không đạt"}`,
-  drawing: (name: string, at: number, of: number) => `Đang dựng ${name} (${at}/${of})`,
-  uploaded: (done: number, of: number) => `Đã tải lên ${done}/${of} bản`,
+  drawing: (name: string, at: number, of: number) => `Đang chuẩn bị ${name} (${at}/${of})`,
+  uploaded: (done: number, of: number) => `Đã chuẩn bị ${done}/${of} bản`,
   opening: "Đang mở lượt duyệt",
 } as const;
 
@@ -88,7 +88,7 @@ export class SetStopError extends Error {
 /** The run's own words for a stop at step 4. */
 export const STOP_TEXT = {
   changed: (count: number) =>
-    `${count} bản vừa thay đổi ở nơi khác. Bấm Thử lại để dựng và tải lên lại các bản đó, hoặc mở lại để xem.`,
+    `${count} bản vừa thay đổi ở nơi khác. Bấm Thử lại để gửi lại các bản đó, hoặc mở lại để xem.`,
   notDraft: (count: number) =>
     `${count} bản không còn là bản nháp nên không gửi cùng bộ được. Hãy về dự án và chọn lại các bản.`,
   cannotSend:

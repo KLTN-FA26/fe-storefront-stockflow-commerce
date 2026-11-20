@@ -38,11 +38,12 @@ import {
 } from "./submit-set-steps";
 
 // "Gửi duyệt cả bộ" (docs 12 §4.10, BR-19), outside React: 1. check each design; 2. the customer
-// confirms; 3. draw each design in turn and upload its files as a single submission does, then read
-// its version; 4. one request opens the round over every `{ id, version }`. Nothing is sent for
-// review before step 4, which takes every design or none. A stop keeps what is done: "Thử lại"
-// goes on from the design that stopped, without drawing or uploading again what was. "Hủy"
-// aborts the run.
+// confirms; 3. read each design's version; 4. one request opens the round over every
+// `{ id, version }`. Nothing is drawn or uploaded unless the BE asks: its `422
+// DESIGN_BATCH_PREFLIGHT_FAILED` names the designs with outdated files and their roles, which are
+// then drawn and uploaded (`repairFiles`) before the round is asked for again. Step 4 takes every
+// design or none. A stop keeps what is done: "Thử lại" goes on from the design that stopped,
+// without reading, drawing or uploading again what was. "Hủy" aborts the run.
 
 export type { RowState, SetPhase, SetState } from "./submit-set-state";
 
@@ -106,6 +107,11 @@ export function createSetRun(deps: SetRunDeps) {
   /** Kept across stops: passed step 1, drawn not uploaded yet, uploaded (with its version). */
   const passed = new Set<string>();
   const drawn = new Map<string, DrawnFiles>();
+  /**
+   * Designs whose files are drawn and uploaded before the round is asked for: the BE refused the
+   * round without saying which file to repair, so asking again as it is would meet the same answer.
+   */
+  const mustDraw = new Set<string>();
   const sent = new Map<string, RoundDesign>();
   /** The BE's "files outdated" is repaired once per run (the files drawn again from a fresh template). */
   let repairedOnce = false;
@@ -220,7 +226,14 @@ export function createSetRun(deps: SetRunDeps) {
     }
   }
 
-  /** Step 3: each design in turn, from the first not uploaded; then step 4. */
+  /** Step 3, one design: only its version is read; the BE says at step 4 which files it wants. */
+  async function versionOf(signal: AbortSignal, { id }: Design): Promise<RoundDesign | null> {
+    setRow(signal, id, { kind: "uploading" });
+    const version = await deps.readVersion(id);
+    return signal.aborted ? null : { id, version };
+  }
+
+  /** Step 3: each design in turn, from the first not ready; then step 4. */
   async function sendAll(signal: AbortSignal) {
     set(signal, { phase: "sending", step: 3 });
     for (const [i, design] of designs.entries()) {
@@ -229,7 +242,9 @@ export function createSetRun(deps: SetRunDeps) {
         continue;
       }
       announce(signal, ANNOUNCE.drawing(design.name, i + 1, count));
-      const item = await onRow(signal, design.id, () => sendOne(signal, design));
+      const item = await onRow(signal, design.id, () =>
+        mustDraw.has(design.id) ? sendOne(signal, design) : versionOf(signal, design),
+      );
       if (!item || signal.aborted) return; // stopped: aborted, or the design fails its check now
       sent.set(design.id, item);
       setRow(signal, design.id, { kind: "uploaded" });
@@ -281,6 +296,12 @@ export function createSetRun(deps: SetRunDeps) {
     drawn.delete(id);
   }
 
+  /** Like `forget`, and the design's files are drawn and uploaded before the round is asked again. */
+  function forgetAndDraw(id: string) {
+    forget(id);
+    mustDraw.add(id);
+  }
+
   /**
    * `422 DESIGN_BATCH_PREFLIGHT_FAILED`: none was sent, and the BE recorded it. A design with
    * findings fails the set (its row lists them); one whose files are outdated has them drawn again
@@ -306,16 +327,18 @@ export function createSetRun(deps: SetRunDeps) {
     if (repairedOnce) {
       // Outdated again after the repair: ask the customer to try again, drawing everything anew.
       for (const { designId } of outdated) {
-        forget(designId);
+        forgetAndDraw(designId);
         setRow(signal, designId, { kind: "stopped", message: ROW_TEXT.outdated });
       }
       return stall(signal, error, () => go(sendAll));
     }
-    repairedOnce = true;
+    // Drawing and uploading again is step 3's work: "Hủy" and the leave guard apply to it.
+    set(signal, { phase: "sending", step: 3 });
     for (const { designId, roles } of outdated) {
       const design = designs.find((candidate) => candidate.id === designId);
       if (!design) continue;
       setRow(signal, designId, { kind: "drawing", step: "preview", fraction: 0 });
+      announce(signal, ANNOUNCE.drawing(design.name, designs.indexOf(design) + 1, count));
       const outcome = await onRow(signal, designId, () =>
         repairFiles(
           steps(signal),
@@ -328,7 +351,11 @@ export function createSetRun(deps: SetRunDeps) {
             setRow(signal, designId, { kind: "drawing", step, fraction });
           },
         ),
-      );
+      ).catch((error: unknown) => {
+        // Some of its files may be up: its version moved on, so it is read again on "Thử lại".
+        forget(designId);
+        throw error;
+      });
       if (signal.aborted) return;
       if ("failed" in outcome) {
         forget(designId);
@@ -341,6 +368,9 @@ export function createSetRun(deps: SetRunDeps) {
       sent.set(designId, outcome.repaired);
       setRow(signal, designId, { kind: "uploaded" });
     }
+    // Counted once every named design is repaired: a repair cut short by a network error is
+    // finished on "Thử lại" without that counting as the one repair the run allows.
+    repairedOnce = true;
     await openRound(signal);
   }
 
@@ -350,7 +380,7 @@ export function createSetRun(deps: SetRunDeps) {
    * anew (sending the same files would meet the same refusal), once per click, never by itself.
    */
   function unreadableRefusal(signal: AbortSignal) {
-    for (const design of designs) forget(design.id);
+    for (const design of designs) forgetAndDraw(design.id);
     stall(signal, new SetStopError(STOP_TEXT.unreadable), () => go(sendAll));
   }
 
@@ -400,7 +430,7 @@ export function createSetRun(deps: SetRunDeps) {
       return stall(signal, new SetStopError(STOP_TEXT.changed(outcomes.length)), () => go(sendAll));
     }
     // Nothing shows which one: every design is drawn and uploaded again on "Thử lại".
-    for (const design of designs) forget(design.id);
+    for (const design of designs) forgetAndDraw(design.id);
     stall(signal, error, () => go(sendAll));
   }
 

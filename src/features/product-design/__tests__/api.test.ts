@@ -465,6 +465,26 @@ describe("submitting", () => {
     });
   });
 
+  it("records only the failing checks: one fail among 60 notes is the one finding sent (SD-7)", async () => {
+    const notes = Array.from({ length: 60 }, (_, i) => ({
+      ruleId: "TOO_MANY_COLORS" as const,
+      level: "note" as const,
+      message: `Lưu ý ${i}`,
+    }));
+    const fail = {
+      ruleId: "DPI_BELOW_MIN" as const,
+      level: "fail" as const,
+      message: "Ảnh dưới 300 DPI.",
+    };
+
+    await recordPreflightFailure(returned, { version: 5, issues: [...notes, fail] });
+
+    expect(backend.post).toHaveBeenLastCalledWith(`/designs/${returned}/preflight-failures`, {
+      version: 5,
+      issues: [{ rule: "DPI_BELOW_MIN" }],
+    });
+  });
+
   it("lists no files before a design was ever sent", async () => {
     expect(await listDesignFiles(draft)).toEqual([]);
   });

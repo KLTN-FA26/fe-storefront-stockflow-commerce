@@ -142,11 +142,16 @@ export async function recordPreflightFailure(
 ): Promise<DesignEvent> {
   const { data } = await api.post<unknown>(designPath(id, "/preflight-failures"), {
     version: input.version,
-    issues: input.issues.slice(0, MAX_REPORTED_ISSUES).map((issue) => ({
-      rule: beRuleOf(issue.ruleId),
-      ...(issue.surfaceCode ? { surfaceCode: issue.surfaceCode } : {}),
-      ...(issue.elementId ? { elementId: issue.elementId } : {}),
-    })),
+    // Only the failing checks are findings of a refusal: a note the studio shows is not one, and
+    // sixty of them must not push the real failure out of the first 50 the BE takes (SD-7).
+    issues: input.issues
+      .filter((issue) => issue.level === "fail")
+      .slice(0, MAX_REPORTED_ISSUES)
+      .map((issue) => ({
+        rule: beRuleOf(issue.ruleId),
+        ...(issue.surfaceCode ? { surfaceCode: issue.surfaceCode } : {}),
+        ...(issue.elementId ? { elementId: issue.elementId } : {}),
+      })),
   });
   return toDesignEvent(designDecisionDtoSchema.parse(data));
 }

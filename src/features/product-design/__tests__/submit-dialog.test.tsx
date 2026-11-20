@@ -126,8 +126,14 @@ async function openSubmit(user: ReturnType<typeof userEvent.setup>) {
 
 const urlsOf = (spy: { mock: { calls: unknown[][] } }) => spy.mock.calls.map(([url]) => url);
 
-/** What one complete sending posts, in order: the three files, then the request for review (F-19). */
+const REVIEW = (id: string) => `/designs/${id}/technical-review-requests`;
+
+/**
+ * What one complete sending of a design with no files yet posts, in order (F-19): the request for
+ * review, refused as 409 DESIGN_FILES_OUTDATED for want of files; the three files; the request again.
+ */
 const SENT = (id: string) => [
+  REVIEW(id),
   `/designs/${id}/artifacts`,
   `/designs/${id}/artifacts`,
   `/designs/${id}/artifacts`,
@@ -297,7 +303,15 @@ describe("SubmitDialog on a preflight Pass", () => {
     const { store, post } = await designBackend();
     const id = await draftWith(store, [textAt("text", 170)]);
     await openStudio(id, renderer);
-    post.mockRejectedValueOnce(new ApiError(503, "SERVICE_UNAVAILABLE", "Upload failed"));
+    // The first file's upload fails (the request for review before it goes through).
+    let failed = false;
+    post.mockImplementation(async (...args: Parameters<typeof realPost>) => {
+      if (!failed && String(args[0]).endsWith("/artifacts")) {
+        failed = true;
+        throw new ApiError(503, "SERVICE_UNAVAILABLE", "Upload failed");
+      }
+      return realPost(...args);
+    });
 
     const dialog = await openSubmit(user);
     await user.click(within(dialog).getByRole("button", { name: "Gửi duyệt" }));
@@ -310,8 +324,9 @@ describe("SubmitDialog on a preflight Pass", () => {
     await user.click(retry);
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), SUBMISSION);
-    // The first upload failed; the retry sends the three files and the request, drawing nothing again.
-    expect(urlsOf(post)).toEqual([`/designs/${id}/artifacts`, ...SENT(id)]);
+    // The first upload failed; the retry asks again, sends the three files drawn before and the
+    // request, drawing nothing again.
+    expect(urlsOf(post)).toEqual([REVIEW(id), `/designs/${id}/artifacts`, ...SENT(id)]);
     expect(renderer.printSurface).toHaveBeenCalledTimes(1);
     expect(renderer.designBrief).toHaveBeenCalledTimes(1);
     expect(await designIn(store, id)).toMatchObject({ status: "PENDING_REVIEW" });
@@ -424,7 +439,7 @@ describe("SubmitDialog on a preflight Pass", () => {
 
     await user.click(within(dialog).getByRole("button", { name: "Đóng" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(urlsOf(post)).toEqual([`/designs/${id}/artifacts`]); // refused at the first upload
+    expect(urlsOf(post)).toEqual([REVIEW(id)]); // refused at the first ask
   });
 
   it("says why, and offers only Đóng, once the design is gone (404: deleted in another tab)", async () => {
@@ -475,12 +490,13 @@ describe("SubmitDialog on a preflight Pass", () => {
     expect(
       screen.queryByRole("dialog", { name: "Thiết kế đã thay đổi ở nơi khác" }),
     ).not.toBeInTheDocument();
-    expect(urlsOf(post)).toEqual([]);
+    // Only the first ask went out: the files drawn after it were never uploaded.
+    expect(urlsOf(post)).toEqual([REVIEW(id)]);
 
     await user.click(again);
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), SUBMISSION);
-    expect(urlsOf(post)).toEqual(SENT(id));
+    expect(urlsOf(post)).toEqual([REVIEW(id), ...SENT(id)]);
     expect(renderer.printSurface).toHaveBeenCalledTimes(2); // drawn anew from the edited design
     const { document } = settle(await store.getDocument(id)).data as { document: DesignDocument };
     expect(document.surfaces.BODY?.background).toEqual({ kind: "color", color: "#FF0000" });

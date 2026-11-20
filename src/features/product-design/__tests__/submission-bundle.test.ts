@@ -41,6 +41,17 @@ const input = (renderer: ExportRenderer, template = cup12oz) => ({
 });
 
 describe("buildSubmissionBundle", () => {
+  it("refuses a file the BE would answer 413 to, before anything is uploaded (SD-14)", async () => {
+    // A stand-in limit: the real 50 MB file is not built in a test.
+    await expect(
+      buildSubmissionBundle({ ...input(fakeRenderer()), maxFileBytes: 10 }),
+    ).rejects.toMatchObject({
+      name: "Error",
+      message: "File in lớn hơn 50 MB, hãy bớt ảnh hoặc giảm độ phân giải.",
+    });
+    await expect(buildSubmissionBundle(input(fakeRenderer()))).resolves.toBeDefined();
+  });
+
   it("returns the three files with their names and types", async () => {
     const bundle = await buildSubmissionBundle(input(fakeRenderer()));
 
