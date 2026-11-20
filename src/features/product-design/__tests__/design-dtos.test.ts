@@ -51,7 +51,7 @@ describe("a design as the BE sends it", () => {
       name: "Ly giấy logo quán",
       status: "DRAFT",
       // No product name or variant name: the slug and the SKU stand in (F-7).
-      product: { slug: "ly-giay-2-lop-12oz", title: "ly-giay-2-lop-12oz" },
+      product: { id: null, slug: "ly-giay-2-lop-12oz", title: "ly-giay-2-lop-12oz" },
       variant: { sku: "CUP-PAPER-12OZ-WHT", label: "CUP-PAPER-12OZ-WHT" },
       version: 3,
       projectId: null,
@@ -67,8 +67,18 @@ describe("a design as the BE sends it", () => {
 
   it("names the product and the variant from productName and variantName (F-7)", () => {
     const design = toDesign(designDraftDtoSchema.parse(designDraftDto()), null);
-    expect(design.product).toEqual({ slug: "ly-giay-2-lop-12oz", title: "Ly giấy 2 lớp 12oz" });
+    expect(design.product).toEqual({
+      id: null,
+      slug: "ly-giay-2-lop-12oz",
+      title: "Ly giấy 2 lớp 12oz",
+    });
     expect(design.variant).toEqual({ sku: "CUP-PAPER-12OZ-WHT", label: "Trắng 12oz" });
+  });
+
+  it("keeps the product id the BE sends, which a chat about the product names", () => {
+    const productId = "9a1c0000-0000-4000-8000-0000000000b1";
+    const design = toDesign(designDraftDtoSchema.parse(designDraftDto({ productId })), null);
+    expect(design.product.id).toBe(productId);
   });
 
   it("renames the fields: parentSnapshotId, reviewRequestedAt (F-4)", () => {
@@ -135,6 +145,7 @@ describe("a design as the BE sends it", () => {
     );
     expect(page.items).toHaveLength(2);
     expect(toDesign(page.items[1]!, null).product).toEqual({
+      id: null,
       slug: null,
       title: "Ly giấy 2 lớp 12oz", // productName, kept once the product is gone
     });

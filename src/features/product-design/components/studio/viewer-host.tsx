@@ -5,13 +5,11 @@ import { useCallback, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 import { isWebGLAvailable } from "../../engine";
+import { COLOR_DISCLAIMER } from "../color-disclaimer";
 import { FlatPreview } from "./flat-preview";
 import { PreviewCardHeader, type PreviewCardControls } from "./preview-card";
 import { Viewer3D } from "./viewer-3d";
 import { ViewerTitle } from "./viewer-toolbar";
-
-/** BR-07: shown with every preview, 3D or flat. */
-export const COLOR_DISCLAIMER = "Màu sắc hiển thị có thể sai lệch so với thành phẩm in thật";
 
 /**
  * The live preview: the three.js model where WebGL works, else (no WebGL, the context lost for

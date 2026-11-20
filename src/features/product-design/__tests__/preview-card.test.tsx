@@ -7,7 +7,7 @@ import { settle } from "@/test/fake-backend";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { DesignStudio } from "../components/studio/design-studio";
-import { COLOR_DISCLAIMER } from "../components/studio/viewer-host";
+import { COLOR_DISCLAIMER } from "../components/color-disclaimer";
 import { StudioBodySkeleton } from "../components/studio/studio-skeleton";
 import { designKeys } from "../queries";
 import { cupWithText, designBackend, submitElsewhere } from "./design-backend";
@@ -66,6 +66,17 @@ describe("the 3D corner card", () => {
       expect(button).toHaveClass("size-11");
     }
     expect(within(viewer()).getByText(COLOR_DISCLAIMER)).toBeInTheDocument();
+  });
+
+  it("the 2D frame shows the colour disclaimer too, also while the 3D card is minimised", async () => {
+    const user = userEvent.setup();
+    await open(MOCK_DESIGN_IDS.draft);
+    expect(within(stage()).getByText(COLOR_DISCLAIMER)).toBeInTheDocument();
+
+    await user.click(minimiseButton());
+
+    expect(screen.getByRole("button", { name: "Mở lại bản xem trước" })).toBeInTheDocument();
+    expect(within(stage()).getByText(COLOR_DISCLAIMER)).toBeInTheDocument();
   });
 
   it("every control of the card is a button that Tab reaches", async () => {
@@ -254,7 +265,7 @@ describe("the 3D corner card", () => {
     expect(screen.queryByRole("button", { name: "Đổi chỗ 2D và 3D" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Thu nhỏ bản xem trước" })).toBeNull();
     expect(viewer()).not.toHaveClass("absolute");
-    expect(screen.getByText(COLOR_DISCLAIMER)).toBeInTheDocument();
+    expect(within(viewer()).getByText(COLOR_DISCLAIMER)).toBeInTheDocument();
   });
 });
 

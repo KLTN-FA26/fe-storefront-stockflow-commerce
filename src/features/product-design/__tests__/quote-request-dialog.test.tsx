@@ -116,7 +116,10 @@ describe("an approved design's quote request", () => {
         FIRST_READ,
       ),
     ).toBeInTheDocument();
-    expect(within(dialog).getByRole("link", { name: "Mở chat" })).toHaveAttribute("href", "/chat");
+    expect(within(dialog).getByRole("link", { name: "Mở chat" })).toHaveAttribute(
+      "href",
+      `/chat/new?kind=DESIGN&id=${pending}`,
+    );
     expect(backend.post).toHaveBeenCalledWith(`/designs/${pending}/quote-requests`, {
       cartons: 50,
       desiredDeliveryDate: "2099-12-31",

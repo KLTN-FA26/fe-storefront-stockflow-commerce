@@ -31,7 +31,11 @@ import {
 
 /** The facts of a request: cartons, date, its status, the customer's SKU once approved. */
 export function QuoteRequestFacts({ request }: { request: DesignQuoteRequest }) {
-  const waitsForApproval = request.status === "OPEN" && request.designStatus !== "APPROVED";
+  const open = request.status === "OPEN";
+  // The request stays open when the Sales Manager returns the design (BE B40): the design is a
+  // DRAFT again, with the reason it came back for.
+  const returned = open && (request.designStatus === "DRAFT" || !!request.returnReason);
+  const waitsForApproval = open && !returned && request.designStatus !== "APPROVED";
   return (
     <section
       aria-label="Yêu cầu báo giá"
@@ -55,6 +59,12 @@ export function QuoteRequestFacts({ request }: { request: DesignQuoteRequest }) 
           </>
         ) : null}
       </dl>
+      {returned ? (
+        <p className="text-ink-tertiary text-xs">
+          Thiết kế bị trả lại. Sửa theo lý do trả lại rồi gửi duyệt lại; Sale sẽ báo giá khi bản
+          được duyệt.
+        </p>
+      ) : null}
       {waitsForApproval ? (
         <p className="text-ink-tertiary text-xs">
           Sale đã nhận yêu cầu và sẽ báo giá khi bản được duyệt.

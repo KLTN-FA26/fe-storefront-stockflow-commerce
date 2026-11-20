@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 import type { useDesignList } from "../queries";
 import type { Design } from "../types";
 import { DesignCard } from "./design-card";
+import { COLOR_DISCLAIMER } from "./color-disclaimer";
 import type { DesignRevision } from "./design-list-revision";
 import {
   DesignListSkeleton,
@@ -73,6 +74,7 @@ export function DesignListBody({
   }
   return (
     <>
+      <p className="text-ink-tertiary mb-3 text-xs">{COLOR_DISCLAIMER}</p>
       <ul
         aria-label="Danh sách thiết kế"
         aria-busy={isPlaceholderData}

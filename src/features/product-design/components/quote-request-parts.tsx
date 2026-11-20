@@ -124,10 +124,16 @@ export function QuoteRequestFields({
 
 /**
  * The ask went through: a new request ("Đã gửi yêu cầu, Sale sẽ liên hệ qua chat"), or the open one
- * changed ("Đã cập nhật yêu cầu"); "Mở chat" opens the conversations, where the BE posts the
- * request's card (16 §4.2).
+ * changed ("Đã cập nhật yêu cầu"); "Mở chat" opens the conversation about `chat` (the design or the
+ * project the request is for), where the BE posts the request's card (16 §4.2).
  */
-export function QuoteRequestSent({ updated }: { updated: boolean }) {
+export function QuoteRequestSent({
+  updated,
+  chat,
+}: {
+  updated: boolean;
+  chat: { kind: "DESIGN" | "DESIGN_PROJECT"; id: string };
+}) {
   return (
     <div className="grid gap-3">
       <div
@@ -145,7 +151,7 @@ export function QuoteRequestSent({ updated }: { updated: boolean }) {
         </p>
       </div>
       <Button asChild variant="outline" className={cn(ACTION_BUTTON, "justify-self-start")}>
-        <Link href={STORE_ROUTES.chat.list}>
+        <Link href={STORE_ROUTES.chat.about(chat.kind, chat.id)}>
           <MessageCircle aria-hidden className="size-4" />
           Mở chat
         </Link>

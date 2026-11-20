@@ -162,11 +162,37 @@ export async function listDesignFiles(
   signal?: AbortSignal,
   approved = false,
 ): Promise<DesignFile[]> {
-  if (approved) {
-    const { data } = await api.get<unknown>(designPath(id, "/snapshot"), withSignal(signal));
-    const frozen = designSnapshotDtoSchema.parse(data).artifacts;
-    if (frozen?.length) return toDesignFiles(frozen);
-  }
+  if (approved) return filesOfSnapshot(id, await getDesignSnapshot(id, signal), signal);
+  return listUploadedFiles(id, signal);
+}
+
+/** An approved design's frozen bundle: its files and the customer's own SKU (`null` if none came). */
+export type DesignSnapshot = { customerSku: string | null; files: DesignFile[] };
+
+/**
+ * GET /designs/{id}/snapshot: what approval froze, which never changes afterwards (the SKU is
+ * issued during the approval). Only the owner reads it, and only once the design is APPROVED
+ * (404 before). `customerSku` is left out by the BE when null.
+ */
+export async function getDesignSnapshot(id: string, signal?: AbortSignal): Promise<DesignSnapshot> {
+  const { data } = await api.get<unknown>(designPath(id, "/snapshot"), withSignal(signal));
+  const snapshot = designSnapshotDtoSchema.parse(data);
+  return {
+    customerSku: snapshot.customerSku?.trim() || null,
+    files: snapshot.artifacts?.length ? toDesignFiles(snapshot.artifacts) : [],
+  };
+}
+
+/** The files of an approved design: the snapshot's, or (an old snapshot without any) the uploads'. */
+export async function filesOfSnapshot(
+  id: string,
+  snapshot: DesignSnapshot,
+  signal?: AbortSignal,
+): Promise<DesignFile[]> {
+  return snapshot.files.length > 0 ? snapshot.files : listUploadedFiles(id, signal);
+}
+
+async function listUploadedFiles(id: string, signal?: AbortSignal): Promise<DesignFile[]> {
   const { data } = await api.get<unknown>(designPath(id, "/artifacts"), withSignal(signal));
   return toDesignFiles(z.array(designArtifactDtoSchema).parse(data));
 }

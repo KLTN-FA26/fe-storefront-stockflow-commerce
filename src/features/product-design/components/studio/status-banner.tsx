@@ -3,6 +3,7 @@
 import { formatDateTime } from "@/lib/format";
 
 import { isReturned } from "../../lifecycle";
+import { useDesignCustomerSku } from "../../queries";
 import { ChatAboutButton } from "../chat-about-button";
 import { RequestQuoteButton } from "../design-quote-request";
 import type { Design } from "../../types";
@@ -13,6 +14,22 @@ import { SubmittedFiles } from "./submitted-files";
 /** An instant as the customer reads it (Asia/Ho_Chi_Minh); "—" when it cannot be read. */
 const timeOf = (iso: string | null | undefined) =>
   iso && !Number.isNaN(Date.parse(iso)) ? formatDateTime(iso) : "—";
+
+/** "Đã duyệt lúc …", with the design's own SKU once the snapshot says it (read once, not per render). */
+function ApprovedLine({ design }: { design: Design }) {
+  const { sku } = useDesignCustomerSku(design.id, true);
+  return (
+    <>
+      {`Đã duyệt lúc ${timeOf(design.approvedAt)}`}
+      {sku ? (
+        <>
+          {" · SKU riêng "}
+          <span className="font-mono text-xs break-all">{sku}</span>
+        </>
+      ) : null}
+    </>
+  );
+}
 
 /**
  * Where the design stands, under the studio's header (spec §6.4): why a returned draft came back
@@ -43,7 +60,7 @@ export function StatusBanner({ design }: { design: Design }) {
           </div>
         }
       >
-        {`Đã duyệt lúc ${timeOf(design.approvedAt)}`}
+        <ApprovedLine design={design} />
       </ReadOnlyBanner>
     );
   }

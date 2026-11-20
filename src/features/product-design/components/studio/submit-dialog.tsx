@@ -128,7 +128,7 @@ function SubmitBody({
       </DialogHeader>
 
       {sentWithQuote ? (
-        <QuoteRequestSent updated={false} />
+        <QuoteRequestSent updated={false} chat={{ kind: "DESIGN", id: design.id }} />
       ) : failed ? (
         <FailBody
           issues={issues}

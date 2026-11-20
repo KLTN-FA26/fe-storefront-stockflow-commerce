@@ -839,6 +839,12 @@ describe("TOO_MANY_COLORS", () => {
     message: `Thiết kế dùng nhiều màu hơn mức cho phép (${maxColors}).`,
     surfaceCode,
   });
+  const photoNote = (surfaceCode: PrintAreaCode): PreflightIssue => ({
+    ruleId: "TOO_MANY_COLORS",
+    level: "note",
+    message: "Ảnh được in theo quy trình nhiều màu.",
+    surfaceCode,
+  });
   const run = (doc: DesignDocument, maxColors: number | null) =>
     only(runPreflight(input(doc, { maxColors })).issues, "TOO_MANY_COLORS");
 
@@ -896,9 +902,19 @@ describe("TOO_MANY_COLORS", () => {
     expect(run(doc, 1)).toEqual([tooMany("FRONT", 1), tooMany("BACK", 1)]);
   });
 
-  it("adds a note about any image when maxColors is set", () => {
+  it("says a photo is printed in a multi-colour process, not that it uses too many colours", () => {
     const doc = onFront(imageEl("img"));
-    expect(run(doc, 4)).toEqual([tooMany("FRONT", 4)]);
+    expect(run(doc, 4)).toEqual([photoNote("FRONT")]);
+  });
+
+  it("shows one note, the colour one, when an image comes with too many solid colours", () => {
+    const doc = onFront(
+      imageEl("img"),
+      textEl("a", { color: "#111111" }),
+      textEl("b", { color: "#222222" }),
+    );
+    expect(run(doc, 1)).toEqual([tooMany("FRONT", 1)]);
+    expect(run(doc, 2)).toEqual([photoNote("FRONT")]);
   });
 
   it("does nothing when the template sets no limit", () => {

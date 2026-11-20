@@ -92,7 +92,10 @@ describe("ProjectQuoteSection", () => {
         FIRST_READ,
       ),
     ).toBeInTheDocument();
-    expect(within(dialog).getByRole("link", { name: "Mở chat" })).toHaveAttribute("href", "/chat");
+    expect(within(dialog).getByRole("link", { name: "Mở chat" })).toHaveAttribute(
+      "href",
+      `/chat/new?kind=DESIGN_PROJECT&id=${id}`,
+    );
     expect(backend.post).toHaveBeenCalledWith(`/design-projects/${id}/quote-requests`, {
       lines: [{ designId: approved, cartons: 40 }],
       desiredDeliveryDate: "2099-12-31",

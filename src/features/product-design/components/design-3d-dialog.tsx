@@ -15,14 +15,9 @@ import {
 } from "@/components/ui/dialog";
 
 import { describeDesignError } from "../errors";
+import { COLOR_DISCLAIMER } from "./color-disclaimer";
 import type { FontRegistry } from "../engine";
 import type { Design } from "../types";
-
-/**
- * BR-07, the same sentence as the studio's `COLOR_DISCLAIMER` (viewer-host.tsx), which cannot be
- * imported here: that module pulls three.js in with it, and this one must not.
- */
-const COLOR_NOTE = "Màu sắc hiển thị có thể sai lệch so với thành phẩm in thật";
 
 type Picture =
   { state: "loading" } | { state: "failed"; error: unknown } | { state: "ready"; url: string };
@@ -108,7 +103,7 @@ function Design3DBody({
           </Button>
         </div>
       ) : null}
-      <p className="text-ink-tertiary text-xs">{COLOR_NOTE}</p>
+      <p className="text-ink-tertiary text-xs">{COLOR_DISCLAIMER}</p>
     </div>
   );
 }

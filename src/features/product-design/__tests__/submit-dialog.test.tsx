@@ -15,7 +15,7 @@ import { renderWithProviders, signIn, signOut } from "@/test/render";
 import { DesignStudio } from "../components/studio/design-studio";
 import type { ExportRenderer } from "../components/studio/export-renderer";
 import type { StudioServices } from "../components/studio/studio-context";
-import { COLOR_DISCLAIMER } from "../components/studio/viewer-host";
+import { COLOR_DISCLAIMER } from "../components/color-disclaimer";
 import { emptyDocument, setBackground, type DesignDocument, type DesignElement } from "../engine";
 import { cup12oz, PNG_1x1, textEl } from "../engine/__tests__/fixtures";
 import { designKeys } from "../queries";

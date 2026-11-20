@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 
+import { COLOR_DISCLAIMER } from "../color-disclaimer";
 import { CanvasStage } from "./canvas-stage";
 import { CARD_BOX } from "./card-box";
 import { ImagePaste } from "./image-paste";
@@ -105,6 +106,9 @@ export function StageArea({
           <PreviewCardHeader kind="2D" {...controls} />
         ) : null}
         <CanvasStage />
+        <p className="text-ink-tertiary border-border-default shrink-0 border-t px-3 py-1.5 text-xs">
+          {COLOR_DISCLAIMER}
+        </p>
       </section>
       <ViewerHost
         productPhoto={productPhoto}

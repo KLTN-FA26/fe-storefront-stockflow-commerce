@@ -87,9 +87,10 @@ describe("DesignStudio", () => {
     expect(within(bar).getByText("Thân ly")).toBeInTheDocument();
     expect(screen.queryByRole("radiogroup", { name: "Mặt in" })).not.toBeInTheDocument();
     expect(screen.getByText("Preview 3D không khả dụng")).toBeInTheDocument();
+    // Under the 2D frame and under the preview: both views carry the note.
     expect(
-      screen.getByText("Màu sắc hiển thị có thể sai lệch so với thành phẩm in thật"),
-    ).toBeInTheDocument();
+      screen.getAllByText("Màu sắc hiển thị có thể sai lệch so với thành phẩm in thật"),
+    ).toHaveLength(2);
     expect(
       screen.getByRole("img", { name: "Bản thiết kế Thân ly, 0 phần tử" }),
     ).toBeInTheDocument();

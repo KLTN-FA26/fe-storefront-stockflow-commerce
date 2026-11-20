@@ -34,6 +34,7 @@ export function toDesign(dto: DesignDraftDto, project: ProjectRefDto | null): De
     name: dto.name,
     status: dto.status,
     product: {
+      id: dto.productId ?? null,
       slug: dto.productSlug ?? null,
       title: dto.productName?.trim() || dto.productSlug || dto.sku,
     },

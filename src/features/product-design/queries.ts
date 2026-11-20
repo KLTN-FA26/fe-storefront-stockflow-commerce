@@ -4,6 +4,7 @@ import {
   skipToken,
   useQueries,
   useQuery,
+  useQueryClient,
 } from "@tanstack/react-query";
 
 import { isDesignMockMode } from "@/lib/api/design-mock-flag";
@@ -16,7 +17,9 @@ import {
   getDesign,
   getDesignDocument,
   getDesignHistory,
+  filesOfSnapshot,
   getDesignPrintConfig,
+  getDesignSnapshot,
   getDraftCount,
   listDesignAssets,
   listDesignFiles,
@@ -46,6 +49,8 @@ export const designKeys = {
   files: (id: string) => [...designKeys.detail(id), "files"] as const,
   /** Its quote requests (A-3), newest first: an ask or a submission with one re-reads them. */
   quoteRequests: (id: string) => [...designKeys.detail(id), "quote-requests"] as const,
+  /** The approved design's frozen bundle (files and customer SKU): read once, it never changes. */
+  snapshot: (id: string) => [...designKeys.detail(id), "snapshot"] as const,
   /** The latest submission's files, or the approved snapshot's: two reads, two entries. */
   fileList: (id: string, approved: boolean) =>
     [...designKeys.files(id), approved ? "approved" : "latest"] as const,
@@ -163,14 +168,39 @@ export function useDesignHistory(id: string) {
   });
 }
 
+/** An approved design's snapshot: frozen at approval, so it is never stale and never read twice. */
+const snapshotQuery = (id: string) =>
+  queryOptions({
+    queryKey: designKeys.snapshot(id),
+    queryFn: ({ signal }) => getDesignSnapshot(id, signal),
+    retry: retryTransient,
+    staleTime: Infinity,
+    gcTime: QUERY_TIMES.detail.gcTime,
+  });
+
+/**
+ * The customer's own SKU of an APPROVED design, from its snapshot (the design list does not carry
+ * it yet: BE-2). `null` while there is none, and for a design not approved: nothing is read then.
+ * Meant for one design's own screen (the studio's status bar), never one per list card.
+ */
+export function useDesignCustomerSku(id: string, approved: boolean) {
+  const snapshot = useQuery({ ...snapshotQuery(id), enabled: approved });
+  return { sku: snapshot.data?.customerSku ?? null, isPending: approved && snapshot.isPending };
+}
+
 /**
  * The files of the latest submission (`[]` before one), or of the approved snapshot (`approved`):
  * each read under its own key, so one never answers for the other.
  */
 export function useDesignFiles(id: string, enabled: boolean, approved = false) {
+  const client = useQueryClient();
   return useQuery({
     queryKey: designKeys.fileList(id, approved),
-    queryFn: ({ signal }) => listDesignFiles(id, signal, approved),
+    // The approved list is cut from the shared snapshot query: the studio reads `/snapshot` once.
+    queryFn: approved
+      ? async ({ signal }) =>
+          filesOfSnapshot(id, await client.ensureQueryData(snapshotQuery(id)), signal)
+      : ({ signal }) => listDesignFiles(id, signal),
     enabled,
     retry: retryTransient,
     ...QUERY_TIMES.detail,

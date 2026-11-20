@@ -79,7 +79,7 @@ function QuoteRequestForm({ design, current, onClose }: Props) {
           <DialogTitle>Yêu cầu báo giá</DialogTitle>
           <DialogDescription>{design.name}</DialogDescription>
         </DialogHeader>
-        <QuoteRequestSent updated={!ask.data.created} />
+        <QuoteRequestSent updated={!ask.data.created} chat={{ kind: "DESIGN", id: design.id }} />
         <DialogFooter className="gap-2">
           <Button type="button" className={ACTION_BUTTON} onClick={onClose}>
             Đóng

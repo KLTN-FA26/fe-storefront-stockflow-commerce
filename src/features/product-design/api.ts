@@ -55,7 +55,9 @@ export {
   requestProjectQuote,
 } from "./api-quote-requests";
 export {
+  filesOfSnapshot,
   getArtifactDownloadUrl,
+  getDesignSnapshot,
   listDesignFiles,
   readDesignVersion,
   recordPreflightFailure,

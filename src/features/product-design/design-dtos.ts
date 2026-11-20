@@ -23,6 +23,8 @@ export const designDraftDtoSchema = z.object({
   // The BE writes `productSlug` null (omitted) once the product is gone (`DesignWorkflowService`):
   // one such design must not fail the parse of the whole page. A customer's own design always has a SKU.
   productSlug: z.string().min(1).nullish(),
+  /** The product the design is drawn on: the chat context ("Chat với Sale" about its variant). */
+  productId: beId().nullish(),
   sku: z.string().min(1),
   /** The product's name, kept once it is no longer published; the SKU stands in for a missing variant name. */
   productName: z.string().nullish(),

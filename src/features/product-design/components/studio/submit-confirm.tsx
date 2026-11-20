@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/shared";
 
 import type { ExportRenderer } from "./export-renderer";
-import { COLOR_DISCLAIMER } from "./viewer-host";
+import { COLOR_DISCLAIMER } from "../color-disclaimer";
 
 /** The confirmation's picture: small, drawn once the preflight passed. */
 const CONFIRM_PREVIEW_PX = 480;
