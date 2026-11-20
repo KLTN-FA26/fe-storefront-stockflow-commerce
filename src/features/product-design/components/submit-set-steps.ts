@@ -96,13 +96,14 @@ export function drawDesign(
   deps: StepDeps,
   designId: string,
   onStep: BundleProgress,
+  roles?: readonly DesignFileRole[],
 ): Promise<{ drawn: DrawnFiles } | { failed: PreflightReport }> {
   return withSession(deps, designId, async (session) => {
     const checked = await checkSession(session);
     deps.signal.throwIfAborted();
     if (checked.report.result === "Fail")
       return { failed: await recorded(session, checked.report) };
-    const bundle = await buildSessionBundle(session, checked, onStep, deps.signal);
+    const bundle = await buildSessionBundle(session, checked, onStep, deps.signal, roles);
     deps.signal.throwIfAborted();
     const { checksum, report } = checked;
     return { drawn: { bundle, checksum, report, runNonce: newRunNonce() } };
@@ -150,7 +151,7 @@ export async function repairFiles(
 ): Promise<{ repaired: RoundDesign } | { failed: PreflightReport }> {
   await deps.client.fetchQuery({ ...designPrintConfigQuery(design), staleTime: 0 });
   deps.signal.throwIfAborted();
-  const outcome = await drawDesign(deps, design.id, onStep);
+  const outcome = await drawDesign(deps, design.id, onStep, roles);
   if ("failed" in outcome) return outcome;
   const { drawn } = outcome;
   await storedVersionOf({ client: deps.client, design }, drawn.checksum);

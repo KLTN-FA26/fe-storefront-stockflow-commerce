@@ -62,7 +62,6 @@ export {
   readDesignVersion,
   recordPreflightFailure,
   requestReview,
-  submitDesign,
   uploadDesignFile,
   uploadDesignFiles,
 } from "./api-submission";

@@ -28,7 +28,6 @@ import {
   requestReview,
   renameDesign,
   saveDesignDocument,
-  submitDesign,
   uploadDesignAsset,
   uploadDesignFiles,
 } from "../api";
@@ -39,6 +38,7 @@ import { describeFileDownloadError, outdatedRolesOf, preflightIssuesOf } from ".
 import type { SubmissionFiles } from "../types";
 import { designBackend, type DesignBackend } from "./design-backend";
 import { designDraftDto } from "./fixtures";
+import { submitDesign } from "./submit-helper";
 
 // Through the real client, the mock adapter and the design route table, over a seeded store in
 // memory (spec 2026-11-09 §5): what the screens get while the design module runs on the mock.

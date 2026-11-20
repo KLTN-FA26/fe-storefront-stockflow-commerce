@@ -17,11 +17,11 @@ import {
   requestDesignQuote,
   requestProjectQuote,
   requestReview,
-  submitDesign,
 } from "../api";
 import { pngBytes } from "../engine/__tests__/fixtures";
 import type { SubmissionFiles } from "../types";
 import { designBackend, type DesignBackend } from "./design-backend";
+import { submitDesign } from "./submit-helper";
 
 // A customer's quote requests (plan WF-02 Phụ lục B area A) through the real client, the mock
 // adapter and the design route table over a seeded store: the BE's paths, bodies, statuses (201 a

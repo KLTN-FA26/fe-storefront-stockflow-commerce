@@ -11,8 +11,6 @@ import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { SubmitSetScreen } from "../components/submit-set-screen";
 import type { ExportRenderer } from "../components/studio/export-renderer";
-import { uploadDesignFiles } from "../api";
-import { documentChecksum } from "../engine";
 import { emptyDocument } from "../engine/document/factory";
 import type { DesignDocument } from "../engine/document/schema";
 import { cup12oz, PNG_1x1, textEl } from "../engine/__tests__/fixtures";
@@ -124,26 +122,6 @@ async function draftOf(store: DesignMockStore, projectId: string, name: string, 
   return id;
 }
 
-/**
- * Files the BE already holds for a design, drawn from its stored layout, as an earlier send leaves
- * them: the round then needs nothing drawn or uploaded for it.
- */
-async function seedFiles(store: DesignMockStore, id: string) {
-  const { document } = settle(await store.getDocument(id)).data as { document: DesignDocument };
-  const pdf = new TextEncoder().encode("%PDF-1.7 stand-in");
-  const file = (name: string, type: string, bytes: Uint8Array) => ({ name, type, bytes });
-  await uploadDesignFiles(
-    id,
-    {
-      CUSTOMER_PREVIEW: file("preview.png", "image/png", PNG_1x1),
-      PRINT_READY: file("print-ready.pdf", "application/pdf", pdf),
-      TECHNICAL_SPEC: file("technical-spec.pdf", "application/pdf", pdf),
-    },
-    await documentChecksum(document),
-    "seed",
-  );
-}
-
 async function newProject(store: DesignMockStore) {
   const created = settle(await store.createProject({ name: "Quán Hoa" }));
   return (created.data as { id: string }).id;
@@ -212,7 +190,7 @@ describe("Gửi duyệt cả bộ", () => {
     expect(history.map((event) => event.type)).toContain("PREFLIGHT_FAILED");
   });
 
-  it("checks, confirms, asks for the round, then draws and uploads the files the BE says are missing, with each design's own progress, and goes back to the project", async () => {
+  it("checks, confirms, draws and uploads each design with its own progress, then opens the round and goes back to the project", async () => {
     const { store } = backend;
     const projectId = await newProject(store);
     const a = await draftOf(store, projectId, "Ly A");
@@ -234,8 +212,8 @@ describe("Gửi duyệt cả bộ", () => {
       await within(rowA).findByRole("progressbar", { name: "Tiến độ Ly A" }, SLOW),
     ).toBeInTheDocument();
     expect(within(rowA).getByText("Đang dựng ảnh xem trước…")).toBeInTheDocument();
-    expect(announced()).toHaveTextContent("Đang chuẩn bị Ly A (1/2)");
-    expect(within(await rowOf("Ly B")).getByText("Sẵn sàng gửi")).toBeInTheDocument();
+    expect(announced()).toHaveTextContent("Đang dựng Ly A (1/2)");
+    expect(within(await rowOf("Ly B")).getByText("Đạt")).toBeInTheDocument();
     // Leaving now asks first (jsdom has no BeforeUnloadEvent: a cancelable event will do).
     const leave = new Event("beforeunload", { cancelable: true }) as BeforeUnloadEvent;
     Object.defineProperty(leave, "returnValue", { value: undefined, writable: true });
@@ -255,40 +233,16 @@ describe("Gửi duyệt cả bộ", () => {
     expect(project.openRound?.designIds).toEqual([a, b]);
     expect(uploadsOf(a)).toHaveLength(FILES);
     expect(uploadsOf(b)).toHaveLength(FILES);
-    // Asked first, refused for want of files, asked again after they went up.
-    expect(rounds()).toHaveLength(2);
-    expect(posted().indexOf(`/design-projects/${projectId}/review-rounds`)).toBeLessThan(
-      posted().indexOf(`/designs/${a}/artifacts`),
-    );
+    // Drawn and uploaded first: the one request opens the round, and the BE has no refusal to
+    // write into the project's history.
+    expect(rounds()).toHaveLength(1);
     const types = (await historyOf(store, projectId)).map((event) => event.type);
     expect(types).toContain("BATCH_SUBMITTED");
+    expect(types).not.toContain("BATCH_PREFLIGHT_FAILED");
     expect(env.push).not.toHaveBeenCalled(); // Back from the project does not come here again
   });
 
-  it("draws and uploads nothing when the BE already holds the files: the round is asked for at once", async () => {
-    const { store } = backend;
-    const projectId = await newProject(store);
-    const a = await draftOf(store, projectId, "Ly A");
-    const b = await draftOf(store, projectId, "Ly B");
-    await seedFiles(store, a);
-    await seedFiles(store, b);
-    const seeded = posted().length;
-    const draw = renderers();
-    const user = userEvent.setup();
-
-    open(projectId, [a, b], draw.factory);
-    await user.click(await screen.findByRole("button", { name: "Gửi duyệt 2 bản" }, SLOW));
-
-    await waitFor(
-      () => expect(env.replace).toHaveBeenCalledWith(STORE_ROUTES.design.project(projectId)),
-      SLOW,
-    );
-    expect(draw.previews()).toBe(0);
-    expect(posted().slice(seeded)).toEqual([`/design-projects/${projectId}/review-rounds`]);
-    for (const id of [a, b]) expect((await designOf(store, id)).status).toBe("PENDING_REVIEW");
-  });
-
-  it("after a network error, Thử lại goes on from the design that stopped and draws no finished design again", async () => {
+  it("after a network error, Thử lại goes on from the design that stopped and draws no design again", async () => {
     const { store } = backend;
     const projectId = await newProject(store);
     const a = await draftOf(store, projectId, "Ly A");
@@ -312,8 +266,9 @@ describe("Gửi duyệt cả bộ", () => {
     const retry = await screen.findByRole("button", { name: "Thử lại" }, SLOW);
     expect(screen.getByRole("alert")).toHaveTextContent("Không kết nối được máy chủ");
     await waitFor(() => expect(screen.getByRole("alert")).toHaveFocus());
-    expect(within(await rowOf("Ly A")).getByText("Sẵn sàng gửi")).toBeInTheDocument();
+    expect(within(await rowOf("Ly A")).getByText("Đã tải lên")).toBeInTheDocument();
     expect(draw.previews()).toBe(2);
+    const loads = draw.made.length;
 
     await user.click(retry);
 
@@ -321,33 +276,33 @@ describe("Gửi duyệt cả bộ", () => {
       () => expect(env.replace).toHaveBeenCalledWith(STORE_ROUTES.design.project(projectId)),
       SLOW,
     );
-    expect(draw.previews()).toBe(3); // a was not drawn again; b, cut short, was
+    expect(draw.previews()).toBe(2); // nothing drawn again
+    expect(draw.made).toHaveLength(loads); // nothing loaded again
     expect(uploadsOf(a)).toHaveLength(FILES);
-    // b's first file was cut; its files were drawn and sent again, all three.
+    // b's first file was cut and sent again with the same key, then the other two followed.
+    const [first, again] = uploadsOf(b);
     expect(uploadsOf(b)).toHaveLength(FILES + 1);
+    expect(again?.[2]?.headers).toMatchObject({
+      "Idempotency-Key": (first?.[2]?.headers as Record<string, string>)["Idempotency-Key"],
+    });
     for (const id of [a, b]) expect((await designOf(store, id)).status).toBe("PENDING_REVIEW");
   });
 
-  it("names the design another tab changed before the round, and Thử lại reads its new version and asks again", async () => {
+  it("names the design another tab changed since its upload, and Thử lại draws only that one again", async () => {
     const { store } = backend;
     const projectId = await newProject(store);
     const a = await draftOf(store, projectId, "Ly A");
     const b = await draftOf(store, projectId, "Ly B");
-    // Another tab saves a's layout after its version was read, just before the round is asked for.
-    let editA = true;
-    backend.post.mockImplementation(async (...args: Parameters<typeof api.post>) => {
-      if (args[0].endsWith("/review-rounds") && editA) {
-        editA = false;
-        const { version } = await designOf(store, a);
-        settle(await store.putDocument(a, { version, document: textDocument("Trà sữa") }));
-      }
-      return realPost(...args);
-    });
     const draw = renderers();
+    const releaseSecond = draw.hold(2); // b's drawing waits, after a was uploaded
     const user = userEvent.setup();
 
     open(projectId, [a, b], draw.factory);
     await user.click(await screen.findByRole("button", { name: "Gửi duyệt 2 bản" }, SLOW));
+    await within(await rowOf("Ly A")).findByText("Đã tải lên", {}, SLOW);
+    const { version } = await designOf(store, a);
+    settle(await store.putDocument(a, { version, document: textDocument("Trà sữa") }));
+    releaseSecond();
 
     const changed = await rowOf("Ly A");
     expect(
@@ -362,10 +317,10 @@ describe("Gửi duyệt cả bộ", () => {
       () => expect(env.replace).toHaveBeenCalledWith(STORE_ROUTES.design.project(projectId)),
       SLOW,
     );
-    expect(draw.previews()).toBe(2); // each drawn once, when the BE asked for files
-    expect(uploadsOf(a)).toHaveLength(FILES);
+    expect(draw.previews()).toBe(3); // a twice, b once
+    expect(uploadsOf(a)).toHaveLength(2 * FILES);
     expect(uploadsOf(b)).toHaveLength(FILES);
-    // The first met a's moved version (409 CONFLICT), the second found no files, the third opened.
+    // 409 CONFLICT on a's moved version; asked again, a's files were outdated (422); then opened.
     expect(rounds()).toHaveLength(3);
     for (const id of [a, b]) expect((await designOf(store, id)).status).toBe("PENDING_REVIEW");
   });
@@ -405,23 +360,23 @@ describe("Gửi duyệt cả bộ", () => {
     const projectId = await newProject(store);
     const a = await draftOf(store, projectId, "Ly A");
     const b = await draftOf(store, projectId, "Ly B");
-    await seedFiles(store, a);
-    await seedFiles(store, b);
-    // a's print file reads as drawn from another layout (a template edited since).
-    settle(await store.simulateOutdatedFiles(a, ["PRINT_READY"]));
     const draw = renderers();
+    const releaseSecond = draw.hold(2);
     const user = userEvent.setup();
 
     open(projectId, [a, b], draw.factory);
     await user.click(await screen.findByRole("button", { name: "Gửi duyệt 2 bản" }, SLOW));
+    await within(await rowOf("Ly A")).findByText("Đã tải lên", {}, SLOW);
+    // a's print file now reads as drawn from another layout (a template edited since).
+    settle(await store.simulateOutdatedFiles(a, ["PRINT_READY"]));
+    releaseSecond();
 
     await waitFor(
       () => expect(env.replace).toHaveBeenCalledWith(STORE_ROUTES.design.project(projectId)),
       SLOW,
     );
-    expect(uploadsOf(a)).toHaveLength(FILES + 1); // seeded, then the print file again, not the other two
-    expect(uploadsOf(b)).toHaveLength(FILES); // only what was seeded
-    expect(draw.previews()).toBe(1); // only a is drawn
+    expect(uploadsOf(a)).toHaveLength(FILES + 1); // the print file again, not the other two
+    expect(uploadsOf(b)).toHaveLength(FILES);
     expect(rounds()).toHaveLength(2);
     // a's template is read afresh before its files are drawn again (a template edited on the server).
     const templateReads = backend.get.mock.calls.filter(
@@ -446,8 +401,6 @@ describe("Gửi duyệt cả bộ", () => {
     const projectId = await newProject(store);
     const a = await draftOf(store, projectId, "Ly A");
     const b = await draftOf(store, projectId, "Ly B");
-    await seedFiles(store, a);
-    await seedFiles(store, b);
     // Every round request finds a's print file drawn from another layout.
     backend.post.mockImplementation(async (...args: Parameters<typeof api.post>) => {
       if (args[0].endsWith("/review-rounds")) await store.simulateOutdatedFiles(a, ["PRINT_READY"]);
@@ -468,7 +421,7 @@ describe("Gửi duyệt cả bộ", () => {
     ).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Thử lại" }, SLOW)).toBeInTheDocument();
     expect(rounds()).toHaveLength(2); // asked, repaired once, asked again: no loop
-    expect(uploadsOf(a)).toHaveLength(FILES + 1); // seeded, then the print file once
+    expect(uploadsOf(a)).toHaveLength(FILES + 1);
     for (const id of [a, b]) expect((await designOf(store, id)).status).toBe("DRAFT");
   });
 
@@ -496,7 +449,7 @@ describe("Gửi duyệt cả bộ", () => {
     expect(drawing.printSurface).not.toHaveBeenCalled(); // stopped after the preview
     await act(() => new Promise((resolve) => setTimeout(resolve, 600)));
     expect(posted().filter((url) => url.endsWith("/artifacts"))).toEqual([]);
-    expect(rounds()).toHaveLength(1); // the one ask that said files were missing; no other
+    expect(rounds()).toEqual([]);
     for (const id of [a, b]) expect((await designOf(store, id)).status).toBe("DRAFT");
   });
 
@@ -534,13 +487,10 @@ describe("Gửi duyệt cả bộ", () => {
     expect(previews).toBe(1); // b was never started
     expect(draw.made.at(-1)!.printSurface).not.toHaveBeenCalled();
     expect(posted().filter((url) => url.endsWith("/artifacts"))).toEqual([]);
-    expect(rounds()).toHaveLength(1);
+    expect(rounds()).toEqual([]);
     expect(screen.queryByText(/chưa thành công|không gửi được/i)).not.toBeInTheDocument();
     for (const id of [a, b]) expect((await designOf(store, id)).status).toBe("DRAFT");
-    // Only the BE's own note of the ask that found no files (it records that refusal as it does a
-    // failed check); the run itself records nothing, being cancelled.
-    const failures = (await historyOf(store, projectId)).filter((e) => /fail|lỗi/i.test(e.type));
-    expect(failures.map((e) => e.note)).toEqual([expect.stringContaining("files outdated")]);
+    expect((await historyOf(store, projectId)).filter((e) => /fail|lỗi/i.test(e.type))).toEqual([]);
   });
 });
 
@@ -564,7 +514,7 @@ describe("Gửi duyệt cả bộ: what the customer is told", () => {
       () => expect(env.replace).toHaveBeenCalledWith(STORE_ROUTES.design.project(projectId)),
       SLOW,
     );
-    expect(rounds()).toHaveLength(2); // refused for want of files, then opened
+    expect(rounds()).toHaveLength(1);
     expect(screen.queryByText("Chưa gửi bản nào.")).not.toBeInTheDocument();
     for (const id of [a, b]) expect((await designOf(store, id)).status).toBe("PENDING_REVIEW");
   });
@@ -578,7 +528,7 @@ describe("Gửi duyệt cả bộ: what the customer is told", () => {
     backend.post.mockImplementation(async (...args: Parameters<typeof api.post>) => {
       if (offline) throw lost();
       const answer = await realPost(...args);
-      if (args[0].endsWith("/review-rounds") && rounds().length === 2) {
+      if (args[0].endsWith("/review-rounds") && rounds().length === 1) {
         offline = true;
         throw lost();
       }
@@ -605,7 +555,7 @@ describe("Gửi duyệt cả bộ: what the customer is told", () => {
       () => expect(env.replace).toHaveBeenCalledWith(STORE_ROUTES.design.project(projectId)),
       SLOW,
     );
-    expect(rounds()).toHaveLength(3); // the third answered the round already open
+    expect(rounds()).toHaveLength(2); // the second answered the round already open
     const types = (await historyOf(store, projectId)).map((event) => event.type);
     expect(types.filter((type) => type === "BATCH_SUBMITTED")).toHaveLength(1);
   });
@@ -639,7 +589,7 @@ const reopenLink = (row: HTMLElement) =>
   within(row).queryByRole("link", { name: "Mở lại thiết kế" });
 
 describe("Gửi duyệt cả bộ: a round the BE refuses for some of its designs (BE-4)", () => {
-  it("re-reads only the designs details.designIds names: one edited elsewhere is named, with its studio, and Thử lại asks again with its new version", async () => {
+  it("re-reads only the designs details.designIds names: one edited elsewhere is named, with its studio, and Thử lại draws only it again", async () => {
     const { store } = backend;
     const projectId = await newProject(store);
     const a = await draftOf(store, projectId, "Ly A");
@@ -671,7 +621,7 @@ describe("Gửi duyệt cả bộ: a round the BE refuses for some of its design
     ).toBeInTheDocument();
     expect(reopenLink(named)).toHaveAttribute("href", STORE_ROUTES.design.detail(b));
     const other = await rowOf("Ly A");
-    expect(within(other).getByText("Sẵn sàng gửi")).toBeInTheDocument();
+    expect(within(other).getByText("Đã tải lên")).toBeInTheDocument();
     expect(reopenLink(other)).toBeNull();
     expect(readsOf(a)).toBe(readsOfA); // a is not named, so not read again
     expect(screen.getByRole("alert")).toHaveTextContent("Chưa gửi bản nào");
@@ -683,10 +633,9 @@ describe("Gửi duyệt cả bộ: a round the BE refuses for some of its design
       () => expect(env.replace).toHaveBeenCalledWith(STORE_ROUTES.design.project(projectId)),
       SLOW,
     );
-    // Nothing was drawn before the refusal; once asked again the BE said files were missing.
-    expect(uploadsOf(a)).toHaveLength(FILES);
-    expect(uploadsOf(b)).toHaveLength(FILES);
-    expect(rounds()).toHaveLength(3); // 409 CONFLICT, 422 files missing, opened
+    expect(uploadsOf(a)).toHaveLength(FILES); // a kept its files
+    expect(uploadsOf(b)).toHaveLength(2 * FILES); // b drawn and uploaded again
+    expect(rounds()).toHaveLength(3); // 409 CONFLICT, 422 b's files outdated, opened
   });
 
   /** b leaves DRAFT in another tab once its files are up, just before the round is asked for. */
@@ -745,8 +694,8 @@ describe("Gửi duyệt cả bộ: a round the BE refuses for some of its design
       expect(screen.queryByRole("button", { name: "Thử lại" })).not.toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Về dự án" })).toBeInTheDocument();
       await act(() => new Promise((resolve) => setTimeout(resolve, 600)));
-      expect(draw.previews()).toBe(0); // nothing drawn
-      expect(uploadsOf(b)).toHaveLength(0);
+      expect(draw.previews()).toBe(2); // nothing drawn again
+      expect(uploadsOf(b)).toHaveLength(FILES);
       expect(rounds()).toHaveLength(1);
     },
   );
@@ -777,7 +726,7 @@ describe("Gửi duyệt cả bộ: a round the BE refuses for some of its design
     expect(reopenLink(row)).toHaveAttribute("href", STORE_ROUTES.design.detail(b));
     expect(screen.queryByRole("button", { name: "Thử lại" })).not.toBeInTheDocument();
     await act(() => new Promise((resolve) => setTimeout(resolve, 600)));
-    expect(draw.previews()).toBe(0);
+    expect(draw.previews()).toBe(2);
     expect(rounds()).toHaveLength(1);
   });
 
@@ -828,7 +777,7 @@ describe("Gửi duyệt cả bộ: a round the BE refuses for some of its design
       expect(reopenLink(row)).toBeNull();
       expect(screen.getByRole("alert")).toHaveTextContent("Có bản không thể gửi cùng bộ");
       expect(screen.queryByRole("button", { name: "Thử lại" })).not.toBeInTheDocument();
-      expect(draw.previews()).toBe(0);
+      expect(draw.previews()).toBe(2);
     },
   );
 
@@ -837,15 +786,8 @@ describe("Gửi duyệt cả bộ: a round the BE refuses for some of its design
     const projectId = await newProject(store);
     const a = await draftOf(store, projectId, "Ly A");
     const b = await draftOf(store, projectId, "Ly B");
-    // The mock names the designs; this BE strips the list off its refusal. Another tab saves a's
-    // layout after its version was read, just before the round is asked for.
-    let editA = true;
+    // The mock names the designs; this BE strips the list off its refusal.
     backend.post.mockImplementation(async (...args: Parameters<typeof api.post>) => {
-      if (args[0].endsWith("/review-rounds") && editA) {
-        editA = false;
-        const { version } = await designOf(store, a);
-        settle(await store.putDocument(a, { version, document: textDocument("Trà sữa") }));
-      }
       try {
         return await realPost(...args);
       } catch (error) {
@@ -856,10 +798,15 @@ describe("Gửi duyệt cả bộ: a round the BE refuses for some of its design
       }
     });
     const draw = renderers();
+    const releaseSecond = draw.hold(2);
     const user = userEvent.setup();
 
     open(projectId, [a, b], draw.factory);
     await user.click(await screen.findByRole("button", { name: "Gửi duyệt 2 bản" }, SLOW));
+    await within(await rowOf("Ly A")).findByText("Đã tải lên", {}, SLOW);
+    const { version } = await designOf(store, a);
+    settle(await store.putDocument(a, { version, document: textDocument("Trà sữa") }));
+    releaseSecond();
 
     const changed = await rowOf("Ly A");
     expect(
@@ -898,7 +845,7 @@ describe("Gửi duyệt cả bộ: a round the BE refuses for some of its design
 });
 
 describe("Gửi duyệt cả bộ: refusals the run cannot act on", () => {
-  it("stops on a 422 it cannot read, and Thử lại draws and uploads every design before asking again, once", async () => {
+  it("stops on a 422 it cannot read, and Thử lại draws and uploads every design anew, once", async () => {
     const { store } = backend;
     const projectId = await newProject(store);
     const a = await draftOf(store, projectId, "Ly A");
@@ -925,7 +872,7 @@ describe("Gửi duyệt cả bộ: refusals the run cannot act on", () => {
     // It waits for the customer: no request of its own.
     await act(() => new Promise((resolve) => setTimeout(resolve, 600)));
     expect(rounds()).toHaveLength(1);
-    expect(draw.previews()).toBe(0);
+    expect(draw.previews()).toBe(2);
 
     await user.click(screen.getByRole("button", { name: "Thử lại" }));
 
@@ -933,9 +880,9 @@ describe("Gửi duyệt cả bộ: refusals the run cannot act on", () => {
       () => expect(env.replace).toHaveBeenCalledWith(STORE_ROUTES.design.project(projectId)),
       SLOW,
     );
-    expect(draw.previews()).toBe(2); // each design drawn, as the refusal named no file
-    expect(uploadsOf(a)).toHaveLength(FILES);
-    expect(uploadsOf(b)).toHaveLength(FILES);
+    expect(draw.previews()).toBe(4); // each design drawn again
+    expect(uploadsOf(a)).toHaveLength(2 * FILES);
+    expect(uploadsOf(b)).toHaveLength(2 * FILES);
     expect(rounds()).toHaveLength(2);
     for (const id of [a, b]) expect((await designOf(store, id)).status).toBe("PENDING_REVIEW");
   });
@@ -945,19 +892,15 @@ describe("Gửi duyệt cả bộ: refusals the run cannot act on", () => {
     const projectId = await newProject(store);
     const a = await draftOf(store, projectId, "Ly A");
     const b = await draftOf(store, projectId, "Ly B");
-    // Taken out in another tab, just before the round is asked for.
-    let removeA = true;
-    backend.post.mockImplementation(async (...args: Parameters<typeof api.post>) => {
-      if (args[0].endsWith("/review-rounds") && removeA) {
-        removeA = false;
-        settle(await store.removeFromProject(projectId, a));
-      }
-      return realPost(...args);
-    });
+    const draw = renderers();
+    const releaseSecond = draw.hold(2);
     const user = userEvent.setup();
 
-    open(projectId, [a, b], renderers().factory);
+    open(projectId, [a, b], draw.factory);
     await user.click(await screen.findByRole("button", { name: "Gửi duyệt 2 bản" }, SLOW));
+    await within(await rowOf("Ly A")).findByText("Đã tải lên", {}, SLOW);
+    settle(await store.removeFromProject(projectId, a)); // taken out in another tab
+    releaseSecond();
 
     const gone = await rowOf("Ly A");
     expect(

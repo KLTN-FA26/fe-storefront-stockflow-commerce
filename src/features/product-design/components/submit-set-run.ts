@@ -38,12 +38,13 @@ import {
 } from "./submit-set-steps";
 
 // "Gửi duyệt cả bộ" (docs 12 §4.10, BR-19), outside React: 1. check each design; 2. the customer
-// confirms; 3. read each design's version; 4. one request opens the round over every
-// `{ id, version }`. Nothing is drawn or uploaded unless the BE asks: its `422
-// DESIGN_BATCH_PREFLIGHT_FAILED` names the designs with outdated files and their roles, which are
-// then drawn and uploaded (`repairFiles`) before the round is asked for again. Step 4 takes every
-// design or none. A stop keeps what is done: "Thử lại" goes on from the design that stopped,
-// without reading, drawing or uploading again what was. "Hủy" aborts the run.
+// confirms; 3. draw each design in turn and upload its files as a single submission does, then read
+// its version; 4. one request opens the round over every `{ id, version }`. The first pass draws
+// first (asking a fresh set would meet a 422 that the BE writes into the project's history). After
+// a refusal and on retries the round is asked first: its `422 DESIGN_BATCH_PREFLIGHT_FAILED` names
+// the designs with outdated files and their roles, which are then drawn and uploaded only for those
+// roles (`repairFiles`). Step 4 takes every design or none. A stop keeps what is done: "Thử lại"
+// goes on from the design that stopped, without drawing or uploading again what was. "Hủy" aborts.
 
 export type { RowState, SetPhase, SetState } from "./submit-set-state";
 
@@ -108,10 +109,11 @@ export function createSetRun(deps: SetRunDeps) {
   const passed = new Set<string>();
   const drawn = new Map<string, DrawnFiles>();
   /**
-   * Designs whose files are drawn and uploaded before the round is asked for: the BE refused the
-   * round without saying which file to repair, so asking again as it is would meet the same answer.
+   * Designs whose files are drawn and uploaded before the round is asked for: every design on the
+   * first pass, and again one the BE refused without saying which file to repair (asking as it is
+   * would meet the same answer). Others (read again after a change) are asked for first.
    */
-  const mustDraw = new Set<string>();
+  const mustDraw = new Set<string>(designs.map((design) => design.id));
   const sent = new Map<string, RoundDesign>();
   /** The BE's "files outdated" is repaired once per run (the files drawn again from a fresh template). */
   let repairedOnce = false;
@@ -228,7 +230,6 @@ export function createSetRun(deps: SetRunDeps) {
 
   /** Step 3, one design: only its version is read; the BE says at step 4 which files it wants. */
   async function versionOf(signal: AbortSignal, { id }: Design): Promise<RoundDesign | null> {
-    setRow(signal, id, { kind: "uploading" });
     const version = await deps.readVersion(id);
     return signal.aborted ? null : { id, version };
   }
@@ -247,6 +248,7 @@ export function createSetRun(deps: SetRunDeps) {
       );
       if (!item || signal.aborted) return; // stopped: aborted, or the design fails its check now
       sent.set(design.id, item);
+      mustDraw.delete(design.id);
       setRow(signal, design.id, { kind: "uploaded" });
       announce(signal, ANNOUNCE.uploaded(sent.size, count));
     }

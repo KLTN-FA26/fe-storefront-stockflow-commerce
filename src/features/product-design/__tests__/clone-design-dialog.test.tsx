@@ -229,6 +229,24 @@ describe("CloneDesignDialog", () => {
     expect(keys[1]!["Idempotency-Key"]).not.toBe(keys[0]!["Idempotency-Key"]);
   });
 
+  it("keeps the Idempotency-Key when the BE says the first request is still running (409)", async () => {
+    const { post } = backend;
+    const design = await startOf(CUP);
+    show(design, [CUP.sku, "CUP-PAPER-8OZ-KRAFT"]);
+    await userEvent.click(await option("CUP-PAPER-8OZ-KRAFT"));
+    post.mockRejectedValueOnce(new ApiError(409, "IDEMPOTENT_REQUEST_IN_PROGRESS", "busy"));
+
+    await confirm();
+    await userEvent.click(await screen.findByRole("button", { name: "Thử lại" }, WAIT));
+
+    await waitFor(() => expect(env.push).toHaveBeenCalledTimes(1), WAIT);
+    const keys = post.mock.calls
+      .filter(([url]) => url === `/designs/${design.id}/clones`)
+      .map(([, , config]) => (config as { headers: Record<string, string> }).headers);
+    expect(keys).toHaveLength(2);
+    expect(keys[1]!["Idempotency-Key"]).toBe(keys[0]!["Idempotency-Key"]);
+  });
+
   it("cannot be closed while the copy is being made, so the studio always opens", async () => {
     const onOpenChange = vi.fn();
     const design = await startOf(CUP);

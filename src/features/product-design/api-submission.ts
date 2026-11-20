@@ -25,7 +25,6 @@ import type {
   QuoteRequestInput,
   SubmissionFile,
   SubmissionFiles,
-  SubmitDesignInput,
 } from "./types";
 import { artifactUploadKey } from "./upload-key";
 
@@ -117,17 +116,6 @@ export async function requestReview(
     ...(quoteRequest ? { quoteRequest: quoteRequestBody(quoteRequest) } : {}),
   });
   return designFromAnswer(data);
-}
-
-/**
- * Sends a design the BE's way: its three files (each `POST …/artifacts`), the version read after the
- * last upload moved it, then the request for review (with the quote request, when one is asked).
- * The layout is already saved: the studio flushes
- * and verifies it before it draws (`documentChecksum` is that stored layout's).
- */
-export async function submitDesign(id: string, input: SubmitDesignInput): Promise<Design> {
-  await uploadDesignFiles(id, input.files, input.documentChecksum, input.runNonce);
-  return requestReview(id, await readDesignVersion(id), input.quoteRequest);
 }
 
 /**

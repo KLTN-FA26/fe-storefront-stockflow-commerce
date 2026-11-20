@@ -45,7 +45,7 @@ class TemplateChangedError extends ExportError {
   }
 }
 
-export type SubmitStep = "idle" | "checking" | BundleStep | "upload" | "done" | "error";
+export type SubmitStep = "idle" | "checking" | BundleStep | "send" | "upload" | "done" | "error";
 
 /**
  * What a run has made, kept so a retry does not repeat it. The check comes first; the files are
@@ -119,7 +119,8 @@ export function useDesignSubmission(design: Design) {
       work.current ??= await prepare();
       const w = work.current;
       if (!w) return; // the preflight failed: `prepare` set the issues
-      setState({ step: "upload", fraction: 0, issues: null });
+      // The BE is asked first; files are drawn and uploaded only if it says so.
+      setState({ step: "send", fraction: 0, issues: null });
       await assertStoredIs(ctx, w); // the stored layout is still the drawn one
       const submitted = await sendDesign(design.id, {
         documentChecksum: w.checksum,
@@ -130,7 +131,7 @@ export function useDesignSubmission(design: Design) {
         // template edited on the server is drawn with its new values: when it differs from the
         // studio's, a session of its own is loaded on it (as a set's designs are); otherwise the
         // same checked document is drawn again here.
-        redraw: async () => {
+        redraw: async (roles) => {
           // Outdated because a second tab saved meanwhile? Then the stored layout is not the
           // drawn one: the conflict dialog, not three more uploads of the old document.
           await assertStoredIs(ctx, w);
@@ -149,12 +150,13 @@ export function useDesignSubmission(design: Design) {
               { client, fonts: services.fonts, signal: new AbortController().signal },
               design.id,
               progress,
+              roles,
             );
             // Its findings are on the history (`drawDesign` records them); the stale work goes.
             if ("failed" in outcome) throw new TemplateChangedError(failsOf(outcome.failed));
             w.bundle = outcome.drawn.bundle;
           } else {
-            w.bundle = await drawBundle(subject, w, progress);
+            w.bundle = await drawBundle(subject, w, progress, undefined, roles);
           }
           // Drawn while this tab edited or another saved? Then these files are not the stored
           // layout's: nothing is uploaded (the next run checks and draws the new one).

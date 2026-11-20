@@ -24,7 +24,7 @@ describe("describeDesignError: 429 with Retry-After", () => {
 
   it("429 with Retry-After 600 reads 'thử lại sau 10 phút'", () => {
     expect(describeDesignError(limited(600))).toBe(
-      "Bạn đã tải lên nhiều lần; thử lại sau 10 phút.",
+      "Bạn đã thao tác quá nhiều lần; thử lại sau 10 phút.",
     );
     expect(describeProjectError(limited(600))).toContain("thử lại sau 10 phút");
   });

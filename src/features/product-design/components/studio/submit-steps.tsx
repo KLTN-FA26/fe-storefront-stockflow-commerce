@@ -45,6 +45,15 @@ export function SubmitSteps({
   const stateOf = (i: number): StepState =>
     i < index ? "done" : i > index ? "todo" : step === "error" ? "failed" : "current";
 
+  // The request for review is made before anything is drawn: no file step is under way yet.
+  if (step === "send") {
+    return (
+      <p className="text-ink-secondary flex items-center gap-2 text-sm" role="status">
+        <Loader2 aria-hidden className="size-4 animate-spin" />
+        Đang gửi duyệt…
+      </p>
+    );
+  }
   return (
     <div className="flex flex-col gap-3">
       <ol className="flex flex-col gap-1">

@@ -471,6 +471,24 @@ describe("useDesignSubmission", () => {
     ]);
   });
 
+  it("shows a neutral step while the first ask is made, not the upload step", async () => {
+    const { view } = await setup();
+    let release!: () => void;
+    requestReview.mockImplementationOnce(
+      () => new Promise((resolve) => (release = () => resolve(pending))),
+    );
+
+    let running!: Promise<void>;
+    act(() => {
+      running = view.result.current.run();
+    });
+    await waitFor(() => expect(requestReview).toHaveBeenCalled());
+    expect(view.result.current.step).toBe("send");
+
+    release();
+    await act(() => running);
+  });
+
   it("asks again on Thử lại after any 422 DESIGN_PREFLIGHT_FAILED, even one whose issues it cannot read", async () => {
     const { view, renderer } = await setup();
     requestReview.mockRejectedValueOnce(

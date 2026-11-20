@@ -3,7 +3,19 @@
 // draft (the BE's idempotency filter answers a repeated key with the first result, or 409
 // `IDEMPOTENT_REQUEST_IN_PROGRESS` while it still runs). One key per link (product + sku + project).
 
+import { hasErrorCode } from "@/lib/api/describe-error";
+
+import { isTransientFailure } from "./quote-request-errors";
+
 const PREFIX = "sf.design.create-key:";
+
+/**
+ * Whether the same Idempotency-Key may be sent again after this failure: the network, the server
+ * (5xx) or 409 `IDEMPOTENT_REQUEST_IN_PROGRESS` leave the request's fate open; any other answer
+ * (a 4xx) is stored by the BE for the key and replayed, so it needs a new key.
+ */
+export const isRetryableWithSameKey = (error: unknown) =>
+  isTransientFailure(error) || hasErrorCode(error, "IDEMPOTENT_REQUEST_IN_PROGRESS");
 
 /** The key of this link's create: the one kept from an earlier load, else a new one (kept). */
 export function createKeyFor(scope: string): string {

@@ -111,7 +111,7 @@ export function describeFileRefusal(
 function describeWait(error: unknown): string | null {
   if (!hasErrorCode(error, "RATE_LIMITED") || error.retryAfterSeconds === undefined) return null;
   const minutes = Math.max(1, Math.ceil(error.retryAfterSeconds / 60));
-  return `Bạn đã tải lên nhiều lần; thử lại sau ${minutes} phút.`;
+  return `Bạn đã thao tác quá nhiều lần; thử lại sau ${minutes} phút.`;
 }
 
 /** Customer-facing text for any failure reaching the design UI. */

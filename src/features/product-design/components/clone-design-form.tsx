@@ -13,7 +13,7 @@ import { retargetDocument } from "../engine/document/retarget";
 import { describeDesignError } from "../errors";
 import { useCloneDesign } from "../mutations";
 import { designDocumentQuery } from "../queries";
-import { isTransientFailure } from "../quote-request-errors";
+import { isRetryableWithSameKey } from "../create-key";
 import { templateOf } from "../selectors";
 import type { CloneResult, Design } from "../types";
 import { TargetChoice, TargetsLoading } from "./clone-design-parts";
@@ -85,7 +85,7 @@ export function CloneForm({
         onBusyChange(false);
       }
     } catch (error) {
-      if (!isTransientFailure(error)) attempt.current = null;
+      if (!isRetryableWithSameKey(error)) attempt.current = null;
       setFailure(error);
       onBusyChange(false);
     }

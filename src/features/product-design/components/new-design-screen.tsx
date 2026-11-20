@@ -4,12 +4,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
 
 import { STORE_ROUTES } from "@/constants";
-import { hasErrorCode } from "@/lib/api/describe-error";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 
-import { createKeyFor, forgetCreateKey } from "../create-key";
+import { createKeyFor, forgetCreateKey, isRetryableWithSameKey } from "../create-key";
 import { describeDesignError, isProjectRefusal } from "../errors";
-import { isTransientFailure } from "../quote-request-errors";
 import { useCreateDesign } from "../mutations";
 import { useDraftCount, usePrintConfig } from "../queries";
 import { defaultDesignName, isPrintConfigUsable } from "../selectors";
@@ -22,9 +20,6 @@ import {
   LauncherNoPrintConfig,
   LauncherSignIn,
 } from "./launcher-states";
-
-const isRetryableWithSameKey = (error: unknown) =>
-  isTransientFailure(error) || hasErrorCode(error, "IDEMPOTENT_REQUEST_IN_PROGRESS");
 
 /**
  * `/design/new?product=&sku=` (spec 2026-11-09 §6.2), checked in order: signed in; (the desktop

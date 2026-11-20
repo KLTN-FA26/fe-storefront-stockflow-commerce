@@ -2,7 +2,12 @@ import { documentChecksum, runPreflight } from "../../engine";
 import type { DesignDocument, PreflightReport } from "../../engine";
 import type { DesignSession } from "./load-design-session";
 import type { StudioServices } from "./studio-context";
-import { buildSubmissionBundle, type BundleStep, type SubmissionBundle } from "./submission-bundle";
+import {
+  buildSubmissionBundle,
+  type BundleRole,
+  type BundleStep,
+  type SubmissionBundle,
+} from "./submission-bundle";
 import { storedVersionOf } from "./submission-checks";
 import { preflightVariant } from "./use-preflight";
 
@@ -58,6 +63,7 @@ export function drawBundle(
   checked: Checked,
   onStep?: BundleProgress,
   signal?: AbortSignal,
+  roles?: readonly BundleRole[],
 ): Promise<SubmissionBundle> {
   return buildSubmissionBundle({
     name: subject.design.name,
@@ -72,6 +78,7 @@ export function drawBundle(
     renderer: subject.exportRenderer,
     ...(onStep ? { onStep } : {}),
     ...(signal ? { signal } : {}),
+    ...(roles ? { uploading: roles } : {}),
   });
 }
 
@@ -102,6 +109,7 @@ export async function buildSessionBundle(
   checked: Checked,
   onStep?: BundleProgress,
   signal?: AbortSignal,
+  roles?: readonly BundleRole[],
 ): Promise<SubmissionBundle> {
   assertOpen(session);
   if (session.editor.store.getState().document !== checked.document) {
@@ -109,5 +117,5 @@ export async function buildSessionBundle(
   }
   await storedVersionOf(session, checked.checksum);
   assertOpen(session);
-  return drawBundle(session, checked, onStep, signal);
+  return drawBundle(session, checked, onStep, signal, roles);
 }
