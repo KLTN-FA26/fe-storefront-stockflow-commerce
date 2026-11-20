@@ -97,12 +97,15 @@ export interface PaymentSummary {
  */
 export function paymentSummary(
   order: Pick<Order, "status">,
-  plan: Pick<OrderInstallments, "paymentStatus" | "outstanding">,
+  plan: Pick<OrderInstallments, "paymentStatus" | "outstanding" | "paid">,
 ): PaymentSummary {
   const allCancelled = order.status === "CANCELLED" && plan.paymentStatus == null;
   if (!allCancelled) return { rows: ["total", "paid", "outstanding"], cancelledAndSettled: false };
   return {
-    rows: plan.outstanding > 0 ? ["paid", "outstanding"] : ["paid"],
+    rows: [
+      ...(plan.paid > 0 ? (["paid"] as const) : []),
+      ...(plan.outstanding > 0 ? (["outstanding"] as const) : []),
+    ],
     cancelledAndSettled: true,
   };
 }

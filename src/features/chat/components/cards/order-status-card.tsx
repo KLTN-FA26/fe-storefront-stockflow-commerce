@@ -20,11 +20,14 @@ export function OrderStatusCard({
   card: ChatCard;
   payload: OrderStatusCardPayload;
 }) {
+  // BE supersedes every earlier ORDER_STATUS card of the order on a new shipment event, even those of
+  // other shipments; the card has no action, so its own shipment status stays the truth.
+  const closed = card.state === "SUPERSEDED" ? null : closedCardMeta(card.state);
   return (
     <CardFrame
       eyebrow="Giao hàng"
       title={payload.orderNumber ?? "Đơn hàng"}
-      status={closedCardMeta(card.state) ?? shipmentStatusMeta(payload.status)}
+      status={closed ?? shipmentStatusMeta(payload.status)}
       footer={
         <Link href={STORE_ROUTES.account.orders.detail(payload.orderId)} className={CARD_LINK}>
           Xem đơn hàng

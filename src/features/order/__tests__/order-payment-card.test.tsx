@@ -134,6 +134,15 @@ describe("OrderPaymentCard on a cancelled order (audit item 26)", () => {
     expect(screen.getByText(/Khoản hoàn \(nếu có\) ở mục Hoàn tiền/)).toBeInTheDocument();
   });
 
+  it("đơn huỷ, chưa trả đồng nào: không hiện dòng Bạn đã thanh toán 0 ₫", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ data: cancelledPlan({ paid: 0 }) });
+    renderWithProviders(<OrderPaymentCard order={cancelled()} />);
+
+    expect(await screen.findByRole("heading", { name: "Thanh toán" })).toBeInTheDocument();
+    expect(screen.queryByText("Bạn đã thanh toán")).not.toBeInTheDocument();
+    expect(screen.queryByText("Tổng theo hợp đồng")).not.toBeInTheDocument();
+  });
+
   it("đơn huỷ còn phí huỷ chưa trả: vẫn hiện Còn phải thanh toán", async () => {
     vi.spyOn(api, "get").mockResolvedValue({
       data: beOrderInstallments({ paymentStatus: "PARTIALLY_PAID", outstanding: 500_000 }),

@@ -59,6 +59,21 @@ describe("ORDER_STATUS card", () => {
   });
 });
 
+describe("ORDER_STATUS card superseded by a later shipment event", () => {
+  it("keeps its own shipment status instead of 'Đã thay bằng bản mới'", () => {
+    renderMessage(
+      cardMessageJson(
+        "ORDER_STATUS",
+        { orderId: ORDER_ID, shipmentCode: "SHP-0001", status: "DELIVERED" },
+        { state: "SUPERSEDED" },
+      ),
+    );
+    const card = screen.getByRole("region", { name: /Giao hàng/ });
+    expect(within(card).getByText("Đã giao")).toBeInTheDocument();
+    expect(card).not.toHaveTextContent("Đã thay bằng bản mới");
+  });
+});
+
 describe("INVOICE card", () => {
   it("downloads the PDF through the e-invoice's short-lived link", async () => {
     const user = userEvent.setup();
