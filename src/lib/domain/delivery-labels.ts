@@ -16,7 +16,7 @@ export const DELIVERY_FAILURE_REASON_LABEL = {
 
 /** A reason code the FE does not know (newer than this build) reads as "Đang cập nhật lý do". */
 export function deliveryFailureLabel(code: string | null | undefined): string {
-  return code && code in DELIVERY_FAILURE_REASON_LABEL
+  return code && Object.hasOwn(DELIVERY_FAILURE_REASON_LABEL, code)
     ? DELIVERY_FAILURE_REASON_LABEL[code as keyof typeof DELIVERY_FAILURE_REASON_LABEL]
     : DELIVERY_FAILURE_REASON_LABEL.UNKNOWN;
 }

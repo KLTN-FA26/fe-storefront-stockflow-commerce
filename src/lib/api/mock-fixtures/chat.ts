@@ -1011,6 +1011,21 @@ export function createMockChatStore(deps: MockChatDeps) {
     if (action === "REQUEST_CHANGES" && !(isText(body.note) && body.note.trim())) {
       return fail(400, "VALIDATION_FAILED", "Vui lòng ghi rõ nội dung cần sửa của báo giá.");
     }
+    if (card.kind === "SAMPLE_APPROVAL") {
+      // BE ChatCardActions: APPROVE, or REQUEST_REPRINT with a required note, answers the round.
+      if (action === "REQUEST_REPRINT" && !(isText(body.note) && body.note.trim())) {
+        return fail(400, "VALIDATION_FAILED", "Vui lòng ghi rõ điểm cần in lại mẫu.");
+      }
+      const answeredAt = now().toISOString();
+      card.payload = {
+        ...card.payload,
+        status: action === "APPROVE" ? "APPROVED" : "REPRINT_REQUESTED",
+        answeredAt,
+      };
+      card.state = "ACTED";
+      card.updatedAt = answeredAt;
+      return ok(messageView(message, c.id));
+    }
     if (card.kind !== "QUOTE" || (action !== "ACCEPT" && action !== "REQUEST_CHANGES")) {
       return fail(409, "CHAT_CARD_ACTION_NOT_ALLOWED", "Thẻ này không còn thao tác đó.");
     }

@@ -30,6 +30,7 @@ interface AttachmentImageProps {
 export function AttachmentImage({ conversationId, file, fallback }: AttachmentImageProps) {
   const [open, setOpen] = useState(false);
   const link = useAttachmentLink(conversationId, file.id);
+  const { refetch } = link;
   const name = file.fileName ?? "Ảnh đính kèm";
   const url = link.data?.url;
   if (!url) return <>{fallback}</>;
@@ -38,7 +39,11 @@ export function AttachmentImage({ conversationId, file, fallback }: AttachmentIm
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setOpen(true);
+          // The thumbnail's link may be older than its 10 minutes: the dialog gets a fresh one.
+          void refetch();
+        }}
         aria-label={`Xem ảnh ${name}`}
         className="focus-visible:ring-accent relative block size-28 overflow-hidden rounded-[var(--r-md)] border border-current/30 focus-visible:ring-2 focus-visible:outline-none"
       >
@@ -51,7 +56,7 @@ export function AttachmentImage({ conversationId, file, fallback }: AttachmentIm
             <DialogTitle className="text-ink-primary truncate">{name}</DialogTitle>
             <DialogDescription className="sr-only">Xem ảnh đính kèm</DialogDescription>
           </DialogHeader>
-          <div className="relative h-[60dvh] w-full">
+          <div className="relative h-[60dvh] w-full" aria-busy={link.isFetching || undefined}>
             <Image src={url} alt={name} fill unoptimized className="object-contain" />
           </div>
           <Button asChild variant="outline" className="min-h-11 rounded-[var(--r-md)] px-4">

@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { z } from "zod";
 
-import { formatDate } from "@/lib/format/date";
+import { formatDate, formatDateTime } from "@/lib/format/date";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -98,7 +98,7 @@ export function SampleApprovalCard({
         ) : null}
         {payload.answeredAt ? (
           <Fact label="Bạn trả lời lúc" numeric>
-            {formatDate(payload.answeredAt)}
+            {formatDateTime(payload.answeredAt)}
           </Fact>
         ) : null}
       </Facts>

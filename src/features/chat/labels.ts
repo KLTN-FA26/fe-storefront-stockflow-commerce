@@ -126,6 +126,8 @@ const CLOSED_CARD_STATE: Record<string, StatusMeta> = {
   SUPERSEDED: { label: "Đã thay bằng bản mới", tone: "muted" },
   EXPIRED: { label: "Hết hiệu lực", tone: "muted" },
   CANCELLED: { label: "Đã huỷ", tone: "danger" },
+  // BE closes a card (e.g. a sample round whose production order stopped) without touching its payload.
+  CLOSED: { label: "Đã đóng", tone: "muted" },
 };
 export const closedCardMeta = (state: string): StatusMeta | null =>
   CLOSED_CARD_STATE[state] ?? null;

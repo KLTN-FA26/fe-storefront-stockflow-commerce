@@ -117,6 +117,7 @@ describe("SAMPLE_APPROVAL card", () => {
         state: "ACTED",
       }),
     });
+    await waitFor(() => expect(screen.getByRole("button", { name: "In lại mẫu" })).toBeEnabled());
   });
 
   it("REQUEST_REPRINT needs a note and posts it", async () => {
@@ -138,6 +139,17 @@ describe("SAMPLE_APPROVAL card", () => {
       action: "REQUEST_REPRINT",
       note: "Màu logo nhạt hơn mẫu duyệt",
     });
+  });
+
+  it("a CLOSED card whose payload still says WAITING shows no waiting badge and no buttons", () => {
+    renderMessage(
+      cardMessageJson("SAMPLE_APPROVAL", samplePayload({ status: "WAITING" }), {
+        state: "CLOSED",
+      }),
+    );
+    expect(screen.getByText("Đã đóng")).toBeInTheDocument();
+    expect(screen.queryByText("Chờ bạn duyệt")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Duyệt mẫu" })).not.toBeInTheDocument();
   });
 
   it("shows the answered round without buttons", () => {
@@ -172,5 +184,32 @@ describe("image attachments (WF-02 item 52)", () => {
     expect(get.mock.calls[0]?.[0]).toBe(
       `/chat/me/conversations/${CONVERSATION_ID}/attachments/img-1/link`,
     );
+  });
+
+  it("fetches a fresh link when the image is opened, since the thumbnail's may have expired", async () => {
+    const user = userEvent.setup();
+    const get = vi
+      .spyOn(api, "get")
+      .mockResolvedValueOnce({
+        data: { url: "https://files.example.vn/old.png", expiresAt: "2026-11-20T04:00:00Z" },
+      })
+      .mockResolvedValue({
+        data: { url: "https://files.example.vn/new.png", expiresAt: "2026-11-20T05:00:00Z" },
+      });
+    renderMessage(
+      messageJson({
+        senderType: "CUSTOMER",
+        attachments: [{ id: "img-1", fileName: "logo.png", contentType: "image/png" }],
+      }),
+    );
+    await user.click(await screen.findByRole("button", { name: "Xem ảnh logo.png" }));
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() =>
+      expect(within(dialog).getByRole("link", { name: "Tải ảnh" })).toHaveAttribute(
+        "href",
+        "https://files.example.vn/new.png",
+      ),
+    );
+    expect(get).toHaveBeenCalledTimes(2);
   });
 });
