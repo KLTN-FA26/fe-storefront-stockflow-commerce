@@ -24,14 +24,16 @@ export const needsSale = (issues: readonly Pick<ReportedPreflightIssue, "ruleId"
 
 /**
  * "Sale sẽ bổ sung quy cách cho bạn." and "Chat với Sale". The conversation is about the design's
- * product (`PRODUCT`) where the studio knows it: a `DESIGN` context on a draft never sent would
+ * product (`PRODUCT`) where it is published and the studio knows it: a `DESIGN` context on a draft never sent would
  * show Sale the draft before the customer submitted it (open question Q7). Without a product id
  * it is the plain chat, no context.
  */
 export function AskSales() {
-  const { design } = useStudio();
+  const { design, printConfig } = useStudio();
   const allowed = useHasPermission(PERM.chatCreate);
-  const productId = design.product.id;
+  // The BE shows a customer a PRODUCT context only for a PUBLISHED product (CHAT_CONTEXT_NOT_FOUND
+  // otherwise); an approved product not yet listed still takes designs, so it gets the plain chat.
+  const productId = printConfig.product.status === "PUBLISHED" ? design.product.id : null;
   return (
     <div className="flex flex-col items-start gap-2 px-2">
       <p className="text-ink-secondary text-sm">Sale sẽ bổ sung quy cách cho bạn.</p>

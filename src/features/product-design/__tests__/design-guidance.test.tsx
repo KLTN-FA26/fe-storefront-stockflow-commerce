@@ -6,6 +6,7 @@ import { registerMockRoute } from "@/lib/api/mock-adapter";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { getDesign } from "../api";
+import { designKeys } from "../queries";
 import { COLOR_DISCLAIMER } from "../components/color-disclaimer";
 import { DeleteDesignDialog } from "../components/delete-design-dialog";
 import { DesignListBody } from "../components/design-list-body";
@@ -35,10 +36,15 @@ afterEach(() => {
 const fail = (ruleId: string): ReportedPreflightIssue =>
   ({ ruleId, level: "fail", message: `Lỗi ${ruleId}` }) as ReportedPreflightIssue;
 
-function renderIssues(issues: ReportedPreflightIssue[], productId: string | null) {
+function renderIssues(
+  issues: ReportedPreflightIssue[],
+  productId: string | null,
+  productStatus = "PUBLISHED",
+) {
   const services = {
     surfaces: { order: [] },
     template: { printAreas: [] },
+    printConfig: { product: { slug: "ly", title: "Ly giấy", status: productStatus } },
     design: design({ product: { id: productId, slug: "ly", title: "Ly giấy" } }),
   } as unknown as StudioServices;
   return renderWithProviders(
@@ -57,6 +63,17 @@ describe("Chat với Sale on a preflight failure only Sale can clear (item 19)",
       expect(await screen.findByRole("link", { name: /Chat với Sale/ })).toHaveAttribute(
         "href",
         `/chat/new?kind=PRODUCT&id=${PRODUCT_ID}`,
+      );
+    },
+  );
+
+  it.each(["APPROVED", "UNPUBLISHED"])(
+    "opens the plain chat, not PRODUCT, for a %s product: the BE shows only a published one",
+    async (status) => {
+      renderIssues([fail("NO_CARTON_SPEC")], PRODUCT_ID, status);
+      expect(await screen.findByRole("link", { name: "Chat với Sale" })).toHaveAttribute(
+        "href",
+        "/chat/new",
       );
     },
   );
@@ -138,10 +155,15 @@ describe("deleting a returned draft with an open quote request (item 44)", () =>
   });
 
   it("says nothing for a plain draft", async () => {
-    renderWithProviders(<DeleteDesignDialog design={await getDesign(draft)} onClose={() => {}} />);
+    const { client } = renderWithProviders(
+      <DeleteDesignDialog design={await getDesign(draft)} onClose={() => {}} />,
+    );
     const dialog = await screen.findByRole("dialog");
-    await new Promise((resolve) => setTimeout(resolve, 300));
     expect(within(dialog).queryByText(/đóng yêu cầu báo giá/)).not.toBeInTheDocument();
+    // No query was even made for the draft's requests.
+    expect(client.getQueryState(designKeys.quoteRequests(draft))?.fetchStatus ?? "idle").toBe(
+      "idle",
+    );
   });
 });
 
@@ -159,8 +181,11 @@ describe("the approved design's SKU (item 18)", () => {
   it("reads no snapshot for a design that is not approved", async () => {
     const backend = await designBackend();
     const pending = await getDesign(MOCK_DESIGN_IDS.pending);
-    renderWithProviders(<StatusBanner design={pending} />);
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    const { client } = renderWithProviders(<StatusBanner design={pending} />);
+    expect(await screen.findByText(/Đang chờ Quản lý kinh doanh duyệt/)).toBeInTheDocument();
+    expect(client.getQueryState(designKeys.snapshot(pending.id))?.fetchStatus ?? "idle").toBe(
+      "idle",
+    );
     const reads = backend.get.mock.calls.filter(([url]) => String(url).endsWith("/snapshot"));
     expect(reads).toHaveLength(0);
   });
@@ -190,7 +215,13 @@ describe("the colour note (item 43)", () => {
         list={list}
         allTab
         page={1}
-        revision={{ revise: vi.fn(), revisingId: null, busy: false } as never}
+        revision={{
+          revise: vi.fn(),
+          revisingId: undefined,
+          busy: false,
+          error: null,
+          clearError: vi.fn(),
+        }}
         onDelete={vi.fn()}
         onClone={vi.fn()}
         onShowAll={vi.fn()}

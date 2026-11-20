@@ -14,10 +14,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { describeDesignError } from "../errors";
-import { COLOR_DISCLAIMER } from "./color-disclaimer";
 import type { FontRegistry } from "../engine";
+import { describeDesignError } from "../errors";
 import type { Design } from "../types";
+import { COLOR_DISCLAIMER } from "./color-disclaimer";
 
 type Picture =
   { state: "loading" } | { state: "failed"; error: unknown } | { state: "ready"; url: string };

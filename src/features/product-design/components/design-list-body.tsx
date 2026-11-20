@@ -6,8 +6,8 @@ import { cn } from "@/lib/cn";
 
 import type { useDesignList } from "../queries";
 import type { Design } from "../types";
-import { DesignCard } from "./design-card";
 import { COLOR_DISCLAIMER } from "./color-disclaimer";
+import { DesignCard } from "./design-card";
 import type { DesignRevision } from "./design-list-revision";
 import {
   DesignListSkeleton,
