@@ -4,9 +4,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
 
 import { STORE_ROUTES } from "@/constants";
+import { hasErrorCode } from "@/lib/api/describe-error";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 
+import { createKeyFor, forgetCreateKey } from "../create-key";
 import { describeDesignError, isProjectRefusal } from "../errors";
+import { isTransientFailure } from "../quote-request-errors";
 import { useCreateDesign } from "../mutations";
 import { useDraftCount, usePrintConfig } from "../queries";
 import { defaultDesignName, isPrintConfigUsable } from "../selectors";
@@ -19,6 +22,9 @@ import {
   LauncherNoPrintConfig,
   LauncherSignIn,
 } from "./launcher-states";
+
+const isRetryableWithSameKey = (error: unknown) =>
+  isTransientFailure(error) || hasErrorCode(error, "IDEMPOTENT_REQUEST_IN_PROGRESS");
 
 /**
  * `/design/new?product=&sku=` (spec 2026-11-09 §6.2), checked in order: signed in; (the desktop
@@ -59,13 +65,21 @@ export function NewDesignScreen({ product, sku }: { product: string; sku: string
     (force: boolean) => {
       if (name === null) return;
       if (!force && attempt.current?.key === key) return;
-      const promise = mutateAsync({ productSlug: product, sku, name, projectId });
+      // The key outlives a reload (sessionStorage): a reload before the redirect replays this create.
+      const idempotencyKey = createKeyFor(key);
+      const promise = mutateAsync({ productSlug: product, sku, name, projectId, idempotencyKey });
       attempt.current = { key, promise };
       promise.then(
         (design) => {
+          // The visit is over: the next one to this link is a new design.
+          forgetCreateKey(key);
           if (mounted.current) replace(STORE_ROUTES.design.detail(design.id));
         },
-        () => undefined, // shown from the mutation's error, with a retry
+        (error: unknown) => {
+          // The BE keeps a 4xx for the key and would replay it; only a failure a retry can get past
+          // (network, 5xx) or one still in progress keeps the key. Shown from the mutation's error.
+          if (!isRetryableWithSameKey(error)) forgetCreateKey(key);
+        },
       );
     },
     [key, name, mutateAsync, product, sku, projectId, replace],

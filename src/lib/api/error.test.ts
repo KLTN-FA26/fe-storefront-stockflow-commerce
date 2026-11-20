@@ -63,3 +63,27 @@ describe("ApiError details", () => {
     expect(failure({ errorCode: "X", message: "x", details: [1] }).details).toBeUndefined();
   });
 });
+
+describe("ApiError Retry-After", () => {
+  const withHeader = (headers: Record<string, unknown>) =>
+    ApiError.from(
+      new AxiosError("request failed", "ERR_BAD_REQUEST", undefined, undefined, {
+        data: { errorCode: "RATE_LIMITED", message: "x" },
+        status: 429,
+        statusText: "Too Many Requests",
+        headers: headers as never,
+        config: {} as never,
+      }),
+    );
+
+  it("keeps the header in whole seconds", () => {
+    expect(withHeader({ "retry-after": "600" }).retryAfterSeconds).toBe(600);
+  });
+
+  it("has none when the header is absent or is not a number of seconds", () => {
+    expect(withHeader({}).retryAfterSeconds).toBeUndefined();
+    expect(
+      withHeader({ "retry-after": "Wed, 21 Oct 2026 07:28:00 GMT" }).retryAfterSeconds,
+    ).toBeUndefined();
+  });
+});

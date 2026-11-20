@@ -198,6 +198,8 @@ export const createDesignInputSchema = z.object({
   name: designName,
   /** Part E: the design starts inside this project (the same checks as adding one). */
   projectId: beId().optional(),
+  /** Sent as `Idempotency-Key`: a reload of the launcher replays this create, not a second draft. */
+  idempotencyKey: z.string().trim().min(1).optional(),
 });
 
 /**

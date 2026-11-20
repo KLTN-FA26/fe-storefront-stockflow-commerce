@@ -126,16 +126,23 @@ export async function getDraftCount(signal?: AbortSignal): Promise<DraftCount> {
  * (F-12); a SKU it does not list has no template to design on (404 PRINT_CONFIG_NOT_FOUND).
  */
 export async function createDesign(input: CreateDesignInput): Promise<Design> {
-  const { productSlug, sku, name, projectId } = createDesignInputSchema.parse(input);
+  const { productSlug, sku, name, projectId, idempotencyKey } =
+    createDesignInputSchema.parse(input);
   const customization = await readCustomization(productSlug, sku);
   const template = templateOfSku(customization, sku);
-  const { data } = await api.post<unknown>("/designs/mine", {
+  const body = {
     productId: customization.productId,
     sku,
     templateCode: template.code,
     name,
     ...(projectId ? { projectId } : {}),
-  });
+  };
+  // Without a key the call is the plain one; with it a repeated create is answered, not repeated.
+  const { data } = idempotencyKey
+    ? await api.post<unknown>("/designs/mine", body, {
+        headers: { "Idempotency-Key": idempotencyKey },
+      })
+    : await api.post<unknown>("/designs/mine", body);
   return designFromAnswer(data);
 }
 

@@ -13,6 +13,7 @@ import { allowedActions } from "../lifecycle";
 import {
   currentQuoteRequest,
   openQuoteRequest,
+  CARD_QUOTE_REQUESTS,
   useDesignQuoteRequests,
 } from "../quote-request-queries";
 import { mayHaveQuoteRequest } from "../quote-request-rules";
@@ -77,7 +78,7 @@ export function QuoteRequestFacts({ request }: { request: DesignQuoteRequest }) 
 /** The card's line: the request open now (else the latest), a placeholder while it is read. */
 export function DesignQuoteSummary({ design }: { design: Design }) {
   const enabled = mayHaveQuoteRequest(design);
-  const requests = useDesignQuoteRequests(design.id, enabled);
+  const requests = useDesignQuoteRequests(design.id, enabled, CARD_QUOTE_REQUESTS);
   if (!enabled) return null;
   if (requests.isPending) return <Skeleton className="h-16 w-full rounded-[var(--r-md)]" />;
   if (requests.isError) {
@@ -114,7 +115,7 @@ export function RequestQuoteButton({
 }) {
   const allowed = useHasPermission(PERM.designQuoteRequest);
   const offered = allowed && allowedActions(design).includes("requestQuote");
-  const requests = useDesignQuoteRequests(design.id, offered);
+  const requests = useDesignQuoteRequests(design.id, offered, CARD_QUOTE_REQUESTS);
   const [open, setOpen] = useState(false);
   if (!offered) return null;
   return (

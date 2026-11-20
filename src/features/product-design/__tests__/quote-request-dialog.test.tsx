@@ -1,4 +1,5 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -57,6 +58,39 @@ describe("an approved design's quote request", () => {
     expect(within(facts).getByText("120 thùng")).toBeInTheDocument();
     expect(within(facts).getByText("Đang chờ báo giá")).toBeInTheDocument();
     expect(within(facts).getByText(/-KH0010-/)).toBeInTheDocument();
+  });
+
+  it("does not read a card's requests again within 5 minutes, and does after", async () => {
+    const design = await getDesign(approved);
+    const url = `/designs/${approved}/quote-requests`;
+    const reads = () => backend.get.mock.calls.filter(([path]) => path === url).length;
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const show = () =>
+      render(
+        <QueryClientProvider client={client}>
+          <DesignQuoteSummary design={design} />
+        </QueryClientProvider>,
+      );
+    const first = show();
+    await screen.findByRole("region", { name: "Yêu cầu báo giá" }, FIRST_READ);
+    first.unmount();
+    expect(reads()).toBe(1);
+
+    // Only the clock moves: the 60 s of a detail read are over, the 5 minutes of a card are not.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(Date.now() + 2 * 60_000);
+      const again = show();
+      await screen.findByRole("region", { name: "Yêu cầu báo giá" }, FIRST_READ);
+      expect(reads()).toBe(1);
+      again.unmount();
+
+      vi.setSystemTime(Date.now() + 4 * 60_000);
+      show();
+      await waitFor(() => expect(reads()).toBe(2), FIRST_READ);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("reads nothing for a plain draft, and offers no button on it", async () => {
