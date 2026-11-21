@@ -84,8 +84,8 @@ export function MockReviewPanel({
         <PopoverTrigger asChild>
           <Button
             variant="secondary"
-            aria-label="Giả lập Quản lý kinh doanh"
-            title="Giả lập Quản lý kinh doanh"
+            aria-label="Giả lập người duyệt thiết kế"
+            title="Giả lập người duyệt thiết kế"
             className="min-h-11 rounded-full shadow-[var(--sh-md)]"
           >
             <UserCheck aria-hidden className="size-4" />

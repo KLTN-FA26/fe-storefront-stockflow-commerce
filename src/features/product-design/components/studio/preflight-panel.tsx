@@ -166,7 +166,7 @@ export function PreflightPanel({ heading = true }: { heading?: boolean } = {}) {
       </div>
       {report.issues.length === 0 ? (
         <p className="text-ink-secondary text-sm">
-          Không phát hiện vấn đề nào. Quản lý kinh doanh vẫn duyệt lại trước khi in.
+          Không phát hiện vấn đề nào. Thiết kế vẫn được duyệt lại trước khi in.
         </p>
       ) : null}
       <FailedIssues issues={report.issues} onLocate={locate} />

@@ -202,7 +202,7 @@ describe("the approved design's SKU (item 18, BE-2)", () => {
     const pending = await getDesign(MOCK_DESIGN_IDS.pending);
     expect(pending.customerSku).toBeNull();
     renderWithProviders(<StatusBanner design={pending} />);
-    expect(await screen.findByText(/Đang chờ Quản lý kinh doanh duyệt/)).toBeInTheDocument();
+    expect(await screen.findByText(/Đang chờ duyệt — gửi lúc/)).toBeInTheDocument();
     expect(screen.queryByText(/SKU riêng/)).toBeNull();
   });
 });

@@ -49,7 +49,7 @@ afterEach(() => {
   signOut();
 });
 
-const OPEN = { name: "Giả lập Quản lý kinh doanh" } as const;
+const OPEN = { name: "Giả lập người duyệt thiết kế" } as const;
 
 /** The studio of a design with the panel beside it, as the studio layout mounts it. */
 function renderStudio(designId: string) {
@@ -77,7 +77,7 @@ describe("MockReviewPanel in the studio", () => {
     const { store } = await designBackend();
     renderStudio(MOCK_DESIGN_IDS.pending);
     expect(
-      await screen.findByText(/Đang chờ Quản lý kinh doanh duyệt/, undefined, { timeout: 4000 }),
+      await screen.findByText(/Đang chờ duyệt — gửi lúc/, undefined, { timeout: 4000 }),
     ).toBeInTheDocument();
 
     const panel = await openPanel(user);

@@ -40,6 +40,11 @@ export function SubmitSetBar({ projectId, chosen, gate }: SubmitSetBarProps) {
   const needsComputer = fit === "unsupported";
   const canOpen = reason === null && fit === "desktop";
   const reasonId = "submit-set-reason";
+  const computerId = "submit-set-needs-computer";
+  // Only ids that are on the page: both lines when both apply, none while the device is still unknown.
+  const describedBy =
+    [reason !== null && reasonId, needsComputer && computerId].filter(Boolean).join(" ") ||
+    undefined;
   return (
     <div className="bg-bg-surface border-border-default sticky bottom-0 z-30 -mx-4 mt-6 border-t px-4 py-3 shadow-[var(--sh-md)] sm:mx-0 sm:rounded-[var(--r-lg)] sm:border">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -54,7 +59,7 @@ export function SubmitSetBar({ projectId, chosen, gate }: SubmitSetBarProps) {
           <Button
             type="button"
             disabled
-            aria-describedby={reasonId}
+            aria-describedby={describedBy}
             className="min-h-11 rounded-[var(--r-md)] px-5"
           >
             Gửi duyệt cả bộ
@@ -67,7 +72,7 @@ export function SubmitSetBar({ projectId, chosen, gate }: SubmitSetBarProps) {
         </p>
       ) : null}
       {needsComputer ? (
-        <p id={reason === null ? reasonId : undefined} className="text-ink-tertiary mt-2 text-xs">
+        <p id={computerId} className="text-ink-tertiary mt-2 text-xs">
           {NEEDS_COMPUTER}
         </p>
       ) : null}

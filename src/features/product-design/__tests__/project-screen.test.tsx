@@ -556,7 +556,11 @@ describe("MockReviewPanel on the project page", () => {
       />,
     );
     await screen.findByText("Đã chọn 0 bản nháp", undefined, WAIT);
-    const trigger = await screen.findByRole("button", { name: "Giả lập Quản lý kinh doanh" }, WAIT);
+    const trigger = await screen.findByRole(
+      "button",
+      { name: "Giả lập người duyệt thiết kế" },
+      WAIT,
+    );
     expect(trigger.parentElement).toHaveClass("top-[calc(var(--header-h)+0.75rem)]");
   });
   it("Xoá dữ liệu mock empties the page it stands on: the project is gone, not kept cached", async () => {
@@ -567,7 +571,7 @@ describe("MockReviewPanel on the project page", () => {
     await screen.findByRole("heading", { name: "Bộ sắp mất" }, WAIT);
 
     await user.click(
-      await screen.findByRole("button", { name: "Giả lập Quản lý kinh doanh" }, WAIT),
+      await screen.findByRole("button", { name: "Giả lập người duyệt thiết kế" }, WAIT),
     );
     await user.click(await screen.findByRole("button", { name: "Xoá dữ liệu mock" }));
     await user.click(await screen.findByRole("button", { name: "Xoá hết" }));

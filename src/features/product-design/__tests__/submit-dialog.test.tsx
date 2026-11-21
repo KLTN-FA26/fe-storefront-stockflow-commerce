@@ -289,9 +289,7 @@ describe("SubmitDialog on a preflight Pass", () => {
     expect(urlsOf(post)).toEqual(SENT(id));
     expect(await designIn(store, id)).toMatchObject({ status: "PENDING_REVIEW" });
     expect(await historyOf(store, id)).toContain("SUBMITTED_FOR_REVIEW");
-    expect(
-      await screen.findByText(/^Đang chờ Quản lý kinh doanh duyệt — gửi lúc /),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/^Đang chờ duyệt — gửi lúc /)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Chữ (T)" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Gửi duyệt" })).not.toBeInTheDocument();
     expect(screen.getByText("Đã gửi duyệt")).toBeInTheDocument(); // the polite live region
@@ -513,11 +511,7 @@ describe("SubmitDialog on a preflight Pass", () => {
     const dialog = await openSubmit(user);
     await user.click(within(dialog).getByRole("button", { name: "Gửi duyệt" }));
     expect(
-      await screen.findByText(
-        /^Đang chờ Quản lý kinh doanh duyệt — gửi lúc /,
-        undefined,
-        SUBMISSION,
-      ),
+      await screen.findByText(/^Đang chờ duyệt — gửi lúc /, undefined, SUBMISSION),
     ).toBeInTheDocument();
     await act(() => new Promise((resolve) => setTimeout(resolve, 300)));
 

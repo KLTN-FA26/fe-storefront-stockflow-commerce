@@ -44,7 +44,7 @@ export function StatusBanner({ design }: { design: Design }) {
   if (design.status === "PENDING_REVIEW") {
     return (
       <ReadOnlyBanner action={<SubmittedFiles designId={design.id} />}>
-        {`Đang chờ Quản lý kinh doanh duyệt — gửi lúc ${timeOf(design.submittedAt)}`}
+        {`Đang chờ duyệt — gửi lúc ${timeOf(design.submittedAt)}`}
       </ReadOnlyBanner>
     );
   }
