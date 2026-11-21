@@ -16,6 +16,9 @@ type SubmitSetBarProps = {
   gate: Gate;
 };
 
+/** Shown on a phone or tablet, where the set cannot be submitted. */
+const NEEDS_COMPUTER = "Gửi duyệt trên máy tính (màn hình từ 1024 px)";
+
 /** The first reason that stops the set from going: the project's, else too few chosen. */
 const blockedReason = (gate: Gate, chosen: number) => {
   if (!gate.allowed) return gate.reason ?? null;
@@ -25,13 +28,17 @@ const blockedReason = (gate: Gate, chosen: number) => {
 /**
  * Sticky at the bottom of the project page (spec 2026-11-12 §8): how many drafts are chosen and
  * "Gửi duyệt cả bộ", which opens the desktop submit page for them. Locked, with its reason, below
- * two drafts. The submit page is desktop-only, so a phone is told.
+ * two drafts. A customer cannot submit on a phone or tablet at all (decision 2026-11-21): there the
+ * button is locked and says to use a computer; while the device is unknown it is locked quietly.
  */
 export function SubmitSetBar({ projectId, chosen, gate }: SubmitSetBarProps) {
   const reason = blockedReason(gate, chosen.length);
-  // The same test as the gate: a tablet in landscape is wide enough and still told. Not while the
-  // fit is unknown (the server render): the sentence would be in the HTML and then vanish on a computer.
-  const needsComputer = useDeviceFit() === "unsupported";
+  // The same test as the gate: a tablet in landscape is wide enough and still told. While the fit is
+  // unknown (the server render) the button is locked without the sentence, so a computer sees no flash
+  // of text, and no one can follow the link before the device is known.
+  const fit = useDeviceFit();
+  const needsComputer = fit === "unsupported";
+  const canOpen = reason === null && fit === "desktop";
   const reasonId = "submit-set-reason";
   return (
     <div className="bg-bg-surface border-border-default sticky bottom-0 z-30 -mx-4 mt-6 border-t px-4 py-3 shadow-[var(--sh-md)] sm:mx-0 sm:rounded-[var(--r-lg)] sm:border">
@@ -39,7 +46,7 @@ export function SubmitSetBar({ projectId, chosen, gate }: SubmitSetBarProps) {
         <p className="text-ink-primary text-sm font-semibold tabular-nums">
           Đã chọn {chosen.length} bản nháp
         </p>
-        {reason === null ? (
+        {canOpen ? (
           <Button asChild className="min-h-11 rounded-[var(--r-md)] px-5">
             <Link href={STORE_ROUTES.design.projectSubmit(projectId, chosen)}>Gửi duyệt cả bộ</Link>
           </Button>
@@ -60,7 +67,9 @@ export function SubmitSetBar({ projectId, chosen, gate }: SubmitSetBarProps) {
         </p>
       ) : null}
       {needsComputer ? (
-        <p className="text-ink-tertiary mt-2 text-xs">Cần máy tính để gửi duyệt cả bộ</p>
+        <p id={reason === null ? reasonId : undefined} className="text-ink-tertiary mt-2 text-xs">
+          {NEEDS_COMPUTER}
+        </p>
       ) : null}
     </div>
   );

@@ -4,29 +4,50 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SubmitSetBar } from "../components/submit-set-bar";
 
-const NOTE = "Cần máy tính để gửi duyệt cả bộ";
+const NOTE = "Gửi duyệt trên máy tính (màn hình từ 1024 px)";
 const bar = <SubmitSetBar projectId="p-1" chosen={["a", "b"]} gate={{ allowed: true }} />;
+const IPAD = "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15";
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
-describe("SubmitSetBar: the sentence about the computer", () => {
-  it("is not in the server-rendered HTML, so it does not flash up on a computer", () => {
+describe("SubmitSetBar: no submit on a phone or tablet", () => {
+  it("is locked without the sentence in the server HTML, so nothing flashes on a computer", () => {
     // Server render: the device is not known yet (`useDeviceFit` is "unknown").
-    expect(renderToString(bar)).not.toContain(NOTE);
+    const html = renderToString(bar);
+    expect(html).not.toContain(NOTE);
+    expect(html).not.toContain("href=");
+    expect(html).toContain("disabled");
   });
 
-  it("is not shown on a device the studio takes", () => {
+  it("is a link to the submit page on a computer", () => {
     render(bar);
+    expect(screen.getByRole("link", { name: "Gửi duyệt cả bộ" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("/submit"),
+    );
     expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
   });
 
-  it("is shown on a tablet, whatever its width", () => {
-    vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(
-      "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
-    );
+  it("is locked on a tablet, whatever its width, and says to use a computer", () => {
+    vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(IPAD);
     render(bar);
+    expect(screen.queryByRole("link", { name: "Gửi duyệt cả bộ" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Gửi duyệt cả bộ" })).toBeDisabled();
+    expect(screen.getByText(NOTE)).toBeInTheDocument();
+  });
+
+  it("is locked on a phone-width window", () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: true,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    render(bar);
+    expect(screen.getByRole("button", { name: "Gửi duyệt cả bộ" })).toBeDisabled();
     expect(screen.getByText(NOTE)).toBeInTheDocument();
   });
 });
