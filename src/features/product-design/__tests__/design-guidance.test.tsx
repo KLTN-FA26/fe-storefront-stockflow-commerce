@@ -5,9 +5,10 @@ import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/design-seed";
 import { registerMockRoute } from "@/lib/api/mock-adapter";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
-import { getDesign } from "../api";
+import { getDesign, listDesigns } from "../api";
 import { designKeys } from "../queries";
 import { COLOR_DISCLAIMER } from "../components/color-disclaimer";
+import { DesignCard } from "../components/design-card";
 import { DeleteDesignDialog } from "../components/delete-design-dialog";
 import { DesignListBody } from "../components/design-list-body";
 import { QuoteRequestFacts } from "../components/design-quote-request";
@@ -167,27 +168,42 @@ describe("deleting a returned draft with an open quote request (item 44)", () =>
   });
 });
 
-describe("the approved design's SKU (item 18)", () => {
-  it("shows SKU riêng in the studio banner, read from the snapshot once", async () => {
-    const backend = await designBackend();
+describe("the approved design's SKU (item 18, BE-2)", () => {
+  it("shows SKU riêng in the studio banner from the design itself, at once (nothing read for it)", async () => {
     const approved = await getDesign(MOCK_DESIGN_IDS.approved);
+    expect(approved.customerSku).toMatch(/-KH0010-/);
     renderWithProviders(<StatusBanner design={approved} />);
-    expect(await screen.findByText(/-KH0010-/, undefined, FIRST_READ)).toBeInTheDocument();
     expect(screen.getByText(/SKU riêng/)).toBeInTheDocument();
-    const reads = backend.get.mock.calls.filter(([url]) => String(url).endsWith("/snapshot"));
-    expect(reads).toHaveLength(1);
+    expect(screen.getByText(approved.customerSku!)).toHaveClass("font-mono");
   });
 
-  it("reads no snapshot for a design that is not approved", async () => {
+  it("shows it on the approved card from the list row, with no snapshot read", async () => {
     const backend = await designBackend();
-    const pending = await getDesign(MOCK_DESIGN_IDS.pending);
-    const { client } = renderWithProviders(<StatusBanner design={pending} />);
-    expect(await screen.findByText(/Đang chờ Quản lý kinh doanh duyệt/)).toBeInTheDocument();
-    expect(client.getQueryState(designKeys.snapshot(pending.id))?.fetchStatus ?? "idle").toBe(
-      "idle",
+    const page = await listDesigns({ page: 1, size: 20 });
+    const approved = page.items.find((d) => d.id === MOCK_DESIGN_IDS.approved)!;
+    const others = page.items.filter((d) => d.status !== "APPROVED");
+
+    renderWithProviders(
+      <>
+        <DesignCard design={approved} />
+        {others.map((d) => (
+          <DesignCard key={d.id} design={d} />
+        ))}
+      </>,
     );
+
+    expect(screen.getAllByText(/SKU riêng/)).toHaveLength(1);
+    expect(screen.getByText(approved.customerSku!)).toBeInTheDocument();
     const reads = backend.get.mock.calls.filter(([url]) => String(url).endsWith("/snapshot"));
     expect(reads).toHaveLength(0);
+  });
+
+  it("says nothing of a SKU on a design that is not approved", async () => {
+    const pending = await getDesign(MOCK_DESIGN_IDS.pending);
+    expect(pending.customerSku).toBeNull();
+    renderWithProviders(<StatusBanner design={pending} />);
+    expect(await screen.findByText(/Đang chờ Quản lý kinh doanh duyệt/)).toBeInTheDocument();
+    expect(screen.queryByText(/SKU riêng/)).toBeNull();
   });
 });
 

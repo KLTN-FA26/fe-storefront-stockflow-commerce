@@ -44,7 +44,7 @@ const TOGGLE = `h-9 min-w-11 rounded-[var(--r-md)] ${BAR_HIT_Y}`;
  * full text first). A locked text keeps all of it as it is.
  */
 export function TextBar({ element, code, readOnly }: PropertySectionProps<TextElement>) {
-  const { editor, surfaces, template, fonts } = useStudio();
+  const { editor, surfaces, template, fonts, servedFontCodes } = useStudio();
   const italicHintId = useId();
   const surface = surfaces.byCode[code];
   if (!surface) return null;
@@ -63,7 +63,7 @@ export function TextBar({ element, code, readOnly }: PropertySectionProps<TextEl
           inline
           label="Phông chữ"
           value={element.fontCode}
-          options={allowedFonts(template, fonts)}
+          options={allowedFonts(template, fonts, servedFontCodes)}
           onChange={(fontCode) =>
             // A face without italics cannot show the flag, so it is not kept.
             patch({ fontCode, italic: fonts[fontCode]?.italic ? element.italic : false })

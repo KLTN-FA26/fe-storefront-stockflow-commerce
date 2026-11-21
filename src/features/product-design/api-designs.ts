@@ -98,10 +98,15 @@ export async function designFromAnswer(answer: unknown, signal?: AbortSignal): P
   return design!;
 }
 
-/** GET /designs?status=&page=&size= — the caller's designs, newest first, never ARCHIVED (BR-16). */
+/** GET /designs?status=&inProject=&page=&size= — the caller's designs, newest first, never ARCHIVED (BR-16). */
 export async function listDesigns(p: DesignListParams, signal?: AbortSignal): Promise<DesignPage> {
   const { data } = await api.get<unknown>("/designs", {
-    params: { page: to0Based(p.page), size: p.size, ...(p.status ? { status: p.status } : {}) },
+    params: {
+      page: to0Based(p.page),
+      size: p.size,
+      ...(p.status ? { status: p.status } : {}),
+      ...(p.inProject === undefined ? {} : { inProject: p.inProject }),
+    },
     ...withSignal(signal),
   });
   const page = designDraftPageDtoSchema.parse(data);

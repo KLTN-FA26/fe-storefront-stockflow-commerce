@@ -55,6 +55,7 @@ describe("a design as the BE sends it", () => {
       variant: { sku: "CUP-PAPER-12OZ-WHT", label: "CUP-PAPER-12OZ-WHT" },
       version: 3,
       projectId: null,
+      customerSku: null,
       project: null,
       sourceSnapshotId: null,
       lastReturn: null,

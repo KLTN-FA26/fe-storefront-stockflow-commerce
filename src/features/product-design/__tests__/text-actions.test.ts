@@ -61,6 +61,25 @@ describe("allowedFonts", () => {
   it("is empty when none of the template's fonts is in the registry", () => {
     expect(allowedFonts(withFonts(cup12oz, ["pacifico"]), BIG_REGISTRY)).toEqual([]);
   });
+
+  it("keeps only fonts in the registry, the template's list and the BE's list (BE-18)", () => {
+    const template = withFonts(cup12oz, ["montserrat", "lobster", "pacifico"]);
+
+    expect(allowedFonts(template, BIG_REGISTRY, ["lobster", "pacifico", "oswald"])).toEqual([
+      expect.objectContaining({ code: "lobster" }),
+    ]);
+    expect(
+      allowedFonts(withFonts(cup12oz, null), BIG_REGISTRY, ["montserrat"]).map((f) => f.code),
+    ).toEqual(["montserrat"]);
+  });
+
+  it("falls back to the registry while the BE's list is unknown (null)", () => {
+    expect(allowedFonts(withFonts(cup12oz, null), BIG_REGISTRY, null).map((f) => f.code)).toEqual([
+      "be-vietnam-pro",
+      "lobster",
+      "montserrat",
+    ]);
+  });
 });
 
 function setup(template: CustomizationTemplate = cup12oz, fonts: FontRegistry = FONTS) {
@@ -68,7 +87,7 @@ function setup(template: CustomizationTemplate = cup12oz, fonts: FontRegistry = 
   const surfaces = createSurfaces(template);
   const announce = vi.fn();
   const sizer = createSizer(fonts, fakeMeasure);
-  const services = { editor, surfaces, sizer, fonts, template, announce };
+  const services = { editor, surfaces, sizer, fonts, servedFontCodes: null, template, announce };
   const code = editor.store.getState().activeSurface;
   const surface = surfaces.byCode[code]!;
   const texts = () =>

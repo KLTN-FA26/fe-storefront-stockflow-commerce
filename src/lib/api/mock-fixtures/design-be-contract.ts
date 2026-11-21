@@ -137,6 +137,8 @@ export function beDraft(dto: DesignDto, templateCode: string | undefined): Recor
     templateCode,
     previewUrl: dto.previewUrl,
     projectId: dto.projectId,
+    // BE-2: the customer's SKU is sent on an approved design only.
+    customerSku: dto.status === "APPROVED" ? dto.approval?.skuCode : undefined,
     parentSnapshotId: dto.sourceSnapshotId,
     reviewRequestedAt: dto.submittedAt,
     reviewedAt: dto.status === "APPROVED" ? dto.approvedAt : returned?.returnedAt,

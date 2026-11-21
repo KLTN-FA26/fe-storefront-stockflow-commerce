@@ -76,7 +76,7 @@ export function paginate<T>(
  * path of the route table.
  */
 const DESIGN_PATH =
-  /^(?:\/designs(?:\/.*)?|\/design-projects(?:\/.*)?|\/catalog\/products\/[^/]+\/customization|\/__mock(?:\/.*)?)$/;
+  /^(?:\/designs(?:\/.*)?|\/design-projects(?:\/.*)?|\/design-fonts|\/catalog\/products\/[^/]+\/customization|\/__mock(?:\/.*)?)$/;
 
 /**
  * A design URL as the route table knows it, null for any other: without an origin

@@ -2,6 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { registerMockRoute } from "@/lib/api/mock-adapter";
 import { printConfigFor } from "@/lib/api/mock-fixtures/design-print-configs";
 import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/design-seed";
 import type { DesignMockStore } from "@/lib/api/mock-fixtures/design-store";
@@ -566,6 +567,58 @@ describe("text properties", () => {
     await user.click(await screen.findByRole("option", { name: /Lobster/ }));
     expect(lastText(services)).toMatchObject({ fontCode: "lobster", italic: false });
     expect(screen.getByRole("button", { name: "In nghiêng" })).toBeDisabled();
+  });
+
+  it("offers a font only when the registry, the template and GET /design-fonts all have it (BE-18)", async () => {
+    const user = userEvent.setup();
+    const { store: studio } = await designBackend(fontsRestrictedTo(["lobster", "montserrat"]));
+    registerMockRoute("GET", "/design-fonts", () => ({
+      status: 200,
+      data: {
+        success: true,
+        data: [
+          { code: "lobster", label: "Lobster" },
+          { code: "oswald", label: "Oswald" },
+        ],
+      },
+      headers: {},
+    }));
+    const services = await openStudio(await cupDraft(studio), FONTS);
+    await addText(user);
+    await user.keyboard("{Escape}");
+
+    await user.click(screen.getByRole("combobox", { name: /^Phông chữ/ }));
+    const list = await screen.findByRole("listbox");
+    await waitFor(() =>
+      expect(
+        within(list)
+          .getAllByRole("option")
+          .map((o) => o.textContent?.trim()),
+      ).toEqual(["Lobster"]),
+    );
+    expect(lastText(services).fontCode).toBe("lobster");
+  });
+
+  it("falls back to the registry's fonts when GET /design-fonts fails, without blocking the studio", async () => {
+    const user = userEvent.setup();
+    const { store: studio } = await designBackend(fontsRestrictedTo(["lobster", "montserrat"]));
+    let asked = 0;
+    registerMockRoute("GET", "/design-fonts", () => {
+      asked += 1;
+      return { status: 500, data: { success: false, errorCode: "INTERNAL" }, headers: {} };
+    });
+    await openStudio(await cupDraft(studio), FONTS);
+    await addText(user);
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(asked).toBeGreaterThan(0));
+
+    await user.click(screen.getByRole("combobox", { name: /^Phông chữ/ }));
+    const list = await screen.findByRole("listbox");
+    expect(
+      within(list)
+        .getAllByRole("option")
+        .map((o) => o.textContent?.trim()),
+    ).toEqual(["Lobster", "Montserrat"]);
   });
 
   it.each([[null], [[]]])(

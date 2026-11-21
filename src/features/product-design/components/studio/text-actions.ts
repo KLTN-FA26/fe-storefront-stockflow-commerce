@@ -64,20 +64,26 @@ export type FontOption = { code: string; label: string; family: string; italic: 
 /**
  * The fonts a text on this template may use, in the template's order: its `allowedFontCodes`,
  * or every font of the registry when it lists none (`null` or empty, R30). A listed code the
- * registry does not know is skipped.
+ * registry does not know is skipped, and so is one the BE does not list (`served`, BE-18);
+ * `served` is `null` while the BE's list is unknown (not read yet, or it failed): the registry
+ * stands alone then, so the studio never waits on that read.
  */
-export function allowedFonts(template: CustomizationTemplate, fonts: FontRegistry): FontOption[] {
+export function allowedFonts(
+  template: CustomizationTemplate,
+  fonts: FontRegistry,
+  served: readonly string[] | null = null,
+): FontOption[] {
   const listed = template.allowedFontCodes;
   const codes = listed !== null && listed.length > 0 ? listed : Object.keys(fonts);
   return [...new Set(codes)].flatMap((code) => {
     const font = fonts[code];
-    return font ? [{ code, ...font }] : [];
+    return font && (served === null || served.includes(code)) ? [{ code, ...font }] : [];
   });
 }
 
 type PlaceServices = Pick<
   StudioServices,
-  "editor" | "surfaces" | "sizer" | "fonts" | "template" | "announce"
+  "editor" | "surfaces" | "sizer" | "fonts" | "servedFontCodes" | "template" | "announce"
 >;
 
 /**
@@ -88,12 +94,12 @@ type PlaceServices = Pick<
  * nothing was added: the design is read-only, the surface is full, or no font is allowed.
  */
 export function placeText(
-  { editor, surfaces, sizer, fonts, template, announce }: PlaceServices,
+  { editor, surfaces, sizer, fonts, servedFontCodes, template, announce }: PlaceServices,
   preset: TextPreset,
 ): string | null {
   const { activeSurface: code, readOnly, document } = editor.store.getState();
   const surface = surfaces.byCode[code];
-  const font = allowedFonts(template, fonts)[0];
+  const font = allowedFonts(template, fonts, servedFontCodes)[0];
   if (!surface || !font || readOnly) return null;
   if ((document.surfaces[code]?.elements.length ?? 0) >= MAX_ELEMENTS_PER_SURFACE) return null;
 
@@ -144,12 +150,12 @@ export function placeText(
  * element's id, or `null` when nothing was added, as `placeText` does.
  */
 export function placeTextStyle(
-  { editor, surfaces, sizer, fonts, template, announce }: PlaceServices,
+  { editor, surfaces, sizer, fonts, servedFontCodes, template, announce }: PlaceServices,
   item: Pick<LibraryText, "text" | "style">,
 ): string | null {
   const { activeSurface: code, readOnly, document } = editor.store.getState();
   const surface = surfaces.byCode[code];
-  const allowed = allowedFonts(template, fonts);
+  const allowed = allowedFonts(template, fonts, servedFontCodes);
   const font = allowed.find((option) => option.code === item.style.fontCode) ?? allowed[0];
   if (!surface || !font || readOnly) return null;
   if ((document.surfaces[code]?.elements.length ?? 0) >= MAX_ELEMENTS_PER_SURFACE) return null;

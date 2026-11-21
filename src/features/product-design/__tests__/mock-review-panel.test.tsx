@@ -88,9 +88,13 @@ describe("MockReviewPanel in the studio", () => {
     );
     const approved = await designIn(store, MOCK_DESIGN_IDS.pending);
     expect(
-      await screen.findByText(`Đã duyệt lúc ${formatDateTime(approved.approvedAt!)}`, undefined, {
-        timeout: 4000,
-      }),
+      await screen.findByText(
+        new RegExp(`^Đã duyệt lúc ${formatDateTime(approved.approvedAt!)}`),
+        undefined,
+        {
+          timeout: 4000,
+        },
+      ),
     ).toBeInTheDocument();
   });
 

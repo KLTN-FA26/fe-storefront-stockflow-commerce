@@ -13,6 +13,7 @@ import { ApiError } from "@/lib/api/error";
 import { QUERY_TIMES } from "@/lib/api/query-client";
 import { retryTransient } from "@/lib/api/retry";
 
+import { listDesignFontCodes } from "./api-fonts";
 import {
   getAssetDownloadUrl,
   getDesign,
@@ -41,8 +42,10 @@ export const designKeys = {
   all: ["designs"] as const,
   lists: () => [...designKeys.all, "list"] as const,
   list: (p: DesignListParams) => [...designKeys.lists(), p] as const,
-  /** The same list read page after page on demand (`useDesignPages`), whatever the status. */
-  pages: (size: number) => [...designKeys.lists(), "pages", size] as const,
+  /** The designs in no project, read page after page on demand (`useAddableDesigns`). */
+  addable: (size: number) => [...designKeys.lists(), "addable", size] as const,
+  /** The font codes the BE accepts (BE-18): a fixed list, read once. */
+  fonts: () => [...designKeys.all, "fonts"] as const,
   draftCount: () => [...designKeys.all, "draft-count"] as const,
   details: () => [...designKeys.all, "detail"] as const,
   detail: (id: string) => [...designKeys.details(), id] as const,
@@ -85,19 +88,33 @@ export function useDesignList(params: DesignListParams) {
 }
 
 /**
- * The customer's designs read a page at a time, the next page on request (`fetchNextPage`). For a
- * screen that filters what it shows (the box that adds designs to a project): the BE cannot filter
- * by project (BE-15), so a page may hold nothing the screen offers, and the screen reads on instead
- * of showing a page counter that counts rows it hides.
+ * The customer's designs that are in no project, a page at a time, the next on request
+ * (`fetchNextPage`): the box that adds designs to a project. The BE filters (`inProject=false`,
+ * BE-15), so every page holds rows to offer and the page counts are right.
  */
-export function useDesignPages(size: number) {
+export function useAddableDesigns(size: number) {
   return useInfiniteQuery({
-    queryKey: designKeys.pages(size),
+    queryKey: designKeys.addable(size),
     initialPageParam: 1,
-    queryFn: ({ pageParam, signal }) => listDesigns({ page: pageParam, size }, signal),
+    queryFn: ({ pageParam, signal }) =>
+      listDesigns({ page: pageParam, size, inProject: false }, signal),
     getNextPageParam: (last) => (last.hasNext ? last.page + 1 : undefined),
     retry: retryTransient,
     ...QUERY_TIMES.list,
+  });
+}
+
+/**
+ * The font codes the BE accepts in a print configuration (BE-18). The studio's font menu offers a
+ * font only when the BE lists it too; the answer is a fixed list, so it is read once.
+ */
+export function useDesignFontCodes() {
+  return useQuery({
+    queryKey: designKeys.fonts(),
+    queryFn: ({ signal }) => listDesignFontCodes(signal),
+    retry: retryTransient,
+    staleTime: Infinity,
+    gcTime: QUERY_TIMES.master.gcTime,
   });
 }
 
@@ -197,16 +214,6 @@ const snapshotQuery = (id: string) =>
     staleTime: Infinity,
     gcTime: QUERY_TIMES.detail.gcTime,
   });
-
-/**
- * The customer's own SKU of an APPROVED design, from its snapshot (the design list does not carry
- * it yet: BE-2). `null` while there is none, and for a design not approved: nothing is read then.
- * Meant for one design's own screen (the studio's status bar), never one per list card.
- */
-export function useDesignCustomerSku(id: string, approved: boolean) {
-  const snapshot = useQuery({ ...snapshotQuery(id), enabled: approved });
-  return { sku: snapshot.data?.customerSku ?? null, isPending: approved && snapshot.isPending };
-}
 
 /**
  * The files of the latest submission (`[]` before one), or of the approved snapshot (`approved`):

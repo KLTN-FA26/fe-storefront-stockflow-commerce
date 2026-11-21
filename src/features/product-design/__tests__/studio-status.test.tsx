@@ -257,7 +257,7 @@ describe("the studio per status", () => {
     await openStudio(MOCK_DESIGN_IDS.approved);
 
     expect(
-      screen.getByText(`Đã duyệt lúc ${formatDateTime(approved.approvedAt!)}`),
+      screen.getByText(new RegExp(`^Đã duyệt lúc ${formatDateTime(approved.approvedAt!)}`)),
     ).toBeInTheDocument();
     expect(screen.getByText("Đã duyệt")).toBeInTheDocument();
     const replace = vi.fn();

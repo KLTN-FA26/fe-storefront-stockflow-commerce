@@ -3,7 +3,6 @@
 import { formatDateTime } from "@/lib/format";
 
 import { isReturned } from "../../lifecycle";
-import { useDesignCustomerSku } from "../../queries";
 import { ChatAboutButton } from "../chat-about-button";
 import { RequestQuoteButton } from "../design-quote-request";
 import type { Design } from "../../types";
@@ -15,9 +14,9 @@ import { SubmittedFiles } from "./submitted-files";
 const timeOf = (iso: string | null | undefined) =>
   iso && !Number.isNaN(Date.parse(iso)) ? formatDateTime(iso) : "—";
 
-/** "Đã duyệt lúc …", with the design's own SKU once the snapshot says it (read once, not per render). */
+/** "Đã duyệt lúc …", with the design's own SKU the design itself carries (BE-2). */
 function ApprovedLine({ design }: { design: Design }) {
-  const { sku } = useDesignCustomerSku(design.id, true);
+  const sku = design.customerSku;
   return (
     <>
       {`Đã duyệt lúc ${timeOf(design.approvedAt)}`}

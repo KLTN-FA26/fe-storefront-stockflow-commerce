@@ -2,6 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { api } from "@/lib/api/client";
 import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/design-seed";
 import { settle } from "@/test/fake-backend";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
@@ -171,7 +172,7 @@ describe("ProjectScreen", () => {
     expect(await screen.findByText("2/20 bản", undefined, WAIT)).toBeInTheDocument();
   });
 
-  it("reads on past a first page with nothing to offer before saying there is none", async () => {
+  it("asks the BE for designs in no project (BE-15) and shows what it answers, with no page counter", async () => {
     const full = await createProject({ name: "Đầy" });
     for (let i = 0; i < 20; i += 1) {
       await addDesignToProject(
@@ -181,24 +182,25 @@ describe("ProjectScreen", () => {
     }
     const project = await createProject({ name: "Trống" });
     const n = await names();
+    const get = vi.spyOn(api, "get");
     show(project.id);
 
     await userEvent.click(await screen.findByRole("button", { name: "Thêm bản sẵn có" }, WAIT));
     const dialog = await screen.findByRole("dialog", { name: "Thêm bản sẵn có" });
-    // Page 1 holds the 20 designs of the other project; the free ones are on page 2.
+    // The 20 designs of the other project are filtered out by the BE: page 1 already has the free one.
     expect(await within(dialog).findByText(n.approved, undefined, WAIT)).toBeInTheDocument();
     expect(within(dialog).queryByText("Không có bản nào để thêm")).toBeNull();
-    // No page counter over rows it hides, and no way back to a page it would skip again.
-    expect(within(dialog).queryByRole("button", { name: "Trang trước" })).toBeNull();
+    const asked = get.mock.calls.filter(([url]) => url === "/designs");
+    expect(asked).toHaveLength(1);
+    expect(asked[0]![1]).toMatchObject({ params: { inProject: false, page: 0 } });
     expect(within(dialog).queryByRole("button", { name: "Trang sau" })).toBeNull();
   });
 
-  it("reads another page only on 'Xem thêm', and through a page with nothing to add", async () => {
+  it("reads another page only on 'Xem thêm', one request each, nothing hidden between them", async () => {
     const { store } = backend;
     const taken = await createProject({ name: "Đã có chỗ" });
     const target = await createProject({ name: "Trống" });
     const n = await names();
-    // Newest first: 20 free designs; before them 20 in another project; then the seeded ones.
     for (let i = 0; i < 20; i += 1) {
       settle(
         await store.create({ ...STUDIO_PRODUCTS.cup, name: `Đã có ${i}`, projectId: taken.id }),
@@ -207,6 +209,7 @@ describe("ProjectScreen", () => {
     for (let i = 0; i < 20; i += 1) {
       settle(await store.create({ ...STUDIO_PRODUCTS.cup, name: `Tự do ${i}` }));
     }
+    const get = vi.spyOn(api, "get");
     show(target.id);
 
     await userEvent.click(await screen.findByRole("button", { name: "Thêm bản sẵn có" }, WAIT));
@@ -214,16 +217,22 @@ describe("ProjectScreen", () => {
     expect(
       await within(dialog).findAllByRole("button", { name: /^Thêm Tự do/ }, WAIT),
     ).toHaveLength(20);
-    expect(within(dialog).queryByText(n.approved)).toBeNull(); // on a page not read yet
+    expect(within(dialog).queryByText(n.approved)).toBeNull(); // on the next page
+    expect(within(dialog).queryByText(/^Đã có /)).toBeNull(); // never offered
 
-    // The second page is all in the other project: one click reads past it, to the seeded designs.
     await userEvent.click(within(dialog).getByRole("button", { name: "Xem thêm" }));
     expect(await within(dialog).findByText(n.approved, undefined, WAIT)).toBeInTheDocument();
-    // Nothing more to read: the button is gone, and the 20 first rows are still there.
     await waitFor(() =>
       expect(within(dialog).queryByRole("button", { name: "Xem thêm" })).toBeNull(),
     );
     expect(within(dialog).getAllByRole("button", { name: /^Thêm Tự do/ })).toHaveLength(20);
+    const pages = get.mock.calls
+      .filter(([url]) => url === "/designs")
+      .map(([, config]) => (config as { params: { page: number; inProject: boolean } }).params);
+    expect(pages).toEqual([
+      { page: 0, size: 20, inProject: false },
+      { page: 1, size: 20, inProject: false },
+    ]);
   });
 
   it("starts a new design in the project: the new-design flow carries the project id", async () => {

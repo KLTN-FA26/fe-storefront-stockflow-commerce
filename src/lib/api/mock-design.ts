@@ -145,6 +145,21 @@ export function registerDesignMockRoutes(store: DesignMockStore | Promise<Design
       },
     );
   });
+  // BE-18: the codes of the BE's `PrintFont`, in its order: the same eight the studio ships.
+  route("GET", "/design-fonts", async () =>
+    ok(
+      [
+        ["be-vietnam-pro", "Be Vietnam Pro"],
+        ["montserrat", "Montserrat"],
+        ["roboto-slab", "Roboto Slab"],
+        ["playfair-display", "Playfair Display"],
+        ["oswald", "Oswald"],
+        ["dancing-script", "Dancing Script"],
+        ["lobster", "Lobster"],
+        ["pacifico", "Pacifico"],
+      ].map(([code, label]) => ({ code, label })),
+    ),
+  );
   route("GET", "/designs/:id", async (s, config) => viaBe(await s.get(id(config)), draft));
   route("PUT", "/designs/:id/name", async (s, config) =>
     viaBe(await s.rename(id(config), bodyOf(config)), draft),

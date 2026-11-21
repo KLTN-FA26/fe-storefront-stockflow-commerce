@@ -566,6 +566,47 @@ describe("design mock routes", () => {
     ).toEqual({ status: 400, code: "VALIDATION_FAILED" });
   });
 
+  it("GET /designs carries customerSku on an approved design only (BE-2)", async () => {
+    const { data: page } = await api.get<Page<Draft & { customerSku?: string }>>("/designs");
+    const bySku = page.items.map((d) => [d.status, d.customerSku !== undefined] as const);
+    expect(bySku.filter(([status]) => status === "APPROVED").every(([, has]) => has)).toBe(true);
+    expect(bySku.filter(([status]) => status !== "APPROVED").some(([, has]) => has)).toBe(false);
+    const approved = page.items.find((d) => d.id === MOCK_DESIGN_IDS.approved);
+    expect(approved?.customerSku).toMatch(/-KH0010-/);
+  });
+
+  it("GET /designs?inProject=false|true filters in the query, so the totals count it (BE-15)", async () => {
+    const { data: project } = await api.post<{ id: string }>("/design-projects", { name: "Dự án" });
+    await api.post(`/design-projects/${project.id}/designs`, { designId: MOCK_DESIGN_IDS.draft });
+    const all = (await api.get<Page<Draft>>("/designs")).data;
+    const free = (await api.get<Page<Draft>>("/designs", { params: { inProject: false, size: 1 } }))
+      .data;
+    const taken = (await api.get<Page<Draft>>("/designs", { params: { inProject: "true" } })).data;
+
+    expect(free.totalElements).toBe(all.totalElements - 1);
+    expect(free.items).toHaveLength(1); // a full page, though a design of the project exists
+    expect(taken.items.map((d) => d.id)).toEqual([MOCK_DESIGN_IDS.draft]);
+    expect(await codeOf(api.get("/designs", { params: { inProject: "maybe" } }))).toEqual({
+      status: 400,
+      code: "UNSUPPORTED_PARAMETER",
+    });
+  });
+
+  it("GET /design-fonts lists the BE's eight codes, in its order (BE-18)", async () => {
+    const { data } = await api.get<Array<{ code: string; label: string }>>("/design-fonts");
+    expect(data.map((f) => f.code)).toEqual([
+      "be-vietnam-pro",
+      "montserrat",
+      "roboto-slab",
+      "playfair-display",
+      "oswald",
+      "dancing-script",
+      "lobster",
+      "pacifico",
+    ]);
+    expect(data[0]).toEqual({ code: "be-vietnam-pro", label: "Be Vietnam Pro" });
+  });
+
   it("GET …/snapshot of an approved design lists its frozen files and the bundle's checksum; an approved file that lost its bytes fails the integrity check", async () => {
     const { data: snapshot } = await api.get<{
       checksum: string;

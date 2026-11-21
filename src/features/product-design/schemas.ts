@@ -48,6 +48,8 @@ export const designSchema = z.object({
   /** The optimistic-lock token every write echoes back (docs 12 BR-11). */
   version,
   projectId: beId().nullable(),
+  /** The customer's own SKU, once the design is APPROVED (BE-2): `null` before. */
+  customerSku: z.string().min(1).nullable().default(null),
   /** The project's name and status, for the studio header and the card label (part E). */
   project: z
     .object({ id: beId(), name: z.string().min(1), status: projectStatusSchema })

@@ -142,4 +142,6 @@ export type DesignListParams = {
   size: number;
   /** An ARCHIVED design is listed for nobody (BR-16): the BE answers 400 to that status. */
   status?: Exclude<DesignStatus, "ARCHIVED"> | undefined;
+  /** `false`: only designs in no project; `true`: only those in one (BE-15). Omitted: all. */
+  inProject?: boolean | undefined;
 };

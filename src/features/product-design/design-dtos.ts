@@ -33,6 +33,9 @@ export const designDraftDtoSchema = z.object({
   /** A signed link to the current customer preview, absent while there is none. */
   previewUrl: z.string().nullish(),
   projectId: beId().nullish(),
+  /** The customer's own SKU, on an APPROVED design only (BE-2); left out otherwise. */
+  customerSku: z.string().nullish(),
+  customerName: z.string().nullish(),
   parentSnapshotId: beId().nullish(),
   reviewRequestedAt: instant.nullish(),
   /** The Sales Manager's last decision; `reviewNotes` is the reason when they returned it. */

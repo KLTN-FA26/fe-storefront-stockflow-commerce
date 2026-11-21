@@ -14,6 +14,7 @@ import { createStudioKit } from "./studio-kit";
 import { releaseScratchLayer } from "./studio-paint";
 import { useTextEditingState } from "./text-editing";
 import { useAssetImages } from "./use-asset-images";
+import { useDesignFontCodes } from "../../queries";
 import { useAutosave } from "./use-autosave";
 import { useEditor } from "./use-editor";
 import { useStatusFollow } from "./use-status-follow";
@@ -52,6 +53,8 @@ export function useStudioServices(props: StudioWorkspaceProps) {
     [props.assets],
   );
 
+  // BE-18: if the font list cannot be read, the registry alone decides: the studio is not blocked.
+  const servedFontCodes = useDesignFontCodes().data ?? null;
   const fontState = useStudioFonts({ fonts, editor, surfaces, repaint });
   const { status: assetStatus, retryFailed: retryImages } = useAssetImages({
     designId: design.id,
@@ -95,6 +98,7 @@ export function useStudioServices(props: StudioWorkspaceProps) {
       surfaces,
       sizer,
       fonts,
+      servedFontCodes,
       measure,
       images,
       assets,
@@ -121,6 +125,7 @@ export function useStudioServices(props: StudioWorkspaceProps) {
       surfaces,
       sizer,
       fonts,
+      servedFontCodes,
       measure,
       images,
       assets,

@@ -21,7 +21,7 @@ export const DRAFT_LIMIT = 50;
  * A design from its DTO and its project (null when it has none).
  *  - `product.title` ← `productName`, else the slug; `variant.label` ← `variantName`, else the SKU (F-7);
  *  - `sourceSnapshotId` ← `parentSnapshotId`, `submittedAt` ← `reviewRequestedAt` (F-4);
- *  - `approvedAt` ← `reviewedAt` once APPROVED (F-4);
+ *  - `approvedAt` ← `reviewedAt` once APPROVED (F-4); `customerSku` is sent on an approved design only (BE-2);
  *  - `lastReturn` ← `reviewNotes` + `reviewedAt` on a DRAFT: the BE sets the notes only when the Sales
  *    Manager returns a design and clears them on approval (F-5); `updatedAt` stands in for a missing
  *    `reviewedAt`.
@@ -41,6 +41,7 @@ export function toDesign(dto: DesignDraftDto, project: ProjectRefDto | null): De
     variant: { sku: dto.sku, label: dto.variantName?.trim() || dto.sku },
     version: dto.version,
     projectId: dto.projectId ?? null,
+    customerSku: dto.customerSku?.trim() || null,
     project: project ? { id: project.id, name: project.name, status: project.status } : null,
     sourceSnapshotId: dto.parentSnapshotId ?? null,
     lastReturn:

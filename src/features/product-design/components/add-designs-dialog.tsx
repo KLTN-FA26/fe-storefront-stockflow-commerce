@@ -1,7 +1,5 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
-
 import { Alert, EmptyState } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,17 +12,17 @@ import {
 
 import { describeDesignError } from "../errors";
 import { useAddDesignToProject } from "../mutations";
-import { useDesignPages } from "../queries";
-import type { Design, DesignPage } from "../types";
+import { useAddableDesigns } from "../queries";
+import type { Design } from "../types";
 import { DesignListSkeleton, DesignLoadError } from "./design-list-states";
 import { DesignStatusBadge } from "./design-status-badge";
 import { isReturned } from "../lifecycle";
 
-/** Designs read a page at a time, on request; the ones that already belong to a project are left out. */
+/**
+ * Designs read a page at a time, on request. The BE leaves out the ones already in a project and
+ * the deleted ones (docs 12 BR-17: a design joins one project at most; BE-15).
+ */
 const PAGE_SIZE = 20;
-
-/** docs 12 BR-17: a design joins one project at most, and a deleted one joins none. */
-const isJoinable = (design: Design) => design.project === null && design.status !== "ARCHIVED";
 
 function DesignRow({
   design,
@@ -60,47 +58,14 @@ function DesignRow({
   );
 }
 
-/** The designs of the pages read so far that can join a project, each once, newest first. */
-function joinableOf(pages: readonly DesignPage[]): Design[] {
-  const seen = new Set<string>();
-  return pages
-    .flatMap((page) => page.items)
-    .filter((design) => isJoinable(design) && !seen.has(design.id) && seen.add(design.id));
-}
-
 function AddDesignsList({ projectId }: { projectId: string }) {
-  const list = useDesignPages(PAGE_SIZE);
+  const list = useAddableDesigns(PAGE_SIZE);
   const add = useAddDesignToProject(projectId);
   const { data, isPending, error, isFetching, isFetchingNextPage, hasNextPage, refetch } = list;
   const { fetchNextPage, isFetchNextPageError } = list;
-  const rows = joinableOf(data?.pages ?? []);
-  const alive = useRef(true);
-  useEffect(() => {
-    alive.current = true;
-    return () => {
-      alive.current = false;
-    };
-  }, []);
+  const rows = data?.pages.flatMap((page) => page.items) ?? [];
 
-  /** One more page, and on while the pages read hold nothing new to add (never an empty-looking page). */
-  const loadMore = useCallback(async () => {
-    let known = rows.length;
-    while (alive.current) {
-      const result = await fetchNextPage();
-      if (result.isError || !result.hasNextPage) return;
-      const now = joinableOf(result.data?.pages ?? []).length;
-      if (now > known) return;
-      known = now;
-    }
-  }, [fetchNextPage, rows.length]);
-
-  // Nothing to offer on the pages read yet and more to read: read on before saying there is none.
-  const reading = data !== undefined && rows.length === 0 && hasNextPage && !isFetchNextPageError;
-  useEffect(() => {
-    if (reading && !isFetchingNextPage) void fetchNextPage();
-  }, [reading, isFetchingNextPage, fetchNextPage]);
-
-  if (isPending || reading) return <DesignListSkeleton />;
+  if (isPending) return <DesignListSkeleton />;
   if (error && !data) {
     return <DesignLoadError error={error} onRetry={() => void refetch()} retrying={isFetching} />;
   }
@@ -132,7 +97,7 @@ function AddDesignsList({ projectId }: { projectId: string }) {
           variant="outline"
           className="min-h-11 w-full rounded-[var(--r-md)] px-4"
           disabled={isFetchingNextPage}
-          onClick={() => void loadMore()}
+          onClick={() => void fetchNextPage()}
         >
           {isFetchingNextPage ? "Đang tải…" : isFetchNextPageError ? "Thử lại" : "Xem thêm"}
         </Button>
