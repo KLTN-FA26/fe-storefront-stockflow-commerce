@@ -58,7 +58,7 @@ export const DESIGN_STATUS_META: Record<
     label: "Chờ duyệt",
     tone: "info",
     editable: false,
-    hint: "Quản lý kinh doanh đang duyệt thiết kế. Bạn sẽ nhận kết quả tại đây.",
+    hint: "Thiết kế đang được duyệt. Bạn sẽ nhận kết quả tại đây.",
   },
   APPROVED: {
     label: "Đã duyệt",
