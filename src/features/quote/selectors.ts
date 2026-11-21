@@ -38,10 +38,10 @@ export const shownTotals = (quote: Pick<Quote, "accepted" | "proposed">) =>
 export type CustomerHistoryEntry = Omit<QuoteTransition, "revision"> & { revision: number | null };
 
 /**
- * The history a customer reads. The BE sends every row; two kinds were never the customer's to see:
- * a row that enters DRAFT (the quote being drawn up, or Sale reopening a sent quote to revise it,
- * PR #388) and the revision number of a draft Sale dropped (a CANCELLED row out of DRAFT past the
- * revision the customer was shown: it must not read "bản sửa 2" next to "Bản sửa Số 1").
+ * The history a customer reads. The BE now filters the rows that enter DRAFT itself (BE-9), so the
+ * DRAFT filter here is defensive and harmless. The revision-null branch is still needed: a CANCELLED
+ * row out of DRAFT past the revision the customer was shown (a draft Sale dropped) must not read
+ * "bản sửa 2" next to "Bản sửa Số 1".
  */
 export function customerHistory(
   history: readonly QuoteTransition[],
