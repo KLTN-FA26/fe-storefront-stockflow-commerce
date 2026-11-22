@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import { STORE_ROUTES } from "@/constants";
 import { ApiError } from "@/lib/api/error";
@@ -61,7 +61,8 @@ export function DesignStudio(props: DesignStudioProps) {
  * Loads the design, its document, its images and its variant's print configuration (by the
  * design's own template, `GET /designs/{id}/template`), then opens the studio, whatever the status: it follows the
  * status itself (spec §6.4). A design that is not the caller's, or was deleted (ARCHIVED), is not
- * found (docs 12 BR-03, BR-16); so is one whose document is missing. A design deleted while it is
+ * found (docs 12 BR-03, BR-16). One that is there but has no stored layout (`…/document` 404) cannot
+ * be opened, and says so rather than "not found". A design deleted while it is
  * open (another tab) answers its next read with a 404: that wins over the design still cached, so
  * the studio closes on "Không tìm thấy thiết kế" (its unsaved edit stays in this browser).
  */
@@ -78,9 +79,24 @@ function LoadedDesignStudio({
   const printConfig = useDesignPrintConfig(design.data);
   const config = printConfig.data;
 
-  const gone =
-    isNotFound(design.error) || isUnreadableAddress(design.error) || isNotFound(document.error);
+  // A document 404 means "no layout" only if the design was read after it: a 404 from a later read
+  // (the conflict dialog's own fetch, after another tab deleted the design) may mean the design is
+  // gone, so the design is read again first and its own 404 wins.
+  const layoutMissing = isNotFound(document.error);
+  const designReadAfter = design.dataUpdatedAt >= document.errorUpdatedAt;
+  const { isFetching: designFetching, refetch: refetchDesign } = design;
+  const designFailed = design.error !== null;
+  useEffect(() => {
+    if (layoutMissing && !designReadAfter && !designFetching && !designFailed) void refetchDesign();
+  }, [layoutMissing, designReadAfter, designFetching, designFailed, refetchDesign]);
+
+  const gone = isNotFound(design.error) || isUnreadableAddress(design.error);
   if (gone || design.data?.status === "ARCHIVED") return <StudioNotFound />;
+  // The design is there (and the caller's) but its layout is not: retrying cannot bring one back.
+  if (layoutMissing && design.data && designReadAfter) {
+    return <StudioLoadError message={STUDIO_LOAD_MESSAGES.noLayout} />;
+  }
+  if (layoutMissing) return <StudioSkeleton />;
   if (
     design.data &&
     document.data &&

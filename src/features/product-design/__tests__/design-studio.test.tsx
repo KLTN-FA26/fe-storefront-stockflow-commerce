@@ -3,6 +3,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error";
 import { printConfigFor, type PrintConfigRow } from "@/lib/api/mock-fixtures/design-print-configs";
 import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/design-seed";
@@ -14,7 +15,7 @@ import { DesignStudio } from "../components/studio/design-studio";
 import type { StudioServices } from "../components/studio/studio-context";
 import { addElement, removeElement, runPreflight, setBackground, VARIANT_OK } from "../engine";
 import { imageEl } from "../engine/__tests__/fixtures";
-import { designKeys } from "../queries";
+import { designDocumentQuery, designKeys } from "../queries";
 import { templateOf } from "../selectors";
 import { designBackend, draftIn, STUDIO_PRODUCTS } from "./design-backend";
 import { TEST_FONTS } from "./fixtures";
@@ -28,6 +29,8 @@ vi.mock("next/navigation", () => ({
 // tests wait out the real 1.5 s debounce: over 5 s in a loaded full run.
 vi.setConfig({ testTimeout: 20_000 });
 const OPENED = { timeout: 4000 };
+const STUDIO_NO_LAYOUT =
+  "Bản này chưa có bố cục đã lưu nên không mở được trong trình thiết kế. Hãy liên hệ cửa hàng.";
 
 beforeEach(() => {
   env.push.mockReset();
@@ -170,6 +173,55 @@ describe("DesignStudio", () => {
       "href",
       "/design",
     );
+  });
+
+  // Seen on the deployed BE: a design that exists (GET /designs/{id} 200) but has no layout
+  // (GET …/document 404 "This design has no layout") is the customer's, so "not found / not yours"
+  // would be wrong; it cannot be opened, and trying again cannot help.
+  it("says a design without a saved layout cannot be opened, not that it does not exist", async () => {
+    const { store, get } = await designBackend();
+    const id = await draftCup(store);
+    get.mockRestore();
+    const realGet = api.get.bind(api);
+    vi.spyOn(api, "get").mockImplementation((url, config) =>
+      String(url).endsWith(`/designs/${id}/document`)
+        ? Promise.reject(new ApiError(404, "NOT_FOUND", "This design has no layout"))
+        : realGet(url, config),
+    );
+    openStudio(id);
+
+    expect(
+      await screen.findByText(
+        "Bản này chưa có bố cục đã lưu nên không mở được trong trình thiết kế. Hãy liên hệ cửa hàng.",
+        undefined,
+        OPENED,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Không tìm thấy thiết kế")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Thử lại" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Về thiết kế của tôi" })).toBeInTheDocument();
+  });
+
+  // A later document read (the conflict dialog's own fetch) that 404s after another tab deleted the
+  // design is not "no layout": the design is read again and its own 404 says "not found".
+  it("reads a document 404 after the design was deleted elsewhere as not found, not as no layout", async () => {
+    const { store } = await designBackend();
+    const id = await draftCup(store);
+    const seen = openStudio(id);
+    await screen.findByRole("region", { name: "Thuộc tính phần tử" }, OPENED);
+
+    const { version } = settle(await store.get(id)).data as { version: number };
+    settle(await store.remove(id, { version }));
+    await act(async () => {
+      await seen.client
+        ?.fetchQuery({ ...designDocumentQuery(id), staleTime: 0 })
+        .catch(() => undefined);
+    });
+
+    expect(
+      await screen.findByText("Không tìm thấy thiết kế", undefined, OPENED),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(STUDIO_NO_LAYOUT)).not.toBeInTheDocument();
   });
 
   it("reads a mistyped link as no design, without asking the BE (R1-02)", async () => {

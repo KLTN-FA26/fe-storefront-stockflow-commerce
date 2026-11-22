@@ -20,6 +20,9 @@ export const STUDIO_LOAD_MESSAGES = {
   noPrintConfig: "Quy cách này chưa nhận thiết kế.",
   /** Its template is a 3D model: no print surfaces are built for one yet. */
   model3d: "Mẫu 3D của sản phẩm này chưa được hỗ trợ.",
+  /** The design is the caller's but has no stored layout (`GET …/document` 404): nothing to open. */
+  noLayout:
+    "Bản này chưa có bố cục đã lưu nên không mở được trong trình thiết kế. Hãy liên hệ cửa hàng.",
 } as const;
 
 /**
