@@ -241,7 +241,7 @@ describe("OUTSIDE_PRINT_AREA (BR-02)", () => {
 
   it("accepts a background that fills the bleed box, and tolerates float noise on its edges", () => {
     // The bag front's bleed box is 266 × 286 mm: every corner is outside the trim, which the
-    // element encloses.
+    // element encloses — a background, which may reach the bleed (Q5 / SD-2: BE `areaIssue`).
     const fill = (extraMm: number) =>
       onFront(
         imageEl("bg", {
@@ -252,9 +252,51 @@ describe("OUTSIDE_PRINT_AREA (BR-02)", () => {
           placement: { u: 130, v: 140, rotationDeg: 0, scale: 1 },
         }),
       );
-    expect(ruleIds(runPreflight(input(fill(0))).issues)).toEqual(["CROSSES_SAFE_AREA"]);
-    expect(ruleIds(runPreflight(input(fill(1e-9))).issues)).not.toContain("OUTSIDE_PRINT_AREA");
+    expect(ruleIds(runPreflight(input(fill(0))).issues)).toEqual([]);
+    expect(ruleIds(runPreflight(input(fill(1e-9))).issues)).toEqual([]);
     expect(ruleIds(runPreflight(input(fill(0.05))).issues)).toContain("OUTSIDE_PRINT_AREA");
+  });
+
+  it("an image covering all but one trim sample still fails CROSSES_SAFE_AREA", () => {
+    // 261 mm wide at u = 129: from u = -1.5 (in the bleed) to u = 259.5, short of the trim's right
+    // edge (u = 260), so the right-hand trim samples are not covered.
+    const doc = onFront(
+      imageEl("bg", {
+        widthMm: 261,
+        heightMm: 286,
+        naturalWidthPx: 8000,
+        naturalHeightPx: 8000,
+        placement: { u: 129, v: 140, rotationDeg: 0, scale: 1 },
+      }),
+    );
+    expect(ruleIds(runPreflight(input(doc)).issues)).toEqual(["CROSSES_SAFE_AREA"]);
+  });
+
+  it("a background image covering every trim sample on the cup passes, ON_SEAM included", () => {
+    // Wrapped round the cup over the whole band and its glue flap, half the bleed past each edge.
+    const bleed = cup12oz.printAreas[0]!.bleedMm;
+    const band = cupBody.vRange[1] - cupBody.vRange[0];
+    const arc = (sweepRad + seamRad) * midRadiusMm;
+    const background = (extraMm: number) =>
+      docOf(
+        {
+          BODY: content([
+            imageEl("bg", {
+              widthMm: arc + extraMm,
+              heightMm: band + bleed,
+              naturalWidthPx: 8000,
+              naturalHeightPx: 4000,
+              wrap: true,
+              placement: { ...cupPlacement, u: arc / 2 },
+            }),
+          ]),
+        },
+        cup12oz,
+      );
+    expect(ruleIds(runPreflight(input(background(bleed), { ...cup12oz })).issues)).toEqual([]);
+    // Short of the flap's end: no longer a background, so the flap and the safe line count again.
+    const short = ruleIds(runPreflight(input(background(-bleed), { ...cup12oz })).issues);
+    expect(short).toContain("CROSSES_SAFE_AREA");
   });
 
   it("fails wrapped text on the cup whose arc runs past the bleed", () => {
@@ -334,7 +376,7 @@ describe("CROSSES_SAFE_AREA", () => {
     expect(only(runPreflight(input(doc)).issues, "CROSSES_SAFE_AREA")).toEqual([crosses]);
   });
 
-  it("text 1 mm past the safe line fails CROSSES_SAFE_AREA; image the same; background colour and pattern never do; a drawing never does", () => {
+  it("text 1 mm past the safe line fails CROSSES_SAFE_AREA; image and drawing the same; background colour and pattern never do", () => {
     // Left edge of the 60 mm image at u = 2 (the safe line is at u = 5): 3 mm past it; at u = 6 clear.
     const image = (leftU: number) =>
       onFront(imageEl("img", { placement: { u: leftU + 30, v: 140, rotationDeg: 0, scale: 1 } }));
@@ -366,7 +408,8 @@ describe("CROSSES_SAFE_AREA", () => {
     });
     expect(runPreflight(input(pattern)).issues).toEqual([]);
 
-    // A drawing in the safe margin (3 mm in from the trim line) is not a safe-zone issue.
+    // A drawing in the safe margin (3 mm in from the trim line): as an image (Q5 / SD-3, BE checks
+    // "an image or a drawing").
     const drawing = onFront(
       drawingEl("pen", {
         strokes: [
@@ -383,7 +426,32 @@ describe("CROSSES_SAFE_AREA", () => {
         placement: { u: 3, v: 140, rotationDeg: 0, scale: 1 },
       }),
     );
-    expect(ruleIds(runPreflight(input(drawing)).issues)).toEqual([]);
+    expect(ruleIds(runPreflight(input(drawing)).issues)).toEqual(["CROSSES_SAFE_AREA"]);
+  });
+
+  it("a drawing wholly inside the bleed strip fails OUTSIDE_PRINT_AREA; one crossing the safe line fails CROSSES_SAFE_AREA", () => {
+    const pen = (u: number) =>
+      onFront(
+        drawingEl("pen", {
+          strokes: [
+            {
+              mode: "draw",
+              color: "#000000",
+              sizeMm: 0.5,
+              points: [
+                [0, -2, 0.5],
+                [0, 2, 0.5],
+              ],
+            },
+          ],
+          placement: { u, v: 140, rotationDeg: 0, scale: 1 },
+        }),
+      );
+    // u = -1.5: the stroke (±0.4 mm reach) sits in the 3 mm bleed strip, none of it in the trim.
+    expect(ruleIds(runPreflight(input(pen(-1.5))).issues)).toEqual(["OUTSIDE_PRINT_AREA"]);
+    // u = 5: across the safe line (at u = 5).
+    expect(ruleIds(runPreflight(input(pen(5))).issues)).toEqual(["CROSSES_SAFE_AREA"]);
+    expect(runPreflight(input(pen(30))).issues).toEqual([]);
   });
 
   it("fails an element that crosses the trim line into the bleed as CROSSES_SAFE_AREA", () => {
@@ -651,7 +719,7 @@ describe("ON_SEAM", () => {
   const small = (u: number) =>
     textEl("mark", { content: "A", sizePt: 8, placement: { ...cupPlacement, u } });
 
-  it("text on the cup seam fails ON_SEAM; a drawing on the seam does not", () => {
+  it("text on the cup seam fails ON_SEAM; a drawing on the seam too (Q5 / SD-3: as an image)", () => {
     const seamU = (sweepRad + seamRad / 2) * midRadiusMm; // the flap starts at u = sweepRad × mid
     const { issues } = runPreflight(cupInput(small(seamU)));
     expect(only(issues, "ON_SEAM")).toEqual([
@@ -680,7 +748,8 @@ describe("ON_SEAM", () => {
       ],
       placement: { ...cupPlacement, u: seamU },
     });
-    expect(ruleIds(runPreflight(cupInput(pen)).issues)).not.toContain("ON_SEAM");
+    // The BE's safe line stops at the flap ("CROSSES_SAFE_AREA"); the studio also names the flap.
+    expect(ruleIds(runPreflight(cupInput(pen)).issues)).toEqual(["CROSSES_SAFE_AREA", "ON_SEAM"]);
   });
 
   it("does not warn for an element on the front of the cup", () => {

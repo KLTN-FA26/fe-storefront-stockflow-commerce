@@ -6,8 +6,10 @@ import type { PrintSurface } from "../../surfaces/types";
 import type { PreflightIssue, SurfaceScope } from "../types";
 
 // BR-02 (docs 12 §6): content must not leave the print area + bleed. CROSSES_SAFE_AREA and ON_SEAM
-// fail text and images (docs 12 §3 step 4: text and logos stay inside the safe zone, spec §7).
-// Drawings (and the surface background, which is not an element) may run into the bleed.
+// fail text, images and drawings (docs 12 §3 step 4: text and logos stay inside the safe zone,
+// spec §7; BE `LayoutPreflight.areaIssue` checks "an image or a drawing"). An image or a drawing
+// that covers the whole trim is a background and may run into the bleed (PO 2026-11-22, Q5 / SD-2,
+// SD-3: as the BE); the surface background, which is not an element, always may.
 
 /**
  * Outline points are tested this far (mm) inside the outline, so float noise on an element laid
@@ -43,14 +45,22 @@ function overlapsTrim(surface: PrintSurface, outline: PointMm[]): boolean {
 }
 
 /**
+ * Whether the outline encloses every sample of the trim (BE `areaIssue`:
+ * `surface.trimSamples().stream().allMatch(p -> inPolygon(p, outline))`): a background.
+ */
+const coversTrim = (surface: PrintSurface, outline: PointMm[]) =>
+  surface.trimSamples().every((p) => pointInPolygon(p, outline));
+
+/**
  * Where an element sits on its surface. `OUTSIDE_PRINT_AREA` when any of it passes the bleed or it
- * covers none of the trim (BE `LayoutPreflight.areaIssue`). For
- * text and images (never a drawing): otherwise `CROSSES_SAFE_AREA` when any of it is outside the
- * safe line (between safe line and trim, or in the bleed, where it is cut off), and `ON_SEAM` when
- * any of it is on the cup's glue flap. `CROSSES_SAFE_AREA` is not reported for an element that
- * already got `OUTSIDE_PRINT_AREA` (it would say the same thing twice); `ON_SEAM` may still be
- * reported with either. "Any of it" is read off `containmentPoints`: on the cup the middle of an
- * edge counts too.
+ * covers none of the trim (BE `LayoutPreflight.areaIssue`). Otherwise an image or a drawing that
+ * covers the whole trim (`coversTrim`) is a background: nothing more is checked, as the BE returns
+ * nothing for it (it reaches the bleed and the glue flap on purpose). For any other element:
+ * `CROSSES_SAFE_AREA` when any of it is outside the safe line (between safe line and trim, or in
+ * the bleed, where it is cut off), and `ON_SEAM` when any of it is on the cup's glue flap (the BE's
+ * safe line stops at the flap too). `CROSSES_SAFE_AREA` is not reported for an element that already
+ * got `OUTSIDE_PRINT_AREA` (it would say the same thing twice); `ON_SEAM` may still be reported with
+ * either. "Any of it" is read off `containmentPoints`: on the cup the middle of an edge counts too.
  */
 export function areaIssues(scope: SurfaceScope, el: DesignElement): PreflightIssue[] {
   const { input, surface, code } = scope;
@@ -67,7 +77,7 @@ export function areaIssues(scope: SurfaceScope, el: DesignElement): PreflightIss
       ...at,
     });
   }
-  if (el.type === "drawing") return issues;
+  if (el.type !== "text" && coversTrim(surface, outline)) return issues;
 
   if (issues.length === 0 && points.some((p) => !surface.contains(p, "safe"))) {
     issues.push({

@@ -31,11 +31,20 @@ export interface PrintSurface {
   contains(p: PointMm, region: SurfaceRegion): boolean;
   /** True inside the trim on the glue flap, which is hidden under the overlap once assembled. */
   inSeam(p: PointMm): boolean;
+  /**
+   * Points just inside the trim's outline, around all of it (BE `PrintSurface.trimSamples`, inset
+   * `TRIM_SAMPLE_INSET_MM`): an element whose outline encloses every one covers the whole trim — a
+   * background, which may reach into the bleed (PO 2026-11-22, Q5).
+   */
+  trimSamples(): PointMm[];
   outline(region: SurfaceRegion): PathCmd[];
   guides(): Guide[];
   /** Flat point → texture UV over `flatBounds` (V grows upwards, as in three.js). */
   uvOf(x: number, y: number): [number, number];
 }
+
+/** How far inside the trim's outline its samples lie, so a boundary hit is never a coin flip (BE `SAMPLE_INSET_MM`). */
+export const TRIM_SAMPLE_INSET_MM = 0.01;
 
 /** Every print surface of a template, in `printAreas` order. */
 export type SurfaceSet = {
