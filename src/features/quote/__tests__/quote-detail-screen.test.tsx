@@ -151,7 +151,12 @@ describe("QuoteDetailScreen — accepting (TC-F03-01)", () => {
         ),
       );
     const user = userEvent.setup();
-    renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
+    renderWithProviders(
+      <>
+        <ToastProvider />
+        <QuoteDetailScreen quoteId={quoteId} />
+      </>,
+    );
 
     await screen.findByRole("spinbutton", { name: "Số thùng" });
     const reads = () => get.mock.calls.filter(([url]) => url === `/quotes/${quoteId}`).length;
@@ -159,7 +164,9 @@ describe("QuoteDetailScreen — accepting (TC-F03-01)", () => {
     await user.click(screen.getByRole("button", { name: "Chấp nhận báo giá" }));
     await user.click(await screen.findByRole("button", { name: "Chấp nhận" }));
 
+    // Said once, in the toast: the form repeats nothing (C8).
     expect(await screen.findByText(/Dữ liệu vừa thay đổi, đã tải lại/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Dữ liệu vừa thay đổi/)).toHaveLength(1);
     await waitFor(() => expect(reads()).toBeGreaterThan(before));
     expect(post).toHaveBeenCalledTimes(1);
   });

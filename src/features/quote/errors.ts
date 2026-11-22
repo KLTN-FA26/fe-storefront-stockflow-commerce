@@ -22,11 +22,11 @@ export const isApiError = (error: unknown): error is ApiError => error instanceo
 
 /**
  * The answer was refused because the quote moved on (INVALID_QUOTE_TRANSITION: Sale is revising it, or it was
- * withdrawn): the mutation says it in a toast and re-reads the quote, so a form shows nothing more for it (one message,
- * not two).
+ * withdrawn; OPTIMISTIC_LOCK: someone changed it): the mutation says it in a toast and re-reads the quote, so a form
+ * shows nothing more for it (one message, not two).
  */
 export const isToastedQuoteError = (error: unknown): boolean =>
-  hasErrorCode(error, "INVALID_QUOTE_TRANSITION");
+  hasErrorCode(error, "INVALID_QUOTE_TRANSITION") || hasErrorCode(error, "OPTIMISTIC_LOCK");
 
 /** The quote is missing or someone else's: the BE answers 404 NOT_FOUND for both. */
 export const isQuoteNotFound = (error: unknown): error is ApiError =>
