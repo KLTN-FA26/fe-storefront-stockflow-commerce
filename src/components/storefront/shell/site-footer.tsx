@@ -27,13 +27,17 @@ export function SiteFooter() {
         )}
       >
         <div className="col-span-2 space-y-3 lg:col-span-1">
-          <Link href="/" className={cn("font-display text-xl font-bold tracking-tight", focusRing)}>
+          <Link
+            href="/"
+            aria-label={`${BRAND.name} – Trang chủ`}
+            className={cn("font-display text-xl font-bold tracking-tight", focusRing)}
+          >
             <span>{BRAND.wordmark.primary}</span>
             <span className="text-accent">{BRAND.wordmark.accent}</span>
           </Link>
           <p className="text-ink-secondary max-w-sm text-sm">
-            Storefront TMĐT cho sản phẩm in ấn, thiết kế cá nhân hóa và theo dõi đơn hàng trong một
-            trải nghiệm mobile-first.
+            Ly giấy, hộp và bao bì in theo thiết kế của doanh nghiệp bạn. Thiết kế, nhận báo giá, ký
+            hợp đồng và theo dõi đơn hàng ở cùng một nơi.
           </p>
         </div>
         {footerColumns.map((column) => (

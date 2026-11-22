@@ -27,7 +27,7 @@ export function ChatHeaderLink({ className }: { className: string }) {
     <Link
       href={STORE_ROUTES.chat.list}
       className={className}
-      aria-label={count > 0 ? `Tư vấn, ${count} tin nhắn chưa đọc` : undefined}
+      aria-label={count > 0 ? `Chat với Sale, ${count} tin nhắn chưa đọc` : "Chat với Sale"}
     >
       <span className="relative inline-flex">
         <MessageCircle className="size-5" aria-hidden="true" />
@@ -40,7 +40,7 @@ export function ChatHeaderLink({ className }: { className: string }) {
           </span>
         ) : null}
       </span>
-      <span className="sr-only lg:not-sr-only">Tư vấn</span>
+      <span className="sr-only lg:not-sr-only">Chat với Sale</span>
     </Link>
   );
 }

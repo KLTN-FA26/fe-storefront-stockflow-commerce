@@ -60,8 +60,9 @@ export const STORE_ROUTES = {
       list: "/account/quotes",
       detail: (id: string) => `/account/quotes/${id}`,
     },
+    /** The customer's installments, overdue and due first (SF-UX-39). */
+    payments: "/account/payments",
     addresses: "/account/addresses",
     security: "/account/security",
-    privacy: "/account/privacy",
   },
 } as const;

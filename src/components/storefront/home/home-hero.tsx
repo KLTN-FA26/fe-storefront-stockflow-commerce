@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Gift, Palette, type LucideIcon } from "lucide-react";
+import { ArrowRight, FileText, Palette, type LucideIcon } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
 import { cn } from "@/lib/cn";
@@ -22,18 +22,18 @@ type SideBanner = {
 const sideBanners: SideBanner[] = [
   {
     href: STORE_ROUTES.design.list,
-    title: "Tự thiết kế sản phẩm",
-    desc: "Tải logo, căn vùng in và kiểm tra preflight trước khi đặt.",
+    title: "Tự thiết kế mẫu in",
+    desc: "Tải logo, căn vùng in và kiểm tra file in trước khi gửi duyệt.",
     cta: "Thiết kế ngay",
     icon: Palette,
     tone: "accent",
   },
   {
-    href: STORE_ROUTES.catalog.list,
-    title: "Quà doanh nghiệp",
-    desc: "In logo số lượng lớn cho sự kiện, hội nghị, đồng phục team.",
-    cta: "Xem quà tặng",
-    icon: Gift,
+    href: STORE_ROUTES.account.quotes.list,
+    title: "Báo giá của tôi",
+    desc: "Xem báo giá Sale gửi, chấp nhận hoặc đề nghị sửa.",
+    cta: "Xem báo giá",
+    icon: FileText,
     tone: "surface",
   },
 ];
@@ -45,39 +45,39 @@ export function HomeHero() {
         <div className="grid items-center gap-6 md:grid-cols-[1fr_auto]">
           <div className="max-w-xl space-y-3 sm:space-y-4">
             <p className="text-ink-inverse/70 text-xs font-semibold tracking-wider uppercase">
-              StockFlow Storefront
+              In bao bì cho doanh nghiệp
             </p>
             <h1
               id="home-hero-title"
               className="font-display text-2xl leading-tight font-bold tracking-tight sm:text-4xl"
             >
-              Mua sắm, tùy biến thiết kế và theo dõi đơn in ấn trong một trải nghiệm TMĐT.
+              Ly giấy và bao bì in theo thiết kế của doanh nghiệp bạn.
             </h1>
             <p className="text-ink-inverse/80 text-sm sm:text-base">
-              Catalog, editor thiết kế, giỏ hàng và thanh toán — tối ưu cho khách mua lẻ và doanh
-              nghiệp.
+              Thiết kế trực tuyến, nhận báo giá theo số thùng, ký hợp đồng và thanh toán chuyển
+              khoản theo từng đợt.
             </p>
             <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:gap-3 sm:pt-2">
               <Link
-                href={STORE_ROUTES.catalog.list}
+                href={STORE_ROUTES.design.list}
                 className={cn(
                   heroCta,
                   heroFocus,
                   "bg-bg-surface text-ink-primary hover:bg-bg-muted",
                 )}
               >
-                Khám phá sản phẩm
+                Bắt đầu thiết kế
                 <ArrowRight className="size-4" aria-hidden="true" />
               </Link>
               <Link
-                href={STORE_ROUTES.design.list}
+                href={STORE_ROUTES.catalog.list}
                 className={cn(
                   heroCta,
                   heroFocus,
                   "border-ink-inverse/30 hover:bg-ink-inverse/10 border",
                 )}
               >
-                Mở thiết kế của tôi
+                Xem sản phẩm
               </Link>
             </div>
           </div>
@@ -85,8 +85,8 @@ export function HomeHero() {
             <div className="bg-bg-subtle relative aspect-square overflow-hidden rounded-[var(--r-md)]">
               <Image src="/logo.png" alt="" fill sizes="240px" className="object-contain p-6" />
             </div>
-            <p className="text-accent mt-3 text-xs font-semibold">Đang bán chạy</p>
-            <p className="font-display text-sm font-bold">Áo thun cotton premium</p>
+            <p className="text-accent mt-3 text-xs font-semibold">In theo thiết kế</p>
+            <p className="font-display text-sm font-bold">Logo của bạn trên từng sản phẩm</p>
           </div>
         </div>
       </div>

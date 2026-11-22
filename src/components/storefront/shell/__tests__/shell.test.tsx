@@ -8,7 +8,7 @@ import { StorefrontShell } from "@/components/storefront/storefront-shell";
 import { publishCurrentSearch } from "@/features/catalog/current-search-store";
 
 import { HeaderSearch } from "../header-search";
-import { categoryLinks, paymentMethods } from "../nav-config";
+import { footerColumns, mainLinks, paymentMethods, utilityLinks } from "../nav-config";
 import { SiteFooter } from "../site-footer";
 import { SiteHeader } from "../site-header";
 
@@ -54,11 +54,36 @@ describe("HeaderSearch on /search", () => {
 });
 
 describe("SiteHeader", () => {
-  it("renders a link for every category", () => {
+  it("renders a link for every main and utility entry", () => {
     render(<SiteHeader />);
-    for (const { label } of categoryLinks) {
-      expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
+    for (const { label } of [...mainLinks, ...utilityLinks]) {
+      expect(screen.getAllByRole("link", { name: label }).length).toBeGreaterThan(0);
     }
+  });
+
+  it("names the logo and the account links, which show only an icon on small screens", () => {
+    render(<SiteHeader />);
+    expect(screen.getByRole("link", { name: "StockFlowCommerce – Trang chủ" })).toHaveAttribute(
+      "href",
+      "/",
+    );
+    // Signed out here: the entry is the sign-in link, named even where only its icon shows.
+    expect(screen.getByRole("link", { name: "Đăng nhập" })).toHaveAttribute("href", "/login");
+  });
+
+  it("calls the chat 'Chat với Sale' (SF-UX-4)", () => {
+    render(<SiteHeader />);
+    for (const link of screen.getAllByRole("link", { name: /chat/i })) {
+      expect(link).toHaveAccessibleName(expect.stringMatching(/^Chat với Sale/));
+    }
+  });
+
+  it("has no retail category that leads nowhere but the catalogue (SF-UX-5)", () => {
+    render(<SiteHeader />);
+    for (const retail of ["Áo & hoodie", "Quà tặng in ấn", "Ấn phẩm doanh nghiệp"]) {
+      expect(screen.queryByRole("link", { name: retail })).not.toBeInTheDocument();
+    }
+    expect(screen.getByRole("link", { name: "Sản phẩm" })).toHaveAttribute("href", "/catalog");
   });
 
   it("has no cart: the customer does not order on the portal (kltn-docs 14 BR-01)", () => {
@@ -68,7 +93,7 @@ describe("SiteHeader", () => {
 });
 
 describe("SiteFooter", () => {
-  it("renders every payment method and the four trust titles", () => {
+  it("renders every payment method and the four value props", () => {
     render(<SiteFooter />);
     for (const method of paymentMethods) {
       expect(screen.getByText(method)).toBeInTheDocument();
@@ -77,6 +102,37 @@ describe("SiteFooter", () => {
     for (const { title } of defaultTrustItems) {
       expect(screen.getByText(title)).toBeInTheDocument();
     }
+  });
+
+  it("offers bank transfer only, no card brand (installments are paid by transfer)", () => {
+    render(<SiteFooter />);
+    const methods = screen.getByRole("list", { name: "Phương thức thanh toán" });
+    expect(methods).toHaveTextContent("VietQR");
+    expect(methods).toHaveTextContent("Chuyển khoản ngân hàng");
+    expect(methods).not.toHaveTextContent(/Visa|Mastercard/);
+  });
+
+  it("makes no retail promise and names everything in Vietnamese (SF-UX-4, SF-UX-5)", () => {
+    const { container } = render(<SiteFooter />);
+    for (const retail of [
+      /Đổi trả 7 ngày/,
+      /2–4 ngày/,
+      /thẻ/i,
+      /Sales chat/,
+      /Customer portal/,
+      /Catalog/,
+      /mobile-first/,
+    ]) {
+      expect(container).not.toHaveTextContent(retail);
+    }
+    expect(screen.getByRole("link", { name: "Chat với Sale" })).toHaveAttribute("href", "/chat");
+  });
+
+  it("links only to pages that exist: no privacy page (it was a 404)", () => {
+    render(<SiteFooter />);
+    expect(screen.queryByRole("link", { name: "Quyền riêng tư" })).not.toBeInTheDocument();
+    const hrefs = footerColumns.flatMap((column) => column.links.map((link) => link.href));
+    expect(hrefs).not.toContain("/account/privacy");
   });
 });
 
@@ -89,7 +145,8 @@ describe("StorefrontShell", () => {
       </StorefrontShell>,
     );
     expect(screen.queryByLabelText("Mở giỏ hàng")).toBeNull();
-    expect(screen.getByLabelText("Mở tư vấn")).toBeInTheDocument();
+    // The header, the footer and the floating button: one name for the chat everywhere (SF-UX-4).
+    expect(screen.getAllByRole("link", { name: "Chat với Sale" })).toHaveLength(3);
     expect(screen.getByText("Nội dung")).toBeInTheDocument();
   });
 
@@ -100,6 +157,7 @@ describe("StorefrontShell", () => {
         <p>Nội dung</p>
       </StorefrontShell>,
     );
-    expect(screen.queryByLabelText("Mở tư vấn")).toBeNull();
+    // Only the header's and the footer's: no floating button over the composer.
+    expect(screen.getAllByRole("link", { name: "Chat với Sale" })).toHaveLength(2);
   });
 });
