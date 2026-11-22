@@ -18,6 +18,7 @@ import type { Design, DesignProject, ProjectQuoteRequest } from "../types";
 import { ProjectQuoteDialog } from "./project-quote-dialog";
 import {
   ACTION_BUTTON,
+  AnsweringQuoteLink,
   QuoteRequestStatusBadge,
   cartonsLabel,
   desiredDateLabel,
@@ -28,7 +29,7 @@ function ProjectQuoteFacts({ request }: { request: ProjectQuoteRequest }) {
   return (
     <div className="bg-bg-subtle grid gap-2 rounded-[var(--r-md)] p-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">
-        <QuoteRequestStatusBadge status={request.status} />
+        <QuoteRequestStatusBadge request={request} />
         <span className="text-ink-secondary tabular-nums">
           Ngày giao: {desiredDateLabel(request.desiredDeliveryDate)}
         </span>
@@ -46,6 +47,7 @@ function ProjectQuoteFacts({ request }: { request: ProjectQuoteRequest }) {
           </li>
         ))}
       </ul>
+      <AnsweringQuoteLink request={request} />
     </div>
   );
 }
@@ -71,6 +73,7 @@ export function ProjectQuoteSection({
   const approved = (designs ?? []).filter((design) => design.status === "APPROVED");
   const offered = allowed && project.status === "ACTIVE";
   const current = currentQuoteRequest(requests.data);
+  const open = openQuoteRequest(requests.data);
   if (!offered && !current) return null;
 
   const locked = designs !== undefined && approved.length === 0;
@@ -91,14 +94,16 @@ export function ProjectQuoteSection({
         </div>
         {offered ? (
           <div className="flex flex-col gap-1">
+            {/* An open request is changed by a new ask, never doubled (as on a design's card). */}
             <Button
               type="button"
+              variant={open ? "outline" : "default"}
               className={ACTION_BUTTON}
               disabled={designs === undefined || locked}
               aria-describedby={locked ? "project-quote-reason" : undefined}
               onClick={() => setAsking(true)}
             >
-              Yêu cầu báo giá cả dự án
+              {open ? "Sửa yêu cầu báo giá cả dự án" : "Yêu cầu báo giá cả dự án"}
             </Button>
             {locked ? (
               <span id="project-quote-reason" className="text-ink-secondary text-xs">
@@ -133,7 +138,7 @@ export function ProjectQuoteSection({
         <ProjectQuoteDialog
           project={project}
           designs={approved}
-          current={openQuoteRequest(requests.data)}
+          current={open}
           open={asking}
           onOpenChange={setAsking}
         />

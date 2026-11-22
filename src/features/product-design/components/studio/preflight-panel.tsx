@@ -138,7 +138,7 @@ export function FailedIssues({
       {groups.map(({ code, issues: own }) => (
         <IssueGroup key={code} title={nameOf(code)} issues={own} onLocate={onLocate} />
       ))}
-      {needsSale(fails) ? <AskSales /> : null}
+      {needsSale(fails) ? <AskSales issues={fails} /> : null}
     </>
   );
 }

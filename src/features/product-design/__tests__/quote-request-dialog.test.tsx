@@ -44,9 +44,16 @@ function renderDesign(design: Design) {
   );
 }
 
-async function openDialog(user: ReturnType<typeof userEvent.setup>, design: Design) {
+/** "Yêu cầu báo giá …", or "Sửa yêu cầu báo giá …" while the design has a request open. */
+async function openDialog(
+  user: ReturnType<typeof userEvent.setup>,
+  design: Design,
+  label = design.status === "APPROVED" && design.id === approved
+    ? "Sửa yêu cầu báo giá"
+    : "Yêu cầu báo giá",
+) {
   await user.click(
-    await screen.findByRole("button", { name: `Yêu cầu báo giá ${design.name}` }, FIRST_READ),
+    await screen.findByRole("button", { name: `${label} ${design.name}` }, FIRST_READ),
   );
   return screen.findByRole("dialog");
 }
@@ -244,6 +251,31 @@ describe("an approved design's quote request", () => {
     ).toBeInTheDocument();
   });
 
+  it("offers to change, not to file again, while a request is open (the BE keeps one per design)", async () => {
+    const design = await getDesign(approved);
+    renderDesign(design);
+    await screen.findByText("120 thùng", undefined, FIRST_READ);
+    const button = await screen.findByRole(
+      "button",
+      { name: `Sửa yêu cầu báo giá ${design.name}` },
+      FIRST_READ,
+    );
+    expect(button).toHaveAttribute("data-variant", "outline");
+    expect(screen.queryByRole("button", { name: `Yêu cầu báo giá ${design.name}` })).toBeNull();
+  });
+
+  it("is the filled primary action of an approved design with no request open", async () => {
+    settle(await backend.store.simulateApprove(pending));
+    const design = await getDesign(pending);
+    renderDesign(design);
+    const button = await screen.findByRole(
+      "button",
+      { name: `Yêu cầu báo giá ${design.name}` },
+      FIRST_READ,
+    );
+    expect(button).toHaveAttribute("data-variant", "default");
+  });
+
   it("is not offered without design-quote-requests:CREATE", async () => {
     registerMockRoute("GET", "/identity/me/permissions", () => ({
       status: 200,
@@ -262,7 +294,7 @@ describe("an approved design's quote request", () => {
     // The card still shows the request; only asking is gated.
     expect(await screen.findByText("120 thùng", undefined, FIRST_READ)).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: /Yêu cầu báo giá/ })).not.toBeInTheDocument(),
+      expect(screen.queryByRole("button", { name: /yêu cầu báo giá/i })).not.toBeInTheDocument(),
     );
   });
 });

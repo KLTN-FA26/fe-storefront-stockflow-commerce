@@ -1122,7 +1122,7 @@ describe("variant rules", () => {
       {
         ruleId: "NO_CARTON_SPEC",
         level: "fail",
-        message: "Quy cách chưa có quy cách thùng, chưa gửi duyệt được.",
+        message: "Sản phẩm này chưa có quy cách đóng thùng nên chưa gửi duyệt được.",
       },
     ]);
     expect(noSpec.result).toBe("Fail");

@@ -114,7 +114,10 @@ export function DesignCard({
           {notes}
           {mayHaveQuoteRequest(design) ? <DesignQuoteSummary design={design} /> : null}
         </div>
+        {/* One primary (filled) button per status (SF-UX-7): "Tiếp tục thiết kế" on a draft,
+            "Yêu cầu báo giá" on an approved design, the WF-02 next step, first; the rest outline. */}
         <div className="mt-auto flex flex-wrap gap-2">
+          {actions.includes("requestQuote") ? <RequestQuoteButton design={design} /> : null}
           {actions.includes("edit") ? (
             <Button asChild className={ACTION_CLASS}>
               <Link href={href} aria-label={`Tiếp tục thiết kế ${title}`}>
@@ -131,6 +134,7 @@ export function DesignCard({
           {onRevise && actions.includes("createRevision") ? (
             <Button
               type="button"
+              variant="outline"
               className={ACTION_CLASS}
               disabled={reviseDisabled}
               aria-label={`Tạo bản sửa ${title}`}
@@ -139,7 +143,6 @@ export function DesignCard({
               {revising ? "Đang tạo..." : "Tạo bản sửa"}
             </Button>
           ) : null}
-          {actions.includes("requestQuote") ? <RequestQuoteButton design={design} /> : null}
           {/* Any design can be talked over in chat (PO 2026-11-22, Q7: as the BE — Sale sees its
               name and status, never a draft's content). */}
           <ChatAboutButton kind="DESIGN" id={design.id} name={title} />

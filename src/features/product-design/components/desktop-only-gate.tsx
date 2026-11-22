@@ -54,7 +54,7 @@ export function useDeviceFit(): DeviceFit {
 type CopyState = "idle" | "copied" | "failed";
 
 /** The page's link, to open on a computer. */
-function CopyLinkButton() {
+export function CopyLinkButton() {
   const [state, setState] = useState<CopyState>("idle");
   const copy = async () => {
     try {

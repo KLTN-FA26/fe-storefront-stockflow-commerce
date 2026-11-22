@@ -59,17 +59,19 @@ function renderIssues(
 describe("Chat với Sale on a preflight failure only Sale can clear (item 19)", () => {
   // PO 2026-11-22 (Q7): as the BE — the conversation is about the design itself, whatever its
   // status; Sale sees its name and status, never a draft's content.
-  it.each(["NO_CARTON_SPEC", "VARIANT_UNAVAILABLE"])(
-    "%s offers the chat about the design",
-    async (ruleId) => {
-      renderIssues([fail(ruleId)], PRODUCT_ID);
-      expect(await screen.findByText("Sale sẽ bổ sung quy cách cho bạn.")).toBeInTheDocument();
-      expect(await screen.findByRole("link", { name: /Chat với Sale/ })).toHaveAttribute(
-        "href",
-        `/chat/new?kind=DESIGN&id=${ids.design}`,
-      );
-    },
-  );
+  it.each([
+    ["NO_CARTON_SPEC", "Sale sẽ bổ sung quy cách thùng cho bạn."],
+    ["VARIANT_UNAVAILABLE", "Sale sẽ giúp bạn chọn quy cách khác."],
+    // A check this build has no words for (SF-UX-12): no code to act on, so Sale is the way out.
+    ["BLEED_MISSING", "Sale sẽ xem lỗi này và hướng dẫn bạn."],
+  ])("%s offers the chat about the design", async (ruleId, line) => {
+    renderIssues([fail(ruleId)], PRODUCT_ID);
+    expect(await screen.findByText(line)).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /Chat với Sale/ })).toHaveAttribute(
+      "href",
+      `/chat/new?kind=DESIGN&id=${ids.design}`,
+    );
+  });
 
   it.each([
     ["an APPROVED product", PRODUCT_ID, "APPROVED"],
@@ -91,7 +93,7 @@ describe("Chat với Sale on a preflight failure only Sale can clear (item 19)",
       throw new Error(`unexpected GET ${url}`);
     });
     renderIssues([fail("NO_CARTON_SPEC")], PRODUCT_ID);
-    expect(await screen.findByText("Sale sẽ bổ sung quy cách cho bạn.")).toBeInTheDocument();
+    expect(await screen.findByText("Sale sẽ bổ sung quy cách thùng cho bạn.")).toBeInTheDocument();
     await waitFor(() =>
       expect(get).toHaveBeenCalledWith("/identity/me/permissions", expect.anything()),
     );
@@ -103,7 +105,7 @@ describe("Chat với Sale on a preflight failure only Sale can clear (item 19)",
   it("offers nothing for a failure the customer fixes in the design", () => {
     renderIssues([fail("EMPTY_DESIGN")], PRODUCT_ID);
     expect(screen.getByText("Lỗi EMPTY_DESIGN")).toBeInTheDocument();
-    expect(screen.queryByText("Sale sẽ bổ sung quy cách cho bạn.")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Sale sẽ/)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Chat với Sale/ })).not.toBeInTheDocument();
   });
 });
@@ -133,6 +135,54 @@ describe("a returned draft's quote request (item 21)", () => {
     );
     expect(screen.getByText(/Sale đã nhận yêu cầu và sẽ báo giá/)).toBeInTheDocument();
     expect(screen.queryByText(/Sửa theo lý do trả lại/)).not.toBeInTheDocument();
+  });
+});
+
+describe("an answered quote request (SF-UX-10, R5-5)", () => {
+  const QUOTE_ID = "01a2043f-3d65-706a-9d7b-dcc7bff017d6";
+  const closed = (over: Record<string, unknown>) =>
+    ({
+      id: "r1",
+      designId: ids.design,
+      designName: "Ly",
+      designStatus: "APPROVED",
+      cartons: 10,
+      status: "CLOSED",
+      requestedAt: "2026-11-01T00:00:00Z",
+      closedAt: "2026-11-02T00:00:00Z",
+      ...over,
+    }) as DesignQuoteRequest;
+
+  it("says a quote answered it, names the quote and links to it", () => {
+    renderWithProviders(
+      <QuoteRequestFacts
+        request={closed({
+          closedOutcome: "QUOTED",
+          quoteId: QUOTE_ID,
+          quoteNumber: "QT-20261123-0001",
+        })}
+      />,
+    );
+    expect(screen.getByText("Đã có báo giá")).toBeInTheDocument();
+    expect(screen.queryByText("Đã đóng")).not.toBeInTheDocument();
+    expect(screen.getByText("QT-20261123-0001")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Xem báo giá" })).toHaveAttribute(
+      "href",
+      `/account/quotes/${QUOTE_ID}`,
+    );
+  });
+
+  it("reads 'Đã đóng' with no link when closed without a quote, or before the BE names it", () => {
+    for (const request of [
+      closed({ closedOutcome: "CLOSED_BY_STAFF" }),
+      closed({ closedOutcome: "QUOTED" }),
+      closed({}),
+    ]) {
+      const view = renderWithProviders(<QuoteRequestFacts request={request} />);
+      expect(screen.getByText("Đã đóng")).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Xem báo giá" })).not.toBeInTheDocument();
+      view.unmount();
+    }
   });
 });
 

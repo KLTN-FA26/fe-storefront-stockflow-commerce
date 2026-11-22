@@ -258,7 +258,7 @@ describe("preflightIssuesOf", () => {
       {
         ruleId: "BLEED_MISSING",
         level: "fail",
-        message: "Thiết kế chưa đạt một kiểm tra tự động (mã: BLEED_MISSING).",
+        message: "Thiết kế chưa đạt một kiểm tra tự động.",
       },
       ...studio,
     ]);

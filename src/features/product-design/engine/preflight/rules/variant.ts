@@ -22,7 +22,7 @@ export function variantIssues(variant: PreflightVariant): PreflightIssue[] {
     issues.push({
       ruleId: "NO_CARTON_SPEC",
       level: "fail",
-      message: "Quy cách chưa có quy cách thùng, chưa gửi duyệt được.",
+      message: "Sản phẩm này chưa có quy cách đóng thùng nên chưa gửi duyệt được.",
     });
   }
   return issues;

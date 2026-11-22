@@ -52,10 +52,11 @@ async function renderSection(projectId: string) {
   return project;
 }
 
-const openDialog = async (user: ReturnType<typeof userEvent.setup>) => {
-  await user.click(
-    await screen.findByRole("button", { name: "Yêu cầu báo giá cả dự án" }, FIRST_READ),
-  );
+const openDialog = async (
+  user: ReturnType<typeof userEvent.setup>,
+  name = "Yêu cầu báo giá cả dự án",
+) => {
+  await user.click(await screen.findByRole("button", { name }, FIRST_READ));
   return screen.findByRole("dialog");
 };
 
@@ -115,7 +116,8 @@ describe("ProjectQuoteSection", () => {
     await renderSection(id);
     await screen.findByText("10 thùng", undefined, FIRST_READ);
 
-    const dialog = await openDialog(user);
+    // An open request is changed, not doubled: the button says so.
+    const dialog = await openDialog(user, "Sửa yêu cầu báo giá cả dự án");
     const cartons = within(dialog).getByLabelText("Số thùng mong muốn");
     expect(cartons).toHaveValue(10);
     await user.clear(cartons);
