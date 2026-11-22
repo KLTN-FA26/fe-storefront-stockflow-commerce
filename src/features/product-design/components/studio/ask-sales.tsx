@@ -1,16 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { MessageCircle } from "lucide-react";
-
-import { STORE_ROUTES } from "@/constants";
-import { Button } from "@/components/ui/button";
-import { PERM } from "@/lib/auth/permission-codes";
-import { useHasPermission } from "@/lib/auth/my-permissions";
-
 import type { ReportedPreflightIssue } from "../../types";
 import { ChatAboutButton } from "../chat-about-button";
-import { ACTION_BUTTON } from "../quote-request-parts";
 import { useStudio } from "./studio-context";
 
 /**
@@ -23,30 +14,17 @@ export const needsSale = (issues: readonly Pick<ReportedPreflightIssue, "ruleId"
   issues.some((issue) => issue.level === "fail" && SALE_RULES.has(issue.ruleId));
 
 /**
- * "Sale sẽ bổ sung quy cách cho bạn." and "Chat với Sale". The conversation is about the design's
- * product (`PRODUCT`) where it is published and the studio knows it: a `DESIGN` context on a draft never sent would
- * show Sale the draft before the customer submitted it (open question Q7). Without a product id
- * it is the plain chat, no context.
+ * "Sale sẽ bổ sung quy cách cho bạn." and "Chat với Sale" about this design (`DESIGN` context), whatever its status.
+ * PO 2026-11-22 (Q7): as the BE — staff see a design's name, status and return reason, never the content of a draft
+ * (`CustomerDesignRules.requireReader`), and a customer may open a `DESIGN` conversation on any design of theirs
+ * (`ContextResolver`). The button hides itself without `chat-conversations:CREATE`.
  */
 export function AskSales() {
-  const { design, printConfig } = useStudio();
-  const allowed = useHasPermission(PERM.chatCreate);
-  // The BE shows a customer a PRODUCT context only for a PUBLISHED product (CHAT_CONTEXT_NOT_FOUND
-  // otherwise); an approved product not yet listed still takes designs, so it gets the plain chat.
-  const productId = printConfig.product.status === "PUBLISHED" ? design.product.id : null;
+  const { design } = useStudio();
   return (
     <div className="flex flex-col items-start gap-2 px-2">
       <p className="text-ink-secondary text-sm">Sale sẽ bổ sung quy cách cho bạn.</p>
-      {productId ? (
-        <ChatAboutButton kind="PRODUCT" id={productId} name={design.product.title} />
-      ) : allowed ? (
-        <Button asChild variant="outline" className={ACTION_BUTTON}>
-          <Link href={STORE_ROUTES.chat.new} aria-label="Chat với Sale">
-            <MessageCircle aria-hidden className="size-4" />
-            Chat với Sale
-          </Link>
-        </Button>
-      ) : null}
+      <ChatAboutButton kind="DESIGN" id={design.id} name={design.name} />
     </div>
   );
 }

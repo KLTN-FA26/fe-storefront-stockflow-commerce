@@ -1,6 +1,7 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { api } from "@/lib/api/client";
 import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/design-seed";
 import { registerMockRoute } from "@/lib/api/mock-adapter";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
@@ -56,34 +57,46 @@ function renderIssues(
 }
 
 describe("Chat với Sale on a preflight failure only Sale can clear (item 19)", () => {
+  // PO 2026-11-22 (Q7): as the BE — the conversation is about the design itself, whatever its
+  // status; Sale sees its name and status, never a draft's content.
   it.each(["NO_CARTON_SPEC", "VARIANT_UNAVAILABLE"])(
-    "%s offers the chat about the product, never about the unsent draft",
+    "%s offers the chat about the design",
     async (ruleId) => {
       renderIssues([fail(ruleId)], PRODUCT_ID);
       expect(await screen.findByText("Sale sẽ bổ sung quy cách cho bạn.")).toBeInTheDocument();
       expect(await screen.findByRole("link", { name: /Chat với Sale/ })).toHaveAttribute(
         "href",
-        `/chat/new?kind=PRODUCT&id=${PRODUCT_ID}`,
+        `/chat/new?kind=DESIGN&id=${ids.design}`,
       );
     },
   );
 
-  it.each(["APPROVED", "UNPUBLISHED"])(
-    "opens the plain chat, not PRODUCT, for a %s product: the BE shows only a published one",
-    async (status) => {
-      renderIssues([fail("NO_CARTON_SPEC")], PRODUCT_ID, status);
-      expect(await screen.findByRole("link", { name: "Chat với Sale" })).toHaveAttribute(
-        "href",
-        "/chat/new",
-      );
-    },
-  );
-
-  it("opens the plain chat, no context, when the design carries no product id", async () => {
-    renderIssues([fail("NO_CARTON_SPEC")], null);
-    expect(await screen.findByRole("link", { name: "Chat với Sale" })).toHaveAttribute(
+  it.each([
+    ["an APPROVED product", PRODUCT_ID, "APPROVED"],
+    ["an UNPUBLISHED product", PRODUCT_ID, "UNPUBLISHED"],
+    ["no product id", null, "PUBLISHED"],
+  ])("opens the chat about the design whatever the product (%s)", async (_, productId, status) => {
+    renderIssues([fail("NO_CARTON_SPEC")], productId, status);
+    expect(await screen.findByRole("link", { name: /Chat với Sale/ })).toHaveAttribute(
       "href",
-      "/chat/new",
+      `/chat/new?kind=DESIGN&id=${ids.design}`,
+    );
+  });
+
+  it("offers no chat link without chat-conversations:CREATE", async () => {
+    const get = vi.spyOn(api, "get").mockImplementation(async (url: string) => {
+      if (url === "/identity/me/permissions") {
+        return { data: { roles: ["CUSTOMER"], permissions: [], dataScope: "OWN" } };
+      }
+      throw new Error(`unexpected GET ${url}`);
+    });
+    renderIssues([fail("NO_CARTON_SPEC")], PRODUCT_ID);
+    expect(await screen.findByText("Sale sẽ bổ sung quy cách cho bạn.")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(get).toHaveBeenCalledWith("/identity/me/permissions", expect.anything()),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("link", { name: /Chat với Sale/ })).not.toBeInTheDocument(),
     );
   });
 

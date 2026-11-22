@@ -22,9 +22,9 @@ export function ChatAboutButton({
   name,
   className,
 }: {
-  kind: "DESIGN" | "DESIGN_PROJECT" | "PRODUCT";
+  kind: "DESIGN" | "DESIGN_PROJECT";
   id: string;
-  /** For the accessible name: which design, project or product the chat is about. */
+  /** For the accessible name: which design or project the chat is about. */
   name: string;
   className?: string;
 }) {

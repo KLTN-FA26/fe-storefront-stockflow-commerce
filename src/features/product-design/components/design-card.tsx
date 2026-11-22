@@ -140,10 +140,9 @@ export function DesignCard({
             </Button>
           ) : null}
           {actions.includes("requestQuote") ? <RequestQuoteButton design={design} /> : null}
-          {/* A design Sales has seen (sent for review, approved or returned) can be talked over in chat. */}
-          {design.status !== "DRAFT" || isReturned(design) ? (
-            <ChatAboutButton kind="DESIGN" id={design.id} name={title} />
-          ) : null}
+          {/* Any design can be talked over in chat (PO 2026-11-22, Q7: as the BE — Sale sees its
+              name and status, never a draft's content). */}
+          <ChatAboutButton kind="DESIGN" id={design.id} name={title} />
           {onClone ? (
             <Button
               type="button"

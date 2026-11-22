@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, renderHook, screen, waitFor, within } from "@testing-library/react";
+import { renderHook, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -174,12 +174,14 @@ describe("the card and the list: Nhân bản sang cỡ khác", () => {
   it("shows the button only when the page can handle it, and reports the design", async () => {
     const onClone = vi.fn();
     const target = design({ name: "Ly sáng" });
-    const { rerender } = render(
+    // With providers: every card now offers "Chat với Sale", which reads the permission list (Q7).
+    const first = renderWithProviders(
       <DesignCard design={target} onDelete={vi.fn()} onRevise={vi.fn()} />,
     );
     expect(screen.queryByRole("button", { name: /sang cỡ khác/ })).not.toBeInTheDocument();
+    first.unmount();
 
-    rerender(
+    renderWithProviders(
       <DesignCard design={target} onDelete={vi.fn()} onRevise={vi.fn()} onClone={onClone} />,
     );
     await userEvent.click(screen.getByRole("button", { name: "Nhân bản Ly sáng sang cỡ khác" }));
