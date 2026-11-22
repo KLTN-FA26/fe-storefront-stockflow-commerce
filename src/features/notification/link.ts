@@ -32,15 +32,28 @@ export function toSafeNotificationPath(raw: string): string | null {
   return `${path}${url.search}${url.hash}`;
 }
 
-// BE VehicleHandoverNotificationListener links the order as `/orders/{id}`; the storefront page for
-// it is `/account/orders/{id}` (STORE_ROUTES.account.orders.detail). Only that exact shape is
-// rewritten, so an already-correct `/account/orders/...` link and every other path pass unchanged.
-const BE_ORDER_LINK = /^\/orders\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+const UUID = "([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})";
 
-/** Safe in-app target of a notification link, with BE-side order links mapped to the storefront route. */
+/**
+ * BE links that name a page the storefront keeps elsewhere, and where it is. Only these exact shapes
+ * are rewritten, so an already-correct link and every other path pass unchanged (`/einvoices/{id}`
+ * and `/chat/{id}` are storefront pages as the BE writes them).
+ * - `/orders/{id}`: VehicleHandoverNotificationListener; the page is `/account/orders/{id}`.
+ * - `/designs/{id}`: DesignDecisionNotificationListener before R5-1 (now `/design/{id}`); notices
+ *   already stored keep the old link (SF-UX-13).
+ */
+const BE_LINKS: readonly { pattern: RegExp; to: (id: string) => string }[] = [
+  { pattern: new RegExp(`^/orders/${UUID}$`, "i"), to: STORE_ROUTES.account.orders.detail },
+  { pattern: new RegExp(`^/designs/${UUID}$`, "i"), to: STORE_ROUTES.design.detail },
+];
+
+/** Safe in-app target of a notification link, with BE-side links mapped to the storefront route. */
 export function resolveNotificationLink(raw: string): string | null {
   const safe = toSafeNotificationPath(raw);
   if (safe === null) return null;
-  const order = BE_ORDER_LINK.exec(safe);
-  return order?.[1] ? STORE_ROUTES.account.orders.detail(order[1]) : safe;
+  for (const { pattern, to } of BE_LINKS) {
+    const id = pattern.exec(safe)?.[1];
+    if (id) return to(id);
+  }
+  return safe;
 }
