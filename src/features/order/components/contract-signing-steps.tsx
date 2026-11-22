@@ -8,11 +8,11 @@ import { ContractDownloadButton } from "./contract-download-button";
 
 /**
  * Where the signed scan goes: the contract's own conversation with Sales, so it is tied to the
- * contract rather than lost among chat files. `attach=pdf` asks the chat page to open its file
- * picker for a PDF (the chat module reads it; without that it simply opens the conversation).
+ * contract rather than lost among chat files. `attach=pdf` travels to the thread, which asks for the
+ * signed copy above its composer, with a button that opens the file picker.
  */
 export const signedCopyHref = (contractId: string) =>
-  `${STORE_ROUTES.chat.about("CONTRACT", contractId)}&attach=pdf`;
+  STORE_ROUTES.chat.about("CONTRACT", contractId, "pdf");
 
 /** The anchor of the order page's contract section, which chat cards link to. */
 export const CONTRACT_SECTION_ID = "hop-dong";

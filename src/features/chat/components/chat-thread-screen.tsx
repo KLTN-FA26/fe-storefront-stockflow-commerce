@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
+
+import { CHAT_ATTACH_INTENTS } from "@/constants/routes";
 
 import { PERM } from "@/lib/auth/permission-codes";
 import { useRealtimeConnected } from "@/lib/realtime";
@@ -21,6 +24,8 @@ import { ThreadComposer } from "./thread-composer";
 import { CsatPanel, ReopenOffer } from "./thread-footer";
 import { ThreadHeader } from "./thread-header";
 import { ThreadLog } from "./thread-log";
+
+const attachParser = parseAsStringLiteral(CHAT_ATTACH_INTENTS);
 
 /**
  * One conversation (C3, C4): header, messages paged by `seq`, composer. New messages and changed cards come over the
@@ -44,6 +49,9 @@ export function ChatThreadScreen({ conversationId }: { conversationId: string })
   const { mutate: markRead } = useMarkRead(conversationId);
   const takeBack = useTakeBackMessage(conversationId);
   const [endedByServer, setEndedByServer] = useState(false);
+  // `?attach=pdf` from the order page's "Gửi bản đã ký": cleared from the URL once dismissed or sent, so a reload
+  // does not ask again.
+  const [attach, setAttach] = useQueryState("attach", attachParser);
   const marked = useRef(0);
   const newest = timeline.at(-1)?.seq ?? 0;
 
@@ -139,7 +147,12 @@ export function ChatThreadScreen({ conversationId }: { conversationId: string })
               Cuộc trò chuyện đã được giải quyết. Nhắn tiếp để mở lại.
             </p>
           ) : null}
-          <ThreadComposer conversationId={conversationId} onEnded={() => setEndedByServer(true)} />
+          <ThreadComposer
+            conversationId={conversationId}
+            onEnded={() => setEndedByServer(true)}
+            askSignedCopy={attach === "pdf"}
+            onSignedCopyDone={() => void setAttach(null)}
+          />
         </>
       ) : (
         <ReopenOffer conversationId={conversationId} onReopened={() => setEndedByServer(false)} />

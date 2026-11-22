@@ -6,6 +6,7 @@
 import type { InfiniteData } from "@tanstack/react-query";
 
 import { STORE_ROUTES } from "@/constants";
+import { CHAT_ATTACH_INTENTS, type ChatAttachIntent } from "@/constants/routes";
 
 import { contextKindLabel } from "./labels";
 import { isCustomerVisible } from "./schemas";
@@ -203,4 +204,18 @@ export function canTakeBack(message: ChatMessage, now: Date = new Date()): boole
 /** A client message id for C5/C6 (`^[A-Za-z0-9._:-]{1,64}$`), kept across retries of one send. */
 export function newClientMessageId(): string {
   return `sf-${globalThis.crypto.randomUUID()}`;
+}
+
+/**
+ * The `?attach=` a page sent with the customer, kept only for a contract's conversation: `pdf` asks for the signed
+ * copy of the contract, which means nothing elsewhere. Anything else is dropped.
+ */
+export function signedCopyIntentOf(
+  contextKind: string | null | undefined,
+  attach: string | null | undefined,
+): ChatAttachIntent | undefined {
+  if (contextKind !== "CONTRACT") return undefined;
+  return (CHAT_ATTACH_INTENTS as readonly string[]).includes(attach ?? "")
+    ? (attach as ChatAttachIntent)
+    : undefined;
 }

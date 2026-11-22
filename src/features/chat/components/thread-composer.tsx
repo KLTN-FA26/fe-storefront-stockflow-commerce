@@ -13,11 +13,18 @@ import { CHAT_MESSAGE_BY_CODE } from "../labels";
 import { useSendAttachment, useSendText } from "../mutations";
 import { CHAT_FILE_ACCEPT, CHAT_TEXT_MAX, chatFileProblem, chatTextSchema } from "../schemas";
 import { newClientMessageId } from "../selectors";
+import { SignedCopyPrompt } from "./signed-copy-prompt";
 
 interface ThreadComposerProps {
   conversationId: string;
   /** The BE said the conversation ended (409 CHAT_CONVERSATION_ENDED): offer to reopen it. */
   onEnded: () => void;
+  /**
+   * The page that sent the customer here asked for the signed contract (`?attach=pdf`): a prompt above the box whose
+   * button opens the file picker. `onSignedCopyDone` runs when it is dismissed or a file was sent.
+   */
+  askSignedCopy?: boolean;
+  onSignedCopyDone?: () => void;
 }
 
 /**
@@ -25,7 +32,12 @@ interface ThreadComposerProps {
  * caption. A failed send keeps its text and its `clientMessageId`, so the retry is the same message
  * to the BE (C5/C6); changing the text gives it a new id.
  */
-export function ThreadComposer({ conversationId, onEnded }: ThreadComposerProps) {
+export function ThreadComposer({
+  conversationId,
+  onEnded,
+  askSignedCopy = false,
+  onSignedCopyDone,
+}: ThreadComposerProps) {
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -57,7 +69,16 @@ export function ThreadComposer({ conversationId, onEnded }: ThreadComposerProps)
     setProblem(null);
     attempted.current = `${file?.name ?? ""}|${trimmed}`;
     if (file) {
-      sendFile.mutate({ file, caption: trimmed || undefined, clientMessageId }, handlers);
+      sendFile.mutate(
+        { file, caption: trimmed || undefined, clientMessageId },
+        {
+          ...handlers,
+          onSuccess: () => {
+            handlers.onSuccess();
+            onSignedCopyDone?.();
+          },
+        },
+      );
       return;
     }
     const parsed = chatTextSchema.safeParse(trimmed);
@@ -91,6 +112,13 @@ export function ThreadComposer({ conversationId, onEnded }: ThreadComposerProps)
         <p role="alert" className="text-danger text-sm">
           {problem}
         </p>
+      ) : null}
+      {askSignedCopy ? (
+        <SignedCopyPrompt
+          disabled={pending}
+          onChoose={() => picker.current?.click()}
+          onDismiss={() => onSignedCopyDone?.()}
+        />
       ) : null}
       <input
         ref={picker}

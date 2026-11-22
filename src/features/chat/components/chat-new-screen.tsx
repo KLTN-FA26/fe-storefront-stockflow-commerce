@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
 import { STORE_ROUTES } from "@/constants";
+import { CHAT_WITH_SALES } from "@/constants/labels";
 import { describeBeRefusal, hasErrorCode } from "@/lib/api/describe-error";
 import { PERM } from "@/lib/auth/permission-codes";
 import { useHasPermission } from "@/lib/auth/my-permissions";
@@ -21,7 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CHAT_MESSAGE_BY_CODE, contextKindLabel } from "../labels";
 import { useOpenConversation } from "../mutations";
 import { CHAT_TEXT_MAX, chatContextKindSchema } from "../schemas";
-import { newClientMessageId } from "../selectors";
+import { newClientMessageId, signedCopyIntentOf } from "../selectors";
 import type { OpenConversationInput } from "../types";
 
 const formSchema = z.object({
@@ -39,13 +40,15 @@ export function chatContextOf(kind: string | undefined, id: string | undefined) 
 interface ChatNewScreenProps {
   kind?: string | undefined;
   id?: string | undefined;
+  /** `?attach=`: what the linking page wants sent in the conversation (the signed contract). */
+  attach?: string | undefined;
 }
 
 /**
  * "Chat với Sale" (C1): opens — or reuses — a conversation, about one of the customer's documents
  * when the page linked here with one. This is the only way a customer attaches a document.
  */
-export function ChatNewScreen({ kind, id }: ChatNewScreenProps) {
+export function ChatNewScreen({ kind, id, attach }: ChatNewScreenProps) {
   const router = useRouter();
   const canCreate = useHasPermission(PERM.chatCreate);
   const open = useOpenConversation();
@@ -53,6 +56,8 @@ export function ChatNewScreen({ kind, id }: ChatNewScreenProps) {
   const [refusal, setRefusal] = useState<{ text: string; contextMissing: boolean } | null>(null);
   const context = chatContextOf(kind, id);
   const brokenLink = (kind !== undefined || id !== undefined) && context === null;
+  // The signed copy belongs to a contract's conversation; the thread asks for it once it is open.
+  const attachIntent = signedCopyIntentOf(context?.contextKind, attach);
   const { register, handleSubmit, formState } = useForm<NewChatForm>({
     resolver: zodResolver(formSchema),
     defaultValues: { text: "" },
@@ -66,7 +71,8 @@ export function ChatNewScreen({ kind, id }: ChatNewScreenProps) {
       ...(first ? { text: first, clientMessageId } : {}),
     };
     open.mutate(input, {
-      onSuccess: (conversation) => router.replace(STORE_ROUTES.chat.detail(conversation.id)),
+      onSuccess: (conversation) =>
+        router.replace(STORE_ROUTES.chat.detail(conversation.id, attachIntent)),
       onError: (failure) =>
         setRefusal({
           text: describeBeRefusal(failure, CHAT_MESSAGE_BY_CODE),
@@ -80,10 +86,10 @@ export function ChatNewScreen({ kind, id }: ChatNewScreenProps) {
     <PageShell
       width="narrow"
       breadcrumbs={[
-        { label: "Chat với Sale", href: STORE_ROUTES.chat.list },
+        { label: CHAT_WITH_SALES, href: STORE_ROUTES.chat.list },
         { label: "Cuộc trò chuyện mới" },
       ]}
-      title="Chat với Sale"
+      title={CHAT_WITH_SALES}
       subtitle="Sale phụ trách sẽ trả lời bạn ngay trong cuộc trò chuyện."
     >
       <SurfaceCard as="section" className="space-y-4">
@@ -94,6 +100,11 @@ export function ChatNewScreen({ kind, id }: ChatNewScreenProps) {
               {contextKindLabel(context.contextKind)}
             </span>{" "}
             bạn đang xem. Sale nhận được chứng từ này cùng tin nhắn của bạn.
+          </p>
+        ) : null}
+        {attachIntent ? (
+          <p className="text-ink-secondary text-sm">
+            Mở cuộc trò chuyện rồi chọn file hợp đồng đã ký (PDF hoặc ảnh) để gửi cho Sale.
           </p>
         ) : null}
         {brokenLink ? (
@@ -132,7 +143,7 @@ export function ChatNewScreen({ kind, id }: ChatNewScreenProps) {
                 </Alert>
                 {refusal.contextMissing ? (
                   <Button asChild variant="outline" className="min-h-11 rounded-[var(--r-md)] px-4">
-                    <Link href={STORE_ROUTES.chat.new}>Chat với Sale không gắn chứng từ</Link>
+                    <Link href={STORE_ROUTES.chat.new}>{CHAT_WITH_SALES} không gắn chứng từ</Link>
                   </Button>
                 ) : null}
               </div>
