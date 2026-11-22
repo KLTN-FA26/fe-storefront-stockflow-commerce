@@ -139,34 +139,67 @@ export const displayGroup = (order: Pick<Order, "status" | "statusGroup">): Orde
   order.status === "COMPLETED" ? "COMPLETED" : order.statusGroup;
 
 /**
- * Fulfilment progress derived from the status group alone — the BE order has no per-status timestamps.
- * `done` is how many steps are complete; CANCELLED/RETURNED leave the happy path (null).
+ * The order's progress as the B2B process runs (SF-UX-30): contract, first installment, production,
+ * delivery, done. Derived from the status group and whether the first installment is paid — the BE
+ * order has no per-step timestamps. CANCELLED / RETURNED leave the happy path, and a group newer than
+ * this FE has no known place on it: no stepper (null).
  */
-export const ORDER_PROGRESS_STEPS = [
-  { id: "placed", label: "Đặt hàng" },
-  { id: "paid", label: "Thanh toán" },
-  { id: "fulfilment", label: "Chuẩn bị" },
-  { id: "shipping", label: "Đang giao" },
-  { id: "received", label: "Đã nhận" },
-] as const;
+export type ProgressStepId = "contract" | "firstPayment" | "production" | "delivery" | "done";
+/** `owed`: a step the order has moved past while it is still unpaid (the first installment). */
+export type ProgressState = "done" | "current" | "owed" | "todo";
+export interface ProgressStep {
+  id: ProgressStepId;
+  label: string;
+  state: ProgressState;
+}
 
-const DONE_STEPS: Record<OrderDisplayGroup, number | null> = {
-  AWAITING_CONTRACT: 1,
-  AWAITING_STOCK: 2,
+const PROGRESS_STEPS: readonly { id: ProgressStepId; label: string }[] = [
+  { id: "contract", label: "Hợp đồng" },
+  { id: "firstPayment", label: "Thanh toán đợt đầu" },
+  { id: "production", label: "Sản xuất" },
+  { id: "delivery", label: "Giao hàng" },
+  { id: "done", label: "Hoàn tất" },
+];
+
+/** Index of the current step per group; COMPLETED is past the last one. */
+const CURRENT_STEP: Record<OrderDisplayGroup, number | null> = {
+  AWAITING_CONTRACT: 0,
   AWAITING_PAYMENT: 1,
   UNDER_REVIEW: 1,
   CONFIRMED: 2,
+  AWAITING_STOCK: 2,
   IN_PRODUCTION: 2,
-  PREPARING: 2,
+  PREPARING: 3,
   SHIPPING: 3,
-  DELIVERED: 5,
+  DELIVERED: 4,
   // The goods reached the customer; a return of them is being decided.
-  RETURN_REQUESTED: 5,
-  COMPLETED: 5,
+  RETURN_REQUESTED: 4,
+  COMPLETED: PROGRESS_STEPS.length,
   CANCELLED: null,
   RETURNED: null,
-  // Unknown to this FE, so where it sits on the happy path is unknown too: no stepper.
   UNKNOWN: null,
 };
 
-export const orderProgressOf = (group: OrderDisplayGroup) => DONE_STEPS[group];
+/**
+ * @param firstInstallmentPaid whether the contract's first installment is paid; null while unknown
+ *   (no installments read yet). The payment step is never ticked unless it is known to be paid:
+ *   installments before and after delivery may still be owed (shown in the payment card instead).
+ */
+export function orderProgress(
+  group: OrderDisplayGroup,
+  firstInstallmentPaid: boolean | null,
+): ProgressStep[] | null {
+  let current = CURRENT_STEP[group];
+  if (current === null) return null;
+  // Under review after signing: past payment once the first installment is in.
+  if (group === "UNDER_REVIEW" && firstInstallmentPaid) current = 2;
+  const completed = group === "COMPLETED";
+  return PROGRESS_STEPS.map((step, index) => {
+    let state: ProgressState = index < current! ? "done" : index === current ? "current" : "todo";
+    if (step.id === "firstPayment" && state === "done" && !completed && !firstInstallmentPaid) {
+      state = "owed";
+    }
+    const label = step.id === "firstPayment" && state === "done" ? "Đã trả đợt 1" : step.label;
+    return { id: step.id, label, state };
+  });
+}

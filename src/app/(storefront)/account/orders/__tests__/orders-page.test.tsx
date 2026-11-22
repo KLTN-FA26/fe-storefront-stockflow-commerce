@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OrderDetailScreen } from "@/features/order/components/order-detail-screen";
 import { OrdersScreen } from "@/features/order/components/orders-screen";
 import { api } from "@/lib/api/client";
+import { formatNumber } from "@/lib/format/number";
 import { ApiError } from "@/lib/api/error";
 import {
   createMockOrderBook,
@@ -192,7 +193,11 @@ describe("OrdersScreen", () => {
     book = createMockOrderBook(CUSTOMER, []);
     renderWithProviders(<OrdersScreen />);
     expect(await screen.findByText("Bạn chưa có đơn hàng nào")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Tiếp tục mua sắm" })).toBeInTheDocument();
+    // B2B: orders come from accepted quotes, not from a cart (SF-UX-28).
+    expect(screen.getByRole("link", { name: "Xem báo giá" })).toHaveAttribute(
+      "href",
+      "/account/quotes",
+    );
   });
 
   it("explains a missing customer profile instead of offering a retry", async () => {
@@ -257,7 +262,8 @@ describe("OrderDetailScreen", () => {
     expect(await screen.findByRole("heading", { name: "Chi tiết đơn hàng" })).toBeInTheDocument();
     expect(screen.getByText(confirmed.orderNumber)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Đã xác nhận" })).toBeInTheDocument();
-    expect(screen.getByRole("listitem", { current: "step" })).toHaveTextContent("Chuẩn bị");
+    // Contract → first installment → production → delivery → done (SF-UX-30).
+    expect(screen.getByRole("listitem", { current: "step" })).toHaveTextContent("Sản xuất");
     const lines = screen.getByRole("region", { name: /Sản phẩm/ });
     expect(within(lines).getByText(confirmed.lines[0]!.sku)).toBeInTheDocument();
     expect(
@@ -272,7 +278,7 @@ describe("OrderDetailScreen", () => {
       renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
       expect(await screen.findByText(order.orderNumber)).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /Huỷ đơn hàng/ })).not.toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /Chat với CSKH/ })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /Chat với Sale về đơn/ })).toBeInTheDocument();
     },
   );
 
@@ -364,12 +370,13 @@ describe("OrderDetailScreen", () => {
     expect(screen.queryByText("Không tải được đơn hàng")).not.toBeInTheDocument();
   });
 
-  it("counts order lines and units with distinct words", async () => {
+  it("counts order lines and cartons (or pieces) with distinct words, formatted (SF-UX-31)", async () => {
     const confirmed = seeded("CONFIRMED");
-    const units = confirmed.lines.reduce((sum, line) => sum + line.quantity, 0);
+    // The mock book's lines carry pieces only (no cartons), so they count in "cái".
+    const amount = `${formatNumber(confirmed.lines.reduce((total, line) => total + line.quantity, 0))} cái`;
     renderWithProviders(<OrderDetailScreen orderId={confirmed.orderId} />);
     expect(
-      await screen.findByText(`(${confirmed.lines.length} mặt hàng · ${units} sản phẩm)`),
+      await screen.findByText(`(${confirmed.lines.length} mặt hàng · ${amount})`),
     ).toBeInTheDocument();
   });
 

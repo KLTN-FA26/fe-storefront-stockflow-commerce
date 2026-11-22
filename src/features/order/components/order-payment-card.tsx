@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 
 import { Alert, Skeleton } from "@/components/shared";
@@ -12,7 +13,7 @@ import {
   type OrderInstallments,
 } from "@/lib/installments";
 
-import { paymentSummary } from "../selectors";
+import { nextPayable, paymentSummary } from "../selectors";
 import type { Order } from "../types";
 import { OrderInstallmentRow } from "./order-installment-row";
 
@@ -42,7 +43,7 @@ function Summary({ order, plan }: { order: Order; plan: OrderInstallments }) {
             <span className="font-mono">{plan.contractNumber}</span>
           </Row>
         ) : null}
-        {rows.includes("total") ? <Row label="Tổng theo hợp đồng">{money(plan.total)}</Row> : null}
+        {rows.includes("total") ? <Row label="Tổng có VAT">{money(plan.total)}</Row> : null}
         {rows.includes("paid") ? (
           <Row label={cancelledAndSettled ? "Bạn đã thanh toán" : "Đã thanh toán"}>
             {money(plan.paid)}
@@ -63,13 +64,41 @@ function Summary({ order, plan }: { order: Order; plan: OrderInstallments }) {
 }
 
 /**
+ * Which installments show their transfer details: the ones the customer opened, else (`null`) the
+ * one due now, so paying takes no extra tap (SF-UX-29).
+ */
+export function openedInstallments(
+  opened: ReadonlySet<string> | null,
+  plan: OrderInstallments | undefined,
+): ReadonlySet<string> {
+  if (opened) return opened;
+  const due = nextPayable(plan);
+  return new Set(due ? [due.installmentId] : []);
+}
+
+/**
  * How the order is paid (kltn-docs 15): the installments of its sales contract, what each still owes
  * and, for one that does, how to transfer for it. An order without a signed contract has no
- * installments yet (404 INSTALLMENT_NOT_FOUND): the card says so, or is left out once the order
- * ended without one.
+ * installments yet (404 INSTALLMENT_NOT_FOUND): the card says the plan is in the contract and opens
+ * on signing, or is left out once the order ended without one.
  */
-export function OrderPaymentCard({ order }: { order: Order }) {
+export function OrderPaymentCard({
+  order,
+  opened,
+  onOpenedChange,
+}: {
+  order: Order;
+  /**
+   * Installments whose transfer details are open; null for the default (the one due now). Left out,
+   * the card keeps this itself; the order page holds it so the status hero can open one.
+   */
+  opened?: ReadonlySet<string> | null;
+  onOpenedChange?: (opened: ReadonlySet<string>) => void;
+}) {
+  const [own, setOwn] = useState<ReadonlySet<string> | null>(null);
   const query = useMyOrderInstallments(order.orderId);
+  const open = openedInstallments(opened !== undefined ? opened : own, query.data);
+  const change = onOpenedChange ?? setOwn;
 
   if (!query.isPending && isNoInstallments(query.error) && ENDED_STATUSES.has(order.status)) {
     return null;
@@ -91,7 +120,7 @@ export function OrderPaymentCard({ order }: { order: Order }) {
         />
       ) : isNoInstallments(query.error) ? (
         <p className="text-ink-secondary text-sm">
-          Lịch thanh toán theo đợt sẽ hiển thị khi hợp đồng mua bán của đơn được ký.
+          Lịch thanh toán dự kiến nằm trong hợp đồng; các đợt mở để thanh toán khi hợp đồng được ký.
         </p>
       ) : query.error ? (
         <div className="space-y-2" role="alert">
@@ -113,7 +142,17 @@ export function OrderPaymentCard({ order }: { order: Order }) {
           <Summary order={order} plan={query.data} />
           <ul className="space-y-2" aria-label="Các đợt thanh toán">
             {query.data.installments.map((installment) => (
-              <OrderInstallmentRow key={installment.installmentId} installment={installment} />
+              <OrderInstallmentRow
+                key={installment.installmentId}
+                installment={installment}
+                open={open.has(installment.installmentId)}
+                onOpenChange={(next) => {
+                  const updated = new Set(open);
+                  if (next) updated.add(installment.installmentId);
+                  else updated.delete(installment.installmentId);
+                  change(updated);
+                }}
+              />
             ))}
           </ul>
         </>

@@ -1,4 +1,5 @@
 import { api } from "@/lib/api/client";
+import { REPEATED_PARAMS } from "@/lib/api/repeated-params";
 
 import {
   cancelOrderInputSchema,
@@ -24,7 +25,12 @@ export async function getMyOrders(
   signal?: AbortSignal,
 ): Promise<OrderPage> {
   const { data } = await api.get<unknown>("/orders/me", {
-    params: { page: Math.max(params.page, 1) - 1, size: params.size },
+    params: {
+      page: Math.max(params.page, 1) - 1,
+      size: params.size,
+      ...(params.statuses?.length ? { status: [...params.statuses] } : {}),
+    },
+    ...(params.statuses?.length ? REPEATED_PARAMS : {}),
     ...(signal ? { signal } : {}),
   });
   const page = orderPageDtoSchema.parse(data);

@@ -8,9 +8,14 @@ import {
   isOrderTerminal,
   ORDER_DISPLAY_META,
   ORDER_STATUS_GROUP_META,
-  orderProgressOf,
+  orderProgress,
 } from "../lifecycle";
 import { ORDER_STATUS_GROUPS, ORDER_STATUSES } from "../schemas";
+
+const states = (group: Parameters<typeof orderProgress>[0], paid: boolean | null) =>
+  orderProgress(group, paid)!.map((step) => step.state);
+const currentStep = (group: Parameters<typeof orderProgress>[0], paid: boolean | null) =>
+  orderProgress(group, paid)!.find((step) => step.state === "current")?.id;
 
 describe("order lifecycle mirrors BE OrderStatus / CustomerOrders.StatusGroup", () => {
   it("covers the 21 BE statuses after the 4B rescope, plus the legacy IN_FULFILMENT", () => {
@@ -44,7 +49,7 @@ describe("order lifecycle mirrors BE OrderStatus / CustomerOrders.StatusGroup", 
     expect(ORDER_STATUS_GROUP_META.UNKNOWN).toMatchObject({ label: "Đang xử lý", tone: "info" });
     expect(isOrderCancellable("UNKNOWN")).toBe(false);
     expect(isOrderTerminal("UNKNOWN")).toBe(false);
-    expect(orderProgressOf("UNKNOWN")).toBeNull();
+    expect(orderProgress("UNKNOWN", null)).toBeNull();
   });
 
   // BE OrderStatus#customerMayCancelDirectly: false for every status since the 4B rescope.
@@ -114,9 +119,9 @@ describe("order lifecycle mirrors BE OrderStatus / CustomerOrders.StatusGroup", 
     ]);
   });
 
-  it("places the new groups on the stepper: awaiting the contract after the order, awaiting stock after payment", () => {
-    expect(orderProgressOf("AWAITING_CONTRACT")).toBe(1);
-    expect(orderProgressOf("AWAITING_STOCK")).toBe(2);
+  it("places the new groups on the stepper: awaiting the contract first, awaiting stock in production", () => {
+    expect(currentStep("AWAITING_CONTRACT", null)).toBe("contract");
+    expect(currentStep("AWAITING_STOCK", true)).toBe("production");
     expect(ORDER_STATUS_GROUP_META.AWAITING_CONTRACT.label).toBe("Chờ ký hợp đồng");
     expect(ORDER_STATUS_GROUP_META.AWAITING_STOCK.label).toBe("Đang chờ hàng");
   });
@@ -147,15 +152,15 @@ describe("order lifecycle mirrors BE OrderStatus / CustomerOrders.StatusGroup", 
     expect(ORDER_STATUS_GROUP_META.RETURN_REQUESTED.tone).not.toBe(
       ORDER_STATUS_GROUP_META.RETURNED.tone,
     );
-    // The goods reached the customer: the stepper stays full.
-    expect(orderProgressOf("RETURN_REQUESTED")).toBe(5);
+    // The goods reached the customer: only "Hoàn tất" is left.
+    expect(currentStep("RETURN_REQUESTED", true)).toBe("done");
   });
 
   // BE CustomerOrders folds COMPLETED into DELIVERED; the badge and hero still say it is done (A9).
   it("shows a COMPLETED order as Hoàn tất, every other order by its group", () => {
     expect(displayGroup({ status: "COMPLETED", statusGroup: "DELIVERED" })).toBe("COMPLETED");
     expect(ORDER_DISPLAY_META.COMPLETED).toMatchObject({ label: "Hoàn tất", tone: "positive" });
-    expect(orderProgressOf("COMPLETED")).toBe(5);
+    expect(orderProgress("COMPLETED", null)!.every((step) => step.state === "done")).toBe(true);
     expect(displayGroup({ status: "DELIVERED", statusGroup: "DELIVERED" })).toBe("DELIVERED");
     expect(displayGroup({ status: "RETURN_REQUESTED", statusGroup: "RETURN_REQUESTED" })).toBe(
       "RETURN_REQUESTED",
@@ -166,11 +171,28 @@ describe("order lifecycle mirrors BE OrderStatus / CustomerOrders.StatusGroup", 
     }
   });
 
-  it("derives progress from the group alone and leaves the happy path when cancelled/returned", () => {
-    expect(orderProgressOf("AWAITING_PAYMENT")).toBe(1);
-    expect(orderProgressOf("SHIPPING")).toBe(3);
-    expect(orderProgressOf("DELIVERED")).toBe(5);
-    expect(orderProgressOf("CANCELLED")).toBeNull();
-    expect(orderProgressOf("RETURNED")).toBeNull();
+  it("runs contract → first installment → production → delivery → done (SF-UX-30)", () => {
+    expect(orderProgress("AWAITING_CONTRACT", null)!.map((step) => step.label)).toEqual([
+      "Hợp đồng",
+      "Thanh toán đợt đầu",
+      "Sản xuất",
+      "Giao hàng",
+      "Hoàn tất",
+    ]);
+    expect(states("AWAITING_CONTRACT", null)).toEqual(["current", "todo", "todo", "todo", "todo"]);
+    expect(states("AWAITING_PAYMENT", false)).toEqual(["done", "current", "todo", "todo", "todo"]);
+    expect(states("SHIPPING", true)).toEqual(["done", "done", "done", "current", "todo"]);
+    expect(orderProgress("CANCELLED", true)).toBeNull();
+    expect(orderProgress("RETURNED", true)).toBeNull();
+  });
+
+  it("never ticks the payment step while the first installment is owed or unknown", () => {
+    // Nothing due at signing: production runs while installment 1 is still owed.
+    expect(states("IN_PRODUCTION", false)).toEqual(["done", "owed", "current", "todo", "todo"]);
+    expect(states("IN_PRODUCTION", null)).toEqual(["done", "owed", "current", "todo", "todo"]);
+    const paid = orderProgress("IN_PRODUCTION", true)!;
+    expect(paid[1]).toEqual({ id: "firstPayment", label: "Đã trả đợt 1", state: "done" });
+    expect(currentStep("UNDER_REVIEW", false)).toBe("firstPayment");
+    expect(currentStep("UNDER_REVIEW", true)).toBe("production");
   });
 });

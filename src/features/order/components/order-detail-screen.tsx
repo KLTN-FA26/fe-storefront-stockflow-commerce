@@ -6,17 +6,20 @@ import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { useHasPermission } from "@/lib/auth/my-permissions";
 import { formatDateTime } from "@/lib/format/date";
+import { useMyOrderInstallments } from "@/lib/installments";
 import { returnEligibility } from "@/lib/returns";
 
-import { useReturnWindowDays } from "../contract-queries";
+import { useMyOrderContract, useReturnWindowDays } from "../contract-queries";
 import { describeCancelError, isNotFound } from "../errors";
-import { displayGroup } from "../lifecycle";
+import { displayGroup, isOrderTerminal, orderProgress } from "../lifecycle";
 import { useCancelMyOrder } from "../mutations";
 import { useKnownCancellationRequest, useOrder } from "../queries";
 import { isValidOrderId } from "../schemas";
 import { RETURN_CREATE_PERMISSION } from "../return-form";
+import { firstInstallmentPaid, nextPayable } from "../selectors";
 import { CancellationDialog } from "./cancellation-dialog";
 import { OrderCancellationCard } from "./order-cancellation-card";
 import { CopyOrderNumber } from "./copy-order-number";
@@ -25,7 +28,9 @@ import { OrderHelpCard } from "./order-help-card";
 import { OrderReorder } from "./order-reorder";
 import { OrderCompletionHint, deliveredAtOf } from "./order-completion-hint";
 import { OrderContractCard } from "./order-contract-card";
+import { installmentRowId } from "./order-installment-row";
 import { OrderInvoicesCard } from "./order-invoices-card";
+import { OrderNextStep } from "./order-next-step";
 import { OrderPaymentCard } from "./order-payment-card";
 import { OrderRefundCard } from "./order-refund-card";
 import { OrderReturnsCard } from "./order-returns-card";
@@ -56,7 +61,13 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
   // post-cancel invalidation (keyed by order.orderId) hitting this query for a pasted upper-case URL.
   const orderId = rawOrderId.toLowerCase();
   const [dialog, setDialog] = useState<"cancel" | "request" | null>(null);
+  // Installments whose transfer details are open; null = the payment card's default (due now).
+  const [opened, setOpened] = useState<ReadonlySet<string> | null>(null);
+  const desktop = useMediaQuery("(min-width: 64rem)");
   const { data: order, isPending, isPaused, isFetching, error, refetch } = useOrder(orderId);
+  // Shared with the payment and contract cards (same query keys): one request each.
+  const installments = useMyOrderInstallments(orderId, isValidOrderId(orderId));
+  const contract = useMyOrderContract(orderId);
   const cancel = useCancelMyOrder();
   const known = useKnownCancellationRequest(orderId);
   const mayCancel = useHasPermission("sales-orders:UPDATE");
@@ -88,6 +99,23 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
     );
   }
 
+  const group = displayGroup(order);
+  const payable = nextPayable(installments.data);
+  // On a phone the aside stacks under everything: while money is due, its card comes right after the
+  // status hero instead (SF-UX-29). Moved in the DOM, not with CSS order, so the reading and focus
+  // order match what is seen.
+  const paymentFirst = !desktop && payable !== null && !isOrderTerminal(order.status);
+  const payment = <OrderPaymentCard order={order} opened={opened} onOpenedChange={setOpened} />;
+  const pay = (installmentId: string) => {
+    setOpened((current) => new Set([...(current ?? []), installmentId]));
+    // After the row has opened: bring it into view and give it focus for keyboard users.
+    requestAnimationFrame(() => {
+      const row = document.getElementById(installmentRowId(installmentId));
+      row?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+      row?.focus({ preventScroll: true });
+    });
+  };
+
   return (
     <div className="space-y-5">
       <div className="border-border-default border-b pb-3.5">
@@ -118,7 +146,21 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
         <div className="min-w-0 space-y-5">
-          <OrderStatusHero group={displayGroup(order)} holdReason={order.holdReasonPublic} />
+          <OrderStatusHero
+            group={group}
+            holdReason={order.holdReasonPublic}
+            progress={orderProgress(group, firstInstallmentPaid(installments.data))}
+            action={
+              <OrderNextStep
+                orderId={order.orderId}
+                group={group}
+                contract={contract.data}
+                payable={payable}
+                onPay={pay}
+              />
+            }
+          />
+          {paymentFirst ? payment : null}
           <OrderCompletionHint order={order} windowDays={returnWindow.days} />
           <OrderLinesCard order={order} />
           <OrderContractCard orderId={order.orderId} />
@@ -126,7 +168,7 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
         </div>
         <div className="space-y-5 lg:sticky lg:top-[var(--sticky-top)] lg:-mx-1 lg:max-h-[calc(100dvh-var(--sticky-top)-1rem)] lg:self-start lg:overflow-y-auto lg:px-1">
           <OrderTotalCard order={order} />
-          <OrderPaymentCard order={order} />
+          {paymentFirst ? null : payment}
           <OrderInvoicesCard order={order} />
           <OrderRefundCard order={order} />
           <OrderReturnsCard order={order} />
@@ -161,6 +203,8 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
                 ? order.cancellationRequest.status === "PENDING"
                 : known.data !== undefined
             }
+            windowDays={returnWindow.days}
+            deliveredAt={deliveredAtOf(order)}
           />
         </div>
       </div>

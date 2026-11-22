@@ -64,6 +64,8 @@ export interface MyOrdersParams {
   /** 1-based page from the URL. */
   page: number;
   size: number;
+  /** Only these statuses (BE `status`, repeated); every status when left out. */
+  statuses?: readonly OrderStatus[];
 }
 
 /** One vehicle carrying goods of the order (BE OrderShippingTracking.Vehicle). */

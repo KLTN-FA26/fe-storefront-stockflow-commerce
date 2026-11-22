@@ -53,7 +53,7 @@ describe("OrderPaymentCard", () => {
     );
   });
 
-  it("offers transfer details only on an installment that still owes, asked when opened", async () => {
+  it("opens the installment due now with its transfer details, and only owing ones have any (SF-UX-29)", async () => {
     const get = vi
       .spyOn(api, "get")
       .mockImplementation(async (url: string) =>
@@ -64,17 +64,36 @@ describe("OrderPaymentCard", () => {
     const user = userEvent.setup();
     renderWithProviders(<OrderPaymentCard order={orderWith()} />);
 
-    const buttons = await screen.findAllByRole("button", { name: "Xem thông tin chuyển khoản" });
-    // The paid deposit has none.
-    expect(buttons).toHaveLength(1);
-    expect(get).toHaveBeenCalledTimes(1);
-
-    await user.click(buttons[0]!);
+    // The overdue installment 2 is open from the start; the paid deposit has no toggle at all.
     expect(await screen.findByText("HD-20261108-000007-1 DOT2")).toBeInTheDocument();
     expect(get).toHaveBeenLastCalledWith(
       `/installments/me/${transfer.installmentId}/transfer-instructions`,
       expect.anything(),
     );
+    const toggles = screen.getAllByRole("button", { name: /thông tin chuyển khoản/ });
+    expect(toggles).toHaveLength(1);
+    expect(toggles[0]).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(toggles[0]!);
+    expect(screen.queryByText("HD-20261108-000007-1 DOT2")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Xem thông tin chuyển khoản" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+
+  it("keeps an installment not due yet closed", async () => {
+    const plan = beOrderInstallments();
+    const notDue = plan.installments.map((installment) =>
+      installment.status === "PAID"
+        ? installment
+        : { ...installment, status: "NOT_DUE", overdue: false },
+    );
+    vi.spyOn(api, "get").mockResolvedValue({ data: { ...plan, installments: notDue } });
+    renderWithProviders(<OrderPaymentCard order={orderWith()} />);
+    expect(
+      await screen.findByRole("button", { name: "Xem thông tin chuyển khoản" }),
+    ).toHaveAttribute("aria-expanded", "false");
   });
 
   it("says the schedule comes with the contract when the order has no installments yet", async () => {
@@ -84,7 +103,9 @@ describe("OrderPaymentCard", () => {
     renderWithProviders(<OrderPaymentCard order={orderWith()} />);
 
     expect(
-      await screen.findByText(/sẽ hiển thị khi hợp đồng mua bán của đơn được ký/),
+      await screen.findByText(
+        /Lịch thanh toán dự kiến nằm trong hợp đồng; các đợt mở để thanh toán khi hợp đồng được ký/,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -129,7 +150,7 @@ describe("OrderPaymentCard on a cancelled order (audit item 26)", () => {
     expect(screen.getByText("Bạn đã thanh toán").nextElementSibling).toHaveTextContent(
       /10\.000\.000/,
     );
-    expect(screen.queryByText("Tổng theo hợp đồng")).not.toBeInTheDocument();
+    expect(screen.queryByText("Tổng có VAT")).not.toBeInTheDocument();
     expect(screen.queryByText("Còn phải thanh toán")).not.toBeInTheDocument();
     expect(screen.getByText(/Khoản hoàn \(nếu có\) ở mục Hoàn tiền/)).toBeInTheDocument();
   });
@@ -140,7 +161,7 @@ describe("OrderPaymentCard on a cancelled order (audit item 26)", () => {
 
     expect(await screen.findByRole("heading", { name: "Thanh toán" })).toBeInTheDocument();
     expect(screen.queryByText("Bạn đã thanh toán")).not.toBeInTheDocument();
-    expect(screen.queryByText("Tổng theo hợp đồng")).not.toBeInTheDocument();
+    expect(screen.queryByText("Tổng có VAT")).not.toBeInTheDocument();
   });
 
   it("đơn huỷ còn phí huỷ chưa trả: vẫn hiện Còn phải thanh toán", async () => {
@@ -150,14 +171,14 @@ describe("OrderPaymentCard on a cancelled order (audit item 26)", () => {
     renderWithProviders(<OrderPaymentCard order={cancelled()} />);
 
     expect(await screen.findByText("Còn phải thanh toán")).toBeInTheDocument();
-    expect(screen.getByText("Tổng theo hợp đồng")).toBeInTheDocument();
+    expect(screen.getByText("Tổng có VAT")).toBeInTheDocument();
   });
 
   it("đơn đang chạy: giữ ba dòng", async () => {
     vi.spyOn(api, "get").mockResolvedValue({ data: beOrderInstallments() });
     renderWithProviders(<OrderPaymentCard order={orderWith()} />);
 
-    expect(await screen.findByText("Tổng theo hợp đồng")).toBeInTheDocument();
+    expect(await screen.findByText("Tổng có VAT")).toBeInTheDocument();
     expect(screen.getByText("Đã thanh toán", { selector: "dt" })).toBeInTheDocument();
     expect(screen.getByText("Còn phải thanh toán")).toBeInTheDocument();
   });
