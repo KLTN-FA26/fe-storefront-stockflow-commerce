@@ -74,10 +74,12 @@ export async function recheck(ctx: FilesContext, row: DesignRow): Promise<Prefli
   const surfaces = Object.entries(document.surfaces) as Array<
     [PrintAreaCode, DesignDocument["surfaces"][PrintAreaCode]]
   >;
-  // docs 12 §3 (BR-05), as the engine's EMPTY_DESIGN: a visible image, text or drawing on some
-  // surface; a background (colour or pattern) alone is not a design.
+  // BE `LayoutPreflight` EMPTY_DESIGN, as the engine's (SD-8): no surface has a background
+  // (colour or pattern) or a visible image, text or drawing.
   const hasContent = surfaces.some(
-    ([, surface]) => surface?.elements.some((el) => !el.hidden) ?? false,
+    ([, surface]) =>
+      surface !== undefined &&
+      (surface.background.kind !== "none" || surface.elements.some((el) => !el.hidden)),
   );
   if (!hasContent) {
     issues.push({ ruleId: "EMPTY_DESIGN", level: "fail", message: "Thiết kế chưa có nội dung." });

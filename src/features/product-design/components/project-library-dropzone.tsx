@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Alert } from "@/components/shared";
 
 import { MAX_IMAGE_PIXELS, readImageDimensions } from "../engine";
-import { describeLibraryUploadError } from "../errors";
+import { describeLibraryUploadError, TOO_MANY_PIXELS_MESSAGE } from "../errors";
 import { useUploadLibraryImage } from "../library-mutations";
 import type { Gate } from "../project-rules";
 import { ImageDropzone } from "./image-dropzone";
@@ -25,8 +25,7 @@ const BYTES_PER_MB = 1024 * 1024;
 const MESSAGES = {
   unsupported: "Định dạng không được hỗ trợ. Hỗ trợ: PNG, JPG, WebP, SVG.",
   tooLarge: `Tệp lớn hơn ${MAX_MB} MB.`,
-  tooManyPixels:
-    "Ảnh có quá nhiều điểm ảnh (tối đa 40 megapixel). Hãy thu nhỏ kích thước ảnh rồi tải lại.",
+  tooManyPixels: TOO_MANY_PIXELS_MESSAGE,
   unreadable: "Không đọc được kích thước ảnh.",
 } as const;
 

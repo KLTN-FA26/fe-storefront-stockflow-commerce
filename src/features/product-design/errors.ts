@@ -72,10 +72,12 @@ type FileRule =
   | { rule: "FILE_SIZE"; maxFileSizeMb: number }
   | { rule: "PIXELS" };
 
+/** An image over 40 megapixels, refused by the BE (413) or before sending: one sentence for both. */
+export const TOO_MANY_PIXELS_MESSAGE =
+  "Ảnh có quá nhiều điểm ảnh (tối đa 40 megapixel). Hãy thu nhỏ kích thước ảnh rồi tải lại.";
+
 function describeFileRule(rule: FileRule): string {
-  if (rule.rule === "PIXELS") {
-    return "Ảnh có quá nhiều điểm ảnh (tối đa 40 megapixel). Hãy thu nhỏ kích thước ảnh rồi tải lại.";
-  }
+  if (rule.rule === "PIXELS") return TOO_MANY_PIXELS_MESSAGE;
   if (rule.rule === "FILE_SIZE")
     return `Ảnh vượt ${rule.maxFileSizeMb} MB, mức quy cách này cho phép.`;
   const names = rule.formats.map((format) => FORMAT_NAMES[format] ?? format);
