@@ -125,12 +125,12 @@ export function QuoteCard({ conversationId, messageId, card, payload, canAct }: 
       </ul>
       <Facts>
         {payload.proposedTotal !== null && payload.proposedTotal !== undefined ? (
-          <Fact label="Tổng đề xuất (gồm phí, thuế)" numeric>
+          <Fact label="Tổng đề xuất (có VAT)" numeric>
             {cardMoney(payload.proposedTotal, payload.currency)}
           </Fact>
         ) : null}
         {payload.acceptedTotal !== null && payload.acceptedTotal !== undefined ? (
-          <Fact label="Tổng đã chấp nhận" numeric>
+          <Fact label="Tổng đã chấp nhận (có VAT)" numeric>
             {cardMoney(payload.acceptedTotal, payload.currency)}
           </Fact>
         ) : null}
@@ -148,7 +148,7 @@ export function QuoteCard({ conversationId, messageId, card, payload, canAct }: 
             href={STORE_ROUTES.account.orders.detail(payload.convertedOrderId)}
             className={CARD_LINK}
           >
-            Đã lên đơn{" "}
+            {quoteStatusMeta("CONVERTED").label}{" "}
             <span className="font-mono tabular-nums">{payload.convertedOrderNumber ?? ""}</span>
           </Link>
         </p>

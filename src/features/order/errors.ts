@@ -17,7 +17,7 @@ const MESSAGE_BY_CODE: Record<string, string> = {
   CUSTOMER_NOT_FOUND: "Tài khoản chưa được liên kết với hồ sơ khách hàng.",
   CONFLICT: "Thao tác không phù hợp với trạng thái hiện tại của đơn hàng.",
   ORDER_NOT_CANCELLABLE:
-    "Đơn hàng đã sang bước không thể huỷ. Nếu cần trả hàng, hãy chat với chúng tôi.",
+    "Đơn hàng đã sang bước không thể huỷ. Nếu cần trả hàng, hãy chat với Sale.",
   CANCELLATION_NEEDS_STAFF:
     "Đơn đang được sản xuất nên chỉ nhân viên mới quyết định được việc huỷ. Hãy chat với Sales.",
   ORDER_CANCELLED: "Đơn hàng này đã được huỷ.",

@@ -197,7 +197,7 @@ export function AcceptQuoteDialog({
             <dd className="text-ink-primary tabular-nums">{money(preview.tax)}</dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className="text-ink-primary font-semibold">Tổng có thuế (tạm tính)</dt>
+            <dt className="text-ink-primary font-semibold">Tổng có VAT (tạm tính)</dt>
             <dd className="text-ink-primary font-semibold tabular-nums">{money(preview.total)}</dd>
           </div>
         </dl>

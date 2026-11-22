@@ -61,20 +61,20 @@ function helpText(
 ) {
   if (returnWindow) return returnWindowText(returnWindow.days, returnWindow.deliveredAt);
   if (mode === "cancel") {
-    return "Bạn có thể huỷ đơn khi đơn chưa chuyển cho kho hoặc sản xuất, hoặc chat với chúng tôi nếu cần đổi thông tin.";
+    return "Bạn có thể huỷ đơn khi đơn chưa chuyển cho kho hoặc sản xuất, hoặc chat với Sale nếu cần đổi thông tin.";
   }
   if (mode === "request") return requestReason(order.status, order.holdReasonPublic).help;
   if (possible !== null) {
     return mayCancel
-      ? "Có thắc mắc về đơn này? Đội chăm sóc khách hàng luôn sẵn sàng hỗ trợ."
-      : "Tài khoản của bạn hiện không thể tự huỷ đơn. Hãy chat với chúng tôi để được hỗ trợ.";
+      ? "Có thắc mắc về đơn này? Sale phụ trách đơn luôn sẵn sàng hỗ trợ qua chat."
+      : "Tài khoản của bạn hiện không thể tự huỷ đơn. Hãy chat với Sale để được hỗ trợ.";
   }
   if (order.status === ORDER_STATUS_UNKNOWN) {
-    return "Nếu bạn cần huỷ hoặc thay đổi đơn này, hãy chat với chúng tôi.";
+    return "Nếu bạn cần huỷ hoặc thay đổi đơn này, hãy chat với Sale.";
   }
   return isOrderTerminal(order.status)
-    ? "Có thắc mắc về đơn này? Đội chăm sóc khách hàng luôn sẵn sàng hỗ trợ."
-    : "Đơn đã được đóng gói hoặc giao đi nên không thể huỷ. Nếu cần trả hàng, hãy chat với chúng tôi.";
+    ? "Có thắc mắc về đơn này? Sale phụ trách đơn luôn sẵn sàng hỗ trợ qua chat."
+    : "Đơn đã được đóng gói hoặc giao đi nên không thể huỷ. Nếu cần trả hàng, hãy chat với Sale.";
 }
 
 /**

@@ -98,7 +98,7 @@ export function InvoiceRow({
         </Badge>
       </div>
       <p className="text-ink-primary font-semibold tabular-nums">
-        Tổng có thuế: {formatMoney(invoice.grandTotal)}
+        Tổng có VAT: {formatMoney(invoice.grandTotal)}
       </p>
       {invoice.replaces ? (
         <p className="text-ink-secondary">

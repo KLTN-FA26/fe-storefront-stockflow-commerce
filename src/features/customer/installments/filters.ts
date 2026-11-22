@@ -1,6 +1,12 @@
 import { parseAsInteger, parseAsStringLiteral } from "nuqs";
 
-import { isPayable, type Installment, type InstallmentStatus } from "@/lib/installments";
+import { INSTALLMENT_OVERDUE } from "@/lib/domain/status-map";
+import {
+  INSTALLMENT_STATUS_LABEL,
+  isPayable,
+  type Installment,
+  type InstallmentStatus,
+} from "@/lib/installments";
 
 export const MY_INSTALLMENTS_PAGE_SIZE = 10;
 
@@ -11,12 +17,13 @@ export const MY_INSTALLMENTS_PAGE_SIZE = 10;
 export const INSTALLMENT_FILTERS = ["ALL", "DUE", "PARTIALLY_PAID", "NOT_DUE", "PAID"] as const;
 export type InstallmentFilter = (typeof INSTALLMENT_FILTERS)[number];
 
+/** A status filter reads as the status itself (the shared status map), so a chip and a badge agree. */
 export const INSTALLMENT_FILTER_LABEL: Record<InstallmentFilter, string> = {
   ALL: "Tất cả",
-  DUE: "Đến hạn",
-  PARTIALLY_PAID: "Trả một phần",
-  NOT_DUE: "Chưa đến hạn",
-  PAID: "Đã thanh toán",
+  DUE: INSTALLMENT_STATUS_LABEL.DUE,
+  PARTIALLY_PAID: INSTALLMENT_STATUS_LABEL.PARTIALLY_PAID,
+  NOT_DUE: INSTALLMENT_STATUS_LABEL.NOT_DUE,
+  PAID: INSTALLMENT_STATUS_LABEL.PAID,
 };
 
 export const filterToStatus = (filter: InstallmentFilter): InstallmentStatus | undefined =>
@@ -41,9 +48,9 @@ export type PaymentFilter = (typeof PAYMENT_FILTERS)[number];
 
 export const PAYMENT_FILTER_LABEL: Record<PaymentFilter, string> = {
   "can-tra": "Cần thanh toán",
-  "qua-han": "Quá hạn",
-  "chua-den-han": "Chưa đến hạn",
-  "da-tra": "Đã thanh toán",
+  "qua-han": INSTALLMENT_OVERDUE.label,
+  "chua-den-han": INSTALLMENT_STATUS_LABEL.NOT_DUE,
+  "da-tra": INSTALLMENT_STATUS_LABEL.PAID,
   "tat-ca": "Tất cả",
 };
 

@@ -319,7 +319,7 @@ describe("OrderDetailScreen", () => {
       await screen.findByRole("button", { name: `Huỷ đơn hàng ${confirmed.orderNumber}` }),
     );
     expect(
-      screen.getByText(/không thể khôi phục\. Nếu bạn đã thanh toán, vui lòng liên hệ CSKH/),
+      screen.getByText(/không thể khôi phục\. Nếu bạn đã thanh toán, vui lòng chat với Sale/),
     ).toBeInTheDocument();
     expect(screen.queryByText(/hoàn tiền theo chính sách/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Xác nhận huỷ" }));

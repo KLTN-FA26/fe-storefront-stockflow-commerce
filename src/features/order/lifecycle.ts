@@ -113,7 +113,7 @@ export const ORDER_STATUS_GROUP_META: Record<
   // A group newer than this FE (see ORDER_STATUS_GROUP_UNKNOWN): neutral wording.
   UNKNOWN: {
     ...ORDER_STATUS.UNKNOWN,
-    hint: "Đơn hàng đang được xử lý. Hãy chat với chúng tôi nếu bạn cần hỗ trợ.",
+    hint: "Đơn hàng đang được xử lý. Hãy chat với Sale nếu bạn cần hỗ trợ.",
   },
 };
 
