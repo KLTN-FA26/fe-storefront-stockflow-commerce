@@ -98,7 +98,7 @@ describe("ProjectQuoteSection", () => {
         FIRST_READ,
       ),
     ).toBeInTheDocument();
-    expect(within(dialog).getByRole("link", { name: "Mở chat" })).toHaveAttribute(
+    expect(within(dialog).getByRole("link", { name: "Chat với Sale" })).toHaveAttribute(
       "href",
       `/chat/new?kind=DESIGN_PROJECT&id=${id}`,
     );

@@ -166,7 +166,7 @@ describe("an approved design's quote request", () => {
         FIRST_READ,
       ),
     ).toBeInTheDocument();
-    expect(within(dialog).getByRole("link", { name: "Mở chat" })).toHaveAttribute(
+    expect(within(dialog).getByRole("link", { name: "Chat với Sale" })).toHaveAttribute(
       "href",
       `/chat/new?kind=DESIGN&id=${pending}`,
     );
@@ -197,7 +197,7 @@ describe("an approved design's quote request", () => {
     expect(
       await within(dialog).findByText("Đã cập nhật yêu cầu.", undefined, FIRST_READ),
     ).toBeInTheDocument();
-    expect(within(dialog).getByRole("link", { name: "Mở chat" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("link", { name: "Chat với Sale" })).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByText("200 thùng").length).toBeGreaterThan(0));
   });
 

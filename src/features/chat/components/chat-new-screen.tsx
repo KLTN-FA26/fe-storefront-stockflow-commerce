@@ -7,8 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
-import { STORE_ROUTES } from "@/constants";
-import { CHAT_WITH_SALES } from "@/constants/labels";
+import { CHAT_WITH_SALES, STORE_ROUTES } from "@/constants";
 import { describeBeRefusal, hasErrorCode } from "@/lib/api/describe-error";
 import { PERM } from "@/lib/auth/permission-codes";
 import { useHasPermission } from "@/lib/auth/my-permissions";

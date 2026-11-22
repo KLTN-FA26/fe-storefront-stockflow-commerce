@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 
-import { STORE_ROUTES } from "@/constants";
+import { CHAT_WITH_SALES, STORE_ROUTES } from "@/constants";
 import { loginUrl } from "@/lib/auth/safe-next";
 import { Alert, EmptyState, Skeleton } from "@/components/shared";
 import { Button } from "@/components/ui/button";
@@ -120,10 +120,10 @@ export function NoProducts({ query, onClear }: { query: string | undefined; onCl
   return (
     <EmptyState
       title="Chưa có sản phẩm nào"
-      description="Danh mục đang được cập nhật. Vui lòng quay lại sau hoặc chat với chúng tôi."
+      description="Danh mục đang được cập nhật. Vui lòng quay lại sau hoặc chat với Sale."
       action={
         <Button asChild variant="outline" className="min-h-11 rounded-[var(--r-md)] px-5">
-          <Link href={STORE_ROUTES.chat.list}>Chat với CSKH</Link>
+          <Link href={STORE_ROUTES.chat.list}>{CHAT_WITH_SALES}</Link>
         </Button>
       }
     />

@@ -4,9 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MessageCircle } from "lucide-react";
 
-import { STORE_ROUTES } from "@/constants";
+import { CHAT_WITH_SALES, STORE_ROUTES } from "@/constants";
 
-import { CHAT_ENTRY_LABEL, ChatUnreadBadge } from "@/features/chat/components/chat-entry";
+import { ChatUnreadBadge } from "@/features/chat/components/chat-entry";
 
 import { Button } from "@/components/ui/button";
 
@@ -21,7 +21,7 @@ export function ChatFab() {
   return (
     <div className="fixed right-5 bottom-5 z-50">
       <Button asChild size="icon" variant="secondary" className="size-12 rounded-full shadow-lg">
-        <Link href={STORE_ROUTES.chat.list} aria-label={CHAT_ENTRY_LABEL}>
+        <Link href={STORE_ROUTES.chat.list} aria-label={CHAT_WITH_SALES}>
           <MessageCircle className="size-5" />
         </Link>
       </Button>

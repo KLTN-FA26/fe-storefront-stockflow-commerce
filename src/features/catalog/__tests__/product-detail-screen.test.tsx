@@ -131,7 +131,7 @@ describe("ProductDetailScreen — no price, no cart (kltn-docs 13 BR-04, 14 BR-0
     renderWithProviders(<ProductDetailScreen slug="ly-giay-kraft-16oz" />);
     expect(await screen.findByText("Sản phẩm tạm thời chưa mở bán")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Thử lại/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Chat với Sales" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Chat với Sale" })).toBeInTheDocument();
   });
 });
 

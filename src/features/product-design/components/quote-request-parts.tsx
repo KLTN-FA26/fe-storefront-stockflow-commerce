@@ -4,7 +4,7 @@ import { ArrowRight, CheckCircle2, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { Controller, type Control, type FieldErrors, type UseFormRegister } from "react-hook-form";
 
-import { STORE_ROUTES } from "@/constants";
+import { CHAT_WITH_SALES, STORE_ROUTES } from "@/constants";
 import { DatePicker } from "@/components/shared/DatePicker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -222,7 +222,7 @@ export function QuoteRequestFields({
 
 /**
  * The ask went through: a new request ("Đã gửi yêu cầu, Sale sẽ liên hệ qua chat"), or the open one
- * changed ("Đã cập nhật yêu cầu"); "Mở chat" opens the conversation about `chat` (the design or the
+ * changed ("Đã cập nhật yêu cầu"); "Chat với Sale" opens the conversation about `chat` (the design or the
  * project the request is for), where the BE posts the request's card (16 §4.2).
  */
 export function QuoteRequestSent({
@@ -251,7 +251,7 @@ export function QuoteRequestSent({
       <Button asChild variant="outline" className={cn(ACTION_BUTTON, "justify-self-start")}>
         <Link href={STORE_ROUTES.chat.about(chat.kind, chat.id)}>
           <MessageCircle aria-hidden className="size-4" />
-          Mở chat
+          {CHAT_WITH_SALES}
         </Link>
       </Button>
     </div>

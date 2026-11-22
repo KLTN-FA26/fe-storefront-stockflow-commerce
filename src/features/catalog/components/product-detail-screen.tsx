@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
 
-import { APP_ROUTES, STORE_ROUTES } from "@/constants";
+import { APP_ROUTES, CHAT_WITH_SALES, STORE_ROUTES } from "@/constants";
 import { EmptyState, Skeleton } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { ImageGallery } from "@/components/storefront/image-gallery";
@@ -92,7 +92,7 @@ export function ProductDetailScreen({
           action={
             <div className="flex flex-wrap justify-center gap-3">
               <Button asChild className="min-h-11 rounded-[var(--r-md)] px-5">
-                <Link href={STORE_ROUTES.chat.list}>Chat với Sales</Link>
+                <Link href={STORE_ROUTES.chat.list}>{CHAT_WITH_SALES}</Link>
               </Button>
               <Button asChild variant="outline" className="min-h-11 rounded-[var(--r-md)] px-5">
                 <Link href={STORE_ROUTES.catalog.list}>Xem sản phẩm khác</Link>

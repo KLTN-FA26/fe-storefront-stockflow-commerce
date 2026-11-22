@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { ArrowRight, FileSignature, FileText, MessageCircle, Palette } from "lucide-react";
 
-import { STORE_ROUTES } from "@/constants";
+import { CHAT_WITH_SALES, STORE_ROUTES } from "@/constants";
 import { cn } from "@/lib/cn";
 
 import { SurfaceCard } from "@/components/storefront/layout";
-import { CHAT_WITH_SALES, ORDER_FLOW_ANCHOR } from "@/components/storefront/shell/nav-config";
+import { ORDER_FLOW_ANCHOR } from "@/components/storefront/shell/nav-config";
 
 const cta =
   "focus-visible:ring-accent focus-visible:ring-offset-bg-surface inline-flex min-h-11 items-center gap-2 rounded-[var(--r-md)] px-5 text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none";

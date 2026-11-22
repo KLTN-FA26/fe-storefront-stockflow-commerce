@@ -35,7 +35,7 @@ vi.mock("next/navigation", () => ({
 // "Gửi duyệt và yêu cầu báo giá" (docs 12 §4.8.24) in the studio's submit dialog, over the design
 // mock: the choice next to the plain submission, its fields checked before anything is drawn, the
 // body of the request for review (`quoteRequest`), the BE's refusal of the request under its field
-// (the files already sent are sent again as they are), and the notice with "Mở chat" at the end.
+// (the files already sent are sent again as they are), and the notice with "Chat với Sale" at the end.
 // The PDFs are stand-ins, as in `submit-dialog.test.tsx`.
 vi.mock("../engine", async (importOriginal) => {
   const engine = await importOriginal<typeof import("../engine")>();
@@ -149,7 +149,7 @@ describe("Gửi duyệt và yêu cầu báo giá", () => {
     expect(post.mock.calls.filter(([url]) => String(url).includes("/artifacts"))).toEqual([]);
   });
 
-  it("sends `quoteRequest` with the request for review and ends on the notice with Mở chat", async () => {
+  it("sends `quoteRequest` with the request for review and ends on the notice with Chat với Sale", async () => {
     const user = userEvent.setup();
     const { store, post } = await designBackend();
     const id = await passingDraft(store);
@@ -172,7 +172,7 @@ describe("Gửi duyệt và yêu cầu báo giá", () => {
         SUBMISSION,
       ),
     ).toBeInTheDocument();
-    expect(within(dialog).getByRole("link", { name: "Mở chat" })).toHaveAttribute(
+    expect(within(dialog).getByRole("link", { name: "Chat với Sale" })).toHaveAttribute(
       "href",
       `/chat/new?kind=DESIGN&id=${id}`,
     );

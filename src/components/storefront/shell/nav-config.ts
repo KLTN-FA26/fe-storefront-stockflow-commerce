@@ -1,4 +1,4 @@
-import { STORE_ROUTES } from "@/constants";
+import { CHAT_WITH_SALES, STORE_ROUTES } from "@/constants";
 
 export type NavLink = { href: string; label: string; highlight?: boolean };
 export type FooterColumn = { title: string; links: NavLink[] };
@@ -6,9 +6,6 @@ export type FooterColumn = { title: string; links: NavLink[] };
 // The business sells cups and packaging printed to its wholesale customers' own designs, B2B only
 // (decided 2026-10-06): a customer designs, asks for a quote, signs a contract and pays its
 // installments by transfer. There is no cart, no retail category tree, no card payment.
-
-/** One name for the chat with Sales everywhere in the shell (SF-UX-4). */
-export const CHAT_WITH_SALES = "Chat với Sale";
 
 const productsLink: NavLink = { href: STORE_ROUTES.catalog.list, label: "Sản phẩm" };
 const designsLink: NavLink = { href: STORE_ROUTES.design.list, label: "Thiết kế của tôi" };

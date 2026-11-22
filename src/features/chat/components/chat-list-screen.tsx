@@ -4,7 +4,7 @@ import Link from "next/link";
 import { MessageCirclePlus } from "lucide-react";
 import { parseAsInteger, useQueryState } from "nuqs";
 
-import { STORE_ROUTES } from "@/constants";
+import { CHAT_WITH_SALES, STORE_ROUTES } from "@/constants";
 import { PERM } from "@/lib/auth/permission-codes";
 import { useHasPermission } from "@/lib/auth/my-permissions";
 
@@ -43,7 +43,7 @@ export function ChatListScreen() {
   return (
     <PageShell
       width="narrow"
-      title="Chat với Sale"
+      title={CHAT_WITH_SALES}
       subtitle="Hỏi hàng, nhận báo giá, hợp đồng và thông tin thanh toán ngay trong cuộc trò chuyện."
       actions={canCreate ? <NewChatButton /> : undefined}
     >

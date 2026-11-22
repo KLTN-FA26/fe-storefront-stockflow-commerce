@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { MessageCircle } from "lucide-react";
 
-import { STORE_ROUTES } from "@/constants";
+import { CHAT_WITH_SALES, STORE_ROUTES } from "@/constants";
 import { PERM } from "@/lib/auth/permission-codes";
 import { useHasPermission } from "@/lib/auth/my-permissions";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
@@ -24,9 +24,6 @@ export function useUnreadChatMessages(): number {
   return unread.data?.messages ?? 0;
 }
 
-/** SF-UX-4: one name for the chat everywhere. */
-export const CHAT_ENTRY_LABEL = "Chat với Sale";
-
 const badgeText = (count: number) => (count > 99 ? "99+" : String(count));
 
 /** The header's chat entry with its unread badge. */
@@ -36,7 +33,7 @@ export function ChatHeaderLink({ className }: { className: string }) {
     <Link
       href={STORE_ROUTES.chat.list}
       className={className}
-      aria-label={count > 0 ? `${CHAT_ENTRY_LABEL}, ${count} tin nhắn chưa đọc` : undefined}
+      aria-label={count > 0 ? `${CHAT_WITH_SALES}, ${count} tin nhắn chưa đọc` : undefined}
     >
       <span className="relative inline-flex">
         <MessageCircle className="size-5" aria-hidden="true" />
@@ -49,7 +46,7 @@ export function ChatHeaderLink({ className }: { className: string }) {
           </span>
         ) : null}
       </span>
-      <span className="sr-only lg:not-sr-only">{CHAT_ENTRY_LABEL}</span>
+      <span className="sr-only lg:not-sr-only">{CHAT_WITH_SALES}</span>
     </Link>
   );
 }

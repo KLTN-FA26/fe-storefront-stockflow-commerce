@@ -145,7 +145,7 @@ function QuoteRequestForm({ design, current, onClose }: Props) {
 
 /**
  * "Yêu cầu báo giá" on an APPROVED design (docs 12 §4.8.23): the cartons wished for (a suggestion)
- * and, if any, a delivery date. Sent, it says so and offers "Mở chat"; a refusal is worded by the BE,
+ * and, if any, a delivery date. Sent, it says so and offers "Chat với Sale"; a refusal is worded by the BE,
  * under its field when it names one. A customer who is not active cannot ask again.
  */
 export function QuoteRequestDialog({
