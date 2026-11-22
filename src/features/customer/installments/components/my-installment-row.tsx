@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { cn } from "cn";
 
+import { TONE_BADGE_CLASSES } from "@/components/storefront/tone-badge";
 import { Badge } from "@/components/ui/badge";
 import { STORE_ROUTES } from "@/constants";
-import type { SemanticTone } from "@/lib/domain/types";
 import { formatDate } from "@/lib/format/date";
 import { formatMoney } from "@/lib/format/money";
 import {
@@ -12,16 +12,6 @@ import {
   installmentTitle,
   type Installment,
 } from "@/lib/installments";
-
-const TONE_CLASSES: Record<SemanticTone, string> = {
-  positive: "bg-positive/10 text-positive",
-  info: "bg-info/10 text-info",
-  warning: "bg-warning/10 text-warning",
-  danger: "bg-danger/10 text-danger",
-  neutral: "bg-neutral/10 text-neutral",
-  muted: "bg-bg-muted text-ink-secondary",
-  special: "bg-special/10 text-special",
-};
 
 function Cell({
   label,
@@ -38,7 +28,7 @@ function Cell({
       <dd
         className={cn(
           "tabular-nums",
-          strong ? "text-danger font-semibold" : "text-ink-primary font-medium",
+          strong ? "text-danger-ink font-semibold" : "text-ink-primary font-medium",
         )}
       >
         {value}
@@ -77,7 +67,7 @@ export function MyInstallmentRow({ installment }: { installment: Installment }) 
           </p>
           <p className="text-ink-tertiary font-mono text-xs">HĐ {installment.contractNumber}</p>
         </div>
-        <Badge className={cn("h-7 rounded-full px-3 font-semibold", TONE_CLASSES[meta.tone])}>
+        <Badge className={cn("h-7 rounded-full px-3 font-semibold", TONE_BADGE_CLASSES[meta.tone])}>
           {meta.label}
         </Badge>
       </div>

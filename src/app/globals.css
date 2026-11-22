@@ -20,11 +20,13 @@
   --border-strong: #c5cad1;
   --ink-primary: #1a1b18;
   --ink-secondary: #5c5e58;
-  --ink-tertiary: #8a8c85;
+  /* 4.59:1 on --bg-muted, 5.24:1 on white (WCAG 1.4.3, SF-UX-1) */
+  --ink-tertiary: #6b6d66;
   --ink-inverse: #ffffff;
   --brand: #1a1b18;
   --brand-hover: #000000;
-  --accent: #1e88e5;
+  /* links and white-on-accent: 5.75:1 on white, 5.03:1 on --bg-muted */
+  --accent: #1565c0;
   --positive: #1f9d55;
   --info: #2b7fc4;
   --warning: #d98207;
@@ -32,6 +34,14 @@
   --neutral: #6b6e68;
   --muted: #9a9c95;
   --special: #7c5cbf;
+  /* Text in a tone (badge, alert, status line): the tone itself is too light to read on its own
+     10% tint (warning 2.66:1). Each ink is >= 5:1 on every surface and on the 5% / 10% tint. */
+  --positive-ink: #146c3a;
+  --info-ink: #1d5f96;
+  --warning-ink: #8a5200;
+  --danger-ink: #b42318;
+  --neutral-ink: #55574f;
+  --special-ink: #5b3f9e;
   /* storefront: compact retail density (FRONTEND-AI-RULES §5) */
   --card-pad: 16px;
   --card-radius: var(--r-lg);
@@ -76,11 +86,19 @@
   --border-strong: #3d4045;
   --ink-primary: #f4f4f1;
   --ink-secondary: #a8aaa3;
-  --ink-tertiary: #76786f;
+  /* 5.03:1 on --bg-muted, 6.39:1 on --bg-surface */
+  --ink-tertiary: #9a9c94;
   --ink-inverse: #1a1b18;
   --brand: #f4f4f1;
   --brand-hover: #ffffff;
   --accent: #4ea6f0;
+  /* >= 5.5:1 on every dark surface and on the 5% / 10% tint */
+  --positive-ink: #5fd08f;
+  --info-ink: #7ab8ef;
+  --warning-ink: #f2b052;
+  --danger-ink: #f58b8b;
+  --neutral-ink: #b4b6ae;
+  --special-ink: #b9a3ec;
 }
 
 /* ============================================================================
@@ -115,6 +133,12 @@
   --color-neutral: var(--neutral);
   --color-muted-tone: var(--muted);
   --color-special: var(--special);
+  --color-positive-ink: var(--positive-ink);
+  --color-info-ink: var(--info-ink);
+  --color-warning-ink: var(--warning-ink);
+  --color-danger-ink: var(--danger-ink);
+  --color-neutral-ink: var(--neutral-ink);
+  --color-special-ink: var(--special-ink);
   /* shadcn mapping */
   --background: var(--bg-base);
   --foreground: var(--ink-primary);
