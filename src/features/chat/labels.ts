@@ -41,7 +41,8 @@ const CONTEXT_KIND: Record<string, string> = {
   QUOTE: "Báo giá",
   ORDER: "Đơn hàng",
   CONTRACT: "Hợp đồng",
-  PRODUCTION_ORDER: "Đơn sản xuất",
+  // Staff document: its chip is hidden (SF-UX-26); "Lô in" wherever its name still shows.
+  PRODUCTION_ORDER: "Lô in",
   EINVOICE: "Hoá đơn",
 };
 export const contextKindLabel = (kind: string) => CONTEXT_KIND[kind] ?? "Chứng từ";
@@ -67,7 +68,8 @@ export const requestStatusMeta = (status: string | null | undefined) =>
   meta(REQUEST_STATUS, status, "Đang chờ báo giá");
 
 const QUOTE_STATUS: Record<string, StatusMeta> = {
-  SENT: { label: "Chờ bạn trả lời", tone: "warning" },
+  // Waiting on the customer, said from their side (SF-UX-2; the same words as the quote pages).
+  SENT: { label: "Chờ bạn phản hồi", tone: "warning" },
   ACCEPTED: { label: "Đã chấp nhận", tone: "positive" },
   CHANGES_REQUESTED: { label: "Đã yêu cầu sửa", tone: "info" },
   EXPIRED: { label: "Hết hiệu lực", tone: "muted" },
@@ -76,14 +78,17 @@ const QUOTE_STATUS: Record<string, StatusMeta> = {
 };
 export const quoteStatusMeta = (status: string) => meta(QUOTE_STATUS, status, "Báo giá");
 
-/** CONTRACT card status (plan E1): Đã gửi / Đã ký / Đã huỷ / Hoàn tất. */
+/** CONTRACT card status (plan E1): Chờ bạn ký / Đã ký / Đã huỷ / Hoàn tất. */
 const CONTRACT_STATUS: Record<string, StatusMeta> = {
-  SENT: { label: "Đã gửi", tone: "info" },
+  SENT: { label: "Chờ bạn ký", tone: "warning" },
   SIGNED: { label: "Đã ký", tone: "positive" },
   CANCELLED: { label: "Đã huỷ", tone: "danger" },
   COMPLETED: { label: "Hoàn tất", tone: "muted" },
 };
 export const contractStatusMeta = (status: string) => meta(CONTRACT_STATUS, status, "Hợp đồng");
+
+/** A SENT contract whose signed copy the customer already sent in the chat: Sales have to record it (SF-UX-24). */
+export const SIGNED_COPY_SENT: StatusMeta = { label: "Chờ Sale xác nhận", tone: "info" };
 
 const INSTALLMENT_STATUS: Record<string, StatusMeta> = {
   NOT_DUE: { label: "Chưa đến hạn", tone: "neutral" },

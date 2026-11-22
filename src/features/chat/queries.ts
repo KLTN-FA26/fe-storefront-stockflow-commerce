@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 
 import { QUERY_TIMES } from "@/lib/api/query-client";
+import { useRealtimeConnected } from "@/lib/realtime";
 
 import {
   getAttachmentLink,
@@ -33,44 +34,54 @@ export const chatKeys = {
 };
 
 /**
- * Realtime is polling for now: the BE pushes over STOMP at `/ws` (plan B.5), which needs a client
- * library the storefront does not have yet. New messages are caught up with `since=<last seq>`
- * every 5 s (plan E1); card state changes (an edit, a quote superseded, a contract signed) arrive
- * with the slower refetch of the loaded pages — every 10 s: at 30 s a card the customer had just acted on, or
- * a contract Sales had just recorded as signed, looked stale for half a minute (WF-02 audit).
+ * How often the REST reads run. With the socket up (`NEXT_PUBLIC_WS_URL`, `features/chat/realtime.ts`) new messages,
+ * changed cards, the conversation and the badge arrive as events, so every poll drops to one slow catch-up
+ * (`fallbackMs`) for what a dropped push missed. Without it the catch-up stays at 5 s. Nothing polls in a background
+ * tab (`refetchIntervalInBackground: false`), and the loaded message pages are never refetched on a timer: an
+ * infinite query refetches EVERY page it holds (SF-UX-6), so the catch-up reads only the newest page.
  */
 export const CHAT_POLL = {
   catchUpMs: 5_000,
-  pagesMs: 10_000,
-  detailMs: 10_000,
+  detailMs: 15_000,
   listMs: 30_000,
   unreadMs: 30_000,
+  /** Every poll while the socket is up. */
+  fallbackMs: 45_000,
 } as const;
+
+/** `ms` without a socket, the slow fallback with one. */
+const pollEvery = (live: boolean, ms: number) => (live ? CHAT_POLL.fallbackMs : ms);
 
 export const CHAT_PAGE_SIZE = 20;
 export const MESSAGE_PAGE_SIZE = 30;
 
 export function useMyConversations(params: ChatListParams, enabled = true) {
+  const live = useRealtimeConnected();
   return useQuery({
     queryKey: chatKeys.list(params),
     queryFn: ({ signal }) => listMyConversations(params, signal),
     enabled,
     placeholderData: keepPreviousData,
-    refetchInterval: CHAT_POLL.listMs,
+    refetchInterval: pollEvery(live, CHAT_POLL.listMs),
+    refetchIntervalInBackground: false,
     ...QUERY_TIMES.list,
   });
 }
 
-export function useConversation(id: string) {
+export function useConversation(id: string, live = false) {
   return useQuery({
     queryKey: chatKeys.detail(id),
     queryFn: ({ signal }) => getMyConversation(id, signal),
-    refetchInterval: CHAT_POLL.detailMs,
+    refetchInterval: pollEvery(live, CHAT_POLL.detailMs),
+    refetchIntervalInBackground: false,
     ...QUERY_TIMES.detail,
   });
 }
 
-/** The thread, paged back by `before` (newest first on the wire). */
+/**
+ * The thread, paged back by `before` (newest first on the wire). No `refetchInterval` and no refetch on focus: both
+ * would reload every page scrolled back through. New and changed messages come from the socket and the catch-up.
+ */
 export function useConversationMessages(id: string, enabled = true) {
   return useInfiniteQuery({
     queryKey: chatKeys.messages(id),
@@ -79,8 +90,8 @@ export function useConversationMessages(id: string, enabled = true) {
     initialPageParam: null as number | null,
     getNextPageParam: (last) => last.nextBefore ?? undefined,
     enabled,
-    refetchInterval: CHAT_POLL.pagesMs,
-    staleTime: CHAT_POLL.pagesMs,
+    staleTime: CHAT_POLL.fallbackMs,
+    refetchOnWindowFocus: false,
     gcTime: QUERY_TIMES.detail.gcTime,
   });
 }
@@ -88,48 +99,75 @@ export function useConversationMessages(id: string, enabled = true) {
 /** At most this many `since` pages per tick; a longer backlog continues on the next tick. */
 const MAX_CATCH_UP_PAGES = 5;
 
+const maxSeq = (messages: readonly ChatMessage[], floor: number) =>
+  messages.reduce((newest, message) => Math.max(newest, message.seq), floor);
+
 /**
- * Every 5 s, asks for what came after the newest message held and folds it into the thread. A new
- * card may have superseded an older one, so it also refreshes the loaded pages and the header.
+ * One request per tick: the NEWEST page, folded into the thread. It brings what arrived (a message is added) and what
+ * changed among the latest messages (an edit, a card that changed state or was superseded is replaced in place). Only
+ * when more than a page arrived since the last tick does it page forward with `since` to fill the gap.
+ *
+ * Its data is the cursor: the newest seq read over REST. A message the socket put in the thread does not move it,
+ * so a push that skipped messages (the socket was down) cannot make the catch-up skip them too.
  */
-export function useMessageCatchUp(id: string, enabled: boolean) {
+export function useMessageCatchUp(id: string, enabled: boolean, live = false) {
   const queryClient = useQueryClient();
   return useQuery({
     queryKey: chatKeys.catchUp(id),
     queryFn: async ({ signal }) => {
       const key = chatKeys.messages(id);
-      let since = newestSeqOf(queryClient.getQueryData<MessagePages>(key));
-      const arrived: ChatMessage[] = [];
-      for (let round = 0; round < MAX_CATCH_UP_PAGES; round += 1) {
-        const page = await getMessages(id, { since, limit: MESSAGE_PAGE_SIZE }, signal);
-        arrived.push(...page.items);
-        if (page.nextSince === null || page.nextSince === undefined) break;
-        since = page.nextSince;
+      const held = queryClient.getQueryData<MessagePages>(key);
+      const cursor = queryClient.getQueryData<number>(chatKeys.catchUp(id)) ?? newestSeqOf(held);
+      const newest = await getMessages(id, { limit: MESSAGE_PAGE_SIZE }, signal);
+      const fetched = [...newest.items];
+      const oldestRead = fetched.reduce((low, message) => Math.min(low, message.seq), Infinity);
+      if (fetched.length >= MESSAGE_PAGE_SIZE && oldestRead > cursor + 1) {
+        let since = cursor;
+        for (let round = 0; round < MAX_CATCH_UP_PAGES; round += 1) {
+          const page = await getMessages(id, { since, limit: MESSAGE_PAGE_SIZE }, signal);
+          fetched.push(...page.items);
+          if (page.nextSince === null || page.nextSince === undefined) break;
+          since = page.nextSince;
+        }
       }
+      const arrived = fetched.filter((message) => message.seq > newestSeqOf(held));
+      queryClient.setQueryData<MessagePages>(key, (data) => upsertMessages(data, fetched));
       if (arrived.length > 0) {
-        queryClient.setQueryData<MessagePages>(key, (data) => upsertMessages(data, arrived));
-        void queryClient.invalidateQueries({ queryKey: chatKeys.detail(id) });
-        void queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
-        if (arrived.some((message) => message.kind === "CARD")) {
+        void queryClient.invalidateQueries(
+          { queryKey: chatKeys.detail(id) },
+          { cancelRefetch: false },
+        );
+        void queryClient.invalidateQueries(
+          { queryKey: chatKeys.lists() },
+          { cancelRefetch: false },
+        );
+        // Without the socket, a new card may have superseded one beyond the newest page.
+        if (!live && arrived.some((message) => message.kind === "CARD")) {
           void queryClient.invalidateQueries({ queryKey: key });
         }
       }
-      return arrived.length;
+      return maxSeq(fetched, cursor);
     },
     enabled,
-    refetchInterval: CHAT_POLL.catchUpMs,
+    refetchInterval: pollEvery(live, CHAT_POLL.catchUpMs),
+    refetchIntervalInBackground: false,
     staleTime: 0,
-    gcTime: 0,
+    gcTime: QUERY_TIMES.detail.gcTime,
   });
 }
 
-/** C14 for the header badge, polled lightly. */
-export function useChatUnread(enabled: boolean) {
+/**
+ * C14, the badge: ONE query for every consumer (the header link, the floating button, anything else) — they share
+ * the key, so React Query asks once however many are mounted (L-1). Its own queue on the socket keeps it fresh;
+ * without one, it is polled lightly.
+ */
+export function useChatUnread(enabled: boolean, live = false) {
   return useQuery({
     queryKey: chatKeys.unread(),
     queryFn: ({ signal }) => getMyUnread(signal),
     enabled,
-    refetchInterval: CHAT_POLL.unreadMs,
+    refetchInterval: pollEvery(live, CHAT_POLL.unreadMs),
+    refetchIntervalInBackground: false,
     staleTime: CHAT_POLL.unreadMs,
   });
 }

@@ -89,7 +89,7 @@ describe("StorefrontShell", () => {
       </StorefrontShell>,
     );
     expect(screen.queryByLabelText("Mở giỏ hàng")).toBeNull();
-    expect(screen.getByLabelText("Mở tư vấn")).toBeInTheDocument();
+    expect(screen.getByLabelText("Chat với Sale")).toBeInTheDocument();
     expect(screen.getByText("Nội dung")).toBeInTheDocument();
   });
 
@@ -100,6 +100,6 @@ describe("StorefrontShell", () => {
         <p>Nội dung</p>
       </StorefrontShell>,
     );
-    expect(screen.queryByLabelText("Mở tư vấn")).toBeNull();
+    expect(screen.queryByLabelText("Chat với Sale")).toBeNull();
   });
 });

@@ -17,13 +17,22 @@ interface CardViewProps {
   /** The card's fallback text (BE `body`), shown for a kind the storefront does not draw. */
   body: string | null | undefined;
   canAct: boolean;
+  /** CONTRACT: when the customer sent the signed copy after it (`signedCopiesOf`). */
+  signedCopyAt?: string | null | undefined;
 }
 
 /**
  * Draws a card from its kind, payload and state (plan B.7). Buttons come from `customerActions`
  * only: `staffActions` is not even parsed into the storefront's card.
  */
-export function CardView({ conversationId, messageId, card, body, canAct }: CardViewProps) {
+export function CardView({
+  conversationId,
+  messageId,
+  card,
+  body,
+  canAct,
+  signedCopyAt,
+}: CardViewProps) {
   const view = card.view;
   switch (view.type) {
     case "DESIGN_QUOTE_REQUEST":
@@ -41,7 +50,7 @@ export function CardView({ conversationId, messageId, card, body, canAct }: Card
         />
       );
     case "CONTRACT":
-      return <ContractCard payload={view.payload} />;
+      return <ContractCard payload={view.payload} signedCopyAt={signedCopyAt} />;
     case "TRANSFER":
       return <TransferCard payload={view.payload} reminder={view.reminder} />;
     case "CSAT":
