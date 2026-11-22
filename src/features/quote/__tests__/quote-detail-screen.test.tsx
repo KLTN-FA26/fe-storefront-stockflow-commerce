@@ -273,6 +273,36 @@ describe("QuoteDetailScreen — asking for changes", () => {
       }),
     );
   });
+
+  it.each([
+    ["INVALID_QUOTE_TRANSITION", 409, "Báo giá đang được Sale sửa: chưa thể trả lời.", 1],
+    ["VALIDATION_FAILED", 400, "Nội dung yêu cầu sửa quá dài.", 2],
+  ])(
+    "a %s refusal: said once when the toast says it, inline otherwise",
+    async (code, status, text, times) => {
+      backend(beSentQuote);
+      vi.spyOn(api, "post").mockRejectedValue(new ApiError(status, code, text));
+      const user = userEvent.setup();
+      renderWithProviders(
+        <>
+          <ToastProvider />
+          <QuoteDetailScreen quoteId={quoteId} />
+        </>,
+      );
+      await user.click(await screen.findByRole("button", { name: "Yêu cầu sửa" }));
+      const dialog = await screen.findByRole("dialog");
+      await user.type(within(dialog).getByLabelText(/Nội dung cần sửa/), "Giảm giá");
+      await user.click(within(dialog).getByRole("button", { name: "Gửi yêu cầu sửa" }));
+      if (times === 1) {
+        expect(await screen.findByText(text)).toBeInTheDocument();
+        expect(screen.getAllByText(text)).toHaveLength(1);
+        expect(within(dialog).queryByText(text)).not.toBeInTheDocument();
+      } else {
+        // Not a toasted code: the dialog says it itself.
+        expect(await within(dialog).findByText(text)).toBeInTheDocument();
+      }
+    },
+  );
 });
 
 const revising = {
