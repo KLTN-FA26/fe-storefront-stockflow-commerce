@@ -1,6 +1,7 @@
 import { PDFDocument } from "pdf-lib";
 import { describe, expect, it, vi } from "vitest";
 
+import { ExportError } from "../components/studio/export-canvas";
 import type { ExportRenderer } from "../components/studio/export-renderer";
 import { buildSubmissionBundle, type BundleStep } from "../components/studio/submission-bundle";
 import { createSizer, createSurfaces, emptyDocument, mmToPt, mmToPx, printDpi } from "../engine";
@@ -41,6 +42,22 @@ const input = (renderer: ExportRenderer, template = cup12oz) => ({
 });
 
 describe("buildSubmissionBundle", () => {
+  it("refuses a file the BE would answer 413 to, before anything is uploaded (SD-14)", async () => {
+    // A stand-in limit: the real 50 MB file is not built in a test.
+    await expect(
+      buildSubmissionBundle({ ...input(fakeRenderer()), maxFileBytes: 10 }),
+    ).rejects.toSatisfy(
+      (error: unknown) =>
+        error instanceof ExportError &&
+        error.message === "File in lớn hơn 50 MB, hãy bớt ảnh hoặc giảm độ phân giải.",
+    );
+    // A file that is not uploaded is not held to the limit.
+    await expect(
+      buildSubmissionBundle({ ...input(fakeRenderer()), maxFileBytes: 10, uploading: [] }),
+    ).resolves.toBeDefined();
+    await expect(buildSubmissionBundle(input(fakeRenderer()))).resolves.toBeDefined();
+  });
+
   it("returns the three files with their names and types", async () => {
     const bundle = await buildSubmissionBundle(input(fakeRenderer()));
 

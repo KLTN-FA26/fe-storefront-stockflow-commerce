@@ -13,6 +13,7 @@ import { retargetDocument } from "../engine/document/retarget";
 import { describeDesignError } from "../errors";
 import { useCloneDesign } from "../mutations";
 import { designDocumentQuery } from "../queries";
+import { isRetryableWithSameKey } from "../create-key";
 import { templateOf } from "../selectors";
 import type { CloneResult, Design } from "../types";
 import { TargetChoice, TargetsLoading } from "./clone-design-parts";
@@ -43,7 +44,8 @@ export function CloneForm({
   const [sku, setSku] = useState<string | null>(null);
   const [made, setMade] = useState<Made | null>(null);
   const [failure, setFailure] = useState<unknown>(null);
-  // One key per variant chosen: a retry after a lost answer is the same request (R-E7).
+  // One key per variant chosen: a retry after a lost answer is the same request (R-E7). A refusal
+  // the BE stores for the key (a 4xx) drops it: the same key would replay that answer for ever.
   const attempt = useRef<{ sku: string; key: string } | null>(null);
   const open = (id: string) => router.push(STORE_ROUTES.design.detail(id));
 
@@ -83,6 +85,7 @@ export function CloneForm({
         onBusyChange(false);
       }
     } catch (error) {
+      if (!isRetryableWithSameKey(error)) attempt.current = null;
       setFailure(error);
       onBusyChange(false);
     }

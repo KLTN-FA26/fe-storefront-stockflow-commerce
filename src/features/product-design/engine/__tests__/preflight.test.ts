@@ -195,9 +195,9 @@ describe("OUTSIDE_PRINT_AREA (BR-02)", () => {
     expect(ruleIds(runPreflight(input(doc)).issues)).toEqual(["OUTSIDE_PRINT_AREA"]);
   });
 
-  it("element past print area + bleed fails OUTSIDE_PRINT_AREA; one inside the bleed only (text) fails CROSSES_SAFE_AREA, not OUTSIDE", () => {
-    // Inside the left bleed strip (u = -1.5 → flat x ≈ 1.5; trim starts at 3): nothing of it is in
-    // the trim, yet it is inside the bleed.
+  it("element past print area + bleed fails OUTSIDE_PRINT_AREA; an element wholly in the bleed strip (image, or text anchored there) fails OUTSIDE too", () => {
+    // Inside the left bleed strip (u = -1.5 → flat x ≈ 1.5; trim starts at 3): nothing of an image
+    // there is in the trim, so it covers none of it (BE overlapsTrim) and is cut off.
     const speck = onFront(
       imageEl("speck", {
         widthMm: 2,
@@ -207,7 +207,7 @@ describe("OUTSIDE_PRINT_AREA (BR-02)", () => {
         placement: { u: -1.5, v: 140, rotationDeg: 0, scale: 1 },
       }),
     );
-    expect(ruleIds(runPreflight(input(speck)).issues)).toEqual(["CROSSES_SAFE_AREA"]);
+    expect(ruleIds(runPreflight(input(speck)).issues)).toEqual(["OUTSIDE_PRINT_AREA"]);
 
     const word = (u: number) =>
       onFront(
@@ -218,9 +218,21 @@ describe("OUTSIDE_PRINT_AREA (BR-02)", () => {
         }),
       );
     const inBleed = runPreflight(input(word(-1.5)));
-    expect(ruleIds(inBleed.issues)).toEqual(["CROSSES_SAFE_AREA"]);
+    expect(ruleIds(inBleed.issues)).toEqual(["OUTSIDE_PRINT_AREA"]);
     expect(inBleed.result).toBe("Fail");
     expect(ruleIds(runPreflight(input(word(-10))).issues)).toEqual(["OUTSIDE_PRINT_AREA"]);
+  });
+
+  it("text anchored in the bleed strip but reaching into the trim fails OUTSIDE_PRINT_AREA, as BE anchorIssue (C11)", () => {
+    // "A" at 8 pt centred on u = -0.5: anchored 0.5 mm into the bleed, its right edge inside the trim.
+    const doc = onFront(
+      textEl("word", {
+        content: "A",
+        sizePt: 8,
+        placement: { u: -0.5, v: 140, rotationDeg: 0, scale: 1 },
+      }),
+    );
+    expect(ruleIds(runPreflight(input(doc)).issues)).toEqual(["OUTSIDE_PRINT_AREA"]);
   });
 
   it("fails an element that reaches into the bleed as CROSSES_SAFE_AREA, not OUTSIDE_PRINT_AREA", () => {
@@ -241,7 +253,7 @@ describe("OUTSIDE_PRINT_AREA (BR-02)", () => {
 
   it("accepts a background that fills the bleed box, and tolerates float noise on its edges", () => {
     // The bag front's bleed box is 266 × 286 mm: every corner is outside the trim, which the
-    // element encloses.
+    // element encloses — a background, which may reach the bleed (Q5 / SD-2: BE `areaIssue`).
     const fill = (extraMm: number) =>
       onFront(
         imageEl("bg", {
@@ -252,9 +264,92 @@ describe("OUTSIDE_PRINT_AREA (BR-02)", () => {
           placement: { u: 130, v: 140, rotationDeg: 0, scale: 1 },
         }),
       );
-    expect(ruleIds(runPreflight(input(fill(0))).issues)).toEqual(["CROSSES_SAFE_AREA"]);
-    expect(ruleIds(runPreflight(input(fill(1e-9))).issues)).not.toContain("OUTSIDE_PRINT_AREA");
+    expect(ruleIds(runPreflight(input(fill(0))).issues)).toEqual([]);
+    expect(ruleIds(runPreflight(input(fill(1e-9))).issues)).toEqual([]);
     expect(ruleIds(runPreflight(input(fill(0.05))).issues)).toContain("OUTSIDE_PRINT_AREA");
+  });
+
+  it("an image leaving the trim's right-hand samples uncovered is no background: CROSSES_SAFE_AREA", () => {
+    // 261 mm wide at u = 129: from u = -1.5 (in the bleed) to u = 259.5, short of the trim's right
+    // edge (u = 260), so the right-hand trim samples are not covered.
+    const doc = onFront(
+      imageEl("bg", {
+        widthMm: 261,
+        heightMm: 286,
+        naturalWidthPx: 8000,
+        naturalHeightPx: 8000,
+        placement: { u: 129, v: 140, rotationDeg: 0, scale: 1 },
+      }),
+    );
+    expect(ruleIds(runPreflight(input(doc)).issues)).toEqual(["CROSSES_SAFE_AREA"]);
+  });
+
+  it("a background image covering every trim sample on the cup passes, ON_SEAM included", () => {
+    // Wrapped round the cup over the whole band and its glue flap, half the bleed past each edge.
+    const bleed = cup12oz.printAreas[0]!.bleedMm;
+    const band = cupBody.vRange[1] - cupBody.vRange[0];
+    const arc = (sweepRad + seamRad) * midRadiusMm;
+    const background = (extraMm: number) =>
+      docOf(
+        {
+          BODY: content([
+            imageEl("bg", {
+              widthMm: arc + extraMm,
+              heightMm: band + bleed,
+              naturalWidthPx: 8000,
+              naturalHeightPx: 4000,
+              wrap: true,
+              placement: { ...cupPlacement, u: arc / 2 },
+            }),
+          ]),
+        },
+        cup12oz,
+      );
+    expect(ruleIds(runPreflight(input(background(bleed), { ...cup12oz })).issues)).toEqual([]);
+    // Into half of the glue flap, its top and bottom edges inside the band (a wrapped image is tested on those
+    // edges): not a background, so the flap (ON_SEAM) and the safe line count, as for any image.
+    const halfFlapRight = (sweepRad + seamRad / 2) * midRadiusMm;
+    const halfFlap = docOf(
+      {
+        BODY: content([
+          imageEl("bg", {
+            widthMm: halfFlapRight + bleed / 2,
+            heightMm: band / 2,
+            naturalWidthPx: 8000,
+            naturalHeightPx: 4000,
+            wrap: true,
+            placement: { ...cupPlacement, u: (halfFlapRight - bleed / 2) / 2 },
+          }),
+        ]),
+      },
+      cup12oz,
+    );
+    expect(ruleIds(runPreflight(input(halfFlap, { ...cup12oz })).issues)).toEqual([
+      "CROSSES_SAFE_AREA",
+      "ON_SEAM",
+    ]);
+    // Everything but the glue flap: not a background (the flap's samples are uncovered), so the safe line counts.
+    const shortOfFlap = docOf(
+      {
+        BODY: content([
+          imageEl("bg", {
+            widthMm: sweepRad * midRadiusMm + bleed,
+            heightMm: band + bleed,
+            naturalWidthPx: 8000,
+            naturalHeightPx: 4000,
+            wrap: true,
+            placement: { ...cupPlacement, u: (sweepRad * midRadiusMm) / 2 - bleed / 2 },
+          }),
+        ]),
+      },
+      cup12oz,
+    );
+    expect(ruleIds(runPreflight(input(shortOfFlap, { ...cup12oz })).issues)).toContain(
+      "CROSSES_SAFE_AREA",
+    );
+    // Short of the flap's end: no longer a background, so the flap and the safe line count again.
+    const short = ruleIds(runPreflight(input(background(-bleed), { ...cup12oz })).issues);
+    expect(short).toContain("CROSSES_SAFE_AREA");
   });
 
   it("fails wrapped text on the cup whose arc runs past the bleed", () => {
@@ -334,7 +429,7 @@ describe("CROSSES_SAFE_AREA", () => {
     expect(only(runPreflight(input(doc)).issues, "CROSSES_SAFE_AREA")).toEqual([crosses]);
   });
 
-  it("text 1 mm past the safe line fails CROSSES_SAFE_AREA; image the same; background colour and pattern never do; a drawing never does", () => {
+  it("text 1 mm past the safe line fails CROSSES_SAFE_AREA; image and drawing the same; background colour and pattern never do", () => {
     // Left edge of the 60 mm image at u = 2 (the safe line is at u = 5): 3 mm past it; at u = 6 clear.
     const image = (leftU: number) =>
       onFront(imageEl("img", { placement: { u: leftU + 30, v: 140, rotationDeg: 0, scale: 1 } }));
@@ -366,7 +461,8 @@ describe("CROSSES_SAFE_AREA", () => {
     });
     expect(runPreflight(input(pattern)).issues).toEqual([]);
 
-    // A drawing in the safe margin (3 mm in from the trim line) is not a safe-zone issue.
+    // A drawing in the safe margin (3 mm in from the trim line): as an image (Q5 / SD-3, BE checks
+    // "an image or a drawing").
     const drawing = onFront(
       drawingEl("pen", {
         strokes: [
@@ -383,7 +479,32 @@ describe("CROSSES_SAFE_AREA", () => {
         placement: { u: 3, v: 140, rotationDeg: 0, scale: 1 },
       }),
     );
-    expect(ruleIds(runPreflight(input(drawing)).issues)).toEqual([]);
+    expect(ruleIds(runPreflight(input(drawing)).issues)).toEqual(["CROSSES_SAFE_AREA"]);
+  });
+
+  it("a drawing wholly inside the bleed strip fails OUTSIDE_PRINT_AREA; one crossing the safe line fails CROSSES_SAFE_AREA", () => {
+    const pen = (u: number) =>
+      onFront(
+        drawingEl("pen", {
+          strokes: [
+            {
+              mode: "draw",
+              color: "#000000",
+              sizeMm: 0.5,
+              points: [
+                [0, -2, 0.5],
+                [0, 2, 0.5],
+              ],
+            },
+          ],
+          placement: { u, v: 140, rotationDeg: 0, scale: 1 },
+        }),
+      );
+    // u = -1.5: the stroke (±0.4 mm reach) sits in the 3 mm bleed strip, none of it in the trim.
+    expect(ruleIds(runPreflight(input(pen(-1.5))).issues)).toEqual(["OUTSIDE_PRINT_AREA"]);
+    // u = 5: across the safe line (at u = 5).
+    expect(ruleIds(runPreflight(input(pen(5))).issues)).toEqual(["CROSSES_SAFE_AREA"]);
+    expect(runPreflight(input(pen(30))).issues).toEqual([]);
   });
 
   it("fails an element that crosses the trim line into the bleed as CROSSES_SAFE_AREA", () => {
@@ -485,17 +606,42 @@ describe("FONT_NOT_ALLOWED (BR-DSG-001)", () => {
     elementId,
   });
 
-  it('FONT_NOT_ALLOWED fails only when fontStatus is "error"; a font outside allowedFontCodes passes', () => {
+  it("FONT_NOT_ALLOWED fails a font outside a non-empty allowedFontCodes (BE LayoutPreflight)", () => {
     const doc = onFront(textEl("txt", { fontCode: "lobster" }));
-    expect(runPreflight(input(doc, { allowedFontCodes: ["be-vietnam-pro"] })).issues).toEqual([]);
+    const outside = runPreflight(input(doc, { allowedFontCodes: ["be-vietnam-pro"] }));
+    expect(only(outside.issues, "FONT_NOT_ALLOWED")).toEqual([
+      {
+        ...issue("FRONT", "txt"),
+        message: "Phông chữ này không có trong danh sách của mẫu in, hãy đổi phông khác.",
+      },
+    ]);
+    expect(outside.result).toBe("Fail");
+    expect(runPreflight(input(doc, { allowedFontCodes: ["lobster"] })).issues).toEqual([]);
     expect(runPreflight(input(doc, { allowedFontCodes: null })).issues).toEqual([]);
     expect(runPreflight(input(doc, { allowedFontCodes: [] })).issues).toEqual([]);
+  });
 
+  it('FONT_NOT_ALLOWED also fails an allowed font whose fontStatus is "error"', () => {
+    const doc = onFront(textEl("txt", { fontCode: "lobster" }));
     const failed = runPreflight(
-      input(doc, { allowedFontCodes: ["be-vietnam-pro"] }, { fontStatus: { lobster: "error" } }),
+      input(doc, { allowedFontCodes: ["lobster"] }, { fontStatus: { lobster: "error" } }),
     );
     expect(only(failed.issues, "FONT_NOT_ALLOWED")).toEqual([issue("FRONT", "txt")]);
     expect(failed.result).toBe("Fail");
+  });
+
+  it("fails a font the BE's /design-fonts list does not have, once it is read (C9); not before", () => {
+    const doc = onFront(textEl("txt", { fontCode: "lobster" }));
+    const unlisted = runPreflight(
+      input(doc, { allowedFontCodes: null }, { servedFontCodes: ["be-vietnam-pro"] }),
+    );
+    expect(ruleIds(unlisted.issues)).toEqual(["FONT_NOT_ALLOWED"]);
+    expect(
+      runPreflight(input(doc, { allowedFontCodes: null }, { servedFontCodes: null })).issues,
+    ).toEqual([]);
+    expect(
+      runPreflight(input(doc, { allowedFontCodes: null }, { servedFontCodes: ["lobster"] })).issues,
+    ).toEqual([]);
   });
 
   it("fails a font that failed to load, but not one that is still loading", () => {
@@ -595,9 +741,9 @@ describe("EMPTY_DESIGN", () => {
     expect(runPreflight(input(doc)).issues).toEqual([empty]);
   });
 
-  it("fails a design with only a background colour or pattern (docs 12 §3)", () => {
+  it("passes a design with only a background colour or pattern (SD-8: as the BE, a background is printed)", () => {
     const solid = docOf({ LEFT: content([], { kind: "color", color: "#336699" }) });
-    expect(runPreflight(input(solid)).issues).toEqual([empty]);
+    expect(runPreflight(input(solid)).issues).toEqual([]);
 
     const pattern = docOf({
       FRONT: content([], {
@@ -608,7 +754,9 @@ describe("EMPTY_DESIGN", () => {
         rotationDeg: 0,
       }),
     });
-    expect(runPreflight(input(pattern)).issues).toEqual([empty]);
+    expect(runPreflight(input(pattern)).issues).toEqual([]);
+    // A background of kind "none" is no background: still empty.
+    expect(runPreflight(input(docOf({ FRONT: content([], NONE) }))).issues).toEqual([empty]);
   });
 
   it("is satisfied by one text on any surface", () => {
@@ -640,7 +788,7 @@ describe("ON_SEAM", () => {
   const small = (u: number) =>
     textEl("mark", { content: "A", sizePt: 8, placement: { ...cupPlacement, u } });
 
-  it("text on the cup seam fails ON_SEAM; a drawing on the seam does not", () => {
+  it("text on the cup seam fails ON_SEAM; a drawing on the seam too (Q5 / SD-3: as an image)", () => {
     const seamU = (sweepRad + seamRad / 2) * midRadiusMm; // the flap starts at u = sweepRad × mid
     const { issues } = runPreflight(cupInput(small(seamU)));
     expect(only(issues, "ON_SEAM")).toEqual([
@@ -669,7 +817,8 @@ describe("ON_SEAM", () => {
       ],
       placement: { ...cupPlacement, u: seamU },
     });
-    expect(ruleIds(runPreflight(cupInput(pen)).issues)).not.toContain("ON_SEAM");
+    // The BE's safe line stops at the flap ("CROSSES_SAFE_AREA"); the studio also names the flap.
+    expect(ruleIds(runPreflight(cupInput(pen)).issues)).toEqual(["CROSSES_SAFE_AREA", "ON_SEAM"]);
   });
 
   it("does not warn for an element on the front of the cup", () => {
@@ -828,6 +977,12 @@ describe("TOO_MANY_COLORS", () => {
     message: `Thiết kế dùng nhiều màu hơn mức cho phép (${maxColors}).`,
     surfaceCode,
   });
+  const photoNote = (surfaceCode: PrintAreaCode): PreflightIssue => ({
+    ruleId: "TOO_MANY_COLORS",
+    level: "note",
+    message: "Ảnh được in theo quy trình nhiều màu.",
+    surfaceCode,
+  });
   const run = (doc: DesignDocument, maxColors: number | null) =>
     only(runPreflight(input(doc, { maxColors })).issues, "TOO_MANY_COLORS");
 
@@ -885,9 +1040,19 @@ describe("TOO_MANY_COLORS", () => {
     expect(run(doc, 1)).toEqual([tooMany("FRONT", 1), tooMany("BACK", 1)]);
   });
 
-  it("adds a note about any image when maxColors is set", () => {
+  it("says a photo is printed in a multi-colour process, not that it uses too many colours", () => {
     const doc = onFront(imageEl("img"));
-    expect(run(doc, 4)).toEqual([tooMany("FRONT", 4)]);
+    expect(run(doc, 4)).toEqual([photoNote("FRONT")]);
+  });
+
+  it("shows one note, the colour one, when an image comes with too many solid colours", () => {
+    const doc = onFront(
+      imageEl("img"),
+      textEl("a", { color: "#111111" }),
+      textEl("b", { color: "#222222" }),
+    );
+    expect(run(doc, 1)).toEqual([tooMany("FRONT", 1)]);
+    expect(run(doc, 2)).toEqual([photoNote("FRONT")]);
   });
 
   it("does nothing when the template sets no limit", () => {
@@ -896,7 +1061,7 @@ describe("TOO_MANY_COLORS", () => {
   });
 });
 
-describe("CMYK_CONVERSION (BR-07)", () => {
+describe("CMYK_CONVERSION", () => {
   it("adds a single document-level info issue for a CMYK template", () => {
     const report = runPreflight(input(cleanDoc, { colorMode: "CMYK" }));
     expect(report.issues).toEqual([

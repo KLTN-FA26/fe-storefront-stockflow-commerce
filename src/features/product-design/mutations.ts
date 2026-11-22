@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import {
@@ -9,11 +10,14 @@ import {
   saveDesignDocument,
   uploadDesignAsset,
 } from "./api";
+import { hasErrorCode } from "@/lib/api/describe-error";
+
 import { isDesignConflict, isDesignGone, isDesignStateChanged } from "./errors";
 import { reReadProject, reReadProjects } from "./project-mutations";
 import { designKeys, projectKeys } from "./queries";
 import type {
   CloneDesignInput,
+  CreateDesignInput,
   Design,
   DesignDocumentRecord,
   RenameDesignInput,
@@ -84,14 +88,66 @@ function reReadWhenStateChanged(
   void client.invalidateQueries({ queryKey: designKeys.lists() });
 }
 
+const IN_PROGRESS_TRIES = 5;
+
+/** Waits `ms`, or rejects with the signal's reason as soon as it is aborted (the page was left). */
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) return reject(signal.reason);
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", stop);
+      resolve();
+    }, ms);
+    const stop = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", stop, { once: true });
+  });
+}
+
+/**
+ * The create, tried again a little later while the BE still runs the request this key started
+ * (409 `IDEMPOTENT_REQUEST_IN_PROGRESS`, `Retry-After` 1 s): a reload of the launcher meets it. The waits stop when
+ * `signal` is aborted (the launcher was left), so no create is sent after the page is gone; the IN_PROGRESS error is
+ * then thrown as it is, so the key is kept (`isRetryableWithSameKey`).
+ */
+async function createDesignWhenFree(
+  input: CreateDesignInput,
+  signal: AbortSignal,
+): Promise<Design> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await createDesign(input);
+    } catch (error) {
+      if (!hasErrorCode(error, "IDEMPOTENT_REQUEST_IN_PROGRESS") || attempt >= IN_PROGRESS_TRIES) {
+        throw error;
+      }
+      // Left while waiting: the first request may still be drawing the design on the BE, so the caller must keep its
+      // key (a later visit replays it). Throw the IN_PROGRESS answer itself, never the abort, which reads as "gone".
+      await sleep((error.retryAfterSeconds ?? 1) * 1000, signal).catch(() => {
+        throw error;
+      });
+    }
+  }
+}
+
 /**
  * POST /designs. The caller opens the studio of the draft it gets back. With a `projectId` the
  * draft starts inside that project, so the project is re-read too (its count, its strip).
  */
 export function useCreateDesign() {
   const client = useQueryClient();
+  // Aborted when the screen that asked is unmounted: a create still waiting to retry is dropped.
+  const leaving = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    leaving.current = controller;
+    return () => controller.abort();
+  }, []);
   return useMutation({
-    mutationFn: createDesign,
+    mutationFn: (input: CreateDesignInput) =>
+      createDesignWhenFree(input, leaving.current?.signal ?? new AbortController().signal),
     onSuccess: (_design, input) =>
       Promise.all([
         reReadDrafts(client),

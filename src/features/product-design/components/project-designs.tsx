@@ -3,6 +3,7 @@
 import { EmptyState } from "@/components/shared";
 
 import type { Design } from "../types";
+import { COLOR_DISCLAIMER } from "./color-disclaimer";
 import { ProjectDesignCard } from "./project-design-card";
 
 type Props = {
@@ -38,23 +39,26 @@ export function ProjectDesigns({
     );
   }
   return (
-    <ul
-      aria-label="Các bản trong dự án"
-      className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3"
-    >
-      {designs.map((design) => (
-        <li key={design.id}>
-          <ProjectDesignCard
-            design={design}
-            projectId={projectId}
-            open={open}
-            checked={chosen.has(design.id)}
-            onCheckedChange={onChoose}
-            onView3D={onView3D}
-            onClone={onClone}
-          />
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-3">
+      <p className="text-ink-tertiary text-xs">{COLOR_DISCLAIMER}</p>
+      <ul
+        aria-label="Các bản trong dự án"
+        className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3"
+      >
+        {designs.map((design) => (
+          <li key={design.id}>
+            <ProjectDesignCard
+              design={design}
+              projectId={projectId}
+              open={open}
+              checked={chosen.has(design.id)}
+              onCheckedChange={onChoose}
+              onView3D={onView3D}
+              onClone={onClone}
+            />
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

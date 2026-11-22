@@ -37,11 +37,22 @@ export const designSchema = z.object({
   id: beId(),
   name: z.string().min(1).max(NAME_MAX),
   status: designStatusSchema,
-  product: z.object({ slug: code, title: z.string().min(1) }),
+  /** The slug is null once the product is gone (BE leaves `productSlug` out): no link, no catalogue read. */
+  product: z.object({
+    /**
+     * The product's id, as the BE always sends it. No screen reads it now: "Chat với Sale" is about the design itself
+     * (`DESIGN` context, PO 2026-11-22 Q7), not its product.
+     */
+    id: beId().nullish(),
+    slug: code.nullable(),
+    title: z.string().min(1),
+  }),
   variant: z.object({ sku: code, label: z.string().min(1) }),
   /** The optimistic-lock token every write echoes back (docs 12 BR-11). */
   version,
   projectId: beId().nullable(),
+  /** The customer's own SKU, once the design is APPROVED (BE-2): `null` before. */
+  customerSku: z.string().min(1).nullable().default(null),
   /** The project's name and status, for the studio header and the card label (part E). */
   project: z
     .object({ id: beId(), name: z.string().min(1), status: projectStatusSchema })
@@ -192,6 +203,8 @@ export const createDesignInputSchema = z.object({
   name: designName,
   /** Part E: the design starts inside this project (the same checks as adding one). */
   projectId: beId().optional(),
+  /** Sent as `Idempotency-Key`: a reload of the launcher replays this create, not a second draft. */
+  idempotencyKey: z.string().trim().min(1).optional(),
 });
 
 /**

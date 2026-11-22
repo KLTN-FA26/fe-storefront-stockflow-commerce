@@ -72,15 +72,23 @@ type FileRule =
   | { rule: "FILE_SIZE"; maxFileSizeMb: number }
   | { rule: "PIXELS" };
 
+/** An image over 40 megapixels, refused by the BE (413) or before sending: one sentence for both. */
+export const TOO_MANY_PIXELS_MESSAGE =
+  "Ảnh có quá nhiều điểm ảnh (tối đa 40 megapixel). Hãy thu nhỏ kích thước ảnh rồi tải lại.";
+
 function describeFileRule(rule: FileRule): string {
-  if (rule.rule === "PIXELS") {
-    return "Ảnh có quá nhiều điểm ảnh (tối đa 40 megapixel). Hãy thu nhỏ kích thước ảnh rồi tải lại.";
-  }
+  if (rule.rule === "PIXELS") return TOO_MANY_PIXELS_MESSAGE;
   if (rule.rule === "FILE_SIZE")
     return `Ảnh vượt ${rule.maxFileSizeMb} MB, mức quy cách này cho phép.`;
   const names = rule.formats.map((format) => FORMAT_NAMES[format] ?? format);
   return `Quy cách này chỉ nhận ảnh ${names.join(", ")}.`;
 }
+
+/**
+ * A 413 `PAYLOAD_TOO_LARGE` is also an image over 40 megapixels (BE `ImageDimensions`); only its `message` tells them
+ * apart: "…40 megapixel…" in English, "…40 triệu điểm ảnh…" in Vietnamese (`refusal.image.tooManyPixels`).
+ */
+const isPixelRefusal = (error: ApiError) => /megapixel|điểm ảnh/i.test(error.message);
 
 /**
  * The words for a file the BE refused with only a `message` (no `details`): 415 is a format the
@@ -96,17 +104,25 @@ export function describeFileRefusal(
     return describeFileRule({ rule: "FORMAT", formats: [...template.allowedFileFormats] });
   }
   if (error.status === 413 && error.code === "PAYLOAD_TOO_LARGE") {
-    // The same 413 is a file over its bytes and an image over 40 megapixels (`ImageDimensions`);
-    // the BE sends a `message` only, and the pixel count is the one that names "megapixel".
-    if (/megapixel/i.test(error.message)) return describeFileRule({ rule: "PIXELS" });
+    if (isPixelRefusal(error)) return describeFileRule({ rule: "PIXELS" });
     return describeFileRule({ rule: "FILE_SIZE", maxFileSizeMb: template.maxFileSizeMb });
   }
   return null;
 }
 
+/**
+ * 429 `RATE_LIMITED` with the BE's `Retry-After`: how long to wait, in minutes (rounded up, at least
+ * one). Null for any other error, and for a 429 that names no wait.
+ */
+function describeWait(error: unknown): string | null {
+  if (!hasErrorCode(error, "RATE_LIMITED") || error.retryAfterSeconds === undefined) return null;
+  const minutes = Math.max(1, Math.ceil(error.retryAfterSeconds / 60));
+  return `Bạn đã thao tác quá nhiều lần; thử lại sau ${minutes} phút.`;
+}
+
 /** Customer-facing text for any failure reaching the design UI. */
 export function describeDesignError(error: unknown): string {
-  return describeApiError(error, MESSAGE_BY_CODE);
+  return describeWait(error) ?? describeApiError(error, MESSAGE_BY_CODE);
 }
 
 const PROJECT_MESSAGE_BY_CODE: Record<string, string> = {
@@ -115,9 +131,22 @@ const PROJECT_MESSAGE_BY_CODE: Record<string, string> = {
   NOT_FOUND: "Không tìm thấy dự án này.",
 };
 
+/**
+ * An upload to the project library refused by the BE: a 413 is an image over 40 megapixels or a file over the
+ * library's `maxMb`, each in its own words (not the generic "over the allowed size"); anything else as a project error.
+ */
+export function describeLibraryUploadError(error: unknown, maxMb: number): string {
+  if (error instanceof ApiError && error.status === 413 && error.code === "PAYLOAD_TOO_LARGE") {
+    return isPixelRefusal(error)
+      ? describeFileRule({ rule: "PIXELS" })
+      : `Tệp lớn hơn ${maxMb} MB.`;
+  }
+  return describeProjectError(error);
+}
+
 /** Customer-facing text for a failure on a project screen: the generic codes name the project. */
 export function describeProjectError(error: unknown): string {
-  return describeApiError(error, PROJECT_MESSAGE_BY_CODE);
+  return describeWait(error) ?? describeApiError(error, PROJECT_MESSAGE_BY_CODE);
 }
 
 /** A write sent a stale version (409): the editor stops and offers a reload. */
@@ -237,10 +266,19 @@ function namedDesignIdsOf(error: unknown): string[] | null {
 }
 
 /**
- * The designs a 404 to a round names as gone or out of the project, should the BE say which in
- * `details.designIds` (d47ed4ae sends no `details` with it: null then).
+ * The designs a 404 to a round names as gone or out of the project. A 404 answer is the batch's
+ * heaviest refusal: `details.designs` lists every refused design, the ones with another code
+ * (`DESIGN_NOT_DRAFT`, `CONFLICT`) included, so only those coded `NOT_FOUND` are gone. Without
+ * `designs`, `details.designIds` are the answer's own code, so all NOT_FOUND. Null when it names
+ * none (d47ed4ae sends no `details`).
  */
 export function goneDesignIdsOf(error: unknown): string[] | null {
   if (!(error instanceof ApiError) || error.status !== 404) return null;
-  return namedDesignIdsOf(error);
+  const parsed = batchDesignIdsDetailsSchema.safeParse(error.details);
+  if (!parsed.success) return null;
+  const { designs, designIds } = parsed.data;
+  const ids = designs
+    ? designs.filter((design) => design.errorCode === "NOT_FOUND").map((design) => design.designId)
+    : (designIds ?? []);
+  return ids.length > 0 ? ids : null;
 }

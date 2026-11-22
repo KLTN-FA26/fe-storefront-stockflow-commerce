@@ -10,7 +10,7 @@ import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { DesignStudio } from "../components/studio/design-studio";
 import type { StudioServices } from "../components/studio/studio-context";
-import { COLOR_DISCLAIMER } from "../components/studio/viewer-host";
+import { COLOR_DISCLAIMER } from "../components/color-disclaimer";
 import { designKeys } from "../queries";
 import { cupWithText, designBackend, submitElsewhere } from "./design-backend";
 import { TEST_FONTS } from "./fixtures";
@@ -120,7 +120,7 @@ describe("ViewerHost with WebGL", () => {
     expect(requestFullscreen).toHaveBeenCalledTimes(1);
     const shown = requestFullscreen.mock.contexts[0] as HTMLElement;
     expect(shown).toContainElement(model);
-    expect(shown).toContainElement(screen.getByText(COLOR_DISCLAIMER));
+    expect(shown).toContainElement(within(shown).getByText(COLOR_DISCLAIMER));
   });
 
   it("turns the camera to the face chosen in the Mặt in group", async () => {
@@ -156,7 +156,11 @@ describe("ViewerHost with WebGL", () => {
 
     expect(screen.getByText("Preview 3D không khả dụng")).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: /Mô hình 3D/ })).not.toBeInTheDocument();
-    expect(screen.getByText(COLOR_DISCLAIMER)).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("region", { name: "Xem trước sản phẩm" })).getByText(
+        COLOR_DISCLAIMER,
+      ),
+    ).toBeInTheDocument();
     expect(viewer.dispose).toHaveBeenCalled();
   });
 

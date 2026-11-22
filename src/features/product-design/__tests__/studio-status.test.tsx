@@ -155,9 +155,7 @@ describe("the studio per status", () => {
     const seen = await openStudio(MOCK_DESIGN_IDS.pending);
 
     expect(
-      screen.getByText(
-        `Đang chờ Quản lý kinh doanh duyệt — gửi lúc ${formatDateTime(pending.submittedAt!)}`,
-      ),
+      screen.getByText(`Đang chờ duyệt — gửi lúc ${formatDateTime(pending.submittedAt!)}`),
     ).toBeInTheDocument();
     expect(screen.getByText("Chờ duyệt")).toBeInTheDocument();
     expect(tools()).not.toBeInTheDocument();
@@ -257,7 +255,7 @@ describe("the studio per status", () => {
     await openStudio(MOCK_DESIGN_IDS.approved);
 
     expect(
-      screen.getByText(`Đã duyệt lúc ${formatDateTime(approved.approvedAt!)}`),
+      screen.getByText(new RegExp(`^Đã duyệt lúc ${formatDateTime(approved.approvedAt!)}`)),
     ).toBeInTheDocument();
     expect(screen.getByText("Đã duyệt")).toBeInTheDocument();
     const replace = vi.fn();
@@ -405,7 +403,7 @@ describe("a design that moves on elsewhere", () => {
     paintBody(seen.current!, "#FF0000");
 
     expect(
-      await screen.findByText(/^Đang chờ Quản lý kinh doanh duyệt — gửi lúc /, undefined, {
+      await screen.findByText(/^Đang chờ duyệt — gửi lúc /, undefined, {
         timeout: 5000,
       }),
     ).toBeInTheDocument();
@@ -478,7 +476,7 @@ describe("a design that moves on elsewhere", () => {
     await user.click(retry);
 
     expect(
-      await screen.findByText(/^Đang chờ Quản lý kinh doanh duyệt — gửi lúc /, undefined, {
+      await screen.findByText(/^Đang chờ duyệt — gửi lúc /, undefined, {
         timeout: 4000,
       }),
     ).toBeInTheDocument();
@@ -549,7 +547,7 @@ describe("a design that moves on elsewhere", () => {
     // Tab A submits while this tab (B) edits: B's edit is refused and kept in the browser.
     await submitElsewhere(store, id);
     paintBody(seen.current!, "#FF0000");
-    await screen.findByText(/^Đang chờ Quản lý kinh doanh duyệt — gửi lúc /, undefined, {
+    await screen.findByText(/^Đang chờ duyệt — gửi lúc /, undefined, {
       timeout: 5000,
     });
     await waitFor(() => expect(storedDraft(id)).toMatchObject({ document: RED }));

@@ -55,12 +55,13 @@ export {
   requestProjectQuote,
 } from "./api-quote-requests";
 export {
+  filesOfSnapshot,
   getArtifactDownloadUrl,
+  getDesignSnapshot,
   listDesignFiles,
   readDesignVersion,
   recordPreflightFailure,
   requestReview,
-  submitDesign,
   uploadDesignFile,
   uploadDesignFiles,
 } from "./api-submission";

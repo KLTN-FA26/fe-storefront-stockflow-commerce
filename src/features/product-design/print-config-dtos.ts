@@ -7,8 +7,8 @@ import { printAreaSchema, productModelSchema } from "./engine/template/schema";
 // What the BE sends of a print configuration (`origin/develop` 85e6036a): there is no
 // "print-config" object. A product's templates come from `GET /catalog/products/{slug}/customization`
 // (`CatalogCustomizationResponse`), and the template of one design from `GET /designs/{id}/template`
-// (the same template JSON, `active` added, no `hasCartonSpec`). `print-config-mappers.ts` builds the
-// domain `PrintConfig` from them.
+// (the same template JSON, `active` added, and, since BE-11, `designable` and `hasCartonSpec`).
+// `print-config-mappers.ts` builds the domain `PrintConfig` from them.
 
 /**
  * One template, as both reads send it. `maxColors` and `allowedFontCodes` are left out when null;

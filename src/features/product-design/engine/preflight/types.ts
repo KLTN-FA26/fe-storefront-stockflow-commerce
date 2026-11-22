@@ -61,6 +61,11 @@ export type PreflightInput = {
   assets: Readonly<Record<string, PreflightAsset>>;
   /** Load state per `fontCode`; a font with no entry has not been requested and is not an error. */
   fontStatus: Readonly<Record<string, "ready" | "loading" | "error">>;
+  /**
+   * The font codes the BE lists (`GET /design-fonts`, BE-18); absent or `null` until read (or when the read failed):
+   * then no font is refused for being unlisted.
+   */
+  servedFontCodes?: readonly string[] | null;
   variant: PreflightVariant;
 };
 

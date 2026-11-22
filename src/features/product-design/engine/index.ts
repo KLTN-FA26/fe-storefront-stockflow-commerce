@@ -148,7 +148,12 @@ export {
 export { renderSurface, surfacePx } from "./render/render-surface";
 
 // Uploaded images and SVG logos
-export { readImageDimensions, type ImageHeader, type ImageHeaderType } from "./assets/image-header";
+export {
+  MAX_IMAGE_PIXELS,
+  readImageDimensions,
+  type ImageHeader,
+  type ImageHeaderType,
+} from "./assets/image-header";
 export {
   prepareSvg,
   rasterizeSvg,

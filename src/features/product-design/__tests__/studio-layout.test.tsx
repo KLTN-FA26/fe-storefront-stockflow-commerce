@@ -17,7 +17,7 @@ vi.mock("@/providers/app-providers", async (importOriginal) => {
   return { ...actual, useIsDesignMock: () => true };
 });
 
-const PANEL = { name: "Giả lập Quản lý kinh doanh" } as const;
+const PANEL = { name: "Giả lập người duyệt thiết kế" } as const;
 const NOTICE = "Chức năng thiết kế chỉ hỗ trợ trên máy tính";
 
 beforeEach(() => signIn());

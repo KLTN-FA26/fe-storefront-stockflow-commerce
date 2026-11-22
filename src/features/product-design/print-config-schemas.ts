@@ -65,7 +65,7 @@ function warnIgnored(
 export const printConfigSchema = z
   .object({
     sku: code,
-    product: z.object({ slug: code, title: z.string().min(1), status: code }),
+    product: z.object({ slug: code.nullable(), title: z.string().min(1), status: code }),
     variantStatus: z.enum(["ACTIVE", "BLOCKED", "OBSOLETE"]),
     /** docs 12 BR-05, B25: needed before submitting. */
     hasCartonSpec: z.boolean(),

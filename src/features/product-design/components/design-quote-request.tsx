@@ -13,6 +13,7 @@ import { allowedActions } from "../lifecycle";
 import {
   currentQuoteRequest,
   openQuoteRequest,
+  CARD_QUOTE_REQUESTS,
   useDesignQuoteRequests,
 } from "../quote-request-queries";
 import { mayHaveQuoteRequest } from "../quote-request-rules";
@@ -31,7 +32,11 @@ import {
 
 /** The facts of a request: cartons, date, its status, the customer's SKU once approved. */
 export function QuoteRequestFacts({ request }: { request: DesignQuoteRequest }) {
-  const waitsForApproval = request.status === "OPEN" && request.designStatus !== "APPROVED";
+  const open = request.status === "OPEN";
+  // The request stays open when the reviewer (Production Coordinator) returns the design (BE B40): the design is a
+  // DRAFT again, with the reason it came back for.
+  const returned = open && (request.designStatus === "DRAFT" || !!request.returnReason);
+  const waitsForApproval = open && !returned && request.designStatus !== "APPROVED";
   return (
     <section
       aria-label="Yêu cầu báo giá"
@@ -55,6 +60,12 @@ export function QuoteRequestFacts({ request }: { request: DesignQuoteRequest }) 
           </>
         ) : null}
       </dl>
+      {returned ? (
+        <p className="text-ink-tertiary text-xs">
+          Thiết kế bị trả lại. Sửa theo lý do trả lại rồi gửi duyệt lại; Sale sẽ báo giá khi bản
+          được duyệt.
+        </p>
+      ) : null}
       {waitsForApproval ? (
         <p className="text-ink-tertiary text-xs">
           Sale đã nhận yêu cầu và sẽ báo giá khi bản được duyệt.
@@ -67,7 +78,7 @@ export function QuoteRequestFacts({ request }: { request: DesignQuoteRequest }) 
 /** The card's line: the request open now (else the latest), a placeholder while it is read. */
 export function DesignQuoteSummary({ design }: { design: Design }) {
   const enabled = mayHaveQuoteRequest(design);
-  const requests = useDesignQuoteRequests(design.id, enabled);
+  const requests = useDesignQuoteRequests(design.id, enabled, CARD_QUOTE_REQUESTS);
   if (!enabled) return null;
   if (requests.isPending) return <Skeleton className="h-16 w-full rounded-[var(--r-md)]" />;
   if (requests.isError) {
@@ -104,7 +115,7 @@ export function RequestQuoteButton({
 }) {
   const allowed = useHasPermission(PERM.designQuoteRequest);
   const offered = allowed && allowedActions(design).includes("requestQuote");
-  const requests = useDesignQuoteRequests(design.id, offered);
+  const requests = useDesignQuoteRequests(design.id, offered, CARD_QUOTE_REQUESTS);
   const [open, setOpen] = useState(false);
   if (!offered) return null;
   return (

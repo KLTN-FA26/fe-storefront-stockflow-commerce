@@ -3,7 +3,8 @@ import type { CustomizationTemplate } from "../../template/schema";
 import type { PreflightIssue, SurfaceScope } from "../types";
 
 // WHITE_ON_KRAFT and TOO_MANY_COLORS: docs 12 §3 (print colour count and limits), no numbered BR.
-// CMYK_CONVERSION: BR-07 (docs 12 §6, screen colours can differ from the printed result).
+// CMYK_CONVERSION: docs 12 §6 (screen colours can differ from the printed result).
+// The notice itself is sourced from `.claude/rules/mode-b-storefront.md` (Module 12).
 
 /** WCAG relative luminance above which a colour counts as white on kraft paper. */
 const NEAR_WHITE_LUMINANCE = 0.92;
@@ -93,11 +94,20 @@ export function surfaceColorIssues(scope: SurfaceScope): PreflightIssue[] {
       ),
     );
     const hasImage = scope.elements.some((el) => el.type === "image");
-    if (colors.size > maxColors || hasImage) {
+    // A note either way: the BE does not check `maxColors`. Vector colours over the limit say so;
+    // a photo is printed in a multi-colour process, so it is not counted against the limit.
+    if (colors.size > maxColors) {
       issues.push({
         ruleId: "TOO_MANY_COLORS",
         level: "note",
         message: `Thiết kế dùng nhiều màu hơn mức cho phép (${maxColors}).`,
+        surfaceCode: scope.code,
+      });
+    } else if (hasImage) {
+      issues.push({
+        ruleId: "TOO_MANY_COLORS",
+        level: "note",
+        message: "Ảnh được in theo quy trình nhiều màu.",
         surfaceCode: scope.code,
       });
     }

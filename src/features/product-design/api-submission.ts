@@ -25,7 +25,6 @@ import type {
   QuoteRequestInput,
   SubmissionFile,
   SubmissionFiles,
-  SubmitDesignInput,
 } from "./types";
 import { artifactUploadKey } from "./upload-key";
 
@@ -120,17 +119,6 @@ export async function requestReview(
 }
 
 /**
- * Sends a design the BE's way: its three files (each `POST …/artifacts`), the version read after the
- * last upload moved it, then the request for review (with the quote request, when one is asked).
- * The layout is already saved: the studio flushes
- * and verifies it before it draws (`documentChecksum` is that stored layout's).
- */
-export async function submitDesign(id: string, input: SubmitDesignInput): Promise<Design> {
-  await uploadDesignFiles(id, input.files, input.documentChecksum, input.runNonce);
-  return requestReview(id, await readDesignVersion(id), input.quoteRequest);
-}
-
-/**
  * POST /designs/{id}/preflight-failures — records a submit the browser's own preflight refused
  * (docs 12 §5.3 `PREFLIGHT_FAILED`); the design stays as it is. The BE keeps only each finding's
  * `rule` and where it is (a `message` would be ignored, so none is sent), 1 to 50 of them. Not for
@@ -142,11 +130,16 @@ export async function recordPreflightFailure(
 ): Promise<DesignEvent> {
   const { data } = await api.post<unknown>(designPath(id, "/preflight-failures"), {
     version: input.version,
-    issues: input.issues.slice(0, MAX_REPORTED_ISSUES).map((issue) => ({
-      rule: beRuleOf(issue.ruleId),
-      ...(issue.surfaceCode ? { surfaceCode: issue.surfaceCode } : {}),
-      ...(issue.elementId ? { elementId: issue.elementId } : {}),
-    })),
+    // Only the failing checks are findings of a refusal: a note the studio shows is not one, and
+    // sixty of them must not push the real failure out of the first 50 the BE takes (SD-7).
+    issues: input.issues
+      .filter((issue) => issue.level === "fail")
+      .slice(0, MAX_REPORTED_ISSUES)
+      .map((issue) => ({
+        rule: beRuleOf(issue.ruleId),
+        ...(issue.surfaceCode ? { surfaceCode: issue.surfaceCode } : {}),
+        ...(issue.elementId ? { elementId: issue.elementId } : {}),
+      })),
   });
   return toDesignEvent(designDecisionDtoSchema.parse(data));
 }
@@ -162,11 +155,37 @@ export async function listDesignFiles(
   signal?: AbortSignal,
   approved = false,
 ): Promise<DesignFile[]> {
-  if (approved) {
-    const { data } = await api.get<unknown>(designPath(id, "/snapshot"), withSignal(signal));
-    const frozen = designSnapshotDtoSchema.parse(data).artifacts;
-    if (frozen?.length) return toDesignFiles(frozen);
-  }
+  if (approved) return filesOfSnapshot(id, await getDesignSnapshot(id, signal), signal);
+  return listUploadedFiles(id, signal);
+}
+
+/** An approved design's frozen bundle: its files and the customer's own SKU (`null` if none came). */
+export type DesignSnapshot = { customerSku: string | null; files: DesignFile[] };
+
+/**
+ * GET /designs/{id}/snapshot: what approval froze, which never changes afterwards (the SKU is
+ * issued during the approval). Only the owner reads it, and only once the design is APPROVED
+ * (404 before). `customerSku` is left out by the BE when null.
+ */
+export async function getDesignSnapshot(id: string, signal?: AbortSignal): Promise<DesignSnapshot> {
+  const { data } = await api.get<unknown>(designPath(id, "/snapshot"), withSignal(signal));
+  const snapshot = designSnapshotDtoSchema.parse(data);
+  return {
+    customerSku: snapshot.customerSku?.trim() || null,
+    files: snapshot.artifacts?.length ? toDesignFiles(snapshot.artifacts) : [],
+  };
+}
+
+/** The files of an approved design: the snapshot's, or (an old snapshot without any) the uploads'. */
+export async function filesOfSnapshot(
+  id: string,
+  snapshot: DesignSnapshot,
+  signal?: AbortSignal,
+): Promise<DesignFile[]> {
+  return snapshot.files.length > 0 ? snapshot.files : listUploadedFiles(id, signal);
+}
+
+async function listUploadedFiles(id: string, signal?: AbortSignal): Promise<DesignFile[]> {
   const { data } = await api.get<unknown>(designPath(id, "/artifacts"), withSignal(signal));
   return toDesignFiles(z.array(designArtifactDtoSchema).parse(data));
 }

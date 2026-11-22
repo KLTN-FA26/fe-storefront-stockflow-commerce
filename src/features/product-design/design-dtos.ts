@@ -20,9 +20,11 @@ export const designDraftDtoSchema = z.object({
   status: designStatusSchema,
   /** The optimistic-lock token every write echoes back (BR-11). */
   version,
-  // ASSUMPTION: a customer's own design always has its product and SKU; the BE leaves them out only
-  // for a design staff started, which is never in a customer's list. A miss is a contract bug.
-  productSlug: z.string().min(1),
+  // The BE writes `productSlug` null (omitted) once the product is gone (`DesignWorkflowService`):
+  // one such design must not fail the parse of the whole page. A customer's own design always has a SKU.
+  productSlug: z.string().min(1).nullish(),
+  /** The product the design is drawn on: the chat context ("Chat với Sale" about its variant). */
+  productId: beId().nullish(),
   sku: z.string().min(1),
   /** The product's name, kept once it is no longer published; the SKU stands in for a missing variant name. */
   productName: z.string().nullish(),
@@ -31,9 +33,12 @@ export const designDraftDtoSchema = z.object({
   /** A signed link to the current customer preview, absent while there is none. */
   previewUrl: z.string().nullish(),
   projectId: beId().nullish(),
+  /** The customer's own SKU, on an APPROVED design only (BE-2); left out otherwise. */
+  customerSku: z.string().nullish(),
+  customerName: z.string().nullish(),
   parentSnapshotId: beId().nullish(),
   reviewRequestedAt: instant.nullish(),
-  /** The Sales Manager's last decision; `reviewNotes` is the reason when they returned it. */
+  /** The reviewer's (Production Coordinator's) last decision; `reviewNotes` is the reason when they returned it. */
   reviewedAt: instant.nullish(),
   reviewNotes: z.string().nullish(),
   updatedAt: instant.nullish(),

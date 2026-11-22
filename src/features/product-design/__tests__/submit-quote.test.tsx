@@ -167,7 +167,10 @@ describe("Gửi duyệt và yêu cầu báo giá", () => {
         SUBMISSION,
       ),
     ).toBeInTheDocument();
-    expect(within(dialog).getByRole("link", { name: "Mở chat" })).toHaveAttribute("href", "/chat");
+    expect(within(dialog).getByRole("link", { name: "Mở chat" })).toHaveAttribute(
+      "href",
+      `/chat/new?kind=DESIGN&id=${id}`,
+    );
     const [[, body]] = reviewPosts(post, id) as [[string, unknown]];
     expect(body).toEqual({
       version: expect.any(Number),

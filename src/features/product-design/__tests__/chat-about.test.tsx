@@ -16,8 +16,11 @@ describe("Chat với Sale on a design card", () => {
     );
   });
 
-  it("a plain draft Sales has never seen offers no chat", () => {
+  it("a plain draft opens the conversation about that design too (Q7: as the BE)", () => {
     renderWithProviders(<DesignCard design={design({ name: "Ly nháp", status: "DRAFT" })} />);
-    expect(screen.queryByRole("link", { name: /Chat với Sale/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Chat với Sale về Ly nháp" })).toHaveAttribute(
+      "href",
+      `/chat/new?kind=DESIGN&id=${ids.design}`,
+    );
   });
 });

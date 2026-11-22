@@ -12,15 +12,31 @@ import type { DesignQuoteRequest, ProjectQuoteRequest } from "./types";
 // card, the studio of an approved design, the project page.
 
 /**
- * A design's requests, newest first. `enabled` is false for a design that cannot have one
- * (`mayHaveQuoteRequest`): a page of drafts never asked about costs no request.
+ * What the cards of a list read with: every approved card asks once, and the ask and the send
+ * mutations re-read the key themselves, so a list that is shown again within 5 minutes (a tab
+ * switch, a focus) costs no request per card.
  */
-export function useDesignQuoteRequests(designId: string, enabled = true) {
+export const CARD_QUOTE_REQUESTS = {
+  staleTime: 5 * 60_000,
+  refetchOnWindowFocus: false as const,
+} as const;
+
+/**
+ * A design's requests, newest first. `enabled` is false for a design that cannot have one
+ * (`mayHaveQuoteRequest`): a page of drafts never asked about costs no request. `options` widens the
+ * freshness of the cache (`CARD_QUOTE_REQUESTS`); every observer of the key should pass the same.
+ */
+export function useDesignQuoteRequests(
+  designId: string,
+  enabled = true,
+  options: { staleTime: number; refetchOnWindowFocus: false } | undefined = undefined,
+) {
   return useQuery({
     queryKey: designKeys.quoteRequests(designId),
     queryFn: enabled ? ({ signal }) => listDesignQuoteRequests(designId, signal) : skipToken,
     retry: retryTransient,
     ...QUERY_TIMES.detail,
+    ...options,
   });
 }
 

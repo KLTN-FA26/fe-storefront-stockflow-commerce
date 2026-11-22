@@ -1,9 +1,11 @@
 import {
   keepPreviousData,
   queryOptions,
+  useInfiniteQuery,
   skipToken,
   useQueries,
   useQuery,
+  useQueryClient,
 } from "@tanstack/react-query";
 
 import { isDesignMockMode } from "@/lib/api/design-mock-flag";
@@ -11,12 +13,15 @@ import { ApiError } from "@/lib/api/error";
 import { QUERY_TIMES } from "@/lib/api/query-client";
 import { retryTransient } from "@/lib/api/retry";
 
+import { listDesignFontCodes } from "./api-fonts";
 import {
   getAssetDownloadUrl,
   getDesign,
   getDesignDocument,
   getDesignHistory,
+  filesOfSnapshot,
   getDesignPrintConfig,
+  getDesignSnapshot,
   getDraftCount,
   listDesignAssets,
   listDesignFiles,
@@ -37,6 +42,10 @@ export const designKeys = {
   all: ["designs"] as const,
   lists: () => [...designKeys.all, "list"] as const,
   list: (p: DesignListParams) => [...designKeys.lists(), p] as const,
+  /** The designs in no project, read page after page on demand (`useAddableDesigns`). */
+  addable: (size: number) => [...designKeys.lists(), "addable", size] as const,
+  /** The font codes the BE accepts (BE-18): a fixed list, read once. */
+  fonts: () => [...designKeys.all, "fonts"] as const,
   draftCount: () => [...designKeys.all, "draft-count"] as const,
   details: () => [...designKeys.all, "detail"] as const,
   detail: (id: string) => [...designKeys.details(), id] as const,
@@ -46,6 +55,11 @@ export const designKeys = {
   files: (id: string) => [...designKeys.detail(id), "files"] as const,
   /** Its quote requests (A-3), newest first: an ask or a submission with one re-reads them. */
   quoteRequests: (id: string) => [...designKeys.detail(id), "quote-requests"] as const,
+  /**
+   * The approved design's frozen bundle (its files): read once, it never changes. The customer SKU comes with the
+   * design itself (BE-2), not from here.
+   */
+  snapshot: (id: string) => [...designKeys.detail(id), "snapshot"] as const,
   /** The latest submission's files, or the approved snapshot's: two reads, two entries. */
   fileList: (id: string, approved: boolean) =>
     [...designKeys.files(id), approved ? "approved" : "latest"] as const,
@@ -73,6 +87,37 @@ export function useDesignList(params: DesignListParams) {
     placeholderData: keepPreviousData, // no flash between pages or tabs
     retry: retryTransient,
     ...QUERY_TIMES.list,
+  });
+}
+
+/**
+ * The customer's designs that are in no project, a page at a time, the next on request
+ * (`fetchNextPage`): the box that adds designs to a project. The BE filters (`inProject=false`,
+ * BE-15), so every page holds rows to offer and the page counts are right.
+ */
+export function useAddableDesigns(size: number) {
+  return useInfiniteQuery({
+    queryKey: designKeys.addable(size),
+    initialPageParam: 1,
+    queryFn: ({ pageParam, signal }) =>
+      listDesigns({ page: pageParam, size, inProject: false }, signal),
+    getNextPageParam: (last) => (last.hasNext ? last.page + 1 : undefined),
+    retry: retryTransient,
+    ...QUERY_TIMES.list,
+  });
+}
+
+/**
+ * The font codes the BE accepts in a print configuration (BE-18). The studio's font menu offers a
+ * font only when the BE lists it too; the answer is a fixed list, so it is read once.
+ */
+export function useDesignFontCodes() {
+  return useQuery({
+    queryKey: designKeys.fonts(),
+    queryFn: ({ signal }) => listDesignFontCodes(signal),
+    retry: retryTransient,
+    staleTime: Infinity,
+    gcTime: QUERY_TIMES.master.gcTime,
   });
 }
 
@@ -105,7 +150,7 @@ export function designQuery(id: string) {
   });
 }
 
-/** The one status that changes without the customer: the Sales Manager approves or returns it. */
+/** The one status that changes without the customer: the reviewer (Production Coordinator) approves or returns it. */
 const awaitsReview = (design: Design | undefined) => design?.status === "PENDING_REVIEW";
 
 /**
@@ -163,14 +208,29 @@ export function useDesignHistory(id: string) {
   });
 }
 
+/** An approved design's snapshot: frozen at approval, so it is never stale and never read twice. */
+const snapshotQuery = (id: string) =>
+  queryOptions({
+    queryKey: designKeys.snapshot(id),
+    queryFn: ({ signal }) => getDesignSnapshot(id, signal),
+    retry: retryTransient,
+    staleTime: Infinity,
+    gcTime: QUERY_TIMES.detail.gcTime,
+  });
+
 /**
  * The files of the latest submission (`[]` before one), or of the approved snapshot (`approved`):
  * each read under its own key, so one never answers for the other.
  */
 export function useDesignFiles(id: string, enabled: boolean, approved = false) {
+  const client = useQueryClient();
   return useQuery({
     queryKey: designKeys.fileList(id, approved),
-    queryFn: ({ signal }) => listDesignFiles(id, signal, approved),
+    // The approved list is cut from the shared snapshot query: the studio reads `/snapshot` once.
+    queryFn: approved
+      ? async ({ signal }) =>
+          filesOfSnapshot(id, await client.ensureQueryData(snapshotQuery(id)), signal)
+      : ({ signal }) => listDesignFiles(id, signal),
     enabled,
     retry: retryTransient,
     ...QUERY_TIMES.detail,
@@ -235,7 +295,7 @@ export function designPrintConfigQuery(design: Pick<Design, "id" | "product" | "
 /** The print configuration a design is drawn on, once the design is read; `null` when it has none. */
 export function useDesignPrintConfig(design: Design | undefined) {
   const query = designPrintConfigQuery(
-    design ?? { id: "", product: { slug: "", title: "" }, variant: { sku: "", label: "" } },
+    design ?? { id: "", product: { slug: null, title: "" }, variant: { sku: "", label: "" } },
   );
   return useQuery({ ...query, enabled: design !== undefined });
 }

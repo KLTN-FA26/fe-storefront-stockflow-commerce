@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import { customizationTemplateSchema } from "@/features/product-design/engine/template/schema";
 
 import { seedMockCatalog } from "./catalog";
+import { designTemplateOf } from "./design-be-contract";
 import {
   MOCK_BLOCKED_SKU,
   MOCK_PRINT_CONFIGS,
@@ -17,6 +19,18 @@ const productOf = (sku: string) => CATALOG.find((p) => p.variants.some((v) => v.
 const customizableSkus = CATALOG.filter((p) => p.kind === "CUSTOMIZABLE").flatMap((p) =>
   p.variants.map((v) => v.sku),
 );
+
+describe("designTemplateOf (GET /designs/{id}/template)", () => {
+  // The mock answers the BE envelope `{ success, data }`: read it through a schema, not a cast.
+  const envelope = z.object({ data: z.object({ designable: z.boolean() }) });
+  const designable = (sku: string) =>
+    envelope.parse(designTemplateOf(printConfigFor(productOf(sku).slug, sku)).data).data.designable;
+
+  it("says designable false for the blocked variant and true for an active one", () => {
+    expect(designable(MOCK_BLOCKED_SKU)).toBe(false);
+    expect(designable(MOCK_SKU_WITHOUT_CARTON_SPEC)).toBe(true);
+  });
+});
 
 describe("MOCK_PRINT_CONFIGS", () => {
   it("covers every CUSTOMIZABLE SKU of the mock catalogue but the one listed without a configuration", () => {

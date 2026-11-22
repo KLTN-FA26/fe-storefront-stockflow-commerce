@@ -2,7 +2,8 @@ import type { DesignElement } from "../../document/schema";
 import type { PreflightInput, PreflightIssue, SurfaceScope } from "../types";
 
 // BR-DSG-001 (BE): fonts must be loadable. BR-06 (docs 12 §6): uploaded images pass a
-// basic format and size check. EMPTY_DESIGN has BR-05 (at least one element); TOO_THIN is a note (spec §7).
+// basic format and size check. EMPTY_DESIGN: no background and no visible element (BE
+// LayoutPreflight, SD-8); TOO_THIN is a note (spec §7).
 
 /** A thinner line fills in or breaks up when printed. */
 const MIN_LINE_MM = 0.25;
@@ -40,7 +41,24 @@ const at = (scope: SurfaceScope, el: DesignElement) => ({
 function fontIssues(scope: SurfaceScope, el: DesignElement): PreflightIssue[] {
   if (el.type !== "text") return [];
 
-  // Only a font that did not load fails: the allow-list is later scope (docs 01 §4.10 step 6).
+  // BE `LayoutPreflight`: a code outside a non-empty allow-list fails (null or empty = any font). Once the BE's own
+  // list is read (BE-18), a font it does not list fails the same way: the menu never offered it, but a text placed
+  // before the list arrived may still use it (C9).
+  const allowed = scope.input.template.allowedFontCodes;
+  const served = scope.input.servedFontCodes;
+  if (
+    (allowed && allowed.length > 0 && !allowed.includes(el.fontCode)) ||
+    (served && !served.includes(el.fontCode))
+  ) {
+    return [
+      {
+        ruleId: "FONT_NOT_ALLOWED",
+        level: "fail",
+        message: "Phông chữ này không có trong danh sách của mẫu in, hãy đổi phông khác.",
+        ...at(scope, el),
+      },
+    ];
+  }
   if (scope.input.fontStatus[el.fontCode] !== "error") return [];
   return [
     {
@@ -110,15 +128,17 @@ export function elementContentIssues(scope: SurfaceScope, el: DesignElement): Pr
 }
 
 /**
- * `EMPTY_DESIGN`: no visible image, text or drawing on any surface; a background (colour or
- * pattern) alone is not a design. A design on one face of a bag is not empty, so this is a
- * document-level issue with no surface.
+ * `EMPTY_DESIGN`: no surface has a background (colour or pattern) or a visible image, text or
+ * drawing — BE `LayoutPreflight` ("no surface has a background or a visible element"; PO
+ * 2026-11-22, SD-8: as the BE, a background alone is printed, so it is a design). A design on one
+ * face of a bag is not empty, so this is a document-level issue with no surface.
  */
 export function emptyDesignIssues(input: PreflightInput): PreflightIssue[] {
-  // docs 12 §3 (BR-05): a design has at least one element — an image, a text or a drawing.
-  const hasContent = input.surfaces.order.some(
-    (code) => input.document.surfaces[code]?.elements.some((el) => !el.hidden) ?? false,
-  );
+  const hasContent = input.surfaces.order.some((code) => {
+    const surface = input.document.surfaces[code];
+    if (!surface) return false;
+    return surface.background.kind !== "none" || surface.elements.some((el) => !el.hidden);
+  });
   if (hasContent) return [];
   return [{ ruleId: "EMPTY_DESIGN", level: "fail", message: "Thiết kế chưa có nội dung." }];
 }

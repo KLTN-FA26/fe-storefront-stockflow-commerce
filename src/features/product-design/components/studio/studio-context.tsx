@@ -106,6 +106,11 @@ export type StudioServices = {
   surfaces: SurfaceSet;
   sizer: ElementSizer;
   fonts: FontRegistry;
+  /**
+   * The font codes the BE lists (`GET /design-fonts`, BE-18), `null` until read and when the read
+   * failed: the menu then offers the registry's fonts (see `allowedFonts`).
+   */
+  servedFontCodes: readonly string[] | null;
   measure: TextMeasurer;
   /** Decoded images; the editor view and the 3D textures use the `proxy` variant. */
   images: ImageCache;

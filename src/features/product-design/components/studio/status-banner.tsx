@@ -14,9 +14,25 @@ import { SubmittedFiles } from "./submitted-files";
 const timeOf = (iso: string | null | undefined) =>
   iso && !Number.isNaN(Date.parse(iso)) ? formatDateTime(iso) : "—";
 
+/** "Đã duyệt lúc …", with the design's own SKU the design itself carries (BE-2). */
+function ApprovedLine({ design }: { design: Design }) {
+  const sku = design.customerSku;
+  return (
+    <>
+      {`Đã duyệt lúc ${timeOf(design.approvedAt)}`}
+      {sku ? (
+        <>
+          {" · SKU riêng "}
+          <span className="font-mono text-xs break-all">{sku}</span>
+        </>
+      ) : null}
+    </>
+  );
+}
+
 /**
  * Where the design stands, under the studio's header (spec §6.4): why a returned draft came back
- * and when; that a submitted design waits for the Sales Manager since it was sent; when an
+ * and when; that a submitted design waits for the reviewer (Production Coordinator) since it was sent; when an
  * approved one was approved. A sent design also offers the files it was sent with, an approved
  * one "Yêu cầu báo giá" too (docs 12 §4.8.23). Nothing for a plain draft.
  */
@@ -28,7 +44,7 @@ export function StatusBanner({ design }: { design: Design }) {
   if (design.status === "PENDING_REVIEW") {
     return (
       <ReadOnlyBanner action={<SubmittedFiles designId={design.id} />}>
-        {`Đang chờ Quản lý kinh doanh duyệt — gửi lúc ${timeOf(design.submittedAt)}`}
+        {`Đang chờ duyệt — gửi lúc ${timeOf(design.submittedAt)}`}
       </ReadOnlyBanner>
     );
   }
@@ -43,7 +59,7 @@ export function StatusBanner({ design }: { design: Design }) {
           </div>
         }
       >
-        {`Đã duyệt lúc ${timeOf(design.approvedAt)}`}
+        <ApprovedLine design={design} />
       </ReadOnlyBanner>
     );
   }

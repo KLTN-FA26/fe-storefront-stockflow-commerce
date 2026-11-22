@@ -290,7 +290,25 @@ describe("openReviewRound", () => {
     expect(
       refusedDesignIdsOf(withDetails(409, "DESIGN_NOT_DRAFT", { designIds: [a], designs })),
     ).toEqual([a, b]);
-    expect(goneDesignIdsOf(withDetails(404, "NOT_FOUND", { designs }))).toEqual([a, b]);
+    // A 404 lists every refused design: only the ones coded NOT_FOUND are gone (BE `refusal()`).
+    expect(goneDesignIdsOf(withDetails(404, "NOT_FOUND", { designs }))).toBeNull();
+    expect(
+      goneDesignIdsOf(
+        withDetails(404, "NOT_FOUND", {
+          designs: [{ designId: a, errorCode: "NOT_FOUND" }, ...designs],
+        }),
+      ),
+    ).toEqual([a]);
+    expect(
+      goneDesignIdsOf(
+        withDetails(404, "NOT_FOUND", {
+          designs: [
+            { designId: a, errorCode: "DESIGN_NOT_DRAFT" },
+            { designId: b, errorCode: "NOT_FOUND" },
+          ],
+        }),
+      ),
+    ).toEqual([b]);
     expect(
       refusedDesignIdsOf(withDetails(409, "CONFLICT", { designs: [{ designId: a }] })),
     ).toBeNull();

@@ -21,7 +21,7 @@
  *    `design-store-library.ts`) and send sets of drafts for review, all or nothing (§4.10, BR-19;
  *    `design-store-rounds.ts`).
  * `simulateApprove`, `simulateReturn`, `simulateApproveRound`, `simulateFailNextApproval`,
- * `simulateRounds` and `reset` stand in for the Sales Manager (spec §6.5; part E spec §4).
+ * `simulateRounds` and `reset` stand in for the reviewer (Production Coordinator) (spec §6.5; part E spec §4).
  *
  * This file composes the store from its parts: the designs (`design-store-designs.ts`), their
  * document record (`design-store-documents.ts`), the list (`design-store-list.ts`), the reviewer

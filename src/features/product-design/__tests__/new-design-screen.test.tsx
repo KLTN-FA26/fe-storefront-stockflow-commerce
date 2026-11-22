@@ -31,6 +31,7 @@ vi.mock("@/providers/app-providers", () => ({
 beforeEach(() => {
   env.replace.mockReset();
   env.search = new URLSearchParams();
+  window.sessionStorage.clear();
   signIn();
 });
 afterEach(() => {
@@ -45,6 +46,10 @@ const NAME = "Ly giấy 2 lớp 12oz · CUP-PAPER-12OZ-WHT";
 // the product's customization (F-12).
 const CUP_PRODUCT_ID = seedMockCatalog().find((product) => product.slug === CUP)!.productId;
 const CUP_TEMPLATE = printConfigFor(CUP, CUP_SKU)!.template.code;
+const KEYED = { headers: { "Idempotency-Key": expect.any(String) } };
+/** The Idempotency-Key of the n-th create the backend spy saw. */
+const keyOf = (post: { mock: { calls: unknown[][] } }, n: number) =>
+  (post.mock.calls[n]?.[2] as { headers: Record<string, string> }).headers["Idempotency-Key"];
 
 describe("NewDesignScreen", () => {
   it("creates the design named after the product and variant, and opens its studio", async () => {
@@ -56,12 +61,16 @@ describe("NewDesignScreen", () => {
       WAIT,
     );
     expect(post).toHaveBeenCalledTimes(1);
-    expect(post).toHaveBeenCalledWith("/designs/mine", {
-      productId: CUP_PRODUCT_ID,
-      sku: CUP_SKU,
-      templateCode: CUP_TEMPLATE,
-      name: NAME,
-    });
+    expect(post).toHaveBeenCalledWith(
+      "/designs/mine",
+      {
+        productId: CUP_PRODUCT_ID,
+        sku: CUP_SKU,
+        templateCode: CUP_TEMPLATE,
+        name: NAME,
+      },
+      KEYED,
+    );
     expect(env.replace).toHaveBeenCalledTimes(1);
   });
 
@@ -72,13 +81,17 @@ describe("NewDesignScreen", () => {
     renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
 
     await waitFor(() => expect(env.replace).toHaveBeenCalledTimes(1), WAIT);
-    expect(post).toHaveBeenCalledWith("/designs/mine", {
-      productId: CUP_PRODUCT_ID,
-      sku: CUP_SKU,
-      templateCode: CUP_TEMPLATE,
-      name: NAME,
-      projectId: project.id,
-    });
+    expect(post).toHaveBeenCalledWith(
+      "/designs/mine",
+      {
+        productId: CUP_PRODUCT_ID,
+        sku: CUP_SKU,
+        templateCode: CUP_TEMPLATE,
+        name: NAME,
+        projectId: project.id,
+      },
+      KEYED,
+    );
     const opened = env.replace.mock.calls[0]?.[0] as string;
     const created = await getDesign(opened.replace("/design/", ""));
     expect(created.project?.id).toBe(project.id);
@@ -220,6 +233,91 @@ describe("NewDesignScreen", () => {
     expect(client.getQueryState(designKeys.draftCount())?.status).toBe("error");
     expect(screen.getByText("Bạn đã có 50 bản nháp")).toBeInTheDocument();
     expect(screen.queryByText("Không bắt đầu được thiết kế")).not.toBeInTheDocument();
+  });
+
+  it("reloading the launcher before it redirects reuses the Idempotency-Key", async () => {
+    const { post } = await designBackend();
+    // The first load's create never answers (the page is reloaded meanwhile).
+    post.mockImplementationOnce(() => new Promise(() => undefined));
+    const first = renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1), WAIT);
+    first.unmount();
+
+    renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2), WAIT);
+
+    expect(keyOf(post, 1)).toBe(keyOf(post, 0));
+  });
+
+  it("a new visit after success uses a new key", async () => {
+    const { post } = await designBackend();
+    const first = renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
+    await waitFor(() => expect(env.replace).toHaveBeenCalledTimes(1), WAIT);
+    first.unmount();
+
+    renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2), WAIT);
+
+    expect(keyOf(post, 1)).not.toBe(keyOf(post, 0));
+  });
+
+  it("tries again with the same key while the BE still runs the first request (409)", async () => {
+    const { post } = await designBackend();
+    const busy = new ApiError(
+      409,
+      "IDEMPOTENT_REQUEST_IN_PROGRESS",
+      "busy",
+      undefined,
+      undefined,
+      undefined,
+      0,
+    );
+    post.mockRejectedValueOnce(busy);
+    renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
+
+    await waitFor(() => expect(env.replace).toHaveBeenCalledTimes(1), WAIT);
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(keyOf(post, 1)).toBe(keyOf(post, 0));
+    expect(screen.queryByText("Không bắt đầu được thiết kế")).not.toBeInTheDocument();
+  });
+
+  it("leaving the launcher while it waits to try again sends no second create (C10)", async () => {
+    const { post } = await designBackend();
+    const busy = new ApiError(
+      409,
+      "IDEMPOTENT_REQUEST_IN_PROGRESS",
+      "busy",
+      undefined,
+      undefined,
+      undefined,
+      1,
+    );
+    post.mockRejectedValueOnce(busy);
+    const view = renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1), WAIT);
+    const keyBefore = keyOf(post, 0);
+    view.unmount();
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(post).toHaveBeenCalledTimes(1);
+    // The first request may still make the draft on the BE: the key stays, so coming back replays it.
+    const kept = Object.keys(window.sessionStorage)
+      .filter((k) => k.startsWith("sf.design.create-key:"))
+      .map((k) => window.sessionStorage.getItem(k));
+    expect(kept).toContain(keyBefore);
+    renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2), WAIT);
+    expect(keyOf(post, 1)).toBe(keyBefore);
+  });
+
+  it("a refusal the BE stores for the key is not retried with that key", async () => {
+    const { post } = await designBackend();
+    post.mockRejectedValueOnce(new ApiError(422, "IDEMPOTENCY_KEY_REUSED", "x"));
+    renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /Thử lại/ }, WAIT));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2), WAIT);
+
+    expect(keyOf(post, 1)).not.toBe(keyOf(post, 0));
   });
 
   it("does not open the studio once the customer has left the launcher (L12)", async () => {

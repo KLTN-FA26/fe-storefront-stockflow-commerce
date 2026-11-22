@@ -36,20 +36,22 @@ export function useCloneTargets(
   design: Design,
   skusOf: ProductSkusLoader | undefined,
 ): CloneTargets {
-  const slug = design.product.slug;
+  const productSlug = design.product.slug;
+  const slug = productSlug ?? "";
   const skus = useQuery({
     queryKey: designKeys.variantSkus(slug),
     queryFn: ({ signal }) => skusOf!(slug, signal),
-    enabled: skusOf !== undefined,
+    enabled: skusOf !== undefined && productSlug !== null,
     retry: retryTransient,
     ...QUERY_TIMES.detail,
   });
   const others = (skus.data ?? []).filter((sku) => sku !== design.variant.sku);
   const configs = usePrintConfigs(slug, others);
-  const own = usePrintConfig(slug, design.variant.sku, true);
+  const own = usePrintConfig(slug, design.variant.sku, productSlug !== null);
   const record = useDesignDocument(design.id, true);
 
-  if (skusOf === undefined) return { status: "unavailable" };
+  // A product that is gone has no catalogue to list other sizes from.
+  if (skusOf === undefined || productSlug === null) return { status: "unavailable" };
   const failing = [skus, ...configs, own, record].filter((query) => query.isError);
   if (failing.length > 0) {
     return {

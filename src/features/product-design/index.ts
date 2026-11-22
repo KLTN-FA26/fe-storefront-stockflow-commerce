@@ -38,7 +38,6 @@ export {
   recordPreflightFailure,
   renameDesign,
   saveDesignDocument,
-  submitDesign,
   uploadDesignAsset,
 } from "./api";
 export { DesignEntry } from "./components/design-entry";
@@ -193,5 +192,4 @@ export type {
   SaveDocumentInput,
   SubmissionFile,
   SubmissionFiles,
-  SubmitDesignInput,
 } from "./types";

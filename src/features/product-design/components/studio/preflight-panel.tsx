@@ -8,6 +8,7 @@ import { cn } from "@/lib/cn";
 
 import type { PreflightLevel, PreflightReport, PrintAreaCode } from "../../engine";
 import type { ReportedPreflightIssue } from "../../types";
+import { AskSales, needsSale } from "./ask-sales";
 import { usePreflightReport } from "./preflight-context";
 import { useStudio } from "./studio-context";
 
@@ -137,6 +138,7 @@ export function FailedIssues({
       {groups.map(({ code, issues: own }) => (
         <IssueGroup key={code} title={nameOf(code)} issues={own} onLocate={onLocate} />
       ))}
+      {needsSale(fails) ? <AskSales /> : null}
     </>
   );
 }
@@ -164,7 +166,7 @@ export function PreflightPanel({ heading = true }: { heading?: boolean } = {}) {
       </div>
       {report.issues.length === 0 ? (
         <p className="text-ink-secondary text-sm">
-          Không phát hiện vấn đề nào. Quản lý kinh doanh vẫn duyệt lại trước khi in.
+          Không phát hiện vấn đề nào. Thiết kế vẫn được duyệt lại trước khi in.
         </p>
       ) : null}
       <FailedIssues issues={report.issues} onLocate={locate} />

@@ -59,7 +59,7 @@ export const designDraftDto = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-/** The BE's draft returned by the Sales Manager: `reviewNotes` and `reviewedAt` are set. */
+/** The BE's draft returned by the reviewer (Production Coordinator): `reviewNotes` and `reviewedAt` are set. */
 export const returnedDraftDto = (overrides: Record<string, unknown> = {}) =>
   designDraftDto({
     reviewNotes: "Logo bị mờ, hãy dùng ảnh rõ hơn",

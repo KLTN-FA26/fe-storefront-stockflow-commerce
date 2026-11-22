@@ -467,6 +467,20 @@ describe("design mock store", () => {
     ).toEqual([409, "INVALID_STATE"]);
   });
 
+  it("submit takes a design with only a background colour: it is printed (SD-8, BE LayoutPreflight)", async () => {
+    const store = await makeStore();
+    const cup = await createCup(store);
+    const blank = data<DesignDocumentRecordDto>(await store.getDocument(cup.id));
+    const backgroundOnly = {
+      ...blank.document,
+      surfaces: { BODY: { background: { kind: "color", color: "#336699" }, elements: [] } },
+    };
+    await store.putDocument(cup.id, { version: blank.version, document: backgroundOnly });
+    const answer = await submitPassing(store, cup.id);
+    expect(answer.status).toBeLessThan(400);
+    expect((await design(store, cup.id)).status).toBe("PENDING_REVIEW");
+  });
+
   it("submit re-checks on the server: empty document → EMPTY_DESIGN, a missing asset → ASSET_INVALID, a variant no longer ACTIVE → VARIANT_UNAVAILABLE", async () => {
     let blocked = false;
     const store = await makeStore({
@@ -480,19 +494,6 @@ describe("design mock store", () => {
     const refusedEmpty = await submitPassing(store, empty.id);
     expect(refusal(refusedEmpty)).toEqual([422, "PREFLIGHT_FAILED"]);
     expect(errorOf(refusedEmpty).details?.issues).toEqual([
-      expect.objectContaining({ ruleId: "EMPTY_DESIGN", level: "fail" }),
-    ]);
-
-    // docs 12 §3: a background colour alone is not a design either.
-    const blank = data<DesignDocumentRecordDto>(await store.getDocument(empty.id));
-    const backgroundOnly = {
-      ...blank.document,
-      surfaces: { BODY: { background: { kind: "color", color: "#336699" }, elements: [] } },
-    };
-    await store.putDocument(empty.id, { version: blank.version, document: backgroundOnly });
-    const refusedBackground = await submitPassing(store, empty.id);
-    expect(refusal(refusedBackground)).toEqual([422, "PREFLIGHT_FAILED"]);
-    expect(errorOf(refusedBackground).details?.issues).toEqual([
       expect.objectContaining({ ruleId: "EMPTY_DESIGN", level: "fail" }),
     ]);
 
@@ -522,7 +523,7 @@ describe("design mock store", () => {
     // Every refusal is on the record, and the design stays a DRAFT.
     expect(
       data<DesignEventDto[]>(await store.history(empty.id)).map((event) => event.type),
-    ).toEqual(["CREATED", "PREFLIGHT_FAILED", "PREFLIGHT_FAILED", "PREFLIGHT_FAILED"]);
+    ).toEqual(["CREATED", "PREFLIGHT_FAILED", "PREFLIGHT_FAILED"]);
     expect((await design(store, MOCK_DESIGN_IDS.draft)).status).toBe("DRAFT");
   });
 

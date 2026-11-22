@@ -2,7 +2,9 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { api } from "@/lib/api/client";
 import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/design-seed";
+import { settle } from "@/test/fake-backend";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { addDesignToProject, archiveProject, createProject } from "../api";
@@ -170,7 +172,7 @@ describe("ProjectScreen", () => {
     expect(await screen.findByText("2/20 bản", undefined, WAIT)).toBeInTheDocument();
   });
 
-  it("reads on past a first page with nothing to offer before saying there is none", async () => {
+  it("asks the BE for designs in no project (BE-15) and shows what it answers, with no page counter", async () => {
     const full = await createProject({ name: "Đầy" });
     for (let i = 0; i < 20; i += 1) {
       await addDesignToProject(
@@ -180,13 +182,57 @@ describe("ProjectScreen", () => {
     }
     const project = await createProject({ name: "Trống" });
     const n = await names();
+    const get = vi.spyOn(api, "get");
     show(project.id);
 
     await userEvent.click(await screen.findByRole("button", { name: "Thêm bản sẵn có" }, WAIT));
     const dialog = await screen.findByRole("dialog", { name: "Thêm bản sẵn có" });
-    // Page 1 holds the 20 designs of the other project; the free ones are on page 2.
+    // The 20 designs of the other project are filtered out by the BE: page 1 already has the free one.
     expect(await within(dialog).findByText(n.approved, undefined, WAIT)).toBeInTheDocument();
     expect(within(dialog).queryByText("Không có bản nào để thêm")).toBeNull();
+    const asked = get.mock.calls.filter(([url]) => url === "/designs");
+    expect(asked).toHaveLength(1);
+    expect(asked[0]![1]).toMatchObject({ params: { inProject: false, page: 0 } });
+    expect(within(dialog).queryByRole("button", { name: "Trang sau" })).toBeNull();
+  });
+
+  it("reads another page only on 'Xem thêm', one request each, nothing hidden between them", async () => {
+    const { store } = backend;
+    const taken = await createProject({ name: "Đã có chỗ" });
+    const target = await createProject({ name: "Trống" });
+    const n = await names();
+    for (let i = 0; i < 20; i += 1) {
+      settle(
+        await store.create({ ...STUDIO_PRODUCTS.cup, name: `Đã có ${i}`, projectId: taken.id }),
+      );
+    }
+    for (let i = 0; i < 20; i += 1) {
+      settle(await store.create({ ...STUDIO_PRODUCTS.cup, name: `Tự do ${i}` }));
+    }
+    const get = vi.spyOn(api, "get");
+    show(target.id);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Thêm bản sẵn có" }, WAIT));
+    const dialog = await screen.findByRole("dialog", { name: "Thêm bản sẵn có" });
+    expect(
+      await within(dialog).findAllByRole("button", { name: /^Thêm Tự do/ }, WAIT),
+    ).toHaveLength(20);
+    expect(within(dialog).queryByText(n.approved)).toBeNull(); // on the next page
+    expect(within(dialog).queryByText(/^Đã có /)).toBeNull(); // never offered
+
+    await userEvent.click(within(dialog).getByRole("button", { name: "Xem thêm" }));
+    expect(await within(dialog).findByText(n.approved, undefined, WAIT)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(dialog).queryByRole("button", { name: "Xem thêm" })).toBeNull(),
+    );
+    expect(within(dialog).getAllByRole("button", { name: /^Thêm Tự do/ })).toHaveLength(20);
+    const pages = get.mock.calls
+      .filter(([url]) => url === "/designs")
+      .map(([, config]) => (config as { params: { page: number; inProject: boolean } }).params);
+    expect(pages).toEqual([
+      { page: 0, size: 20, inProject: false },
+      { page: 1, size: 20, inProject: false },
+    ]);
   });
 
   it("starts a new design in the project: the new-design flow carries the project id", async () => {
@@ -510,7 +556,11 @@ describe("MockReviewPanel on the project page", () => {
       />,
     );
     await screen.findByText("Đã chọn 0 bản nháp", undefined, WAIT);
-    const trigger = await screen.findByRole("button", { name: "Giả lập Quản lý kinh doanh" }, WAIT);
+    const trigger = await screen.findByRole(
+      "button",
+      { name: "Giả lập người duyệt thiết kế" },
+      WAIT,
+    );
     expect(trigger.parentElement).toHaveClass("top-[calc(var(--header-h)+0.75rem)]");
   });
   it("Xoá dữ liệu mock empties the page it stands on: the project is gone, not kept cached", async () => {
@@ -521,7 +571,7 @@ describe("MockReviewPanel on the project page", () => {
     await screen.findByRole("heading", { name: "Bộ sắp mất" }, WAIT);
 
     await user.click(
-      await screen.findByRole("button", { name: "Giả lập Quản lý kinh doanh" }, WAIT),
+      await screen.findByRole("button", { name: "Giả lập người duyệt thiết kế" }, WAIT),
     );
     await user.click(await screen.findByRole("button", { name: "Xoá dữ liệu mock" }));
     await user.click(await screen.findByRole("button", { name: "Xoá hết" }));

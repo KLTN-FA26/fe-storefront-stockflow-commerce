@@ -94,6 +94,12 @@ export function DesignCard({
           <DesignStatusBadge status={status} returned={isReturned(design)} />
           <h2 className="text-ink-primary line-clamp-2 text-base font-semibold">{title}</h2>
           <p className="text-ink-tertiary text-xs break-words">{subtitle}</p>
+          {design.customerSku ? (
+            <p className="text-ink-secondary text-xs break-all">
+              {"SKU riêng "}
+              <span className="font-mono">{design.customerSku}</span>
+            </p>
+          ) : null}
           {design.project && !hideProject ? (
             <p className="bg-bg-muted text-ink-secondary inline-block max-w-full truncate rounded-full px-3 py-1 text-xs font-medium">
               {`Dự án: ${design.project.name}`}
@@ -134,10 +140,9 @@ export function DesignCard({
             </Button>
           ) : null}
           {actions.includes("requestQuote") ? <RequestQuoteButton design={design} /> : null}
-          {/* A design Sales has seen (sent for review, approved or returned) can be talked over in chat. */}
-          {design.status !== "DRAFT" || isReturned(design) ? (
-            <ChatAboutButton kind="DESIGN" id={design.id} name={title} />
-          ) : null}
+          {/* Any design can be talked over in chat (PO 2026-11-22, Q7: as the BE — Sale sees its
+              name and status, never a draft's content). */}
+          <ChatAboutButton kind="DESIGN" id={design.id} name={title} />
           {onClone ? (
             <Button
               type="button"

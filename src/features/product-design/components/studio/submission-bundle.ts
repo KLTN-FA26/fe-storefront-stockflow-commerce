@@ -20,6 +20,7 @@ import {
   type SurfaceSet,
 } from "../../engine";
 import { bagSheetPage } from "./bag-sheet-page";
+import { ExportError } from "./export-canvas";
 import type { ExportRenderer } from "./export-renderer";
 import { loadPrintProfiles } from "./print-profiles";
 
@@ -29,6 +30,24 @@ export type SubmissionBundle = Record<
   { name: string; type: string; bytes: Uint8Array }
 >;
 export type BundleStep = "preview" | "print" | "spec";
+
+/** The BE takes a design file up to 50 MiB (`FileCategory.DESIGN_RENDER`, multipart 50 MB, SD-14). */
+export const MAX_FILE_BYTES = 50 * 1024 * 1024;
+
+const ALL_FILES: readonly BundleRole[] = ["CUSTOMER_PREVIEW", "PRINT_READY", "TECHNICAL_SPEC"];
+
+const TOO_LARGE = "File in lớn hơn 50 MB, hãy bớt ảnh hoặc giảm độ phân giải.";
+
+/** A file the BE would refuse with 413 is refused here, before any upload. */
+function assertWithinLimit(
+  bundle: SubmissionBundle,
+  uploaded: readonly BundleRole[],
+  limit: number,
+) {
+  if (uploaded.some((file) => bundle[file].bytes.length > limit)) {
+    throw new ExportError(TOO_LARGE);
+  }
+}
 
 /** Spec §9: the preview is 1600 × 1600; the print raster is `printDpi(minDpi)` = `max(minDpi, 300)`. */
 const PREVIEW_PX = 1600;
@@ -61,6 +80,10 @@ export async function buildSubmissionBundle(input: {
   onStep?: (step: BundleStep, fraction: number) => void;
   /** "Hủy": ends the preview's wait for the 3D model at once (rejects with the signal's reason). */
   signal?: AbortSignal;
+  /** The files that will be uploaded (default all): only these are held to the size limit. */
+  uploading?: readonly BundleRole[];
+  /** Test seam: the largest file the BE takes (`MAX_FILE_BYTES`). */
+  maxFileBytes?: number;
 }): Promise<SubmissionBundle> {
   const { name, document, template, surfaces, report, checksum, renderer, onStep, signal } = input;
 
@@ -177,9 +200,11 @@ export async function buildSubmissionBundle(input: {
   await breathe();
   const spec = await buildSheetPdf(briefPages, BRIEF_PAGE_MM.width, BRIEF_PAGE_MM.height);
 
-  return {
+  const bundle: SubmissionBundle = {
     CUSTOMER_PREVIEW: { name: "preview.png", type: "image/png", bytes: preview },
     PRINT_READY: { name: "print-ready.pdf", type: "application/pdf", bytes: printReady },
     TECHNICAL_SPEC: { name: "technical-spec.pdf", type: "application/pdf", bytes: spec },
   };
+  assertWithinLimit(bundle, input.uploading ?? ALL_FILES, input.maxFileBytes ?? MAX_FILE_BYTES);
+  return bundle;
 }

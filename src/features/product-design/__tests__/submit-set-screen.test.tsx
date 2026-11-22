@@ -233,9 +233,12 @@ describe("Gửi duyệt cả bộ", () => {
     expect(project.openRound?.designIds).toEqual([a, b]);
     expect(uploadsOf(a)).toHaveLength(FILES);
     expect(uploadsOf(b)).toHaveLength(FILES);
+    // Drawn and uploaded first: the one request opens the round, and the BE has no refusal to
+    // write into the project's history.
     expect(rounds()).toHaveLength(1);
     const types = (await historyOf(store, projectId)).map((event) => event.type);
     expect(types).toContain("BATCH_SUBMITTED");
+    expect(types).not.toContain("BATCH_PREFLIGHT_FAILED");
     expect(env.push).not.toHaveBeenCalled(); // Back from the project does not come here again
   });
 
@@ -317,7 +320,8 @@ describe("Gửi duyệt cả bộ", () => {
     expect(draw.previews()).toBe(3); // a twice, b once
     expect(uploadsOf(a)).toHaveLength(2 * FILES);
     expect(uploadsOf(b)).toHaveLength(FILES);
-    expect(rounds()).toHaveLength(2); // the first met a's moved version (409 CONFLICT)
+    // 409 CONFLICT on a's moved version; asked again, a's files were outdated (422); then opened.
+    expect(rounds()).toHaveLength(3);
     for (const id of [a, b]) expect((await designOf(store, id)).status).toBe("PENDING_REVIEW");
   });
 
@@ -631,7 +635,7 @@ describe("Gửi duyệt cả bộ: a round the BE refuses for some of its design
     );
     expect(uploadsOf(a)).toHaveLength(FILES); // a kept its files
     expect(uploadsOf(b)).toHaveLength(2 * FILES); // b drawn and uploaded again
-    expect(rounds()).toHaveLength(2);
+    expect(rounds()).toHaveLength(3); // 409 CONFLICT, 422 b's files outdated, opened
   });
 
   /** b leaves DRAFT in another tab once its files are up, just before the round is asked for. */
@@ -933,6 +937,32 @@ describe("Gửi duyệt cả bộ: refusals the run cannot act on", () => {
     expect(screen.queryByRole("button", { name: "Thử lại" })).not.toBeInTheDocument();
     // The set is read again (fresh), which is how a design that is gone would be named.
     await waitFor(() => expect(readsOfB()).toBeGreaterThan(readsBefore));
+  });
+
+  it("marks only the designs coded NOT_FOUND on a 404 that also lists a design refused with another code", async () => {
+    const { store } = backend;
+    const projectId = await newProject(store);
+    const a = await draftOf(store, projectId, "Ly A");
+    const b = await draftOf(store, projectId, "Ly B");
+    refuseRound(
+      () =>
+        new ApiError(404, "NOT_FOUND", "Not found", undefined, undefined, {
+          designIds: [a],
+          designs: [
+            { designId: a, errorCode: "NOT_FOUND" },
+            { designId: b, errorCode: "DESIGN_NOT_DRAFT" },
+          ],
+        }),
+    );
+    const user = userEvent.setup();
+
+    open(projectId, [a, b], renderers().factory);
+    await user.click(await screen.findByRole("button", { name: "Gửi duyệt 2 bản" }, SLOW));
+
+    expect(
+      await within(await rowOf("Ly A")).findByText("Bản này không còn thuộc dự án.", {}, SLOW),
+    ).toBeInTheDocument();
+    expect(within(await rowOf("Ly B")).queryByText("Bản này không còn thuộc dự án.")).toBeNull();
   });
 });
 

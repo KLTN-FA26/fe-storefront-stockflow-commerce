@@ -108,7 +108,10 @@ function ProjectQuoteForm({ project, designs, current, onClose }: Props) {
           <DialogTitle>Yêu cầu báo giá cả dự án</DialogTitle>
           <DialogDescription>{project.name}</DialogDescription>
         </DialogHeader>
-        <QuoteRequestSent updated={!ask.data.created} />
+        <QuoteRequestSent
+          updated={!ask.data.created}
+          chat={{ kind: "DESIGN_PROJECT", id: project.id }}
+        />
         <DialogFooter className="gap-2">
           <Button type="button" className={ACTION_BUTTON} onClick={onClose}>
             Đóng

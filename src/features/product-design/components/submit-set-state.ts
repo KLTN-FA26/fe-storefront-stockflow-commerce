@@ -88,7 +88,7 @@ export class SetStopError extends Error {
 /** The run's own words for a stop at step 4. */
 export const STOP_TEXT = {
   changed: (count: number) =>
-    `${count} bản vừa thay đổi ở nơi khác. Bấm Thử lại để dựng và tải lên lại các bản đó, hoặc mở lại để xem.`,
+    `${count} bản vừa thay đổi ở nơi khác. Bấm Thử lại để gửi lại cả bộ — các bản đó được dựng lại theo nội dung mới — hoặc mở lại để xem.`,
   notDraft: (count: number) =>
     `${count} bản không còn là bản nháp nên không gửi cùng bộ được. Hãy về dự án và chọn lại các bản.`,
   cannotSend:

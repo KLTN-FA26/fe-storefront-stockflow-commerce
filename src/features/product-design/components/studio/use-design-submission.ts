@@ -45,13 +45,19 @@ class TemplateChangedError extends ExportError {
   }
 }
 
-export type SubmitStep = "idle" | "checking" | BundleStep | "upload" | "done" | "error";
+export type SubmitStep = "idle" | "checking" | BundleStep | "send" | "upload" | "done" | "error";
 
 /**
- * What a run has made, kept so a retry resumes at the upload without drawing again. `runNonce` is
+ * What a run has made, kept so a retry does not repeat it. The check comes first; the files are
+ * drawn only when the BE says some are outdated (`bundle` stays null until then). `runNonce` is
  * part of every file's idempotency key: the run keeps it for its retries, and a redraw replaces it.
  */
-type Work = Checked & { bundle: SubmissionBundle; runNonce: string };
+type Work = Checked & {
+  bundle: SubmissionBundle | null;
+  runNonce: string | null;
+  /** The template `bundle` was drawn on (JSON): a retry reuses the files only while the server's is still it. */
+  bundleTemplate: string | null;
+};
 
 type State = {
   step: SubmitStep;
@@ -64,8 +70,9 @@ const IDLE: State = { step: "idle", fraction: 0, issues: null };
 
 /**
  * "Gửi duyệt" (spec §6.4): saves what is pending, runs the preflight on exactly what is stored,
- * records a client-side Fail (no files are made), else draws the bundle, checks the stored
- * document is still the drawn one and submits. A failed upload is retried with the same bundle.
+ * records a client-side Fail (no files are made), else asks the BE to take the design at once; only
+ * when it says files are outdated is the bundle drawn and the named files uploaded (`sendDesign`).
+ * A failed upload is retried with the same bundle.
  * `check()` is the first half alone, for the dialog to confirm before anything is drawn. The check
  * and the drawing are the runner's (`run-submission.ts`), run on the open design.
  */
@@ -100,17 +107,14 @@ export function useDesignSubmission(design: Design) {
     return null;
   }
 
-  /** Flush, preflight, and (when it passes) draw the bundle. Null when the preflight failed. */
+  /** Flush and preflight; nothing is drawn yet. Null when the preflight failed. */
   async function prepare(): Promise<Work | null> {
     const checked = await inspect();
     if (!checked) return null;
     // Saved, yet not what is stored (another tab or device saved since this one loaded it), or
-    // already edited again: nothing is drawn.
+    // already edited again: nothing is sent.
     await assertStoredIs(ctx, checked);
-    const bundle = await drawBundle(subject, checked, (step, fraction) =>
-      setState({ step, fraction, issues: null }),
-    );
-    return { ...checked, bundle, runNonce: newRunNonce() };
+    return { ...checked, bundle: null, runNonce: null, bundleTemplate: null };
   }
 
   async function execute() {
@@ -120,18 +124,29 @@ export function useDesignSubmission(design: Design) {
       work.current ??= await prepare();
       const w = work.current;
       if (!w) return; // the preflight failed: `prepare` set the issues
-      setState({ step: "upload", fraction: 0, issues: null });
+      // The BE is asked first; files are drawn and uploaded only if it says so.
+      setState({ step: "send", fraction: 0, issues: null });
       await assertStoredIs(ctx, w); // the stored layout is still the drawn one
+      // Files kept from an earlier try are reused only while the template is the one they were drawn on (C10): read
+      // afresh, as `redraw` does; a template edited meanwhile drops them, so the BE's answer draws them anew.
+      if (w.bundle && w.bundleTemplate !== null) {
+        const now = await client.fetchQuery({ ...designPrintConfigQuery(design), staleTime: 0 });
+        if (now !== null && JSON.stringify(now.template) !== w.bundleTemplate) {
+          w.bundle = null;
+          w.runNonce = null;
+          w.bundleTemplate = null;
+        }
+      }
       const submitted = await sendDesign(design.id, {
         documentChecksum: w.checksum,
-        files: w.bundle,
-        runNonce: w.runNonce,
+        files: w.bundle ?? undefined,
+        runNonce: w.runNonce ?? undefined,
         quoteRequest: quote.current ?? undefined,
-        // The BE named files to draw again. The design's template is read afresh first, so a
+        // The BE named files to draw (none sent yet, or outdated). The design's template is read afresh first, so a
         // template edited on the server is drawn with its new values: when it differs from the
         // studio's, a session of its own is loaded on it (as a set's designs are); otherwise the
         // same checked document is drawn again here.
-        redraw: async () => {
+        redraw: async (roles) => {
           // Outdated because a second tab saved meanwhile? Then the stored layout is not the
           // drawn one: the conflict dialog, not three more uploads of the old document.
           await assertStoredIs(ctx, w);
@@ -150,13 +165,19 @@ export function useDesignSubmission(design: Design) {
               { client, fonts: services.fonts, signal: new AbortController().signal },
               design.id,
               progress,
+              roles,
             );
             // Its findings are on the history (`drawDesign` records them); the stale work goes.
             if ("failed" in outcome) throw new TemplateChangedError(failsOf(outcome.failed));
             w.bundle = outcome.drawn.bundle;
+            w.bundleTemplate = JSON.stringify(config.template);
           } else {
-            w.bundle = await drawBundle(subject, w, progress);
+            w.bundle = await drawBundle(subject, w, progress, undefined, roles);
+            w.bundleTemplate = JSON.stringify(services.printConfig.template);
           }
+          // Drawn while this tab edited or another saved? Then these files are not the stored
+          // layout's: nothing is uploaded (the next run checks and draws the new one).
+          await assertStoredIs(ctx, w);
           // New files, new upload: another nonce, so a bundle equal to an earlier one is not a replay.
           w.runNonce = newRunNonce();
           setState({ step: "upload", fraction: 0, issues: null });

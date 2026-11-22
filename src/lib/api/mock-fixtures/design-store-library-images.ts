@@ -22,7 +22,6 @@ import {
   type LibraryImageRow,
   type MockResult,
 } from "./design-rows";
-import { DEFAULT_FILE_RULES } from "./design-print-configs";
 import type { StoreContext } from "./design-store-context";
 import {
   assetsOf,
@@ -34,6 +33,7 @@ import {
 } from "./design-store-files";
 import {
   defaultRuleRefusal,
+  LIBRARY_FILE_RULES,
   libraryFull,
   notInProject,
   type LibraryHelpers,
@@ -49,7 +49,7 @@ export function createLibraryImageOps(
       const project = ctx.findProject(id);
       if (!project) return projectNotFound();
       if (project.status !== "ACTIVE") return projectArchived(422);
-      const read = await readImageUpload(ctx, file, DEFAULT_FILE_RULES);
+      const read = await readImageUpload(ctx, file, LIBRARY_FILE_RULES);
       if ("refused" in read) return read.refused;
       const { contentType, checksum, widthPx, heightPx } = read;
 

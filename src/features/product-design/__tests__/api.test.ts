@@ -28,7 +28,6 @@ import {
   requestReview,
   renameDesign,
   saveDesignDocument,
-  submitDesign,
   uploadDesignAsset,
   uploadDesignFiles,
 } from "../api";
@@ -39,6 +38,7 @@ import { describeFileDownloadError, outdatedRolesOf, preflightIssuesOf } from ".
 import type { SubmissionFiles } from "../types";
 import { designBackend, type DesignBackend } from "./design-backend";
 import { designDraftDto } from "./fixtures";
+import { submitDesign } from "./submit-helper";
 
 // Through the real client, the mock adapter and the design route table, over a seeded store in
 // memory (spec 2026-11-09 §5): what the screens get while the design module runs on the mock.
@@ -462,6 +462,26 @@ describe("submitting", () => {
     ).toEqual({
       status: 409,
       code: "DESIGN_NOT_DRAFT",
+    });
+  });
+
+  it("records only the failing checks: one fail among 60 notes is the one finding sent (SD-7)", async () => {
+    const notes = Array.from({ length: 60 }, (_, i) => ({
+      ruleId: "TOO_MANY_COLORS" as const,
+      level: "note" as const,
+      message: `Lưu ý ${i}`,
+    }));
+    const fail = {
+      ruleId: "DPI_BELOW_MIN" as const,
+      level: "fail" as const,
+      message: "Ảnh dưới 300 DPI.",
+    };
+
+    await recordPreflightFailure(returned, { version: 5, issues: [...notes, fail] });
+
+    expect(backend.post).toHaveBeenLastCalledWith(`/designs/${returned}/preflight-failures`, {
+      version: 5,
+      issues: [{ rule: "DPI_BELOW_MIN" }],
     });
   });
 

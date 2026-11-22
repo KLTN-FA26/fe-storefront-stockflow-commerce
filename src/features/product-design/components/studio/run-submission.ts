@@ -2,7 +2,12 @@ import { documentChecksum, runPreflight } from "../../engine";
 import type { DesignDocument, PreflightReport } from "../../engine";
 import type { DesignSession } from "./load-design-session";
 import type { StudioServices } from "./studio-context";
-import { buildSubmissionBundle, type BundleStep, type SubmissionBundle } from "./submission-bundle";
+import {
+  buildSubmissionBundle,
+  type BundleRole,
+  type BundleStep,
+  type SubmissionBundle,
+} from "./submission-bundle";
 import { storedVersionOf } from "./submission-checks";
 import { preflightVariant } from "./use-preflight";
 
@@ -23,7 +28,9 @@ export type SubmissionSubject = Pick<
   | "assetStatus"
   | "fontStatus"
   | "exportRenderer"
->;
+> &
+  // The studio has the BE's font list; a set submission's session does not, and the BE checks fonts again.
+  Partial<Pick<StudioServices, "servedFontCodes">>;
 
 /** What a preflight was run on, its report, and the checksum the files are verified against. */
 export type Checked = { document: DesignDocument; report: PreflightReport; checksum: string };
@@ -47,6 +54,7 @@ export async function checkDocument(
     sizer: subject.sizer,
     assets: subject.assetStatus,
     fontStatus: subject.fontStatus,
+    servedFontCodes: subject.servedFontCodes ?? null,
     variant: preflightVariant(subject.printConfig),
   });
   return { document, report, checksum: await documentChecksum(document) };
@@ -58,6 +66,7 @@ export function drawBundle(
   checked: Checked,
   onStep?: BundleProgress,
   signal?: AbortSignal,
+  roles?: readonly BundleRole[],
 ): Promise<SubmissionBundle> {
   return buildSubmissionBundle({
     name: subject.design.name,
@@ -72,6 +81,7 @@ export function drawBundle(
     renderer: subject.exportRenderer,
     ...(onStep ? { onStep } : {}),
     ...(signal ? { signal } : {}),
+    ...(roles ? { uploading: roles } : {}),
   });
 }
 
@@ -102,6 +112,7 @@ export async function buildSessionBundle(
   checked: Checked,
   onStep?: BundleProgress,
   signal?: AbortSignal,
+  roles?: readonly BundleRole[],
 ): Promise<SubmissionBundle> {
   assertOpen(session);
   if (session.editor.store.getState().document !== checked.document) {
@@ -109,5 +120,5 @@ export async function buildSessionBundle(
   }
   await storedVersionOf(session, checked.checksum);
   assertOpen(session);
-  return drawBundle(session, checked, onStep, signal);
+  return drawBundle(session, checked, onStep, signal, roles);
 }

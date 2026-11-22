@@ -105,19 +105,6 @@ export type PreflightFailureInput = Versioned & { issues: PreflightIssue[] };
 /** One rendered file of a submission. */
 export type SubmissionFile = { name: string; type: string; bytes: Uint8Array };
 export type SubmissionFiles = Record<DesignFileRole, SubmissionFile>;
-/**
- * What sending a design takes: its three files, and the checksum of the saved layout they were
- * drawn from (the BE binds each file to it, BR-10). The version is read when the files are in.
- */
-export type SubmitDesignInput = {
-  documentChecksum: string;
-  files: SubmissionFiles;
-  /** The run's nonce (`newRunNonce`): part of every file's idempotency key. */
-  runNonce: string;
-  /** "Gửi duyệt và yêu cầu báo giá" (docs 12 §4.8.24): absent for a plain submission. */
-  quoteRequest?: QuoteRequestInput | undefined;
-};
-
 export type QuoteRequestStatus = z.infer<typeof quoteRequestStatusSchema>;
 /** A design's quote request and the design as it is now (plan WF-02 §A.3). */
 export type DesignQuoteRequest = z.infer<typeof designQuoteRequestDtoSchema>;
@@ -155,4 +142,6 @@ export type DesignListParams = {
   size: number;
   /** An ARCHIVED design is listed for nobody (BR-16): the BE answers 400 to that status. */
   status?: Exclude<DesignStatus, "ARCHIVED"> | undefined;
+  /** `false`: only designs in no project; `true`: only those in one (BE-15). Omitted: all. */
+  inProject?: boolean | undefined;
 };

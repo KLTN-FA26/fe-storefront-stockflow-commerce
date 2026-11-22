@@ -38,7 +38,8 @@ export function TextToolPanel() {
   const services = useStudio();
   const { start } = useTextEditing();
   const readOnly = useEditorState((s) => s.readOnly);
-  const hasFont = allowedFonts(services.template, services.fonts).length > 0;
+  const hasFont =
+    allowedFonts(services.template, services.fonts, services.servedFontCodes).length > 0;
   const [message, setMessage] = useState<string | null>(null);
 
   const add = (preset: TextPreset) => {

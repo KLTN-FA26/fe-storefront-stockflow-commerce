@@ -9,7 +9,7 @@ import type { PrintConfig } from "./types";
 /** What the caller knows of the product and the variant, beside the template. */
 export type PrintConfigParts = {
   template: TemplateDto;
-  product: { slug: string; title: string; status: string };
+  product: { slug: string | null; title: string; status: string };
   variantStatus: PrintConfig["variantStatus"];
   hasCartonSpec: boolean;
 };

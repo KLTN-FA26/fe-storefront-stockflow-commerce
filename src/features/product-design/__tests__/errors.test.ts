@@ -7,6 +7,7 @@ import {
   describeDesignError,
   describeFileDownloadError,
   describeFileRefusal,
+  describeLibraryUploadError,
   describeProjectError,
   isDesignConflict,
   isDesignStateChanged,
@@ -17,6 +18,27 @@ import {
 
 const apiError = (status: number, code: string, details?: Record<string, unknown>) =>
   new ApiError(status, code, "dev text", undefined, undefined, details);
+
+describe("describeDesignError: 429 with Retry-After", () => {
+  const limited = (retryAfterSeconds?: number) =>
+    new ApiError(429, "RATE_LIMITED", "x", undefined, undefined, undefined, retryAfterSeconds);
+
+  it("429 with Retry-After 600 reads 'thử lại sau 10 phút'", () => {
+    expect(describeDesignError(limited(600))).toBe(
+      "Bạn đã thao tác quá nhiều lần; thử lại sau 10 phút.",
+    );
+    expect(describeProjectError(limited(600))).toContain("thử lại sau 10 phút");
+  });
+
+  it("rounds up to whole minutes, at least one", () => {
+    expect(describeDesignError(limited(61))).toContain("sau 2 phút");
+    expect(describeDesignError(limited(1))).toContain("sau 1 phút");
+  });
+
+  it("keeps the general sentence when the 429 names no wait", () => {
+    expect(describeDesignError(limited())).toContain("Vui lòng thử lại sau ít phút");
+  });
+});
 
 describe("describeDesignError", () => {
   // The BE's own codes (F-2): each reads as the old code it replaces.
@@ -136,6 +158,19 @@ describe("describeFileRefusal (the BE sends 415 and 413 with a message only, F-2
     expect(describeFileRefusal(apiError(413, "PAYLOAD_TOO_LARGE"), template)).toBe(
       "Ảnh vượt 20 MB, mức quy cách này cho phép.",
     );
+  });
+
+  it("words the BE's Vietnamese 413 over 40 megapixels as pixels too", () => {
+    const pixels = new ApiError(
+      413,
+      "PAYLOAD_TOO_LARGE",
+      "Ảnh quá lớn: tối đa 40 triệu điểm ảnh, hãy giảm kích thước ảnh rồi tải lại.",
+    );
+    const template = { allowedFileFormats: ["image/png"], maxFileSizeMb: 50 };
+    expect(describeFileRefusal(pixels, template)).toMatch(/40 megapixel/);
+    expect(describeLibraryUploadError(pixels, 50)).toMatch(/40 megapixel/);
+    const bytes = new ApiError(413, "PAYLOAD_TOO_LARGE", "File quá lớn: tối đa 50 MB.");
+    expect(describeLibraryUploadError(bytes, 50)).toBe("Tệp lớn hơn 50 MB.");
   });
 
   it("words a 413 over 40 megapixels as pixels, not as megabytes, and names WebP", () => {

@@ -30,7 +30,8 @@ export const preflightVariant = (
  * or a stroke does not run the checks every frame.
  */
 export function usePreflight(): PreflightReport {
-  const { template, surfaces, sizer, assetStatus, fontStatus, printConfig } = useStudio();
+  const { template, surfaces, sizer, assetStatus, fontStatus, servedFontCodes, printConfig } =
+    useStudio();
   const document = useEditorState((state) => state.document);
   const { usable, hasCartonSpec } = preflightVariant(printConfig);
   const input = useMemo(
@@ -41,9 +42,20 @@ export function usePreflight(): PreflightReport {
       sizer,
       assets: assetStatus,
       fontStatus,
+      servedFontCodes,
       variant: { usable, hasCartonSpec },
     }),
-    [document, template, surfaces, sizer, assetStatus, fontStatus, usable, hasCartonSpec],
+    [
+      document,
+      template,
+      surfaces,
+      sizer,
+      assetStatus,
+      fontStatus,
+      servedFontCodes,
+      usable,
+      hasCartonSpec,
+    ],
   );
 
   // The input the report is of: the first one at once, each later one after the wait.

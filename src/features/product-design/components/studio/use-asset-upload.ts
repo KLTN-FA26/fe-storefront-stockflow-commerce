@@ -2,7 +2,12 @@
 
 import { useCallback, useRef, useState } from "react";
 
-import { rasterizeSvg, readImageDimensions, type CustomizationTemplate } from "../../engine";
+import {
+  MAX_IMAGE_PIXELS,
+  rasterizeSvg,
+  readImageDimensions,
+  type CustomizationTemplate,
+} from "../../engine";
 import { describeDesignError, describeFileRefusal } from "../../errors";
 import { useUploadAsset } from "../../mutations";
 import type { DesignAsset } from "../../types";
@@ -12,8 +17,6 @@ import { useStudio } from "./studio-context";
 
 export { uploadKey };
 
-/** Images past this many pixels are refused: decoding one would exhaust a phone's memory. */
-const MAX_PIXELS = 40_000_000;
 const BYTES_PER_MB = 1024 * 1024;
 const SVG_TYPE = "image/svg+xml";
 
@@ -55,9 +58,16 @@ function declaredType(file: File): string {
   return TYPE_BY_EXTENSION[extension] ?? "";
 }
 
-/** The `accept` of a file input: the template's formats and SVG, which is rasterised before it is sent. */
+/**
+ * Whether the template takes an SVG: it is drawn to a PNG before it is sent (the BE never stores SVG), so only a
+ * template that takes PNG takes it (PO 2026-11-22, Q2 / SD-10: as the BE).
+ */
+export const takesSvg = (template: Pick<CustomizationTemplate, "allowedFileFormats">) =>
+  template.allowedFileFormats.includes("image/png");
+
+/** The `accept` of a file input: the template's formats, and SVG when it takes PNG (`takesSvg`). */
 export const acceptedFormats = (template: Pick<CustomizationTemplate, "allowedFileFormats">) =>
-  [...template.allowedFileFormats, ".svg"].join(",");
+  [...template.allowedFileFormats, ...(takesSvg(template) ? [".svg"] : [])].join(",");
 
 /** What a customer calls each format; any other MIME type reads as its subtype in capitals. */
 const FORMAT_NAMES: Record<string, string> = {
@@ -68,8 +78,8 @@ const FORMAT_NAMES: Record<string, string> = {
 };
 
 /**
- * The formats a customer may pick, by name: the template's (its file rules', `templateOf`), then
- * SVG, which is always taken because it is drawn to a PNG before it is sent.
+ * The formats a customer may pick, by name: the template's (its file rules', `templateOf`), then SVG when the template
+ * takes PNG, because it is drawn to a PNG before it is sent.
  */
 export function acceptedFormatNames(
   template: Pick<CustomizationTemplate, "allowedFileFormats">,
@@ -77,7 +87,7 @@ export function acceptedFormatNames(
   const names = template.allowedFileFormats.map(
     (type) => FORMAT_NAMES[type] ?? type.replace(/^image\//, "").toUpperCase(),
   );
-  return [...new Set([...names, FORMAT_NAMES[SVG_TYPE]!])];
+  return [...new Set([...names, ...(takesSvg(template) ? [FORMAT_NAMES[SVG_TYPE]!] : [])])];
 }
 
 /** The first of `files` (a drop or a paste may carry several; one image is placed at a time). */
@@ -96,9 +106,10 @@ export async function rasterized(file: File, widthPx: number): Promise<File> {
 
 /**
  * Stores a picked image for the design (P4) and returns it. A file is refused, in this order, when
- * its type is not one the template accepts (SVG always is), when it is larger than the template's
- * `maxFileSizeMb`, when its header does not give a size, or when it has more than 40 MP. An SVG is
- * drawn to a PNG first (it is never stored as SVG), which is then checked like any file. The
+ * its type is not one the template accepts (SVG when it takes PNG), when it is larger than the template's
+ * `maxFileSizeMb` (an SVG too, before it is drawn: a huge one would hang the tab), when its header does not give a
+ * size, or when it has more than 40 MP. An SVG is drawn to a PNG first (it is never stored as SVG), which is then
+ * checked like any file. The
  * idempotency key covers the bytes, the name and the type (`uploadKey`), so the same file sent twice
  * is stored once and the same bytes under another name are a new upload. The decoded image goes into the image cache, so the element that places it draws at once instead of
  * downloading what was just uploaded.
@@ -111,12 +122,13 @@ export function useAssetUpload() {
     async (file: File): Promise<DesignAsset> => {
       const type = declaredType(file);
       const isSvg = type === SVG_TYPE;
-      if (!isSvg && !template.allowedFileFormats.includes(type)) {
+      if (isSvg ? !takesSvg(template) : !template.allowedFileFormats.includes(type)) {
         throw new AssetRefusedError(UPLOAD_MESSAGES.unsupported(acceptedFormatNames(template)));
       }
       const maxBytes = template.maxFileSizeMb * BYTES_PER_MB;
       const tooLarge = new AssetRefusedError(UPLOAD_MESSAGES.tooLarge(template.maxFileSizeMb));
-      if (!isSvg && file.size > maxBytes) throw tooLarge;
+      // The SVG's own bytes first (B7): drawing a huge one would hang the tab before any check ran.
+      if (file.size > maxBytes) throw tooLarge;
 
       // The part carries the type the key and the template check were made for (a file may declare
       // none, `image/jpg`, or parameters).
@@ -133,7 +145,7 @@ export function useAssetUpload() {
       const bytes = new Uint8Array(await toSend.arrayBuffer());
       const header = readImageDimensions(bytes);
       if (!header) throw new AssetRefusedError(UPLOAD_MESSAGES.unreadable);
-      if (header.width * header.height > MAX_PIXELS) {
+      if (header.width * header.height > MAX_IMAGE_PIXELS) {
         throw new AssetRefusedError(UPLOAD_MESSAGES.tooManyPixels);
       }
 

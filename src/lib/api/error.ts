@@ -27,6 +27,8 @@ export class ApiError extends Error {
   readonly correlationId: string | undefined;
   /** BE `details`: structured numbers/dates behind the code, so screens never parse `message`. */
   readonly details: Readonly<Record<string, unknown>> | undefined;
+  /** The `Retry-After` header in whole seconds (429, 409 in progress); undefined when absent or not a number. */
+  readonly retryAfterSeconds: number | undefined;
 
   constructor(
     status: number,
@@ -35,6 +37,7 @@ export class ApiError extends Error {
     fieldErrors?: ApiFieldError[] | Record<string, string>,
     correlationId?: string,
     details?: Record<string, unknown>,
+    retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = "ApiError";
@@ -44,6 +47,7 @@ export class ApiError extends Error {
     this.fieldErrors = toFieldErrorMap(this.fieldErrorDetails);
     this.correlationId = correlationId;
     this.details = details;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 
   /** Create from an AxiosError (used in response interceptor). */
@@ -66,6 +70,7 @@ export class ApiError extends Error {
       data?.fieldErrors,
       data?.correlationId,
       isRecord(data?.details) ? data.details : undefined,
+      parseRetryAfter(err.response.headers?.["retry-after"]),
     );
   }
 
@@ -91,3 +96,10 @@ function toFieldErrorMap(errors: readonly ApiFieldError[]): Record<string, strin
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** `Retry-After` is whole seconds here (the BE sends no HTTP-date); anything else reads as absent. */
+function parseRetryAfter(value: unknown): number | undefined {
+  const text = typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
+  if (!/^\d+$/.test(text)) return undefined;
+  return Number(text);
+}

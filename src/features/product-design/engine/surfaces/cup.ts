@@ -2,6 +2,7 @@ import { sectorBounds } from "../geometry/sector";
 import type { PathCmd, PointMm, RectMm } from "../geometry/types";
 import type { CupModel, PrintArea } from "../template/schema";
 import { createRectSurface } from "./rect";
+import { TRIM_SAMPLE_INSET_MM } from "./types";
 import type { PrintSurface, SurfaceRegion } from "./types";
 
 /** Below this top/bottom radius difference the body is unrolled as a cylinder (spec §4.3). */
@@ -52,6 +53,10 @@ export function cupSector(model: CupModel): CupSector {
  * edges (a negative inset widens, as bleed does).
  */
 type Band = { inner: number; outer: number; from: number; to: number; insetMm: number };
+
+/** BE `PrintSurface.Sector.trimSamples`: 33 points along each trim arc, 9 along each radial edge. */
+const ARC_SAMPLE_STEPS = 32;
+const RADIAL_SAMPLE_STEPS = 8;
 
 /** Sector angle `φ` (0 = straight up, −y) → `PathCmd` canvas arc angle (0 = +x, towards +y). */
 const canvasAngle = (phi: number) => phi - Math.PI / 2;
@@ -154,6 +159,23 @@ function createSectorSurface(area: PrintArea, s: CupSector): PrintSurface {
     },
     contains: (p, region) => inBand(p, bands[region]),
     inSeam: (p) => inBand(p, bands.trim) && polar(p).phi > half,
+    trimSamples: () => {
+      const { from, to } = bands.trim;
+      const outer = s.trimOuterMm - TRIM_SAMPLE_INSET_MM;
+      const inner = s.trimInnerMm + TRIM_SAMPLE_INSET_MM;
+      const points: PointMm[] = [];
+      for (const r of [outer, inner]) {
+        const a = from + TRIM_SAMPLE_INSET_MM / r;
+        const b = to - TRIM_SAMPLE_INSET_MM / r;
+        for (let i = 0; i <= ARC_SAMPLE_STEPS; i++)
+          points.push(at(r, a + ((b - a) * i) / ARC_SAMPLE_STEPS));
+      }
+      for (let i = 0; i <= RADIAL_SAMPLE_STEPS; i++) {
+        const r = inner + ((outer - inner) * i) / RADIAL_SAMPLE_STEPS;
+        points.push(at(r, from + TRIM_SAMPLE_INSET_MM / r), at(r, to - TRIM_SAMPLE_INSET_MM / r));
+      }
+      return points;
+    },
     outline,
     guides: () => [
       { kind: "bleed", path: outline("bleed") },

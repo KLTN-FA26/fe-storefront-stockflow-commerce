@@ -17,7 +17,9 @@ import {
   isDesignGone,
   isDesignStateChanged,
 } from "../errors";
+import { isReturned } from "../lifecycle";
 import { useDeleteDesign } from "../mutations";
+import { openQuoteRequest, useDesignQuoteRequests } from "../quote-request-queries";
 import type { Design } from "../types";
 
 /**
@@ -41,6 +43,10 @@ export function DeleteDesignDialog({
   onClose: () => void;
 }) {
   const remove = useDeleteDesign();
+  // A returned draft keeps the quote request it was sent with (BE B40); deleting it closes that
+  // request (BE `archive` → `closeOpen`). A plain draft has none, so it reads none.
+  const requests = useDesignQuoteRequests(design?.id ?? "", !!design && isReturned(design));
+  const openRequest = openQuoteRequest(requests.data);
   const stale = isStale(remove.error);
   const close = () => {
     remove.reset();
@@ -57,6 +63,9 @@ export function DeleteDesignDialog({
             {design ? `“${design.name}” sẽ bị xoá và không khôi phục được.` : null}
           </DialogDescription>
         </DialogHeader>
+        {openRequest ? (
+          <Alert tone="warning">Xoá nháp sẽ đóng yêu cầu báo giá đang mở.</Alert>
+        ) : null}
         {remove.error ? <Alert tone="danger">{describeDesignError(remove.error)}</Alert> : null}
         <DialogFooter className="gap-2">
           <Button

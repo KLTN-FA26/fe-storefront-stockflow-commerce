@@ -25,7 +25,7 @@ const CLICK_SLOP_PX = 5;
  * `onUnavailable` hands over to the flat preview (the model cannot be built, the context is lost,
  * a render fails).
  * "Toàn màn hình" shows `fullscreenTarget`, the whole preview panel, so the colour disclaimer
- * (BR-07) stays on screen with the model.
+ * (source: `.claude/rules/mode-b-storefront.md`, Module 12) stays on screen with the model.
  */
 export function Viewer3D({
   onUnavailable,
