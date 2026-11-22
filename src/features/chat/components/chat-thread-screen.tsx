@@ -155,7 +155,11 @@ export function ChatThreadScreen({ conversationId }: { conversationId: string })
           />
         </>
       ) : (
-        <ReopenOffer conversationId={conversationId} onReopened={() => setEndedByServer(false)} />
+        <ReopenOffer
+          conversationId={conversationId}
+          onReopened={() => setEndedByServer(false)}
+          attach={attach ?? undefined}
+        />
       )}
     </section>
   );

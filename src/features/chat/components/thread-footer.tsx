@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { RotateCcw } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
+import type { ChatAttachIntent } from "@/constants/routes";
 import { describeBeRefusal } from "@/lib/api/describe-error";
 
 import { toast } from "@/components/shared/Toast";
@@ -16,14 +17,17 @@ import { CsatForm } from "./csat-form";
 
 /**
  * An ended conversation (CLOSED, or past its reopen window): C9 continues it — the same one, or a
- * NEW conversation (`continuedFromId`) the page then moves to.
+ * NEW conversation (`continuedFromId`) the page then moves to, still asking for the signed contract
+ * when this page was (`attach`).
  */
 export function ReopenOffer({
   conversationId,
   onReopened,
+  attach,
 }: {
   conversationId: string;
   onReopened: () => void;
+  attach?: ChatAttachIntent | undefined;
 }) {
   const router = useRouter();
   const reopen = useReopenConversation(conversationId);
@@ -49,7 +53,7 @@ export function ReopenOffer({
             onSuccess: (conversation) => {
               onReopened();
               if (conversation.id !== conversationId) {
-                router.replace(STORE_ROUTES.chat.detail(conversation.id));
+                router.replace(STORE_ROUTES.chat.detail(conversation.id, attach));
               }
             },
             onError: (failure) => setError(describeBeRefusal(failure, CHAT_MESSAGE_BY_CODE)),

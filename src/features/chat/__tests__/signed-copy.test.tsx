@@ -133,3 +133,20 @@ describe("the thread's prompt for the signed contract", () => {
     expect(updates.at(-1)?.searchParams.has("attach")).toBe(false);
   });
 });
+
+describe("an ended contract conversation reopened as a new one", () => {
+  it("keeps asking for the signed contract in the new thread", async () => {
+    vi.spyOn(api, "get").mockImplementation(async (url: string) => {
+      if (url === "/identity/me/permissions") return { data: PERMISSIONS };
+      if (url.endsWith("/messages")) return { data: { items: [], lastSeq: 0 } };
+      return { data: conversationJson({ status: "CLOSED" }) };
+    });
+    vi.spyOn(api, "post").mockResolvedValue({ data: conversationJson({ id: "c-next" }) });
+    const user = userEvent.setup();
+    renderWithProviders(<ChatThreadScreen conversationId={CONVERSATION_ID} />, {
+      searchParams: "?attach=pdf",
+    });
+    await user.click(await screen.findByRole("button", { name: "Mở lại cuộc trò chuyện" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/chat/c-next?attach=pdf"));
+  });
+});
