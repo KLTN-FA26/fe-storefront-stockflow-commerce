@@ -117,7 +117,7 @@ describe("OrdersScreen", () => {
 
     expect(within(card).getByText(`${pending.lines.length} mặt hàng`)).toBeInTheDocument();
     expect(
-      within(card).getByText("Đơn sẽ được xử lý ngay khi bạn thanh toán."),
+      within(card).getByText("Đơn được xử lý sau khi kế toán ghi nhận khoản chuyển của bạn."),
     ).toBeInTheDocument();
     expect(
       within(card).getByRole("link", { name: `Xem đơn ${pending.orderNumber}` }),

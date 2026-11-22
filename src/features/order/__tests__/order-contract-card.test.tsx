@@ -96,7 +96,7 @@ describe("OrderContractCard (WF-02 D3)", () => {
 
     expect(await screen.findByText("HD-20260910-900001-1")).toBeInTheDocument();
     expect(get).toHaveBeenCalledWith(`/orders/me/${orderId}/contract`, expect.anything());
-    expect(screen.getByText("Đã gửi")).toBeInTheDocument();
+    expect(screen.getByText("Chờ bạn ký")).toBeInTheDocument();
 
     const schedule = screen.getByRole("list", { name: "Lịch giao" });
     expect(within(schedule).getAllByText(/× 30 thùng = 30\.000 cái/)).toHaveLength(2);

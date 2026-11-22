@@ -32,7 +32,7 @@ describe("QuotesScreen", () => {
     renderWithProviders(<QuotesScreen />);
 
     const card = (await screen.findByText("QT-20261120-9001")).closest("article")!;
-    expect(within(card).getByText("Đã gửi")).toBeInTheDocument();
+    expect(within(card).getByText("Chờ bạn phản hồi")).toBeInTheDocument();
     expect(within(card).getByText("Số 1")).toBeInTheDocument();
     expect(
       within(card).getByRole("link", { name: "Xem báo giá QT-20261120-9001" }),

@@ -1,18 +1,11 @@
-import type { SemanticTone } from "@/lib/domain/types";
+import { CONTRACT_STATUS, type StatusMeta } from "@/lib/domain/status-map";
 import { INSTALLMENT_MILESTONE_LABEL } from "@/lib/installments";
 import { formatDate } from "@/lib/format/date";
 
 import type { ContractBatch, ContractInstallment, ContractStatus } from "./contract-schemas";
 
-/** The contract's status in the customer's words (kltn-docs 14 §5.2), with its badge tone. */
-export const CONTRACT_STATUS_META: Record<ContractStatus, { label: string; tone: SemanticTone }> = {
-  DRAFT: { label: "Nháp", tone: "neutral" },
-  SENT: { label: "Đã gửi", tone: "warning" },
-  SIGNED: { label: "Đã ký", tone: "info" },
-  COMPLETED: { label: "Hoàn tất", tone: "positive" },
-  CANCELLED: { label: "Đã huỷ", tone: "danger" },
-  UNKNOWN: { label: "Đang cập nhật", tone: "neutral" },
-};
+/** The contract's status in the customer's words (kltn-docs 14 §5.2): the map chat cards read too. */
+export const CONTRACT_STATUS_META: Readonly<Record<ContractStatus, StatusMeta>> = CONTRACT_STATUS;
 
 /** "15/12/2026 – 20/12/2026", one date when both are the same, or "Chưa xác định". */
 export function batchWindow(batch: Pick<ContractBatch, "windowStart" | "windowEnd">): string {

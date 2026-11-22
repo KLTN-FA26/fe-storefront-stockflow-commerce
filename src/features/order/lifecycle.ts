@@ -1,3 +1,4 @@
+import { ORDER_STATUS } from "@/lib/domain/status-map";
 import type { SemanticTone } from "@/lib/domain/types";
 
 import type { Order, OrderStatus, OrderStatusGroup } from "./types";
@@ -67,62 +68,51 @@ export const ORDER_STATUS_GROUP_META: Record<
   { label: string; tone: SemanticTone; hint: string }
 > = {
   AWAITING_CONTRACT: {
-    label: "Chờ ký hợp đồng",
-    tone: "warning",
+    ...ORDER_STATUS.AWAITING_CONTRACT,
     hint: "Hợp đồng mua bán đã được gửi. Đơn được xử lý khi hai bên ký hợp đồng.",
   },
   AWAITING_PAYMENT: {
-    label: "Chờ thanh toán",
-    tone: "warning",
-    hint: "Đơn sẽ được xử lý ngay khi bạn thanh toán.",
+    ...ORDER_STATUS.AWAITING_PAYMENT,
+    hint: "Đơn được xử lý sau khi kế toán ghi nhận khoản chuyển của bạn.",
   },
   UNDER_REVIEW: {
-    label: "Đang xem xét",
-    tone: "warning",
+    ...ORDER_STATUS.UNDER_REVIEW,
     hint: "Đơn đang được kiểm tra. Chúng tôi sẽ liên hệ bạn nếu cần thêm thông tin.",
   },
   CONFIRMED: {
-    label: "Đã xác nhận",
-    tone: "positive",
+    ...ORDER_STATUS.CONFIRMED,
     hint: "Chúng tôi đã xác nhận đơn và sắp bắt đầu chuẩn bị cho bạn.",
   },
   AWAITING_STOCK: {
-    label: "Đang chờ hàng",
-    tone: "info",
+    ...ORDER_STATUS.AWAITING_STOCK,
     hint: "Hàng của đơn đang được sản xuất và sẽ nhập kho trước khi giao cho bạn.",
   },
   IN_PRODUCTION: {
-    label: "Đang sản xuất",
-    tone: "info",
+    ...ORDER_STATUS.IN_PRODUCTION,
     hint: "Sản phẩm của bạn đang được sản xuất.",
   },
   PREPARING: {
-    label: "Đang chuẩn bị hàng",
-    tone: "info",
+    ...ORDER_STATUS.PREPARING,
     hint: "Kho đang lấy và đóng gói đơn hàng của bạn.",
   },
   SHIPPING: {
-    label: "Đang giao hàng",
-    tone: "info",
+    ...ORDER_STATUS.SHIPPING,
     hint: "Đơn đã rời kho và đang trên đường giao đến bạn.",
   },
   DELIVERED: {
-    label: "Đã giao hàng",
-    tone: "positive",
+    ...ORDER_STATUS.DELIVERED,
     hint: "Đơn đã được giao. Đơn hoàn tất khi hết hạn đổi trả và các đợt thanh toán đã đủ.",
   },
   // Apart from RETURNED: the goods are still with the customer while the return is decided.
   RETURN_REQUESTED: {
-    label: "Đang yêu cầu trả hàng",
-    tone: "warning",
+    ...ORDER_STATUS.RETURN_REQUESTED,
     hint: "Yêu cầu trả hàng của đơn đang được xử lý. Theo dõi từng bước trong mục Trả hàng.",
   },
-  CANCELLED: { label: "Đã huỷ", tone: "danger", hint: "Đơn đã bị huỷ và sẽ không được giao." },
-  RETURNED: { label: "Đã trả hàng", tone: "special", hint: "Đơn hàng đã được trả lại." },
+  CANCELLED: { ...ORDER_STATUS.CANCELLED, hint: "Đơn đã bị huỷ và sẽ không được giao." },
+  RETURNED: { ...ORDER_STATUS.RETURNED, hint: "Đơn hàng đã được trả lại." },
   // A group newer than this FE (see ORDER_STATUS_GROUP_UNKNOWN): neutral wording.
   UNKNOWN: {
-    label: "Đang xử lý",
-    tone: "info",
+    ...ORDER_STATUS.UNKNOWN,
     hint: "Đơn hàng đang được xử lý. Hãy chat với chúng tôi nếu bạn cần hỗ trợ.",
   },
 };
@@ -140,8 +130,7 @@ export const ORDER_DISPLAY_META: Record<
 > = {
   ...ORDER_STATUS_GROUP_META,
   COMPLETED: {
-    label: "Hoàn tất",
-    tone: "positive",
+    ...ORDER_STATUS.COMPLETED,
     hint: "Đơn đã hoàn tất: hết hạn đổi trả và các đợt thanh toán đã đủ.",
   },
 };
