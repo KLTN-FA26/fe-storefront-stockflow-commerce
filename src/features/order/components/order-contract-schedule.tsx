@@ -1,10 +1,17 @@
+import { LineGoods } from "@/components/storefront/line-goods";
 import { formatMoney } from "@/lib/format/money";
 import { formatNumber } from "@/lib/format/number";
 
 import { batchWindow, installmentDue } from "../contract-labels";
 import type { ContractBatch, ContractInstallment } from "../contract-schemas";
 
-/** Lịch giao: each batch's window, SKU × cartons = pieces, and its value (14 §4.3 step 11). */
+/**
+ * What a batch's `value` is (L-9): its goods with VAT, fees not included — the demo order's batch is
+ * 27.000.000 = goods 25.000.000 + VAT 8 %, against an order total of 28.620.000 with the plate fee.
+ */
+export const BATCH_VALUE_LABEL = "Giá trị hàng của đợt (gồm VAT, chưa gồm phí)";
+
+/** Lịch giao: each batch's window, the goods × cartons = pieces, and its value (14 §4.3 step 11). */
 export function ContractDeliverySchedule({ batches }: { batches: readonly ContractBatch[] }) {
   if (batches.length === 0) return null;
   return (
@@ -24,15 +31,23 @@ export function ContractDeliverySchedule({ batches }: { batches: readonly Contra
                   · {batchWindow(batch)}
                 </span>
               </p>
-              <p className="text-ink-primary font-semibold tabular-nums">
-                {formatMoney(batch.value)}
+              <p className="text-right tabular-nums">
+                <span className="text-ink-secondary block text-xs">{BATCH_VALUE_LABEL}</span>
+                <span className="text-ink-primary font-semibold">{formatMoney(batch.value)}</span>
               </p>
             </div>
-            <ul className="mt-1 space-y-0.5">
+            <ul className="mt-2 space-y-2">
               {batch.lines.map((line) => (
-                <li key={line.orderLineId} className="text-ink-secondary tabular-nums">
-                  <span className="text-ink-primary font-mono break-all">{line.sku ?? "—"}</span> ×{" "}
-                  {formatNumber(line.cartons)} thùng = {formatNumber(line.units)} cái
+                <li key={line.orderLineId} className="space-y-0.5">
+                  <LineGoods
+                    sku={line.sku ?? "—"}
+                    designName={line.designName}
+                    previewUrl={line.previewUrl}
+                    unitsPerCarton={line.unitsPerCarton}
+                  />
+                  <p className="text-ink-secondary tabular-nums">
+                    {formatNumber(line.cartons)} thùng = {formatNumber(line.units)} cái
+                  </p>
                 </li>
               ))}
             </ul>

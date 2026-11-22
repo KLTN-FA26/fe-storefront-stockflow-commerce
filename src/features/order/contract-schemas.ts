@@ -24,7 +24,11 @@ export const contractPartyDtoSchema = z.object({
   representativeTitle: z.string().nullish(),
 });
 
-/** One delivery batch: its window, the cartons of each order line, its goods with VAT. */
+/**
+ * One delivery batch: its window, the cartons of each order line, and `value`: its goods with VAT,
+ * fees not included (SO-20261123-000001: goods 25.000.000 + VAT 8 % = 27.000.000, while the order
+ * is 28.620.000 with the 1.500.000 plate fee and its VAT).
+ */
 export const contractBatchDtoSchema = z.object({
   seq: z.number().int().positive(),
   windowStart: isoDate.nullish(),
@@ -36,6 +40,10 @@ export const contractBatchDtoSchema = z.object({
       sku: z.string().nullish(),
       cartons: z.number().int().nonnegative(),
       units: z.number().int().nonnegative(),
+      // R5-3, optional.
+      designName: z.string().nullish(),
+      previewUrl: z.string().nullish(),
+      unitsPerCarton: z.number().int().nullish(),
     }),
   ),
 });
