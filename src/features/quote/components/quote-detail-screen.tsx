@@ -9,6 +9,7 @@ import { STORE_ROUTES } from "@/constants";
 import { Alert } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { hasErrorCode } from "@/lib/api/describe-error";
+import { daysLeftText, formatDateTime } from "@/lib/format/date";
 import { PERM } from "@/lib/auth/permission-codes";
 import { useHasPermission } from "@/lib/auth/my-permissions";
 
@@ -38,6 +39,20 @@ function BackToQuotes() {
       <ChevronLeft aria-hidden className="mr-1 size-4" />
       Báo giá của tôi
     </Link>
+  );
+}
+
+/**
+ * The deadline that decides how urgent the answer is, right under the status (SF-UX-17): on a phone
+ * the info card with "Hiệu lực đến" comes only after every line.
+ */
+function ValidityHint({ validUntil }: { validUntil: string }) {
+  const left = daysLeftText(validUntil);
+  return (
+    <p className="text-ink-primary text-sm font-medium tabular-nums">
+      Hiệu lực đến {formatDateTime(validUntil)}
+      {left ? <span className="text-warning-ink"> ({left})</span> : null}
+    </p>
   );
 }
 
@@ -86,6 +101,7 @@ export function QuoteDetailScreen({ quoteId: rawQuoteId }: { quoteId: string }) 
               <QuoteStatusBadge status={status} />
             </div>
             <p className="text-ink-secondary text-sm">{quoteStatusHint(status, quote)}</p>
+            {status === "SENT" ? <ValidityHint validUntil={quote.validUntil} /> : null}
           </div>
           <div className="flex flex-wrap items-start gap-2">
             <QuoteDocumentButton quoteId={quote.id} quoteNumber={quote.quoteNumber} />

@@ -43,7 +43,7 @@ const belowMoq = () =>
 
 const cartonsOf = (lineNo: number) =>
   screen
-    .getAllByRole("spinbutton", { name: "Số thùng" })
+    .getAllByRole("spinbutton", { name: /^Số thùng – dòng \d+ \(/ })
     .find((input) => input.closest("li")?.getAttribute("data-line-no") === String(lineNo))!;
 
 beforeEach(() => {
@@ -54,6 +54,53 @@ afterEach(() => {
   vi.restoreAllMocks();
   notFound.mockReset();
   signOut();
+});
+
+describe("QuoteDetailScreen — what the customer decides on (SF-UX-16..20)", () => {
+  it("names each carton input by its line and SKU", async () => {
+    backend(beTwoLineQuote);
+    renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
+    expect(
+      await screen.findByRole("spinbutton", { name: "Số thùng – dòng 1 (LY-GIAY-DEMO-12OZ-XANH)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("spinbutton", { name: "Số thùng – dòng 2 (NAP-LY-DEMO-90-TRANG)" }),
+    ).toBeInTheDocument();
+  });
+
+  it("announces the live total and says nothing is paid when accepting", async () => {
+    backend(beSentQuote);
+    const user = userEvent.setup();
+    renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
+
+    const total = (await screen.findByText("Tổng có VAT (tạm tính)")).parentElement!;
+    expect(total).toHaveAttribute("aria-live", "polite");
+    await user.click(screen.getByRole("button", { name: "Chấp nhận báo giá" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent(/Bạn chưa phải thanh toán ở bước này/);
+  });
+
+  it("puts the validity and the days left in the header of a SENT quote", async () => {
+    backend({ ...beSentQuote, validUntil: "2099-12-04T02:00:00Z" });
+    renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
+    expect(await screen.findByText(/^Hiệu lực đến 04\/12\/2099 09:00/)).toBeInTheDocument();
+  });
+
+  it("shows the design's name, a thumbnail opening its preview, and pieces per carton", async () => {
+    const [line] = beSentQuote.lines;
+    backend({
+      ...beSentQuote,
+      lines: [
+        { ...line, designName: "Ly cà phê Nhà Mình", previewUrl: "https://media.test/p.png" },
+      ],
+    });
+    renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
+    expect(await screen.findByText("Ly cà phê Nhà Mình")).toBeInTheDocument();
+    expect(screen.getByText(/1\.000 cái\/thùng/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Xem ảnh thiết kế Ly cà phê Nhà Mình (mở tab mới)" }),
+    ).toHaveAttribute("href", "https://media.test/p.png");
+  });
 });
 
 describe("QuoteDetailScreen — accepting (TC-F03-01)", () => {
@@ -72,7 +119,7 @@ describe("QuoteDetailScreen — accepting (TC-F03-01)", () => {
         .closest("li"),
     ).toHaveAttribute("aria-current", "true");
     expect(within(line).getByText(/69\.000\.000/)).toBeInTheDocument();
-    expect(screen.getByText("Tổng có thuế (tạm tính)").nextElementSibling).toHaveTextContent(
+    expect(screen.getByText("Tổng có VAT (tạm tính)").nextElementSibling).toHaveTextContent(
       /76\.140\.000/,
     );
   });
@@ -83,7 +130,7 @@ describe("QuoteDetailScreen — accepting (TC-F03-01)", () => {
     const user = userEvent.setup();
     renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
 
-    const input = await screen.findByRole("spinbutton", { name: "Số thùng" });
+    const input = await screen.findByRole("spinbutton", { name: /^Số thùng – dòng \d+ \(/ });
     await user.clear(input);
     await user.type(input, "10");
     await user.click(screen.getByRole("button", { name: "Chấp nhận báo giá" }));
@@ -104,7 +151,7 @@ describe("QuoteDetailScreen — accepting (TC-F03-01)", () => {
     const user = userEvent.setup();
     renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
 
-    const input = await screen.findByRole("spinbutton", { name: "Số thùng" });
+    const input = await screen.findByRole("spinbutton", { name: /^Số thùng – dòng \d+ \(/ });
     await user.clear(input);
     await user.type(input, "100");
     expect(screen.getByText("= 100.000 cái")).toBeInTheDocument();
@@ -127,7 +174,7 @@ describe("QuoteDetailScreen — accepting (TC-F03-01)", () => {
     const user = userEvent.setup();
     renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
 
-    await screen.findAllByRole("spinbutton", { name: "Số thùng" });
+    await screen.findAllByRole("spinbutton", { name: /^Số thùng – dòng \d+ \(/ });
     await user.click(screen.getByRole("button", { name: "Chấp nhận báo giá" }));
     await user.click(await screen.findByRole("button", { name: "Chấp nhận" }));
 
@@ -158,7 +205,7 @@ describe("QuoteDetailScreen — accepting (TC-F03-01)", () => {
       </>,
     );
 
-    await screen.findByRole("spinbutton", { name: "Số thùng" });
+    await screen.findByRole("spinbutton", { name: /^Số thùng – dòng \d+ \(/ });
     const reads = () => get.mock.calls.filter(([url]) => url === `/quotes/${quoteId}`).length;
     const before = reads();
     await user.click(screen.getByRole("button", { name: "Chấp nhận báo giá" }));
@@ -198,7 +245,7 @@ describe("QuoteDetailScreen — read only (TC-F03-03)", () => {
     const user = userEvent.setup();
     renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
 
-    await screen.findByRole("spinbutton", { name: "Số thùng" });
+    await screen.findByRole("spinbutton", { name: /^Số thùng – dòng \d+ \(/ });
     await user.click(screen.getByRole("button", { name: "Chấp nhận báo giá" }));
     await user.click(await screen.findByRole("button", { name: "Chấp nhận" }));
 
@@ -366,7 +413,7 @@ describe("QuoteDetailScreen — a quote Sale is revising (PR #388)", () => {
       </>,
     );
 
-    await screen.findByRole("spinbutton", { name: "Số thùng" });
+    await screen.findByRole("spinbutton", { name: /^Số thùng – dòng \d+ \(/ });
     await user.click(screen.getByRole("button", { name: "Chấp nhận báo giá" }));
     await user.click(await screen.findByRole("button", { name: "Chấp nhận" }));
 
@@ -388,7 +435,7 @@ describe("QuoteDetailScreen — a quote Sale is revising (PR #388)", () => {
       </>,
     );
 
-    await screen.findByRole("spinbutton", { name: "Số thùng" });
+    await screen.findByRole("spinbutton", { name: /^Số thùng – dòng \d+ \(/ });
     await user.click(screen.getByRole("button", { name: "Chấp nhận báo giá" }));
     await user.click(await screen.findByRole("button", { name: "Chấp nhận" }));
 

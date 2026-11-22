@@ -1,5 +1,6 @@
 import type { UseFormRegisterReturn } from "react-hook-form";
 
+import { LineGoods } from "@/components/storefront/line-goods";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
 import { formatMoney } from "@/lib/format/money";
@@ -36,10 +37,13 @@ export function QuoteAcceptLine({ line, preview, field, error, refused }: QuoteA
         invalid ? "border-danger bg-danger/5" : "border-border-default",
       )}
     >
-      <p className="text-ink-primary text-sm">
-        <span className="text-ink-tertiary">Dòng {line.lineNo} · </span>
-        <span className="font-mono font-semibold break-all">{line.sku}</span>
-      </p>
+      <LineGoods
+        prefix={`Dòng ${line.lineNo} · `}
+        sku={line.sku}
+        designName={line.designName}
+        previewUrl={line.previewUrl}
+        unitsPerCarton={line.unitsPerCarton}
+      />
       <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
         <div className="space-y-1">
           <label htmlFor={inputId} className="text-ink-secondary block text-xs">
@@ -51,6 +55,9 @@ export function QuoteAcceptLine({ line, preview, field, error, refused }: QuoteA
             inputMode="numeric"
             min={1}
             step={1}
+            // Every line has this input: its name says which line it is (SF-UX-18, WCAG 2.4.6),
+            // starting with the visible label (2.5.3).
+            aria-label={`Số thùng – dòng ${line.lineNo} (${line.sku})`}
             aria-invalid={invalid ? true : undefined}
             aria-describedby={`${inputId}-moq${error ? ` ${errorId}` : ""}`}
             className="bg-bg-surface h-11 w-32 rounded-[var(--r-md)] text-base tabular-nums"

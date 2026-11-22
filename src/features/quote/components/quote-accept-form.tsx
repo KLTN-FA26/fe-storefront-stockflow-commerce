@@ -34,6 +34,13 @@ interface QuoteAcceptFormProps {
 
 const money = (amount: number | null) => (amount == null ? "—" : formatMoney(amount));
 
+/** The form's id: the mobile bottom bar's "Chấp nhận" submits it from outside (SF-UX-17). */
+export const QUOTE_ACCEPT_FORM_ID = "quote-accept-form";
+
+/** What accepting commits to, and what it does not (SF-UX-20): nothing is paid at this step. */
+export const ACCEPT_NOTHING_PAID =
+  "Bạn chưa phải thanh toán ở bước này; lịch thanh toán (đặt cọc, các đợt) nằm trong hợp đồng Sale gửi để ký.";
+
 /**
  * Accepting a SENT quote (14 §4.1 step 4, plan D2): cartons per line, proposed by default; live
  * pieces, MOQ, tier, line total and total with tax as a preview only — the BE's numbers are the
@@ -93,7 +100,11 @@ export function QuoteAcceptForm({
           thùng của mỗi SKU.
         </p>
       </div>
-      <form onSubmit={handleSubmit((form) => setConfirming(form.lines))} noValidate>
+      <form
+        id={QUOTE_ACCEPT_FORM_ID}
+        onSubmit={handleSubmit((form) => setConfirming(form.lines))}
+        noValidate
+      >
         <ul className="space-y-3" aria-label="Số thùng từng dòng">
           {quote.lines.map((line, index) => (
             <QuoteAcceptLine
@@ -119,8 +130,9 @@ export function QuoteAcceptForm({
             <dt className="text-ink-secondary">Thuế VAT</dt>
             <dd className="text-ink-primary tabular-nums">{money(preview.tax)}</dd>
           </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-ink-primary font-semibold">Tổng có thuế (tạm tính)</dt>
+          {/* Announced as the cartons change (SF-UX-19, WCAG 4.1.3); the row is read whole. */}
+          <div className="flex justify-between gap-4" aria-live="polite" aria-atomic="true">
+            <dt className="text-ink-primary font-semibold">Tổng có VAT (tạm tính)</dt>
             <dd className="font-display text-ink-primary text-lg font-bold tabular-nums">
               {money(preview.total)}
             </dd>
@@ -136,7 +148,13 @@ export function QuoteAcceptForm({
             </Alert>
           </div>
         ) : null}
-        <div className="mt-4 flex flex-wrap justify-end gap-2">
+        {/* On a phone the form is long: the total and the two answers stay at the bottom of the
+            screen while it is in view (SF-UX-17), clear of the chat button's corner. */}
+        <div className="bg-bg-surface border-border-default mt-4 flex flex-wrap items-center justify-end gap-2 max-lg:sticky max-lg:bottom-20 max-lg:z-10 max-lg:-mx-[var(--card-pad)] max-lg:rounded-[var(--r-md)] max-lg:border-t max-lg:px-[var(--card-pad)] max-lg:py-2 max-lg:shadow-[var(--sh-md)]">
+          <p aria-hidden className="text-ink-secondary mr-auto text-sm lg:hidden">
+            Tổng có VAT{" "}
+            <span className="text-ink-primary font-bold tabular-nums">{money(preview.total)}</span>
+          </p>
           <Button
             type="button"
             variant="outline"
@@ -155,7 +173,7 @@ export function QuoteAcceptForm({
         open={confirming !== null}
         onOpenChange={(open) => !open && setConfirming(null)}
         title={`Chấp nhận báo giá ${quote.quoteNumber}?`}
-        description={`Tổng có thuế tạm tính ${money(preview.total)}. Sau khi bạn chấp nhận, Sale sẽ lập đơn và gửi hợp đồng để ký.`}
+        description={`Tổng có VAT tạm tính ${money(preview.total)}. Sau khi bạn chấp nhận, Sale sẽ lập đơn và gửi hợp đồng để ký. ${ACCEPT_NOTHING_PAID}`}
         confirmLabel="Chấp nhận"
         variant="default"
         onConfirm={() => {

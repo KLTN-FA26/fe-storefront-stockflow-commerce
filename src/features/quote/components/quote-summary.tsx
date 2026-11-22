@@ -43,7 +43,7 @@ export function QuoteTotalsCard({ quote }: { quote: Pick<Quote, "accepted" | "pr
         <Row label="Tiền hàng">{money(totals?.subtotal)}</Row>
         <Row label="Phí">{money(totals?.fees)}</Row>
         <Row label="Thuế VAT">{money(totals?.tax)}</Row>
-        <Row label="Tổng có thuế" strong>
+        <Row label="Tổng có VAT" strong>
           {money(totals?.total)}
         </Row>
       </dl>
