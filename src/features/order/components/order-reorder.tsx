@@ -4,14 +4,22 @@ import { RotateCcw } from "lucide-react";
 import { STORE_ROUTES } from "@/constants";
 import { Button } from "@/components/ui/button";
 
+import { displayGroup } from "../lifecycle";
 import type { Order } from "../types";
 
 /**
  * "Đặt lại" (kltn-docs 14 §4.1 step 6, WF-02 D4): the customer does not order on the portal, so
  * ordering again opens a conversation with Sales with this order as its context (BE chat C1); Sales
- * draw up a new quote at today's prices. No POST /orders/{id}/reorder — the BE dropped it.
+ * draw up a new quote at today's prices. No POST /orders/{id}/reorder — the BE dropped it. Offered
+ * only once the goods arrived (SF-UX-35): before that it is noise beside the order's own next step.
  */
-export function OrderReorder({ order }: { order: Pick<Order, "orderId" | "orderNumber"> }) {
+export function OrderReorder({
+  order,
+}: {
+  order: Pick<Order, "orderId" | "orderNumber" | "status" | "statusGroup">;
+}) {
+  const group = displayGroup(order);
+  if (group !== "DELIVERED" && group !== "COMPLETED") return null;
   return (
     <Button asChild variant="outline" className="min-h-11 rounded-[var(--r-md)] px-4">
       <Link
