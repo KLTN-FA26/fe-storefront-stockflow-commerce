@@ -55,13 +55,7 @@ export const QUOTE_STATUS: Readonly<Record<QuoteStatusKey, StatusMeta>> = {
 
 // ── Sales contract (kltn-docs 14 §5.2) ──
 
-export type ContractStatusKey =
-  | "DRAFT"
-  | "SENT"
-  | "SIGNED"
-  | "COMPLETED"
-  | "CANCELLED"
-  | "UNKNOWN";
+export type ContractStatusKey = "DRAFT" | "SENT" | "SIGNED" | "COMPLETED" | "CANCELLED" | "UNKNOWN";
 
 export const CONTRACT_STATUS: Readonly<Record<ContractStatusKey, StatusMeta>> = {
   DRAFT: { label: "Nháp", tone: "neutral" },
@@ -111,12 +105,7 @@ export const ORDER_STATUS: Readonly<Record<OrderDisplayGroupKey, StatusMeta>> = 
 // ── Installment (kltn-docs 15 §5.1). Overdue is a flag, not a status (WF-05 fix plan §8). ──
 
 export type InstallmentStatusKey =
-  | "NOT_DUE"
-  | "DUE"
-  | "PARTIALLY_PAID"
-  | "PAID"
-  | "CANCELLED"
-  | "UNKNOWN";
+  "NOT_DUE" | "DUE" | "PARTIALLY_PAID" | "PAID" | "CANCELLED" | "UNKNOWN";
 
 export const INSTALLMENT_STATUS: Readonly<Record<InstallmentStatusKey, StatusMeta>> = {
   NOT_DUE: { label: "Chưa đến hạn", tone: "neutral" },
@@ -133,7 +122,10 @@ export const INSTALLMENT_OVERDUE: StatusMeta = { label: "Quá hạn", tone: "dan
  * What the customer reads for an installment: a DUE or PARTIALLY_PAID one past its due day reads
  * "Quá hạn" in danger; a paid or cancelled one never does.
  */
-export function installmentStatusOf(status: string | null | undefined, overdue: boolean): StatusMeta {
+export function installmentStatusOf(
+  status: string | null | undefined,
+  overdue: boolean,
+): StatusMeta {
   if (overdue && status !== "PAID" && status !== "CANCELLED") return INSTALLMENT_OVERDUE;
   return statusMetaOf(INSTALLMENT_STATUS, status, INSTALLMENT_STATUS.UNKNOWN.label);
 }
