@@ -18,7 +18,7 @@ const chatLink: NavLink = { href: STORE_ROUTES.chat.list, label: CHAT_WITH_SALES
 /** The header's main row: the products, then the customer's own work, design to quote. */
 export const mainLinks: NavLink[] = [
   productsLink,
-  { ...designsLink, highlight: true },
+  designsLink,
   projectsLink,
   quotesLink,
 ];

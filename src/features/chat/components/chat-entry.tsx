@@ -46,7 +46,7 @@ export function ChatHeaderLink({ className }: { className: string }) {
           </span>
         ) : null}
       </span>
-      <span className="sr-only lg:not-sr-only">{CHAT_WITH_SALES}</span>
+      <span className="sr-only whitespace-nowrap lg:not-sr-only">{CHAT_WITH_SALES}</span>
     </Link>
   );
 }
