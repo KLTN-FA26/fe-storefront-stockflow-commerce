@@ -160,4 +160,32 @@ describe("StorefrontShell", () => {
     // Only the header's and the footer's: no floating button over the composer.
     expect(screen.getAllByRole("link", { name: "Chat với Sale" })).toHaveLength(2);
   });
+
+  it("keeps room under the page on a phone so the floating button covers no content", () => {
+    navigation.pathname = "/account/orders/o1";
+    const { container } = render(
+      <StorefrontShell>
+        <p>Nội dung</p>
+      </StorefrontShell>,
+    );
+    const space = container.querySelector("[data-chat-fab-space]");
+    expect(space).not.toBeNull();
+    expect(space).toHaveAttribute("aria-hidden", "true");
+    // 80px ≥ the button (48px) and its offset (20px); only below md, coloured like the footer above it.
+    expect(space?.className.split(" ")).toEqual(
+      expect.arrayContaining(["h-20", "md:hidden", "bg-bg-surface"]),
+    );
+    // The last thing on the page, after the footer: nothing scrolls past it.
+    expect(space?.previousElementSibling?.tagName).toBe("FOOTER");
+  });
+
+  it("keeps no room on the chat thread, where the button is hidden", () => {
+    navigation.pathname = "/chat/c1";
+    const { container } = render(
+      <StorefrontShell footer={false}>
+        <p>Nội dung</p>
+      </StorefrontShell>,
+    );
+    expect(container.querySelector("[data-chat-fab-space]")).toBeNull();
+  });
 });

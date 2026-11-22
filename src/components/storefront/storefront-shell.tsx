@@ -16,7 +16,7 @@ export function StorefrontShell({ children, footer = true }: StorefrontShellProp
       <SiteHeader />
       <main className="flex-1">{children}</main>
       {footer ? <SiteFooter /> : null}
-      <ChatFab />
+      <ChatFab spaceClassName={footer ? "bg-bg-surface" : undefined} />
     </div>
   );
 }
