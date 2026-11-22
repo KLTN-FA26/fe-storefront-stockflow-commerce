@@ -4,7 +4,7 @@ import { api } from "@/lib/api/client";
 
 import type { ReturnReasonInput } from "./types";
 
-// The reviewer simulation of spec 2026-11-09 §4.3: the Sales Manager's back-office does not exist
+// The reviewer simulation of spec 2026-11-09 §4.3: the reviewer's (Production Coordinator's) back-office does not exist
 // in this repo, so on the mock these routes stand in for it. This file is the only caller of
 // `/__mock/*`, through the app's client; callers invalidate what the answer changes.
 

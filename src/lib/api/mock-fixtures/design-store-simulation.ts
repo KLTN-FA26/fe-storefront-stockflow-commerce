@@ -1,6 +1,6 @@
 /**
  * The reviewer simulation of the design mock (spec 2026-11-09 §4.3, §6.5): mock-only routes that
- * stand in for the Sales Manager, approving or returning a design under review. Each runs as an
+ * stand in for the reviewer (Production Coordinator), approving or returning a design under review. Each runs as an
  * operation of `design-store.ts`; `reset` stays there, as it reads nothing first.
  *
  * A design of an open review round (part E) is decided by the same operations, with the

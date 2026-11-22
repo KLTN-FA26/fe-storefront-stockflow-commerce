@@ -38,7 +38,7 @@ export const designDraftDtoSchema = z.object({
   customerName: z.string().nullish(),
   parentSnapshotId: beId().nullish(),
   reviewRequestedAt: instant.nullish(),
-  /** The Sales Manager's last decision; `reviewNotes` is the reason when they returned it. */
+  /** The reviewer's (Production Coordinator's) last decision; `reviewNotes` is the reason when they returned it. */
   reviewedAt: instant.nullish(),
   reviewNotes: z.string().nullish(),
   updatedAt: instant.nullish(),

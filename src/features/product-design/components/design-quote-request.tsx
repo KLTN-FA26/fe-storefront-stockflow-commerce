@@ -33,7 +33,7 @@ import {
 /** The facts of a request: cartons, date, its status, the customer's SKU once approved. */
 export function QuoteRequestFacts({ request }: { request: DesignQuoteRequest }) {
   const open = request.status === "OPEN";
-  // The request stays open when the Sales Manager returns the design (BE B40): the design is a
+  // The request stays open when the reviewer (Production Coordinator) returns the design (BE B40): the design is a
   // DRAFT again, with the reason it came back for.
   const returned = open && (request.designStatus === "DRAFT" || !!request.returnReason);
   const waitsForApproval = open && !returned && request.designStatus !== "APPROVED";

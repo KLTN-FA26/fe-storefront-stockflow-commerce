@@ -147,7 +147,7 @@ export function designQuery(id: string) {
   });
 }
 
-/** The one status that changes without the customer: the Sales Manager approves or returns it. */
+/** The one status that changes without the customer: the reviewer (Production Coordinator) approves or returns it. */
 const awaitsReview = (design: Design | undefined) => design?.status === "PENDING_REVIEW";
 
 /**

@@ -362,7 +362,7 @@ function notesPage(pen: Pen, brief: DesignBrief) {
   ry += 5;
   for (const [title, fields] of [
     ["Nhà sản xuất", ["Phương pháp in", "Số màu in", "Ngày gửi bản in thử"]],
-    ["Duyệt bản in thử", ["Quản lý kinh doanh", "Khách hàng", "Ngày duyệt"]],
+    ["Duyệt bản in thử", ["Điều phối sản xuất", "Khách hàng", "Ngày duyệt"]],
   ] as const) {
     const h = 9 + fields.length * 8;
     pen.box(rx, ry, 119, h);

@@ -10,7 +10,7 @@ import type { Design, DesignStatus } from "./types";
 export const DESIGN_TRANSITIONS: Record<DesignStatus, readonly DesignStatus[]> = {
   // save (version + 1, docs 12 BR-11), submit on a preflight Pass (BR-05, BR-07), delete (BR-16)
   DRAFT: ["DRAFT", "PENDING_REVIEW", "ARCHIVED"],
-  // the Sales Manager approves (BR-08) or returns it with a reason (BR-06)
+  // the reviewer (Production Coordinator) approves (BR-08) or returns it with a reason (BR-06)
   PENDING_REVIEW: ["APPROVED", "DRAFT"],
   // final and read-only (BR-09); a change is a new DRAFT made by a revision (BR-12)
   APPROVED: [],
@@ -80,6 +80,6 @@ export const RETURNED_META: { label: string; tone: SemanticTone } = {
   tone: "warning",
 };
 
-/** A DRAFT the Sales Manager sent back: it carries the latest return's reason (docs 12 BR-06). */
+/** A DRAFT the reviewer (Production Coordinator) sent back: it carries the latest return's reason (docs 12 BR-06). */
 export const isReturned = (design: Pick<Design, "status" | "lastReturn">): boolean =>
   design.status === "DRAFT" && design.lastReturn !== null;

@@ -26,7 +26,7 @@ import { ReviewRounds } from "./mock-review-rounds";
 const studioPlace = (draft: boolean) => (draft ? "right-88" : "right-4");
 
 /**
- * A floating stand-in for the Sales Manager on the mock (spec 2026-11-09 §6.5): in the studio it
+ * A floating stand-in for the reviewer (Production Coordinator) on the mock (spec 2026-11-09 §6.5): in the studio it
  * acts on the open design, on /design on the designs waiting for review, on /design/new it only
  * resets; on a project page it lists the open review rounds. Compact, at the bottom left of a
  * page; in the studio (`placement="studio"`) clear of the stage's zoom bar and the 3D card

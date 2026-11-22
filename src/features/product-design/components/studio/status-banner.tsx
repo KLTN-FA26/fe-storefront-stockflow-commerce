@@ -32,7 +32,7 @@ function ApprovedLine({ design }: { design: Design }) {
 
 /**
  * Where the design stands, under the studio's header (spec §6.4): why a returned draft came back
- * and when; that a submitted design waits for the Sales Manager since it was sent; when an
+ * and when; that a submitted design waits for the reviewer (Production Coordinator) since it was sent; when an
  * approved one was approved. A sent design also offers the files it was sent with, an approved
  * one "Yêu cầu báo giá" too (docs 12 §4.8.23). Nothing for a plain draft.
  */

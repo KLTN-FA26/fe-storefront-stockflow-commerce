@@ -43,7 +43,7 @@ function surfaceIssues(input: PreflightInput, code: PrintAreaCode): PreflightIss
 
 /**
  * Client-side print checks (spec §7): a `Fail` blocks submitting (docs 12 §4.3, BR-05), and the
- * server re-checks what it can see on submit (`422 PREFLIGHT_FAILED`); the Sales Manager reviews
+ * server re-checks what it can see on submit (`422 PREFLIGHT_FAILED`); the reviewer (Production Coordinator) reviews
  * after that. The result is `Fail` when any issue fails, else `Pass`: a note never changes a
  * `Pass`.
  */
