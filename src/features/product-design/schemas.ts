@@ -39,7 +39,10 @@ export const designSchema = z.object({
   status: designStatusSchema,
   /** The slug is null once the product is gone (BE leaves `productSlug` out): no link, no catalogue read. */
   product: z.object({
-    /** What a chat about the design's product names (`PRODUCT` context); the BE always sends it. */
+    /**
+     * The product's id, as the BE always sends it. No screen reads it now: "Chat với Sale" is about the design itself
+     * (`DESIGN` context, PO 2026-11-22 Q7), not its product.
+     */
     id: beId().nullish(),
     slug: code.nullable(),
     title: z.string().min(1),

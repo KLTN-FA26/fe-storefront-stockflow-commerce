@@ -154,3 +154,38 @@ describe("print surfaces", () => {
     expect(customizationTemplateSchema.safeParse(sectorOnCylinder).success).toBe(false);
   });
 });
+
+describe("trimSamples (BE PrintSurface.trimSamples, ported point for point)", () => {
+  const INSET = 0.01;
+
+  it("a rectangle: 11 points along each side, corners included, 0.01 mm inside the trim", () => {
+    const front = createSurfaces(bagM).byCode.FRONT!;
+    const samples = front.trimSamples();
+    expect(samples).toHaveLength(44); // i = 0..10, four points per step
+    const bleed = front.bleedMm;
+    const xs = samples.map((p) => p.x);
+    const ys = samples.map((p) => p.y);
+    expect(Math.min(...xs)).toBeCloseTo(bleed + INSET, 9);
+    expect(Math.min(...ys)).toBeCloseTo(bleed + INSET, 9);
+    expect(Math.max(...xs)).toBeCloseTo(front.flatBounds.width - bleed - INSET, 9);
+    expect(Math.max(...ys)).toBeCloseTo(front.flatBounds.height - bleed - INSET, 9);
+    expect(samples.every((p) => front.contains(p, "trim"))).toBe(true);
+  });
+
+  it("the cup's sector: 33 points on each trim arc and 9 pairs across, the glue flap included", () => {
+    const body = createSurfaces(cup12oz).byCode.BODY!;
+    const samples = body.trimSamples();
+    expect(samples).toHaveLength(2 * 33 + 2 * 9);
+    expect(samples.every((p) => body.contains(p, "trim"))).toBe(true);
+    // The trim runs over the glue flap, so some samples lie on it.
+    expect(samples.some((p) => body.inSeam(p))).toBe(true);
+    // Inset 0.01 mm from the arcs: radii trimOuter - 0.01 and trimInner + 0.01 about the apex.
+    const model = cup12oz.model;
+    if (model.kind !== "parametric-cup") throw new Error("cup expected");
+    const { trimOuterMm, trimInnerMm } = cupSector(model);
+    const apex = body.apexMm!;
+    const radii = samples.map((p) => Math.hypot(p.x - apex.x, p.y - apex.y));
+    expect(Math.max(...radii)).toBeCloseTo(trimOuterMm - INSET, 9);
+    expect(Math.min(...radii)).toBeCloseTo(trimInnerMm + INSET, 9);
+  });
+});

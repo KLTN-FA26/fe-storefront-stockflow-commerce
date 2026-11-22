@@ -22,8 +22,8 @@ export const DRAFT_LIMIT = 50;
  *  - `product.title` ← `productName`, else the slug; `variant.label` ← `variantName`, else the SKU (F-7);
  *  - `sourceSnapshotId` ← `parentSnapshotId`, `submittedAt` ← `reviewRequestedAt` (F-4);
  *  - `approvedAt` ← `reviewedAt` once APPROVED (F-4); `customerSku` is sent on an approved design only (BE-2);
- *  - `lastReturn` ← `reviewNotes` + `reviewedAt` on a DRAFT: the BE sets the notes only when the Sales
- *    Manager returns a design and clears them on approval (F-5); `updatedAt` stands in for a missing
+ *  - `lastReturn` ← `reviewNotes` + `reviewedAt` on a DRAFT: the BE sets the notes only when the reviewer
+ *    (Production Coordinator) returns a design and clears them on approval (F-5); `updatedAt` stands in for a missing
  *    `reviewedAt`.
  */
 export function toDesign(dto: DesignDraftDto, project: ProjectRefDto | null): Design {

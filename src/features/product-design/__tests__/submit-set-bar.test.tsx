@@ -59,6 +59,27 @@ describe("SubmitSetBar: no submit on a phone or tablet", () => {
     );
   });
 
+  it("on a phone-width window with a reason of its own: locked, both reasons described", () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: true,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    render(
+      <SubmitSetBar
+        projectId="p-1"
+        chosen={["a", "b"]}
+        gate={{ allowed: false, reason: "Dự án đang chờ duyệt" }}
+      />,
+    );
+    const button = screen.getByRole("button", { name: "Gửi duyệt cả bộ" });
+    expect(button).toBeDisabled();
+    expect(screen.queryByRole("link", { name: "Gửi duyệt cả bộ" })).not.toBeInTheDocument();
+    expect(screen.getByText("Dự án đang chờ duyệt")).toBeInTheDocument();
+    expect(button).toHaveAccessibleDescription(`Dự án đang chờ duyệt ${NOTE}`);
+  });
+
   it("is locked on a phone-width window", () => {
     vi.stubGlobal("matchMedia", (query: string) => ({
       matches: true,

@@ -306,6 +306,25 @@ describe("OUTSIDE_PRINT_AREA (BR-02)", () => {
         cup12oz,
       );
     expect(ruleIds(runPreflight(input(background(bleed), { ...cup12oz })).issues)).toEqual([]);
+    // Everything but the glue flap: not a background (the flap's samples are uncovered), so the safe line counts.
+    const shortOfFlap = docOf(
+      {
+        BODY: content([
+          imageEl("bg", {
+            widthMm: sweepRad * midRadiusMm + bleed,
+            heightMm: band + bleed,
+            naturalWidthPx: 8000,
+            naturalHeightPx: 4000,
+            wrap: true,
+            placement: { ...cupPlacement, u: (sweepRad * midRadiusMm) / 2 - bleed / 2 },
+          }),
+        ]),
+      },
+      cup12oz,
+    );
+    expect(ruleIds(runPreflight(input(shortOfFlap, { ...cup12oz })).issues)).toContain(
+      "CROSSES_SAFE_AREA",
+    );
     // Short of the flap's end: no longer a background, so the flap and the safe line count again.
     const short = ruleIds(runPreflight(input(background(-bleed), { ...cup12oz })).issues);
     expect(short).toContain("CROSSES_SAFE_AREA");
