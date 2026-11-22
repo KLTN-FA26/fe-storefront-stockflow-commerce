@@ -52,6 +52,9 @@ export const quoteLineDtoSchema = z.object({
   units: z.number().int().nonnegative(),
   designSnapshotId: beId().nullish(),
   printSpec: z.string().nullish(),
+  // R5-3, optional: the design's name and a short-lived preview URL (null when it has none).
+  designName: z.string().nullish(),
+  previewUrl: z.string().nullish(),
   priced: z.boolean().catch(false),
   moq: z.number().int().nullish(),
   tiers: z
@@ -142,7 +145,11 @@ export const quoteDtoSchema = z.object({
   version: z.number().int().nonnegative(),
 });
 
-/** One row of GET /quotes (BE QuoteRowResponse): no lines and no total. */
+/**
+ * One row of GET /quotes (BE QuoteRowResponse). R5-2 adds, optionally, the total with VAT (accepted
+ * once accepted, else proposed; absent while not priceable), the line count and line 1's design
+ * name or SKU — an older BE sends none of them.
+ */
 export const quoteRowDtoSchema = z.object({
   id: beId(),
   quoteNumber: z.string().min(1),
@@ -154,6 +161,9 @@ export const quoteRowDtoSchema = z.object({
   convertedOrderId: beId().nullish(),
   createdAt: instantSchema,
   version: z.number().int().nonnegative(),
+  total: amountSchema.nullish(),
+  lineCount: z.number().int().nonnegative().nullish(),
+  firstItemName: z.string().nullish(),
 });
 
 export const quotePageDtoSchema = pageResponseSchema(quoteRowDtoSchema);

@@ -45,6 +45,35 @@ describe("QuotesScreen", () => {
     );
   });
 
+  it("tells rows apart: what is quoted, its total with VAT, and a SENT quote about to expire", async () => {
+    const soon = new Date(Date.now() + 2 * 86_400_000).toISOString();
+    vi.spyOn(api, "get").mockResolvedValue({
+      data: bePage([
+        {
+          ...beQuoteRow,
+          validUntil: soon,
+          total: 76140000,
+          lineCount: 3,
+          firstItemName: "Ly cà phê Nhà Mình",
+        },
+      ]),
+    });
+    renderWithProviders(<QuotesScreen />);
+
+    const card = (await screen.findByText("QT-20261120-9001")).closest("article")!;
+    expect(within(card).getByText("Ly cà phê Nhà Mình · 3 dòng")).toBeInTheDocument();
+    expect(within(card).getByText(/76\.140\.000/)).toBeInTheDocument();
+    expect(within(card).getByText(/^Còn [12] ngày$/)).toBeInTheDocument();
+  });
+
+  it("leaves the expiry chip off a quote far from its deadline or not waiting on the customer", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ data: bePage([beQuoteRow]) });
+    renderWithProviders(<QuotesScreen />);
+    const card = (await screen.findByText("QT-20261120-9001")).closest("article")!;
+    expect(within(card).queryByText(/^Còn \d+ ngày$/)).not.toBeInTheDocument();
+    expect(within(card).queryByText(/Tổng có VAT/)).not.toBeInTheDocument();
+  });
+
   it("sends the status filter of the URL, 0-based page, and says when nothing matches", async () => {
     const get = vi.spyOn(api, "get").mockResolvedValue({ data: bePage([]) });
     const user = userEvent.setup();
