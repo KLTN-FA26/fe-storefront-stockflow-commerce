@@ -258,6 +258,12 @@ describe("SubmitDialog on a preflight Pass", () => {
     await openStudio(id, renderer);
 
     const dialog = await openSubmit(user);
+    // Who reviews is the back office's business (a production coordinator since BE V20261213000200,
+    // not the sales manager): the customer is told only that the design goes for review.
+    expect(dialog).toHaveTextContent(
+      "Thiết kế được lưu, tạo ảnh xem trước, file in và file mô tả thiết kế, rồi gửi đi duyệt.",
+    );
+    expect(dialog).not.toHaveTextContent(/Quản lý kinh\s+doanh/);
     expect(
       await within(dialog).findByRole("img", { name: "Ảnh xem trước thiết kế" }),
     ).toHaveAttribute("src", expect.stringMatching(/^data:image\/png;base64,/));
