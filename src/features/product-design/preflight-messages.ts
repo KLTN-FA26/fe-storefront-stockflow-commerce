@@ -7,8 +7,8 @@ import type { PreflightIssueDto } from "./design-dtos";
  * Every `rule` the BE's preflight answers (origin/develop d47ed4ae): `LayoutPreflight.check` (the
  * layout), `DesignSubmissionService.plan` (the variant, the carton spec, the print and spec files)
  * and `printFileIssues`. The contract (`design-studio-fe-contract.md` §8) calls the list complete
- * and says a new or renamed rule is announced first; a rule outside it still gets the generic
- * sentence and its code, so nothing is lost.
+ * and says a new or renamed rule is announced first; a rule outside it still gets a generic
+ * sentence, and the studio sends the customer to Sale for it.
  */
 export const BE_PREFLIGHT_RULES = [
   "EMPTY_DESIGN",
@@ -39,7 +39,7 @@ const MESSAGE_BY_RULE: Readonly<Record<BePreflightRule, Sentence>> = {
   FONT_NOT_ALLOWED: "Phông chữ này không được phép in.",
   ELEMENT_INVALID: "Có phần tử trong thiết kế không đọc được. Hãy xoá phần tử đó và thêm lại.",
   VARIANT_UNAVAILABLE: "Quy cách này hiện không còn nhận thiết kế.",
-  CARTON_SPEC_MISSING: "Quy cách chưa có quy cách thùng, chưa gửi duyệt được.",
+  CARTON_SPEC_MISSING: "Sản phẩm này chưa có quy cách đóng thùng nên chưa gửi duyệt được.",
   PRINT_FILE_INVALID:
     "File in chưa đúng định dạng hoặc khổ giấy của quy cách (cần PDF, đúng kích thước vùng in kể cả phần tràn lề). Hãy thử gửi lại.",
 };
@@ -50,11 +50,17 @@ const isBeRule = (rule: string): rule is BePreflightRule =>
 /** The rules the table words, for a test to hold against the BE's list. */
 export const wordedPreflightRules = () => Object.keys(MESSAGE_BY_RULE);
 
-/** The sentence for one finding of the BE; a rule not listed gets a generic sentence and its code. */
+/**
+ * A rule this build has no sentence for (SF-UX-12): no raw code in the sentence, which the customer
+ * cannot act on; the studio offers "Chat với Sale" under it instead (`needsSale`).
+ */
+export const UNKNOWN_RULE_SENTENCE = "Thiết kế chưa đạt một kiểm tra tự động.";
+
+/** The sentence for one finding of the BE; a rule not listed gets a generic sentence. */
 export function describePreflightRule(issue: Pick<PreflightIssueDto, "rule" | "values">): string {
   const known = isBeRule(issue.rule) ? MESSAGE_BY_RULE[issue.rule] : undefined;
   if (typeof known === "function") return known(issue.values ?? {});
-  return known ?? `Thiết kế chưa đạt một kiểm tra tự động (mã: ${issue.rule}).`;
+  return known ?? UNKNOWN_RULE_SENTENCE;
 }
 
 /** The studio's own rule id for a BE rule (F-3): only the carton spec is named differently. */
@@ -64,6 +70,9 @@ export const engineRuleOf = (rule: string) =>
 /** The BE's rule for an engine rule id, the other way round: what a recorded browser refusal names. */
 export const beRuleOf = (ruleId: string) =>
   ruleId === "NO_CARTON_SPEC" ? "CARTON_SPEC_MISSING" : ruleId;
+
+/** Whether the BE's list words the rule (its own name, or the studio's for the carton spec). */
+export const isWordedBeRule = (rule: string) => isBeRule(beRuleOf(rule));
 
 /** The sentence for a recorded failure whose rules cannot be read: no code, no id. */
 const GENERIC_RECORDED = "Bản thiết kế chưa đạt kiểm tra tự động.";

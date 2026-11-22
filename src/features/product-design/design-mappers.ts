@@ -42,6 +42,7 @@ export function toDesign(dto: DesignDraftDto, project: ProjectRefDto | null): De
     version: dto.version,
     projectId: dto.projectId ?? null,
     customerSku: dto.customerSku?.trim() || null,
+    ...(dto.unitsPerCarton ? { unitsPerCarton: dto.unitsPerCarton } : {}),
     project: project ? { id: project.id, name: project.name, status: project.status } : null,
     sourceSnapshotId: dto.parentSnapshotId ?? null,
     lastReturn:

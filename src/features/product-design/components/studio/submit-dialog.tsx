@@ -122,7 +122,8 @@ function SubmitBody({
       <DialogHeader>
         <DialogTitle>Gửi duyệt</DialogTitle>
         <DialogDescription>
-          Thiết kế được lưu, tạo ảnh xem trước, file in và file mô tả thiết kế, rồi gửi đi duyệt.
+          Sau khi gửi, bản này được kiểm tra để in và không sửa được trong lúc chờ. Bạn nhận thông
+          báo khi bản được duyệt hoặc bị trả lại để sửa.
         </DialogDescription>
       </DialogHeader>
 

@@ -38,6 +38,7 @@ import type {
 } from "../types";
 import {
   ACTION_BUTTON,
+  CartonsInPieces,
   DIALOG_CONTENT,
   FIELD_ERROR,
   QuoteRequestSent,
@@ -189,8 +190,20 @@ function ProjectQuoteForm({ project, designs, current, onClose }: Props) {
                       className="min-h-11 tabular-nums"
                       disabled={ask.isPending}
                       aria-invalid={cartonsError ? true : undefined}
-                      aria-describedby={cartonsError ? `${rowId}-cartons-error` : undefined}
+                      aria-describedby={
+                        [
+                          design.unitsPerCarton ? `${rowId}-cartons-pieces` : "",
+                          cartonsError ? `${rowId}-cartons-error` : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ") || undefined
+                      }
                       {...register(`lines.${index}.cartons`)}
+                    />
+                    <CartonsInPieces
+                      id={`${rowId}-cartons-pieces`}
+                      unitsPerCarton={design.unitsPerCarton}
+                      cartons={chosen[index]?.cartons}
                     />
                     {cartonsError ? (
                       <p id={`${rowId}-cartons-error`} role="alert" className={FIELD_ERROR}>

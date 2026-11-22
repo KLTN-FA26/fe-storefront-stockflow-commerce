@@ -76,6 +76,16 @@ describe("a design as the BE sends it", () => {
     expect(design.variant).toEqual({ sku: "CUP-PAPER-12OZ-WHT", label: "Trắng 12oz" });
   });
 
+  it("keeps the carton spec when the BE sends it (SF-UX-9), and leaves it out otherwise", () => {
+    const withSpec = toDesign(
+      designDraftDtoSchema.parse(designDraftDto({ unitsPerCarton: 1000 })),
+      null,
+    );
+    expect(withSpec.unitsPerCarton).toBe(1000);
+    const without = toDesign(designDraftDtoSchema.parse(designDraftDto()), null);
+    expect(without).not.toHaveProperty("unitsPerCarton");
+  });
+
   it("keeps the product id the BE sends, which a chat about the product names", () => {
     const productId = "9a1c0000-0000-4000-8000-0000000000b1";
     const design = toDesign(designDraftDtoSchema.parse(designDraftDto({ productId })), null);

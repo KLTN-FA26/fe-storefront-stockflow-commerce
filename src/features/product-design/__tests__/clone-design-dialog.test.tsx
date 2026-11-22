@@ -256,7 +256,7 @@ describe("CloneDesignDialog", () => {
     await confirm();
     await userEvent.keyboard("{Escape}");
     expect(screen.getByRole("button", { name: "Huỷ" })).toBeDisabled();
-    expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Đóng hộp thoại" })).not.toBeInTheDocument();
     expect(onOpenChange).not.toHaveBeenCalled();
 
     await waitFor(() => expect(env.push).toHaveBeenCalledTimes(1), WAIT);

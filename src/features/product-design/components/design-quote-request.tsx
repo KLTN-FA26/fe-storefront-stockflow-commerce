@@ -21,6 +21,7 @@ import type { Design, DesignQuoteRequest } from "../types";
 import { QuoteRequestDialog } from "./quote-request-dialog";
 import {
   ACTION_BUTTON,
+  AnsweringQuoteLink,
   QuoteRequestStatusBadge,
   cartonsLabel,
   desiredDateLabel,
@@ -44,7 +45,7 @@ export function QuoteRequestFacts({ request }: { request: DesignQuoteRequest }) 
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-ink-primary font-medium">Yêu cầu báo giá</span>
-        <QuoteRequestStatusBadge status={request.status} />
+        <QuoteRequestStatusBadge request={request} />
       </div>
       <dl className="text-ink-secondary grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
         <dt>Số thùng</dt>
@@ -60,6 +61,7 @@ export function QuoteRequestFacts({ request }: { request: DesignQuoteRequest }) 
           </>
         ) : null}
       </dl>
+      <AnsweringQuoteLink request={request} />
       {returned ? (
         <p className="text-ink-tertiary text-xs">
           Thiết kế bị trả lại. Sửa theo lý do trả lại rồi gửi duyệt lại; Sale sẽ báo giá khi bản
@@ -103,14 +105,16 @@ export function DesignQuoteSummary({ design }: { design: Design }) {
 }
 
 /**
- * "Yêu cầu báo giá" on an APPROVED design, for a customer holding `design-quote-requests:CREATE`;
- * the dialog starts from the open request, which asking again changes.
+ * "Yêu cầu báo giá" on an APPROVED design, for a customer holding `design-quote-requests:CREATE`:
+ * the card's primary action (SF-UX-7). While a request is open the BE keeps one per design and a new
+ * ask changes it (`DesignQuoteRequestService.request`, 200 not 201), so the button says "Sửa yêu cầu
+ * báo giá" and steps back to an outline one: nothing new is filed, and the next move is Sales'.
  */
 export function RequestQuoteButton({
   design,
   className,
 }: {
-  design: Pick<Design, "id" | "name" | "status">;
+  design: Pick<Design, "id" | "name" | "status"> & Partial<Pick<Design, "unitsPerCarton">>;
   className?: string;
 }) {
   const allowed = useHasPermission(PERM.designQuoteRequest);
@@ -118,22 +122,20 @@ export function RequestQuoteButton({
   const requests = useDesignQuoteRequests(design.id, offered, CARD_QUOTE_REQUESTS);
   const [open, setOpen] = useState(false);
   if (!offered) return null;
+  const current = openQuoteRequest(requests.data);
+  const label = current ? "Sửa yêu cầu báo giá" : "Yêu cầu báo giá";
   return (
     <>
       <Button
         type="button"
+        variant={current ? "outline" : "default"}
         className={cn(ACTION_BUTTON, className)}
-        aria-label={`Yêu cầu báo giá ${design.name}`}
+        aria-label={`${label} ${design.name}`}
         onClick={() => setOpen(true)}
       >
-        Yêu cầu báo giá
+        {label}
       </Button>
-      <QuoteRequestDialog
-        design={design}
-        current={openQuoteRequest(requests.data)}
-        open={open}
-        onOpenChange={setOpen}
-      />
+      <QuoteRequestDialog design={design} current={current} open={open} onOpenChange={setOpen} />
     </>
   );
 }

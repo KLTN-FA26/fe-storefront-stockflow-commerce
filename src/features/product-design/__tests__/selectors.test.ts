@@ -95,7 +95,9 @@ describe("eventView (spec §3.3)", () => {
     expect(
       eventView(event({ type: "PREFLIGHT_FAILED", note: "EMPTY_DESIGN, CARTON_SPEC_MISSING" }))
         .note,
-    ).toBe("Thiết kế chưa có nội dung.\nQuy cách chưa có quy cách thùng, chưa gửi duyệt được.");
+    ).toBe(
+      "Thiết kế chưa có nội dung.\nSản phẩm này chưa có quy cách đóng thùng nên chưa gửi duyệt được.",
+    );
     for (const note of ["BLEED_MISSING FRONT/" + element, "Something went wrong", element]) {
       const shown = eventView(event({ type: "PREFLIGHT_FAILED", note })).note;
       expect(shown).toBe("Bản thiết kế chưa đạt kiểm tra tự động.");

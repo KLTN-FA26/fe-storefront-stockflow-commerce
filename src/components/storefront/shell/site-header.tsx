@@ -10,7 +10,7 @@ import { ThemeToggle } from "@/components/storefront/theme-toggle";
 
 import { HeaderSearch } from "./header-search";
 import { MobileNav } from "./mobile-nav";
-import { categoryLinks, utilityLinks } from "./nav-config";
+import { mainLinks, utilityLinks } from "./nav-config";
 
 const container = "mx-auto flex h-full w-full max-w-7xl items-center px-4 sm:px-6 lg:px-8";
 const focusRing = "focus-visible:ring-accent focus-visible:ring-2 focus-visible:outline-none";
@@ -33,6 +33,7 @@ export function SiteHeader() {
           <MobileNav />
           <Link
             href="/"
+            aria-label={`${BRAND.name} – Trang chủ`}
             className={cn(
               "font-display shrink-0 rounded-sm text-base font-bold tracking-tight sm:text-lg",
               focusRing,
@@ -59,8 +60,8 @@ export function SiteHeader() {
 
       <div className="border-border-default hidden h-11 border-b md:block">
         <div className={cn(container, "justify-between gap-6")}>
-          <nav aria-label="Danh mục sản phẩm" className="-ml-2 flex items-center lg:-ml-3">
-            {categoryLinks.map((link) => (
+          <nav aria-label="Điều hướng chính" className="-ml-2 flex items-center lg:-ml-3">
+            {mainLinks.map((link) => (
               <Link
                 key={link.label}
                 href={link.href}

@@ -10,6 +10,8 @@ import { ChatUnreadBadge } from "@/features/chat/components/chat-entry";
 
 import { Button } from "@/components/ui/button";
 
+import { CHAT_WITH_SALES } from "./nav-config";
+
 /**
  * Floating shortcut to sales chat, with the unread badge; hidden on chat pages, where it would
  * cover the composer.
@@ -21,7 +23,7 @@ export function ChatFab() {
   return (
     <div className="fixed right-5 bottom-5 z-50">
       <Button asChild size="icon" variant="secondary" className="size-12 rounded-full shadow-lg">
-        <Link href={STORE_ROUTES.chat.list} aria-label="Mở tư vấn">
+        <Link href={STORE_ROUTES.chat.list} aria-label={CHAT_WITH_SALES}>
           <MessageCircle className="size-5" />
         </Link>
       </Button>

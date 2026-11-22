@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 
 import { Alert } from "@/components/shared";
 import { Button } from "@/components/ui/button";
@@ -37,7 +37,7 @@ import {
 } from "./quote-request-parts";
 
 type Props = {
-  design: Pick<Design, "id" | "name">;
+  design: Pick<Design, "id" | "name"> & Partial<Pick<Design, "unitsPerCarton">>;
   /** The request still open: the form starts from it, and asking changes it (200). */
   current: DesignQuoteRequest | null;
   onClose: () => void;
@@ -47,6 +47,7 @@ type Props = {
 function QuoteRequestForm({ design, current, onClose }: Props) {
   const ask = useRequestDesignQuote(design.id);
   const {
+    control,
     register,
     control,
     handleSubmit,
@@ -59,6 +60,8 @@ function QuoteRequestForm({ design, current, onClose }: Props) {
       desiredDeliveryDate: current?.desiredDeliveryDate ?? "",
     },
   });
+
+  const cartons = useWatch({ control, name: "cartons" });
 
   const submit = handleSubmit((input) =>
     ask.mutate(input, {
@@ -109,6 +112,8 @@ function QuoteRequestForm({ design, current, onClose }: Props) {
         errors={errors}
         idPrefix={`quote-${design.id}`}
         disabled={ask.isPending}
+        unitsPerCarton={design.unitsPerCarton}
+        cartons={cartons}
       />
       {error && !onFields ? (
         <div role="alert">

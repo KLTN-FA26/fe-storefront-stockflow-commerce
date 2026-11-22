@@ -53,6 +53,8 @@ export const designSchema = z.object({
   projectId: beId().nullable(),
   /** The customer's own SKU, once the design is APPROVED (BE-2): `null` before. */
   customerSku: z.string().min(1).nullable().default(null),
+  /** Pieces in one carton of the variant, when the BE sends it (SF-UX-9): absent otherwise. */
+  unitsPerCarton: z.number().int().positive().exactOptional(),
   /** The project's name and status, for the studio header and the card label (part E). */
   project: z
     .object({ id: beId(), name: z.string().min(1), status: projectStatusSchema })
@@ -165,6 +167,10 @@ const PREFLIGHT_RULE_IDS = {
   VARIANT_UNAVAILABLE: "VARIANT_UNAVAILABLE",
   NO_CARTON_SPEC: "NO_CARTON_SPEC",
 } as const satisfies { [K in PreflightRuleId]: K };
+
+/** Whether a rule id is one of the engine's own. */
+export const isEngineRule = (id: string): id is PreflightRuleId =>
+  Object.hasOwn(PREFLIGHT_RULE_IDS, id);
 
 /** The engine's `PreflightIssue`: a rule the engine knows, its level and message, where it is. */
 export const preflightIssueSchema = z.object({

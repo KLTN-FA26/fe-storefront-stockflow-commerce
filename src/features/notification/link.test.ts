@@ -66,3 +66,33 @@ describe("resolveNotificationLink — BE order links open the customer's order p
     expect(resolveNotificationLink("/admin/orders")).toBeNull();
   });
 });
+
+describe("resolveNotificationLink — one case per link prefix the BE writes for a customer", () => {
+  const id = "418eb759-eb5d-9cac-e62d-4bd9b766c254";
+
+  it("maps the old design decision link /designs/{id} to /design/{id} (SF-UX-13)", () => {
+    expect(resolveNotificationLink(`/designs/${id}`)).toBe(`/design/${id}`);
+    expect(resolveNotificationLink(`/designs/${id.toUpperCase()}`)).toBe(
+      `/design/${id.toUpperCase()}`,
+    );
+  });
+
+  it("keeps the new design link /design/{id} (R5-1) as it is", () => {
+    expect(resolveNotificationLink(`/design/${id}`)).toBe(`/design/${id}`);
+  });
+
+  it("leaves a /designs path that is not one design's link unchanged", () => {
+    expect(resolveNotificationLink("/designs")).toBe("/designs");
+    expect(resolveNotificationLink("/designs/not-a-uuid")).toBe("/designs/not-a-uuid");
+    expect(resolveNotificationLink(`/designs/${id}/files`)).toBe(`/designs/${id}/files`);
+  });
+
+  it("maps /orders/{id} to the customer's order page", () => {
+    expect(resolveNotificationLink(`/orders/${id}`)).toBe(`/account/orders/${id}`);
+  });
+
+  it("opens the e-invoice and chat links where the BE points (they are storefront pages)", () => {
+    expect(resolveNotificationLink(`/einvoices/${id}`)).toBe(`/einvoices/${id}`);
+    expect(resolveNotificationLink(`/chat/${id}`)).toBe(`/chat/${id}`);
+  });
+});

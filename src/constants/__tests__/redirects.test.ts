@@ -45,4 +45,19 @@ describe("storefront redirects (next.config.ts)", () => {
     expect(redirectOf("/orders/not-a-uuid")).toBeUndefined();
     expect(redirectOf(`/account/orders/${id}`)).toBeUndefined();
   });
+
+  it("sends the old design decision link /designs/{uuid} to the design page (SF-UX-13)", () => {
+    const id = "418eb759-eb5d-9cac-e62d-4bd9b766c254";
+    expect(redirectOf(`/designs/${id}`)).toBe(`/design/${id}`);
+    expect(redirectOf(`/designs/${id.toUpperCase()}`)).toBe(`/design/${id.toUpperCase()}`);
+    expect(redirectOf("/designs/not-a-uuid")).toBeUndefined();
+    expect(redirectOf(`/designs/${id}/extra`)).toBeUndefined();
+    expect(redirectOf(`/design/${id}`)).toBeUndefined();
+  });
+
+  it("leaves the BE links that are storefront pages already alone (/einvoices, /chat)", () => {
+    const id = "0e380000-0000-4000-8000-000000000201";
+    expect(redirectOf(`/einvoices/${id}`)).toBeUndefined();
+    expect(redirectOf(`/chat/${id}`)).toBeUndefined();
+  });
 });

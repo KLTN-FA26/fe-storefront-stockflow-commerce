@@ -1,3 +1,6 @@
+/** A BE id in a path-to-regexp group: any case, as the BE writes it. */
+const UUID = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
+
 /**
  * Storefront redirects, applied by next.config.ts `redirects()` (tested with Next's own matcher).
  * Kept here, not inline, so the test can read them. Old /catalog/{slug} product links are
@@ -16,9 +19,15 @@ export const STOREFRONT_REDIRECTS = [
   {
     // The BE links the handover notice to /orders/{id}; the storefront page is /account/orders/{id}.
     // Only a UUID id matches, so /orders/anything-else stays a 404.
-    source:
-      "/orders/:id([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})",
+    source: `/orders/:id(${UUID})`,
     destination: "/account/orders/:id",
+    permanent: false,
+  },
+  {
+    // The design decision notice linked /designs/{id} until R5-1 (it is /design/{id} now); the
+    // notices already stored keep the old link (SF-UX-13). Only a UUID id matches.
+    source: `/designs/:id(${UUID})`,
+    destination: "/design/:id",
     permanent: false,
   },
 ];

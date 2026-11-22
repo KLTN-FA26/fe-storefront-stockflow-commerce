@@ -204,7 +204,9 @@ describe("SubmitDialog on a preflight Fail", () => {
     const dialog = await openSubmit(user);
 
     expect(
-      await within(dialog).findByText("Quy cách chưa có quy cách thùng, chưa gửi duyệt được."),
+      await within(dialog).findByText(
+        "Sản phẩm này chưa có quy cách đóng thùng nên chưa gửi duyệt được.",
+      ),
     ).toBeInTheDocument();
     await waitFor(() => expect(urlsOf(post)).toEqual([`/designs/${id}/preflight-failures`]));
   });
@@ -261,7 +263,7 @@ describe("SubmitDialog on a preflight Pass", () => {
     // Who reviews is the back office's business (a production coordinator since BE V20261213000200,
     // not the sales manager): the customer is told only that the design goes for review.
     expect(dialog).toHaveTextContent(
-      "Thiết kế được lưu, tạo ảnh xem trước, file in và file mô tả thiết kế, rồi gửi đi duyệt.",
+      "Sau khi gửi, bản này được kiểm tra để in và không sửa được trong lúc chờ. Bạn nhận thông báo khi bản được duyệt hoặc bị trả lại để sửa.",
     );
     expect(dialog).not.toHaveTextContent(/Quản lý kinh\s+doanh/);
     expect(

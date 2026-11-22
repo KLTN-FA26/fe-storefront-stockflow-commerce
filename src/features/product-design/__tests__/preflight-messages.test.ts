@@ -57,7 +57,7 @@ describe("a Vietnamese sentence per BE rule", () => {
       "Có phần tử trong thiết kế không đọc được. Hãy xoá phần tử đó và thêm lại.",
     ],
     ["VARIANT_UNAVAILABLE", "Quy cách này hiện không còn nhận thiết kế."],
-    ["CARTON_SPEC_MISSING", "Quy cách chưa có quy cách thùng, chưa gửi duyệt được."],
+    ["CARTON_SPEC_MISSING", "Sản phẩm này chưa có quy cách đóng thùng nên chưa gửi duyệt được."],
   ])("%s", (rule, sentence) => {
     expect(describePreflightRule({ rule })).toBe(sentence);
   });
@@ -75,10 +75,10 @@ describe("a Vietnamese sentence per BE rule", () => {
     expect(sentence).toContain("thử gửi lại");
   });
 
-  it("gives a rule it does not know a generic sentence and its code", () => {
-    expect(describePreflightRule({ rule: "BLEED_MISSING" })).toBe(
-      "Thiết kế chưa đạt một kiểm tra tự động (mã: BLEED_MISSING).",
-    );
+  it("gives a rule it does not know a generic sentence, without the raw code (SF-UX-12)", () => {
+    const sentence = describePreflightRule({ rule: "BLEED_MISSING" });
+    expect(sentence).toBe("Thiết kế chưa đạt một kiểm tra tự động.");
+    expect(sentence).not.toContain("BLEED_MISSING");
   });
 
   it("names the carton spec as the studio does (F-3), both ways", () => {
@@ -112,7 +112,7 @@ describe("the BE's findings as the studio's issue list", () => {
       {
         ruleId: "NO_CARTON_SPEC",
         level: "fail",
-        message: "Quy cách chưa có quy cách thùng, chưa gửi duyệt được.",
+        message: "Sản phẩm này chưa có quy cách đóng thùng nên chưa gửi duyệt được.",
       },
       // A face this build does not know is left out, the finding stays.
       { ruleId: "ASSET_INVALID", level: "fail", message: "Ảnh không hợp lệ hoặc không tải được." },

@@ -64,6 +64,5 @@ export const STORE_ROUTES = {
     payments: "/account/payments",
     addresses: "/account/addresses",
     security: "/account/security",
-    privacy: "/account/privacy",
   },
 } as const;
