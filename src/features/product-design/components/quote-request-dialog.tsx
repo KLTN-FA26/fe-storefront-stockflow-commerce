@@ -49,7 +49,6 @@ function QuoteRequestForm({ design, current, onClose }: Props) {
   const {
     control,
     register,
-    control,
     handleSubmit,
     setError,
     formState: { errors },
