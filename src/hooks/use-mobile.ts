@@ -1,19 +1,13 @@
-/**
- * Mobile breakpoint hook — usehooks-ts wrapper.
- *
- * Giữ nguyên contract cũ: trả về `boolean`, breakpoint 768px.
- * `initializeWithValue: false` để tránh hydration mismatch trong SSR (App Router).
- */
-
 "use client";
 
-import { useMediaQuery } from "usehooks-ts";
+import { useMediaQuery } from "./use-media-query";
 
 const MOBILE_BREAKPOINT = 768;
 
+/**
+ * Below the `md` breakpoint (768px). False on the server and on the first paint, like every media
+ * query here: one implementation, `useMediaQuery`.
+ */
 export function useIsMobile(): boolean {
-  return useMediaQuery(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`, {
-    defaultValue: false,
-    initializeWithValue: false,
-  });
+  return useMediaQuery(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
 }
