@@ -269,7 +269,7 @@ describe("OUTSIDE_PRINT_AREA (BR-02)", () => {
     expect(ruleIds(runPreflight(input(fill(0.05))).issues)).toContain("OUTSIDE_PRINT_AREA");
   });
 
-  it("an image covering all but one trim sample still fails CROSSES_SAFE_AREA", () => {
+  it("an image leaving the trim's right-hand samples uncovered is no background: CROSSES_SAFE_AREA", () => {
     // 261 mm wide at u = 129: from u = -1.5 (in the bleed) to u = 259.5, short of the trim's right
     // edge (u = 260), so the right-hand trim samples are not covered.
     const doc = onFront(
@@ -306,6 +306,28 @@ describe("OUTSIDE_PRINT_AREA (BR-02)", () => {
         cup12oz,
       );
     expect(ruleIds(runPreflight(input(background(bleed), { ...cup12oz })).issues)).toEqual([]);
+    // Into half of the glue flap, its top and bottom edges inside the band (a wrapped image is tested on those
+    // edges): not a background, so the flap (ON_SEAM) and the safe line count, as for any image.
+    const halfFlapRight = (sweepRad + seamRad / 2) * midRadiusMm;
+    const halfFlap = docOf(
+      {
+        BODY: content([
+          imageEl("bg", {
+            widthMm: halfFlapRight + bleed / 2,
+            heightMm: band / 2,
+            naturalWidthPx: 8000,
+            naturalHeightPx: 4000,
+            wrap: true,
+            placement: { ...cupPlacement, u: (halfFlapRight - bleed / 2) / 2 },
+          }),
+        ]),
+      },
+      cup12oz,
+    );
+    expect(ruleIds(runPreflight(input(halfFlap, { ...cup12oz })).issues)).toEqual([
+      "CROSSES_SAFE_AREA",
+      "ON_SEAM",
+    ]);
     // Everything but the glue flap: not a background (the flap's samples are uncovered), so the safe line counts.
     const shortOfFlap = docOf(
       {

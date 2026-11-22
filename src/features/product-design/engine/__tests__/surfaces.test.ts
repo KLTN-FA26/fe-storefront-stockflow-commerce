@@ -187,5 +187,17 @@ describe("trimSamples (BE PrintSurface.trimSamples, ported point for point)", ()
     const radii = samples.map((p) => Math.hypot(p.x - apex.x, p.y - apex.y));
     expect(Math.max(...radii)).toBeCloseTo(trimOuterMm - INSET, 9);
     expect(Math.min(...radii)).toBeCloseTo(trimInnerMm + INSET, 9);
+    // Inset 0.01 mm along the radial edges too: at radius r the angles run from −sweep/2 + 0.01/r to the flap's end
+    // − 0.01/r (angle 0 = straight up from the apex).
+    const { sweepRad, seamRad } = cupSector(model);
+    const from = -sweepRad / 2;
+    const to = sweepRad / 2 + seamRad;
+    const gaps = samples.map((p) => {
+      const r = Math.hypot(p.x - apex.x, p.y - apex.y);
+      const phi = Math.atan2(p.x - apex.x, apex.y - p.y);
+      return { start: phi - (from + INSET / r), end: to - INSET / r - phi };
+    });
+    expect(Math.min(...gaps.map((g) => g.start))).toBeCloseTo(0, 9);
+    expect(Math.min(...gaps.map((g) => g.end))).toBeCloseTo(0, 9);
   });
 });
