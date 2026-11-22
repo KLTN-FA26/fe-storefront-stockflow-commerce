@@ -19,7 +19,8 @@ describe("SubmitSetBar: no submit on a phone or tablet", () => {
     const html = renderToString(bar);
     expect(html).not.toContain(NOTE);
     expect(html).not.toContain("href=");
-    expect(html).toContain("disabled");
+    // The attribute itself, not the `disabled:` utility classes every button carries.
+    expect(html).toMatch(/<button[^>]*\sdisabled=""/);
     // No reason and no device yet: nothing to describe it, so no dangling aria-describedby.
     expect(html).not.toContain("aria-describedby");
   });

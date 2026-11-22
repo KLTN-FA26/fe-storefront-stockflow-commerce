@@ -41,9 +41,15 @@ const at = (scope: SurfaceScope, el: DesignElement) => ({
 function fontIssues(scope: SurfaceScope, el: DesignElement): PreflightIssue[] {
   if (el.type !== "text") return [];
 
-  // BE `LayoutPreflight`: a code outside a non-empty allow-list fails (null or empty = any font).
+  // BE `LayoutPreflight`: a code outside a non-empty allow-list fails (null or empty = any font). Once the BE's own
+  // list is read (BE-18), a font it does not list fails the same way: the menu never offered it, but a text placed
+  // before the list arrived may still use it (C9).
   const allowed = scope.input.template.allowedFontCodes;
-  if (allowed && allowed.length > 0 && !allowed.includes(el.fontCode)) {
+  const served = scope.input.servedFontCodes;
+  if (
+    (allowed && allowed.length > 0 && !allowed.includes(el.fontCode)) ||
+    (served && !served.includes(el.fontCode))
+  ) {
     return [
       {
         ruleId: "FONT_NOT_ALLOWED",

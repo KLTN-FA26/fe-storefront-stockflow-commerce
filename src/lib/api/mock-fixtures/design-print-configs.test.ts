@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import { customizationTemplateSchema } from "@/features/product-design/engine/template/schema";
 
@@ -20,12 +21,10 @@ const customizableSkus = CATALOG.filter((p) => p.kind === "CUSTOMIZABLE").flatMa
 );
 
 describe("designTemplateOf (GET /designs/{id}/template)", () => {
+  // The mock answers the BE envelope `{ success, data }`: read it through a schema, not a cast.
+  const envelope = z.object({ data: z.object({ designable: z.boolean() }) });
   const designable = (sku: string) =>
-    (
-      designTemplateOf(printConfigFor(productOf(sku).slug, sku)).data as {
-        data: { designable: boolean };
-      }
-    ).data.designable;
+    envelope.parse(designTemplateOf(printConfigFor(productOf(sku).slug, sku)).data).data.designable;
 
   it("says designable false for the blocked variant and true for an active one", () => {
     expect(designable(MOCK_BLOCKED_SKU)).toBe(false);

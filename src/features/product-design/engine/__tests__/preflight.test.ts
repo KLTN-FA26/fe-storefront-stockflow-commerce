@@ -223,6 +223,18 @@ describe("OUTSIDE_PRINT_AREA (BR-02)", () => {
     expect(ruleIds(runPreflight(input(word(-10))).issues)).toEqual(["OUTSIDE_PRINT_AREA"]);
   });
 
+  it("text anchored in the bleed strip but reaching into the trim fails OUTSIDE_PRINT_AREA, as BE anchorIssue (C11)", () => {
+    // "A" at 8 pt centred on u = -0.5: anchored 0.5 mm into the bleed, its right edge inside the trim.
+    const doc = onFront(
+      textEl("word", {
+        content: "A",
+        sizePt: 8,
+        placement: { u: -0.5, v: 140, rotationDeg: 0, scale: 1 },
+      }),
+    );
+    expect(ruleIds(runPreflight(input(doc)).issues)).toEqual(["OUTSIDE_PRINT_AREA"]);
+  });
+
   it("fails an element that reaches into the bleed as CROSSES_SAFE_AREA, not OUTSIDE_PRINT_AREA", () => {
     // 262 × 40 mm: 1 mm into the 3 mm bleed on each side, so no corner is inside the trim yet its
     // edges cross it.
@@ -575,6 +587,20 @@ describe("FONT_NOT_ALLOWED (BR-DSG-001)", () => {
     );
     expect(only(failed.issues, "FONT_NOT_ALLOWED")).toEqual([issue("FRONT", "txt")]);
     expect(failed.result).toBe("Fail");
+  });
+
+  it("fails a font the BE's /design-fonts list does not have, once it is read (C9); not before", () => {
+    const doc = onFront(textEl("txt", { fontCode: "lobster" }));
+    const unlisted = runPreflight(
+      input(doc, { allowedFontCodes: null }, { servedFontCodes: ["be-vietnam-pro"] }),
+    );
+    expect(ruleIds(unlisted.issues)).toEqual(["FONT_NOT_ALLOWED"]);
+    expect(
+      runPreflight(input(doc, { allowedFontCodes: null }, { servedFontCodes: null })).issues,
+    ).toEqual([]);
+    expect(
+      runPreflight(input(doc, { allowedFontCodes: null }, { servedFontCodes: ["lobster"] })).issues,
+    ).toEqual([]);
   });
 
   it("fails a font that failed to load, but not one that is still loading", () => {

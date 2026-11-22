@@ -680,6 +680,38 @@ describe("useDesignSubmission", () => {
     });
   });
 
+  describe("files kept after a failed upload, the template changed before Thử lại (C10)", () => {
+    it("does not upload the files drawn on the old template: it draws on the new one", async () => {
+      const { view, services } = await setup();
+      requestReview.mockRejectedValueOnce(outdatedError(["PRINT_READY"]));
+      uploadDesignFiles.mockRejectedValueOnce(new ApiError(503, "UNAVAILABLE", "down"));
+      await act(() => view.result.current.run());
+      expect(view.result.current.step).toBe("error");
+      const oldFiles = uploadDesignFiles.mock.calls[0]![1];
+
+      getDesignPrintConfig.mockResolvedValue({
+        ...services.printConfig,
+        template: { ...services.printConfig.template, minDpi: 600 },
+      } as Awaited<ReturnType<typeof api.getDesignPrintConfig>>);
+      const bundle = {
+        CUSTOMER_PREVIEW: { name: "p.png", type: "image/png", bytes: PNG_1x1 },
+        PRINT_READY: { name: "p.pdf", type: "application/pdf", bytes: PNG_1x1 },
+        TECHNICAL_SPEC: { name: "s.pdf", type: "application/pdf", bytes: PNG_1x1 },
+      };
+      drawDesign.mockResolvedValueOnce({
+        drawn: { bundle, checksum: "x", report: { result: "Pass", issues: [] }, runNonce: "u" },
+      } as unknown as Awaited<ReturnType<typeof steps.drawDesign>>);
+      requestReview.mockRejectedValueOnce(outdatedError(["PRINT_READY"]));
+      requestReview.mockResolvedValueOnce(pending);
+      await act(() => view.result.current.retry());
+
+      await waitFor(() => expect(view.result.current.step).toBe("done"));
+      expect(drawDesign).toHaveBeenCalledTimes(1);
+      expect(uploadDesignFiles.mock.calls[1]![1]).toBe(bundle);
+      expect(uploadDesignFiles.mock.calls[1]![1]).not.toBe(oldFiles);
+    });
+  });
+
   describe("an answer to the request for review lost on the way (Flows M-1)", () => {
     const lost = () => new ApiError(0, "NETWORK_ERROR", "Không kết nối được máy chủ.");
 

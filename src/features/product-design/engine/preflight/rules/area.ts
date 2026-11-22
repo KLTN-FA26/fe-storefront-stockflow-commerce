@@ -69,7 +69,13 @@ export function areaIssues(scope: SurfaceScope, el: DesignElement): PreflightIss
   const at = { surfaceCode: code, elementId: el.id };
 
   const issues: PreflightIssue[] = [];
-  if (points.some((p) => !surface.contains(p, "bleed")) || !overlapsTrim(surface, outline)) {
+  // BE `anchorIssue`: a text anchored outside the trim is outside the print area, wherever its lines reach (C11).
+  const anchor = el.type === "text" ? surface.toFlat(el.placement.u, el.placement.v) : null;
+  if (
+    points.some((p) => !surface.contains(p, "bleed")) ||
+    !overlapsTrim(surface, outline) ||
+    (anchor !== null && !surface.contains(anchor, "trim"))
+  ) {
     issues.push({
       ruleId: "OUTSIDE_PRINT_AREA",
       level: "fail",

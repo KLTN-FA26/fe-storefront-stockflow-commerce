@@ -52,7 +52,12 @@ export type SubmitStep = "idle" | "checking" | BundleStep | "send" | "upload" | 
  * drawn only when the BE says some are outdated (`bundle` stays null until then). `runNonce` is
  * part of every file's idempotency key: the run keeps it for its retries, and a redraw replaces it.
  */
-type Work = Checked & { bundle: SubmissionBundle | null; runNonce: string | null };
+type Work = Checked & {
+  bundle: SubmissionBundle | null;
+  runNonce: string | null;
+  /** The template `bundle` was drawn on (JSON): a retry reuses the files only while the server's is still it. */
+  bundleTemplate: string | null;
+};
 
 type State = {
   step: SubmitStep;
@@ -109,7 +114,7 @@ export function useDesignSubmission(design: Design) {
     // Saved, yet not what is stored (another tab or device saved since this one loaded it), or
     // already edited again: nothing is sent.
     await assertStoredIs(ctx, checked);
-    return { ...checked, bundle: null, runNonce: null };
+    return { ...checked, bundle: null, runNonce: null, bundleTemplate: null };
   }
 
   async function execute() {
@@ -122,6 +127,16 @@ export function useDesignSubmission(design: Design) {
       // The BE is asked first; files are drawn and uploaded only if it says so.
       setState({ step: "send", fraction: 0, issues: null });
       await assertStoredIs(ctx, w); // the stored layout is still the drawn one
+      // Files kept from an earlier try are reused only while the template is the one they were drawn on (C10): read
+      // afresh, as `redraw` does; a template edited meanwhile drops them, so the BE's answer draws them anew.
+      if (w.bundle && w.bundleTemplate !== null) {
+        const now = await client.fetchQuery({ ...designPrintConfigQuery(design), staleTime: 0 });
+        if (now !== null && JSON.stringify(now.template) !== w.bundleTemplate) {
+          w.bundle = null;
+          w.runNonce = null;
+          w.bundleTemplate = null;
+        }
+      }
       const submitted = await sendDesign(design.id, {
         documentChecksum: w.checksum,
         files: w.bundle ?? undefined,
@@ -155,8 +170,10 @@ export function useDesignSubmission(design: Design) {
             // Its findings are on the history (`drawDesign` records them); the stale work goes.
             if ("failed" in outcome) throw new TemplateChangedError(failsOf(outcome.failed));
             w.bundle = outcome.drawn.bundle;
+            w.bundleTemplate = JSON.stringify(config.template);
           } else {
             w.bundle = await drawBundle(subject, w, progress, undefined, roles);
+            w.bundleTemplate = JSON.stringify(services.printConfig.template);
           }
           // Drawn while this tab edited or another saved? Then these files are not the stored
           // layout's: nothing is uploaded (the next run checks and draws the new one).

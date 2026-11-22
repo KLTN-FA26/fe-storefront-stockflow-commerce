@@ -55,7 +55,10 @@ export const designKeys = {
   files: (id: string) => [...designKeys.detail(id), "files"] as const,
   /** Its quote requests (A-3), newest first: an ask or a submission with one re-reads them. */
   quoteRequests: (id: string) => [...designKeys.detail(id), "quote-requests"] as const,
-  /** The approved design's frozen bundle (files and customer SKU): read once, it never changes. */
+  /**
+   * The approved design's frozen bundle (its files): read once, it never changes. The customer SKU comes with the
+   * design itself (BE-2), not from here.
+   */
   snapshot: (id: string) => [...designKeys.detail(id), "snapshot"] as const,
   /** The latest submission's files, or the approved snapshot's: two reads, two entries. */
   fileList: (id: string, approved: boolean) =>

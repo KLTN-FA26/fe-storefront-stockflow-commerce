@@ -281,6 +281,25 @@ describe("NewDesignScreen", () => {
     expect(screen.queryByText("Không bắt đầu được thiết kế")).not.toBeInTheDocument();
   });
 
+  it("leaving the launcher while it waits to try again sends no second create (C10)", async () => {
+    const { post } = await designBackend();
+    const busy = new ApiError(
+      409,
+      "IDEMPOTENT_REQUEST_IN_PROGRESS",
+      "busy",
+      undefined,
+      undefined,
+      undefined,
+      1,
+    );
+    post.mockRejectedValueOnce(busy);
+    const view = renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1), WAIT);
+    view.unmount();
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
   it("a refusal the BE stores for the key is not retried with that key", async () => {
     const { post } = await designBackend();
     post.mockRejectedValueOnce(new ApiError(422, "IDEMPOTENCY_KEY_REUSED", "x"));

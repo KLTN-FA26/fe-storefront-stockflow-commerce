@@ -28,7 +28,9 @@ export type SubmissionSubject = Pick<
   | "assetStatus"
   | "fontStatus"
   | "exportRenderer"
->;
+> &
+  // The studio has the BE's font list; a set submission's session does not, and the BE checks fonts again.
+  Partial<Pick<StudioServices, "servedFontCodes">>;
 
 /** What a preflight was run on, its report, and the checksum the files are verified against. */
 export type Checked = { document: DesignDocument; report: PreflightReport; checksum: string };
@@ -52,6 +54,7 @@ export async function checkDocument(
     sizer: subject.sizer,
     assets: subject.assetStatus,
     fontStatus: subject.fontStatus,
+    servedFontCodes: subject.servedFontCodes ?? null,
     variant: preflightVariant(subject.printConfig),
   });
   return { document, report, checksum: await documentChecksum(document) };
