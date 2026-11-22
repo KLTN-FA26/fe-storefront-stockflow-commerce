@@ -83,6 +83,12 @@ function describeFileRule(rule: FileRule): string {
 }
 
 /**
+ * A 413 `PAYLOAD_TOO_LARGE` is also an image over 40 megapixels (BE `ImageDimensions`); only its `message` tells them
+ * apart: "…40 megapixel…" in English, "…40 triệu điểm ảnh…" in Vietnamese (`refusal.image.tooManyPixels`).
+ */
+const isPixelRefusal = (error: ApiError) => /megapixel|điểm ảnh/i.test(error.message);
+
+/**
  * The words for a file the BE refused with only a `message` (no `details`): 415 is a format the
  * template does not take, 413 `PAYLOAD_TOO_LARGE` a file over its size (F-24). The reason is built
  * from the design's template. Null for any other error.
@@ -96,9 +102,7 @@ export function describeFileRefusal(
     return describeFileRule({ rule: "FORMAT", formats: [...template.allowedFileFormats] });
   }
   if (error.status === 413 && error.code === "PAYLOAD_TOO_LARGE") {
-    // The same 413 is a file over its bytes and an image over 40 megapixels (`ImageDimensions`);
-    // the BE sends a `message` only, and the pixel count is the one that names "megapixel".
-    if (/megapixel/i.test(error.message)) return describeFileRule({ rule: "PIXELS" });
+    if (isPixelRefusal(error)) return describeFileRule({ rule: "PIXELS" });
     return describeFileRule({ rule: "FILE_SIZE", maxFileSizeMb: template.maxFileSizeMb });
   }
   return null;
@@ -124,6 +128,19 @@ const PROJECT_MESSAGE_BY_CODE: Record<string, string> = {
   CONFLICT: "Dự án đã thay đổi, hãy tải lại.", // a stale project version
   NOT_FOUND: "Không tìm thấy dự án này.",
 };
+
+/**
+ * An upload to the project library refused by the BE: a 413 is an image over 40 megapixels or a file over the
+ * library's `maxMb`, each in its own words (not the generic "over the allowed size"); anything else as a project error.
+ */
+export function describeLibraryUploadError(error: unknown, maxMb: number): string {
+  if (error instanceof ApiError && error.status === 413 && error.code === "PAYLOAD_TOO_LARGE") {
+    return isPixelRefusal(error)
+      ? describeFileRule({ rule: "PIXELS" })
+      : `Tệp lớn hơn ${maxMb} MB.`;
+  }
+  return describeProjectError(error);
+}
 
 /** Customer-facing text for a failure on a project screen: the generic codes name the project. */
 export function describeProjectError(error: unknown): string {

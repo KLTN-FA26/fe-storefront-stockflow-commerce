@@ -163,6 +163,22 @@ describe("tool panel", () => {
     expect(dropzone()).toHaveAttribute("accept", "image/png,.svg");
     expect(dropzone()).toHaveAccessibleDescription(/^PNG hoặc SVG, tối đa 5 MB\./);
   });
+
+  it("offers no SVG when the file rules take no PNG (Q2 / SD-10: an SVG is sent as a PNG)", async () => {
+    const user = userEvent.setup();
+    const { store: studio } = await designBackend({
+      printConfigFor: (slug, sku) => {
+        const config = printConfigFor(slug, sku);
+        const fileRules = { minDpi: 300, formats: ["image/jpeg"], maxFileSizeMb: 5 };
+        return config && { ...config, fileRules };
+      },
+    });
+    await openStudio(await cupDraft(studio));
+    await chooseImageTool(user);
+
+    expect(dropzone()).toHaveAttribute("accept", "image/jpeg");
+    expect(dropzone()).toHaveAccessibleDescription(/^JPG, tối đa 5 MB\./);
+  });
 });
 
 describe("uploading an image", () => {
@@ -366,6 +382,39 @@ describe("uploading an image", () => {
     const sent = (post.mock.calls[0]![1] as FormData).get("file") as File;
     expect(sent).toMatchObject({ name: "logo.png", type: "image/png" });
     expect(imagesOf(services)[0]).toMatchObject({ naturalWidthPx: 2000, naturalHeightPx: 1000 });
+  });
+
+  it("refuses an SVG when the file rules take no PNG, before drawing it", async () => {
+    const user = userEvent.setup({ applyAccept: false });
+    const { store: studio, post } = await designBackend({
+      printConfigFor: (slug, sku) => {
+        const config = printConfigFor(slug, sku);
+        const fileRules = { minDpi: 300, formats: ["image/jpeg"], maxFileSizeMb: 5 };
+        return config && { ...config, fileRules };
+      },
+    });
+    await openStudio(await cupDraft(studio));
+    await chooseImageTool(user);
+
+    await user.upload(dropzone(), new File(["<svg/>"], "logo.svg", { type: "image/svg+xml" }));
+
+    expect(await alert()).toHaveTextContent("Định dạng không được hỗ trợ. Hỗ trợ: JPG.");
+    expect(raster.rasterizeSvg).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("refuses an SVG over the size limit before drawing it (a huge one would hang the tab)", async () => {
+    const user = userEvent.setup();
+    const { store: studio, post } = await designBackend();
+    await openStudio(await cupDraft(studio));
+    await chooseImageTool(user);
+
+    const huge = new File([new Uint8Array(50 * MIB + 1)], "huge.svg", { type: "image/svg+xml" });
+    await user.upload(dropzone(), huge);
+
+    expect(await alert()).toHaveTextContent("Tệp lớn hơn 50 MB.");
+    expect(raster.rasterizeSvg).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
   });
 
   it("checks the size of the PNG an SVG is drawn to, and says when it cannot be drawn", async () => {

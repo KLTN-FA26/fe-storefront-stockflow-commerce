@@ -14,7 +14,7 @@ import {
   uploadLibraryImage,
 } from "../api";
 import { ProjectLibrary } from "../components/project-library";
-import { pngBytes } from "../engine/__tests__/fixtures";
+import { pngBytes, webpBytes } from "../engine/__tests__/fixtures";
 import { textStyleSchema } from "../library-schemas";
 import { designBackend } from "./design-backend";
 import { projectAssetDto, textStyleDto } from "./project-fixtures";
@@ -92,9 +92,42 @@ describe("the library of the project page: images", () => {
       new File(["GIF89a"], "anim.gif", { type: "image/gif" }),
     );
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Định dạng không được hỗ trợ");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Định dạng không được hỗ trợ. Hỗ trợ: PNG, JPG, WebP, SVG.",
+    );
     expect(post.mock.calls.some(([url]) => String(url).endsWith("/assets"))).toBe(false);
     expect(screen.getByText("1/30")).toBeInTheDocument();
+  });
+
+  it("takes a WebP, as the BE does (Q2 / SD-9)", async () => {
+    const user = userEvent.setup();
+    const { project } = await withLibrary();
+    show(project);
+    await screen.findByText("1/30", undefined, LISTED);
+
+    await user.upload(
+      screen.getByLabelText("Kéo thả hoặc chọn ảnh"),
+      new File([webpBytes("VP8L", 400, 300)], "anh.webp", { type: "image/webp" }),
+    );
+
+    expect(await screen.findByText("2/30", undefined, LISTED)).toBeInTheDocument();
+    expect(screen.getByText("anh.webp")).toBeInTheDocument();
+  });
+
+  it("turns away an 8000 × 6000 image (48 MP) before sending it", async () => {
+    const user = userEvent.setup();
+    const { project, post } = await withLibrary();
+    show(project);
+    await screen.findByText("1/30", undefined, LISTED);
+    post.mockClear();
+
+    await user.upload(
+      screen.getByLabelText("Kéo thả hoặc chọn ảnh"),
+      new File([pngBytes(8000, 6000)], "poster.png", { type: "image/png" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("tối đa 40 megapixel");
+    expect(post.mock.calls.some(([url]) => String(url).endsWith("/assets"))).toBe(false);
   });
 
   it("draws an SVG to a PNG, as a design's upload does, and sends that", async () => {

@@ -46,9 +46,18 @@ export const libraryFull = (kind: LibraryRow["kind"]) =>
     { details: { kind, limit: LIBRARY_LIMIT } },
   );
 
-/** The default file rules as a refusal of an upload, or null when `file` passes (BR-18, B34). */
+/**
+ * What the library takes, as the BE (`DesignProjectAssetService.LIBRARY_TYPES`: PNG, JPEG, WebP; PO 2026-11-22 Q2): the
+ * default rules' size and DPI, with WebP among the formats.
+ */
+export const LIBRARY_FILE_RULES = {
+  ...DEFAULT_FILE_RULES,
+  formats: ["image/png", "image/jpeg", "image/webp"],
+};
+
+/** The library's file rules as a refusal of an upload, or null when `file` passes (BR-18). */
 export const defaultRuleRefusal = (contentType: string, sizeBytes: number) =>
-  ruleRefusal(DEFAULT_FILE_RULES, contentType, sizeBytes);
+  ruleRefusal(LIBRARY_FILE_RULES, contentType, sizeBytes);
 
 /** A text as a list entry: its words on one line, cut at `LIBRARY_NAME_MAX`. */
 export function nameOfText(text: string): string {

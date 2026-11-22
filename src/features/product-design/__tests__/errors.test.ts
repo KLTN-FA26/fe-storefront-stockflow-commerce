@@ -7,6 +7,7 @@ import {
   describeDesignError,
   describeFileDownloadError,
   describeFileRefusal,
+  describeLibraryUploadError,
   describeProjectError,
   isDesignConflict,
   isDesignStateChanged,
@@ -157,6 +158,19 @@ describe("describeFileRefusal (the BE sends 415 and 413 with a message only, F-2
     expect(describeFileRefusal(apiError(413, "PAYLOAD_TOO_LARGE"), template)).toBe(
       "Ảnh vượt 20 MB, mức quy cách này cho phép.",
     );
+  });
+
+  it("words the BE's Vietnamese 413 over 40 megapixels as pixels too", () => {
+    const pixels = new ApiError(
+      413,
+      "PAYLOAD_TOO_LARGE",
+      "Ảnh quá lớn: tối đa 40 triệu điểm ảnh, hãy giảm kích thước ảnh rồi tải lại.",
+    );
+    const template = { allowedFileFormats: ["image/png"], maxFileSizeMb: 50 };
+    expect(describeFileRefusal(pixels, template)).toMatch(/40 megapixel/);
+    expect(describeLibraryUploadError(pixels, 50)).toMatch(/40 megapixel/);
+    const bytes = new ApiError(413, "PAYLOAD_TOO_LARGE", "File quá lớn: tối đa 50 MB.");
+    expect(describeLibraryUploadError(bytes, 50)).toBe("Tệp lớn hơn 50 MB.");
   });
 
   it("words a 413 over 40 megapixels as pixels, not as megabytes, and names WebP", () => {

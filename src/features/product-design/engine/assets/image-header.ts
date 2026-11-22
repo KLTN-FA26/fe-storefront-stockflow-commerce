@@ -1,5 +1,11 @@
 export type ImageHeaderType = "image/png" | "image/jpeg" | "image/webp";
 
+/**
+ * Images past this many pixels are refused before they are sent: the BE answers 413 above it (`ImageDimensions`, 40
+ * megapixels), and decoding one would exhaust a phone's memory. One number for the studio and the project library.
+ */
+export const MAX_IMAGE_PIXELS = 40_000_000;
+
 export type ImageHeader = { width: number; height: number; type: ImageHeaderType };
 
 /** Whether the bytes at `at` spell `text` (ASCII). */
