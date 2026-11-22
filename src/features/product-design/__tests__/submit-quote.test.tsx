@@ -6,6 +6,7 @@ import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error";
 import type { DesignMockStore } from "@/lib/api/mock-fixtures/design-store";
 import { settle } from "@/test/fake-backend";
+import { pickDate } from "@/test/date-picker";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { listDesignQuoteRequests } from "../api";
@@ -17,6 +18,9 @@ import { cup12oz, PNG_1x1, textEl } from "../engine/__tests__/fixtures";
 import type { Design } from "../types";
 import { designBackend, draftIn, STUDIO_PRODUCTS } from "./design-backend";
 import { TEST_FONTS } from "./fixtures";
+
+/** A day the picker offers (its years reach five ahead) and the "not in the past" rule allows. */
+const FUTURE_DAY = `${new Date().getFullYear() + 1}-12-31`;
 
 // The print file needs its colour profiles: jsdom serves no `public/` files.
 vi.mock(
@@ -154,9 +158,10 @@ describe("Gửi duyệt và yêu cầu báo giá", () => {
 
     await user.click(within(dialog).getByRole("radio", { name: /Gửi duyệt và yêu cầu báo giá/ }));
     await user.type(within(dialog).getByLabelText("Số thùng mong muốn"), "40");
-    await user.type(
+    await pickDate(
+      user,
       within(dialog).getByLabelText("Ngày giao mong muốn (không bắt buộc)"),
-      "2099-12-31",
+      FUTURE_DAY,
     );
     await user.click(within(dialog).getByRole("button", { name: "Gửi duyệt và yêu cầu báo giá" }));
 
@@ -174,7 +179,7 @@ describe("Gửi duyệt và yêu cầu báo giá", () => {
     const [[, body]] = reviewPosts(post, id) as [[string, unknown]];
     expect(body).toEqual({
       version: expect.any(Number),
-      quoteRequest: { cartons: 40, desiredDeliveryDate: "2099-12-31" },
+      quoteRequest: { cartons: 40, desiredDeliveryDate: FUTURE_DAY },
     });
     expect((settle(await store.get(id)).data as Design).status).toBe("PENDING_REVIEW");
     expect(await listDesignQuoteRequests(id)).toEqual([
@@ -211,9 +216,10 @@ describe("Gửi duyệt và yêu cầu báo giá", () => {
 
     await user.click(within(dialog).getByRole("radio", { name: /Gửi duyệt và yêu cầu báo giá/ }));
     await user.type(within(dialog).getByLabelText("Số thùng mong muốn"), "40");
-    await user.type(
+    await pickDate(
+      user,
       within(dialog).getByLabelText("Ngày giao mong muốn (không bắt buộc)"),
-      "2099-12-31",
+      FUTURE_DAY,
     );
     await user.click(within(dialog).getByRole("button", { name: "Gửi duyệt và yêu cầu báo giá" }));
 
@@ -232,7 +238,8 @@ describe("Gửi duyệt và yêu cầu báo giá", () => {
     const drawnOnce = uploads();
 
     // Without a date this time: the files are not drawn again, the request goes with the design.
-    await user.clear(date);
+    await user.click(date);
+    await user.click(await screen.findByRole("button", { name: "Xoá ngày" }));
     await user.click(within(dialog).getByRole("button", { name: "Gửi duyệt và yêu cầu báo giá" }));
     expect(
       await within(dialog).findByText(

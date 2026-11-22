@@ -48,6 +48,7 @@ function QuoteRequestForm({ design, current, onClose }: Props) {
   const ask = useRequestDesignQuote(design.id);
   const {
     register,
+    control,
     handleSubmit,
     setError,
     formState: { errors },
@@ -104,6 +105,7 @@ function QuoteRequestForm({ design, current, onClose }: Props) {
       </DialogHeader>
       <QuoteRequestFields
         register={register}
+        control={control}
         errors={errors}
         idPrefix={`quote-${design.id}`}
         disabled={ask.isPending}

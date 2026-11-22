@@ -49,6 +49,7 @@ export function SubmitQuoteChoice({
       {withQuote ? (
         <QuoteRequestFields
           register={form.register}
+          control={form.control}
           errors={form.formState.errors}
           idPrefix="submit-quote"
           disabled={disabled}

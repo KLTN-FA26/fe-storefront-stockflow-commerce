@@ -2,9 +2,10 @@
 
 import { CheckCircle2, MessageCircle } from "lucide-react";
 import Link from "next/link";
-import type { FieldErrors, UseFormRegister } from "react-hook-form";
+import { Controller, type Control, type FieldErrors, type UseFormRegister } from "react-hook-form";
 
 import { STORE_ROUTES } from "@/constants";
+import { DatePicker } from "@/components/shared/DatePicker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +15,7 @@ import type { SemanticTone } from "@/lib/domain/types";
 import { formatDate, formatNumber } from "@/lib/format";
 
 import { MAX_QUOTE_CARTONS, vnToday } from "../quote-request-rules";
-import type { QuoteRequestFormValues, QuoteRequestStatus } from "../types";
+import type { QuoteRequestFormValues, QuoteRequestInput, QuoteRequestStatus } from "../types";
 import { BADGE, TONE_CLASSES } from "./design-status-badge";
 
 // What every quote-request screen shares: the status badge, the two fields of an ask, how a
@@ -58,11 +59,14 @@ function described(id: string, error: string | undefined) {
  */
 export function QuoteRequestFields({
   register,
+  control,
   errors,
   idPrefix,
   disabled = false,
 }: {
   register: UseFormRegister<QuoteRequestFormValues>;
+  /** The date is a dd/MM/yyyy picker (SF-UX-3), a controlled field. */
+  control: Control<QuoteRequestFormValues, unknown, QuoteRequestInput>;
   errors: FieldErrors<QuoteRequestFormValues>;
   idPrefix: string;
   disabled?: boolean;
@@ -99,15 +103,23 @@ export function QuoteRequestFields({
       </div>
       <div className="grid gap-2">
         <Label htmlFor={dateId}>Ngày giao mong muốn (không bắt buộc)</Label>
-        <Input
-          id={dateId}
-          type="date"
-          min={vnToday()}
-          className="min-h-11 tabular-nums"
-          disabled={disabled}
-          aria-invalid={dateError ? true : undefined}
-          aria-describedby={described(dateId, dateError)}
-          {...register("desiredDeliveryDate")}
+        <Controller
+          control={control}
+          name="desiredDeliveryDate"
+          render={({ field }) => (
+            <DatePicker
+              id={dateId}
+              value={field.value ?? ""}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+              ref={field.ref}
+              min={vnToday()}
+              clearable
+              disabled={disabled}
+              aria-invalid={dateError ? true : undefined}
+              aria-describedby={described(dateId, dateError)}
+            />
+          )}
         />
         <p id={`${dateId}-hint`} className="text-ink-tertiary text-xs">
           Từ hôm nay trở đi. Sale chép ngày này vào báo giá.

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/error";
 import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/design-seed";
 import { settle } from "@/test/fake-backend";
+import { pickDate } from "@/test/date-picker";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import {
@@ -16,6 +17,9 @@ import {
 } from "../api";
 import { ProjectQuoteSection } from "../components/project-quote-section";
 import { designBackend, type DesignBackend } from "./design-backend";
+
+/** A day the picker offers (its years reach five ahead) and the "not in the past" rule allows. */
+const FUTURE_DAY = `${new Date().getFullYear() + 1}-12-31`;
 
 // "Yêu cầu báo giá cả dự án" (docs 12 §4.11) on the project page, over the design mock: one row per
 // APPROVED design, cartons per chosen design and one shared date, the body sent, a refusal of a line
@@ -79,9 +83,10 @@ describe("ProjectQuoteSection", () => {
 
     await user.click(within(dialog).getByLabelText(/Ly cà phê Nhà Mình 12oz/));
     await user.type(within(dialog).getByLabelText("Số thùng mong muốn"), "40");
-    await user.type(
+    await pickDate(
+      user,
       within(dialog).getByLabelText("Ngày giao mong muốn chung (không bắt buộc)"),
-      "2099-12-31",
+      FUTURE_DAY,
     );
     await user.click(within(dialog).getByRole("button", { name: "Gửi yêu cầu" }));
 
@@ -98,7 +103,7 @@ describe("ProjectQuoteSection", () => {
     );
     expect(backend.post).toHaveBeenCalledWith(`/design-projects/${id}/quote-requests`, {
       lines: [{ designId: approved, cartons: 40 }],
-      desiredDeliveryDate: "2099-12-31",
+      desiredDeliveryDate: FUTURE_DAY,
     });
 
     await user.click(within(dialog).getByRole("button", { name: "Đóng" }));

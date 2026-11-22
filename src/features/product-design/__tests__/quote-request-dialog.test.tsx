@@ -8,12 +8,16 @@ import { ApiError } from "@/lib/api/error";
 import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/design-seed";
 import { registerMockRoute } from "@/lib/api/mock-adapter";
 import { settle } from "@/test/fake-backend";
+import { pickDate } from "@/test/date-picker";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { getDesign } from "../api";
 import { DesignQuoteSummary, RequestQuoteButton } from "../components/design-quote-request";
 import type { Design } from "../types";
 import { designBackend, type DesignBackend } from "./design-backend";
+
+/** A day the picker offers (its years reach five ahead) and the "not in the past" rule allows. */
+const FUTURE_DAY = `${new Date().getFullYear() + 1}-12-31`;
 
 // "Yêu cầu báo giá" on an approved design (docs 12 §4.8.23) over the design mock: the open request
 // on its card, the dialog's checks, the answer for a new request (201) and for a changed one (200),
@@ -104,7 +108,7 @@ describe("an approved design's quote request", () => {
     expect(screen.queryByRole("button", { name: /Yêu cầu báo giá/ })).not.toBeInTheDocument();
   });
 
-  it("checks the fields before sending: cartons required and a whole number in range, no past date", async () => {
+  it("checks the fields before sending: cartons required and a whole number in range, no past day offered", async () => {
     const user = userEvent.setup();
     settle(await backend.store.simulateApprove(pending));
     const design = await getDesign(pending);
@@ -115,16 +119,20 @@ describe("an approved design's quote request", () => {
     expect(await within(dialog).findByText("Nhập số thùng mong muốn.")).toBeInTheDocument();
 
     await user.type(within(dialog).getByLabelText("Số thùng mong muốn"), "0");
-    await user.type(
-      within(dialog).getByLabelText("Ngày giao mong muốn (không bắt buộc)"),
-      "2020-01-01",
-    );
     await user.click(within(dialog).getByRole("button", { name: "Gửi yêu cầu" }));
     expect(await within(dialog).findByText("Số thùng từ 1 đến 1.000.000.")).toBeInTheDocument();
-    expect(
-      within(dialog).getByText("Ngày giao mong muốn phải từ hôm nay trở đi."),
-    ).toBeInTheDocument();
     expect(backend.post).not.toHaveBeenCalled();
+    // The day is a dd/MM/yyyy picker (SF-UX-3) that does not offer a day before today.
+    const date = within(dialog).getByLabelText("Ngày giao mong muốn (không bắt buộc)");
+    expect(date).toHaveTextContent("Chọn ngày");
+    await user.click(date);
+    const today = screen.getAllByRole("gridcell").find((c) => c.hasAttribute("data-today"));
+    const before = today?.previousElementSibling;
+    if (before && !before.hasAttribute("data-outside")) {
+      expect(before.querySelector("button")).toBeDisabled();
+    }
+    expect(today?.querySelector("button")).toBeEnabled();
+    await user.keyboard("{Escape}");
     // Only a suggestion: the hint says so.
     expect(within(dialog).getByText(/Chỉ là gợi ý/)).toBeInTheDocument();
   });
@@ -137,9 +145,10 @@ describe("an approved design's quote request", () => {
     const dialog = await openDialog(user, design);
 
     await user.type(within(dialog).getByLabelText("Số thùng mong muốn"), "50");
-    await user.type(
+    await pickDate(
+      user,
       within(dialog).getByLabelText("Ngày giao mong muốn (không bắt buộc)"),
-      "2099-12-31",
+      FUTURE_DAY,
     );
     await user.click(within(dialog).getByRole("button", { name: "Gửi yêu cầu" }));
 
@@ -156,7 +165,7 @@ describe("an approved design's quote request", () => {
     );
     expect(backend.post).toHaveBeenCalledWith(`/designs/${pending}/quote-requests`, {
       cartons: 50,
-      desiredDeliveryDate: "2099-12-31",
+      desiredDeliveryDate: FUTURE_DAY,
     });
     // The card follows once the dialog is closed: the request is the one it shows now.
     await user.click(within(dialog).getByRole("button", { name: "Đóng" }));

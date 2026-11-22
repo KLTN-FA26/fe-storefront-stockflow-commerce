@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 
 import { Alert } from "@/components/shared";
+import { DatePicker } from "@/components/shared/DatePicker";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -213,15 +214,23 @@ function ProjectQuoteForm({ project, designs, current, onClose }: Props) {
       </fieldset>
       <div className="grid gap-2">
         <Label htmlFor="project-quote-date">Ngày giao mong muốn chung (không bắt buộc)</Label>
-        <Input
-          id="project-quote-date"
-          type="date"
-          min={vnToday()}
-          className="min-h-11 tabular-nums"
-          disabled={ask.isPending}
-          aria-invalid={dateError ? true : undefined}
-          aria-describedby={dateError ? "project-quote-date-error" : undefined}
-          {...register("desiredDeliveryDate")}
+        <Controller
+          control={control}
+          name="desiredDeliveryDate"
+          render={({ field }) => (
+            <DatePicker
+              id="project-quote-date"
+              value={field.value ?? ""}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+              ref={field.ref}
+              min={vnToday()}
+              clearable
+              disabled={ask.isPending}
+              aria-invalid={dateError ? true : undefined}
+              aria-describedby={dateError ? "project-quote-date-error" : undefined}
+            />
+          )}
         />
         {dateError ? (
           <p id="project-quote-date-error" role="alert" className={FIELD_ERROR}>
