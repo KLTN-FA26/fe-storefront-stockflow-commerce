@@ -136,6 +136,13 @@ const quotePricingJson = () => ({
   fees: [{ amount: 1_500_000, tax: 120_000, taxRate: 8 }],
 });
 
+/** SF-UX-21: accepting waits for the pricing; once it failed, the dialog says so and lets the customer accept. */
+const pricingFailed = async () => {
+  expect(
+    await screen.findByText(/Chưa tải được MOQ và giá tạm tính/, {}, { timeout: 4000 }),
+  ).toBeInTheDocument();
+};
+
 describe("accepting a quote on its card (C10)", () => {
   // Without the quote's pricing the dialog still works: the BE checks the MOQ.
   beforeEach(() => {
@@ -155,6 +162,7 @@ describe("accepting a quote on its card (C10)", () => {
     await user.click(screen.getByRole("button", { name: "Chấp nhận" }));
     const input = await screen.findByLabelText(/Dòng 1/);
     expect(input).toHaveValue(60);
+    await pricingFailed();
     await user.clear(input);
     await user.type(input, "80");
     await user.click(screen.getByRole("button", { name: "Chấp nhận báo giá" }));
@@ -184,6 +192,7 @@ describe("accepting a quote on its card (C10)", () => {
     open();
     await user.click(screen.getByRole("button", { name: "Chấp nhận" }));
     const input = await screen.findByLabelText(/Dòng 1/);
+    await pricingFailed();
     await user.clear(input);
     await user.type(input, "10");
     await user.click(screen.getByRole("button", { name: "Chấp nhận báo giá" }));
@@ -223,6 +232,32 @@ describe("accepting a quote on its card (C10)", () => {
       await within(dialog).findByText("Dòng 1: tối thiểu 20 thùng (MOQ)."),
     ).toBeInTheDocument();
     expect(post).not.toHaveBeenCalled();
+  });
+
+  it("SF-UX-21: shows each line's price tiers, the applying one marked, as the quote page does", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, "get").mockResolvedValue({ data: quotePricingJson() });
+    open();
+    await user.click(screen.getByRole("button", { name: "Chấp nhận" }));
+    const dialog = await screen.findByRole("dialog");
+    const tiers = await within(dialog).findByRole("list", { name: "Bậc giá" });
+    expect(within(tiers).getAllByRole("listitem")).toHaveLength(3);
+    // 60 cartons: the 50-carton break applies.
+    expect(
+      within(tiers)
+        .getByText(/Từ 50 thùng/)
+        .closest("li"),
+    ).toHaveAttribute("aria-current", "true");
+  });
+
+  it("SF-UX-21: 'Chấp nhận báo giá' waits while the pricing loads", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, "get").mockReturnValue(new Promise(() => undefined) as never);
+    open();
+    await user.click(screen.getByRole("button", { name: "Chấp nhận" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Đang tải MOQ và giá tạm tính…")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Chấp nhận báo giá" })).toBeDisabled();
   });
 
   it("keeps the typed cartons when polling refreshes the card while the dialog is open", async () => {
@@ -289,6 +324,11 @@ describe("PAYMENT_INFO: the VietQR code (plan E1)", () => {
     expect(
       screen.getByText(/tài khoản, số tiền và nội dung chuyển khoản được điền sẵn/),
     ).toBeInTheDocument();
+  });
+
+  it("SF-UX-38: the caption on the white plate has a dark colour that does not flip with the theme", () => {
+    renderCard(cardMessageJson("PAYMENT_INFO", transferPayload()));
+    expect(screen.getByText(/được điền sẵn/)).toHaveClass("text-ink-on-light");
   });
 
   it("draws no code when the BE sent none (no BIN configured)", () => {

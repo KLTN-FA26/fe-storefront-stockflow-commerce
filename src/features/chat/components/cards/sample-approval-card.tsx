@@ -7,6 +7,7 @@ import type { z } from "zod";
 
 import { formatDate, formatDateTime } from "@/lib/format/date";
 
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { SampleCardPayload } from "../../card-payloads";
 import { closedCardMeta, sampleStatusMeta } from "../../labels";
 import { QUOTE_FEEDBACK_MAX, requestReprintInputSchema } from "../../schemas";
+import { sampleCardTitle } from "../../thread-facts";
 import type { ChatCard } from "../../types";
 import { CardDialog } from "./card-dialog";
 import { CardFrame, Fact, Facts } from "./card-frame";
@@ -30,7 +32,11 @@ interface SampleApprovalCardProps {
 
 type ReprintForm = z.infer<typeof requestReprintInputSchema>;
 
-/** SAMPLE_APPROVAL card (plan B.7.9): APPROVE, or REQUEST_REPRINT with a note, while WAITING. */
+/**
+ * SAMPLE_APPROVAL card (plan B.7.9): APPROVE, or REQUEST_REPRINT with a note, while WAITING. Approving releases mass
+ * printing, which cannot be undone, so it is confirmed first (SF-UX-25); the card is named after the goods, not the
+ * internal production order.
+ */
 export function SampleApprovalCard({
   conversationId,
   messageId,
@@ -39,6 +45,9 @@ export function SampleApprovalCard({
   canAct,
 }: SampleApprovalCardProps) {
   const [reprintOpen, setReprintOpen] = useState(false);
+  const [approveOpen, setApproveOpen] = useState(false);
+  const { title, named } = sampleCardTitle(payload);
+  const round = payload.roundNo ? ` lần ${payload.roundNo}` : "";
   const action = useCardActionState(conversationId, messageId);
   const canApprove = canAct && card.customerActions.includes("APPROVE");
   const canReprint = canAct && card.customerActions.includes("REQUEST_REPRINT");
@@ -54,8 +63,9 @@ export function SampleApprovalCard({
 
   return (
     <CardFrame
-      eyebrow={`Duyệt mẫu in${payload.roundNo ? ` · lần ${payload.roundNo}` : ""}`}
-      title={payload.productionOrderCode ?? "Mẫu in"}
+      eyebrow="Duyệt mẫu in"
+      title={title}
+      titleMono={!named}
       status={closedCardMeta(card.state) ?? sampleStatusMeta(payload.status)}
       footer={
         canApprove || canReprint ? (
@@ -65,7 +75,7 @@ export function SampleApprovalCard({
                 type="button"
                 disabled={action.pending}
                 className="min-h-11 rounded-[var(--r-md)] px-4"
-                onClick={() => action.submit({ action: "APPROVE" })}
+                onClick={() => setApproveOpen(true)}
               >
                 {action.pending ? "Đang gửi..." : "Duyệt mẫu"}
               </Button>
@@ -112,6 +122,16 @@ export function SampleApprovalCard({
           {action.error}
         </p>
       ) : null}
+      <ConfirmDialog
+        open={approveOpen}
+        onOpenChange={setApproveOpen}
+        title={`Duyệt mẫu${round}?`}
+        description="Sau khi duyệt sẽ in hàng loạt theo mẫu này, không đổi thiết kế được."
+        confirmLabel="Duyệt mẫu"
+        cancelLabel="Xem lại"
+        variant="default"
+        onConfirm={() => action.submit({ action: "APPROVE" })}
+      />
       <CardDialog
         open={reprintOpen}
         onOpenChange={(open) => {

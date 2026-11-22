@@ -20,6 +20,8 @@ interface CardDialogProps {
   description: string;
   confirm: string;
   pending: boolean;
+  /** The confirm button waits for something besides the send (e.g. the pricing still loading). */
+  confirmDisabled?: boolean;
   /** Why the last attempt failed, kept in the dialog so the customer can fix it and retry. */
   error: string | null;
   onSubmit: FormEventHandler<HTMLFormElement>;
@@ -34,6 +36,7 @@ export function CardDialog({
   description,
   confirm,
   pending,
+  confirmDisabled = false,
   error,
   onSubmit,
   children,
@@ -74,7 +77,7 @@ export function CardDialog({
             </Button>
             <Button
               type="submit"
-              disabled={pending}
+              disabled={pending || confirmDisabled}
               className="min-h-11 rounded-[var(--r-md)] px-4"
             >
               {pending ? "Đang gửi..." : confirm}

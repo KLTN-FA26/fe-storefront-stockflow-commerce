@@ -15,7 +15,8 @@ import { closedCardMeta, quoteStatusMeta } from "../../labels";
 import { useQuotePricing } from "../../queries";
 import { isPastValidity, quoteButtonsOf } from "../../selectors";
 import type { ChatCard } from "../../types";
-import { AcceptQuoteDialog, RequestChangesDialog } from "./quote-dialogs";
+import { RequestChangesDialog } from "./quote-changes-dialog";
+import { AcceptQuoteDialog } from "./quote-dialogs";
 import { CARD_LINK, CardFrame, Fact, Facts, cardMoney } from "./card-frame";
 import { useCardActionState } from "./use-card-action";
 

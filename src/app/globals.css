@@ -22,6 +22,8 @@
   --ink-secondary: #5c5e58;
   --ink-tertiary: #8a8c85;
   --ink-inverse: #ffffff;
+  /* Text on a surface that stays white in both themes (the VietQR plate): not redefined for dark on purpose. */
+  --ink-on-light: #3d3f3a;
   --brand: #1a1b18;
   --brand-hover: #000000;
   --accent: #1e88e5;
@@ -48,9 +50,9 @@
   --r-xl: 16px;
   --r-full: 9999px;
   /* shadows */
-  --sh-sm: 0 1px 2px rgba(26,27,24,0.06), 0 1px 3px rgba(26,27,24,0.08);
-  --sh-md: 0 4px 12px rgba(26,27,24,0.08);
-  --sh-lg: 0 12px 32px rgba(26,27,24,0.14);
+  --sh-sm: 0 1px 2px rgba(26, 27, 24, 0.06), 0 1px 3px rgba(26, 27, 24, 0.08);
+  --sh-md: 0 4px 12px rgba(26, 27, 24, 0.08);
+  --sh-lg: 0 12px 32px rgba(26, 27, 24, 0.14);
 }
 
 @media (min-width: 640px) {
@@ -105,6 +107,7 @@
   --color-ink-secondary: var(--ink-secondary);
   --color-ink-tertiary: var(--ink-tertiary);
   --color-ink-inverse: var(--ink-inverse);
+  --color-ink-on-light: var(--ink-on-light);
   --color-brand: var(--brand);
   --color-brand-hover: var(--brand-hover);
   --color-accent: var(--accent);
@@ -176,7 +179,9 @@
     border-radius: 2px;
   }
   @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
+    *,
+    *::before,
+    *::after {
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;

@@ -185,7 +185,11 @@ export const invoiceCardPayloadSchema = z.object({
 export const sampleCardPayloadSchema = z.object({
   roundId: id,
   roundNo: count,
+  /** Staff-only: the production order's code. Kept for parsing, never shown (SF-UX-25). */
   productionOrderCode: text,
+  /** What the sample is of, when the BE names it; else the card is titled by `skus`. */
+  designName: text,
+  productName: text,
   salesOrderId: text,
   status: z.string(),
   physicalSampleSentOn: text,
