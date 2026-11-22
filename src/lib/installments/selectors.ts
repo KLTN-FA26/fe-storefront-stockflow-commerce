@@ -44,3 +44,16 @@ export function installmentTitle(installment: Pick<Installment, "seq" | "name">)
   const name = installment.name.trim();
   return name ? `Đợt ${installment.seq} · ${name}` : `Đợt ${installment.seq}`;
 }
+
+/**
+ * Owed now, the one rule the account to-do strip and the payments page share: payable, and either
+ * overdue, DUE (its milestone reached), or paid in part after its milestone was reached. A part
+ * payment made before the milestone (paid early) is not due yet.
+ */
+export function isDueNow(
+  installment: Pick<Installment, "status" | "outstanding" | "overdue" | "reachedAt">,
+): boolean {
+  if (!isPayable(installment)) return false;
+  if (installment.overdue || installment.status === "DUE") return true;
+  return installment.status === "PARTIALLY_PAID" && installment.reachedAt != null;
+}

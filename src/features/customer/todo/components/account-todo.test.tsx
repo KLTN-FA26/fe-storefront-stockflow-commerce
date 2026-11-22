@@ -9,6 +9,10 @@ import { renderWithProviders, signIn, signOut } from "@/test/render";
 import { installmentsToPay } from "../queries";
 import { AccountTodo } from "./account-todo";
 
+/** An installment still owing money (the shared fixture is a paid one). */
+const owed = (over: Record<string, unknown>) =>
+  beInstallment({ paidAmount: 0, outstanding: 152_100, paidAt: undefined, ...over });
+
 const ALL = ["sales-quotes:READ", "sales-orders:READ", "payment-installments:READ"];
 const QUOTE_ID = "01a2043f-3d65-706a-9d7b-dcc7bff017d6";
 const ORDER_ID = "18a05a36-cbcf-93d9-afb5-7b69d242383d";
@@ -98,10 +102,10 @@ describe("AccountTodo — 'Việc cần làm' on the account home (SF-UX-39)", (
       installments: (status) =>
         status === "DUE"
           ? page([
-              beInstallment({ status: "DUE", overdue: true }),
-              beInstallment({ status: "DUE" }),
+              owed({ status: "DUE", overdue: true }),
+              owed({ status: "DUE" }),
             ])
-          : page([beInstallment({ status: "PARTIALLY_PAID", overdue: false })]),
+          : page([owed({ status: "PARTIALLY_PAID", overdue: false, reachedAt: null })]),
     });
     renderWithProviders(<AccountTodo />);
     expect(
@@ -128,14 +132,16 @@ describe("AccountTodo — 'Việc cần làm' on the account home (SF-UX-39)", (
 });
 
 describe("installmentsToPay", () => {
-  it("counts DUE ones and overdue partial ones, not a partial one before its due day", () => {
-    const row = (over: Record<string, unknown>) => installmentDtoSchema.parse(beInstallment(over));
+  it("counts what the payments page counts: DUE, overdue, and partial ones past their milestone", () => {
+    const row = (over: Record<string, unknown>) => installmentDtoSchema.parse(owed(over));
     expect(
       installmentsToPay([
         row({ status: "DUE", overdue: false }),
         row({ status: "PARTIALLY_PAID", overdue: true }),
-        row({ status: "PARTIALLY_PAID", overdue: false }),
+        row({ status: "PARTIALLY_PAID", overdue: false, reachedAt: "2026-09-07T03:00:00Z" }),
+        // Paid in part before its milestone: not owed yet.
+        row({ status: "PARTIALLY_PAID", overdue: false, reachedAt: null }),
       ]),
-    ).toEqual({ due: 2, overdue: 1 });
+    ).toEqual({ due: 3, overdue: 1 });
   });
 });

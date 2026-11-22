@@ -3,6 +3,7 @@ import { parseAsInteger, parseAsStringLiteral } from "nuqs";
 import { INSTALLMENT_OVERDUE } from "@/lib/domain/status-map";
 import {
   INSTALLMENT_STATUS_LABEL,
+  isDueNow,
   isPayable,
   type Installment,
   type InstallmentStatus,
@@ -58,11 +59,13 @@ export const paymentFilterParser = parseAsStringLiteral(PAYMENT_FILTERS)
   .withDefault("can-tra")
   .withOptions({ history: "push", scroll: false });
 
-type Row = Pick<Installment, "status" | "overdue" | "outstanding" | "dueDate" | "seq">;
+type Row = Pick<
+  Installment,
+  "status" | "overdue" | "outstanding" | "dueDate" | "seq" | "reachedAt"
+>;
 
-/** Owing now: due, partly paid or overdue, with money still to pay. */
-const dueNow = (row: Row) =>
-  isPayable(row) && (row.overdue || row.status === "DUE" || row.status === "PARTIALLY_PAID");
+/** Owing now: the shared rule (`isDueNow`), so this page and the account to-do strip count alike. */
+const dueNow = (row: Row) => isDueNow(row);
 
 const MATCHES: Record<PaymentFilter, (row: Row) => boolean> = {
   "can-tra": dueNow,

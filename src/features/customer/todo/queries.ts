@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { QUERY_TIMES } from "@/lib/api/query-client";
 import { ORDERS_QUERY_ROOT } from "@/lib/api/query-keys";
-import { useMyInstallments, type Installment } from "@/lib/installments";
+import { isDueNow, useMyInstallments, type Installment } from "@/lib/installments";
 
 import { countContractsToSign, countQuotesToAnswer } from "./api";
 
@@ -39,11 +39,11 @@ const INSTALLMENT_ROWS = 50;
 export type InstallmentsToPay = { due: number; overdue: number };
 
 /**
- * The installments to pay now: every DUE one, and a PARTIALLY_PAID one once it is overdue (one paid
- * in part before its due day is not urgent yet). Overdue is the BE's flag (WF-05 fix plan §8).
+ * The installments to pay now, by the same rule as the payments page it links to (`isDueNow`).
+ * Overdue is the BE's flag (WF-05 fix plan §8).
  */
 export function installmentsToPay(rows: readonly Installment[]): InstallmentsToPay {
-  const now = rows.filter((row) => row.status === "DUE" || row.overdue);
+  const now = rows.filter(isDueNow);
   return { due: now.length, overdue: now.filter((row) => row.overdue).length };
 }
 
