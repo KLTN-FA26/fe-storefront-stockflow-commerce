@@ -4,6 +4,8 @@ import { RefreshCw } from "lucide-react";
 
 import { Alert, Skeleton } from "@/components/shared";
 import { Button } from "@/components/ui/button";
+// The chat's transfer card draws the same BE payload; reused as is, not copied.
+import { VietQrCode } from "@/features/chat/components/cards/viet-qr-code";
 import { describeApiError } from "@/lib/api/describe-error";
 import { ApiError } from "@/lib/api/error";
 import { formatDate } from "@/lib/format/date";
@@ -22,10 +24,12 @@ interface FieldProps {
   value: string;
   /** Names the field for the copy button; without it the value is not copyable. */
   copyName?: string;
+  /** What the copy button puts on the clipboard when it is not the shown value (an amount's digits). */
+  copyValue?: string;
   emphasis?: boolean;
 }
 
-function Field({ label, value, copyName, emphasis = false }: FieldProps) {
+function Field({ label, value, copyName, copyValue, emphasis = false }: FieldProps) {
   return (
     <div className="flex items-center justify-between gap-2">
       <dt className="text-ink-secondary shrink-0">{label}</dt>
@@ -39,16 +43,21 @@ function Field({ label, value, copyName, emphasis = false }: FieldProps) {
         >
           {value}
         </span>
-        {copyName ? <CopyFieldButton value={value} fieldName={copyName} /> : null}
+        {copyName ? <CopyFieldButton value={copyValue ?? value} fieldName={copyName} /> : null}
       </dd>
     </div>
   );
 }
 
+/** What happens after the transfer (SF-UX-37): a person matches it, so it is not instant. */
+export const AFTER_TRANSFER_TEXT =
+  "Sau khi chuyển, kế toán đối chiếu sao kê và ghi nhận khoản tiền trong giờ làm việc; trạng thái đợt sẽ chuyển sang Đã thanh toán. Bạn không cần gửi lại chứng từ.";
+
 /**
- * How to pay one installment by bank transfer (kltn-docs 15 §4.2 step 5): the shop's account, what
- * the installment still owes, and the transfer content (contract number + installment) the
- * accountant matches the bank statement line against.
+ * How to pay one installment by bank transfer (kltn-docs 15 §4.2 step 5): the VietQR the BE drew up
+ * when it sends one (R5-9), the shop's account, what the installment still owes — the amount
+ * copyable as digits for a bank app — and the transfer content (contract number + installment) the
+ * accountant matches the bank statement line against; then what happens next.
  */
 export function TransferInstructionsBlock({ transfer }: { transfer: InstallmentTransfer }) {
   const headingId = `transfer-${transfer.installmentId}`;
@@ -60,6 +69,7 @@ export function TransferInstructionsBlock({ transfer }: { transfer: InstallmentT
       <h3 id={headingId} className="text-ink-primary text-sm font-semibold">
         Thông tin chuyển khoản
       </h3>
+      {transfer.vietQr ? <VietQrCode payload={transfer.vietQr} /> : null}
       <dl className="space-y-1 text-sm">
         <Field label="Ngân hàng" value={transfer.bankName} />
         <Field
@@ -78,6 +88,8 @@ export function TransferInstructionsBlock({ transfer }: { transfer: InstallmentT
         <Field
           label="Số tiền cần chuyển"
           value={formatMoney(transfer.amountDue, transfer.currency)}
+          copyName="số tiền"
+          copyValue={String(Math.round(transfer.amountDue))}
           emphasis
         />
         {transfer.dueDate ? (
@@ -87,6 +99,7 @@ export function TransferInstructionsBlock({ transfer }: { transfer: InstallmentT
       <p className="text-ink-tertiary text-xs">
         Hãy ghi đúng nội dung chuyển khoản để kế toán đối chiếu khoản tiền với đúng đợt thanh toán.
       </p>
+      <p className="text-ink-secondary text-xs">{AFTER_TRANSFER_TEXT}</p>
     </section>
   );
 }
