@@ -4,28 +4,37 @@ import Link from "next/link";
 import { FileDown } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
-import { formatDate } from "@/lib/format/date";
+import { formatDate, formatDateTime } from "@/lib/format/date";
 import { formatNumber } from "@/lib/format/number";
 
 import { Button } from "@/components/ui/button";
 
 import { getContractDocumentLink } from "../../api";
 import type { ContractCardPayload } from "../../card-payloads";
-import { contractStatusMeta, milestoneLabel } from "../../labels";
+import { SIGNED_COPY_SENT, contractStatusMeta, milestoneLabel } from "../../labels";
 import { useOpenLink } from "../use-open-link";
 import { CARD_LINK, CardFrame, Fact, Facts, cardMoney } from "./card-frame";
+
+interface ContractCardProps {
+  payload: ContractCardPayload;
+  /** When the customer last sent a PDF or image after this card, while it waits for the signature (SF-UX-24). */
+  signedCopyAt?: string | null | undefined;
+}
 
 /**
  * CONTRACT card (plan B.7.4): no action for either side. The customer downloads the contract and
  * sends the signed scan back as a chat file; Sales record the signing on the contract's own page.
+ * Once a file is sent, the card says so and that Sales still have to confirm it.
  */
-export function ContractCard({ payload }: { payload: ContractCardPayload }) {
+export function ContractCard({ payload, signedCopyAt }: ContractCardProps) {
   const download = useOpenLink();
+  const waiting = payload.status === "SENT";
+  const sentCopy = waiting && signedCopyAt ? signedCopyAt : null;
   return (
     <CardFrame
       eyebrow="Hợp đồng mua bán"
       title={payload.number}
-      status={contractStatusMeta(payload.status)}
+      status={sentCopy ? SIGNED_COPY_SENT : contractStatusMeta(payload.status)}
       footer={
         <>
           <Button
@@ -98,7 +107,12 @@ export function ContractCard({ payload }: { payload: ContractCardPayload }) {
           </ol>
         </div>
       ) : null}
-      {payload.status === "SENT" ? (
+      {sentCopy ? (
+        <p role="status" className="text-ink-primary">
+          Đã gửi bản ký lúc <span className="tabular-nums">{formatDateTime(sentCopy)}</span> · chờ
+          Sale xác nhận.
+        </p>
+      ) : waiting ? (
         <p className="text-ink-secondary">
           Ký xong, bạn gửi bản scan hoặc PDF có chữ ký vào cuộc trò chuyện này bằng nút đính kèm.
         </p>

@@ -113,7 +113,7 @@ describe("SAMPLE_APPROVAL card", () => {
       customerActions: ["APPROVE", "REQUEST_REPRINT"],
     });
 
-  it("APPROVE posts the action to the card endpoint and disables the buttons while pending", async () => {
+  it("SF-UX-25: APPROVE asks for confirmation first, then posts and disables the buttons while pending", async () => {
     const user = userEvent.setup();
     let finish: (value: unknown) => void = () => undefined;
     const post = vi
@@ -121,6 +121,12 @@ describe("SAMPLE_APPROVAL card", () => {
       .mockReturnValue(new Promise((resolve) => (finish = resolve)) as never);
     renderMessage(waiting());
     await user.click(screen.getByRole("button", { name: "Duyệt mẫu" }));
+    const dialog = await screen.findByRole("dialog", { name: "Duyệt mẫu lần 1?" });
+    expect(dialog).toHaveTextContent(
+      "Sau khi duyệt sẽ in hàng loạt theo mẫu này, không đổi thiết kế được.",
+    );
+    expect(post).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole("button", { name: "Duyệt mẫu" }));
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     expect(post.mock.calls[0]?.[0]).toMatch(
       new RegExp(`^/chat/me/conversations/${CONVERSATION_ID}/cards/[^/]+/actions$`),
@@ -133,6 +139,42 @@ describe("SAMPLE_APPROVAL card", () => {
       }),
     });
     await waitFor(() => expect(screen.getByRole("button", { name: "In lại mẫu" })).toBeEnabled());
+  });
+
+  it("SF-UX-25: backing out of the confirmation sends nothing", async () => {
+    const user = userEvent.setup();
+    const post = vi.spyOn(api, "post");
+    renderMessage(waiting());
+    await user.click(screen.getByRole("button", { name: "Duyệt mẫu" }));
+    await user.click(await screen.findByRole("button", { name: "Xem lại" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("SF-UX-25: is titled by the goods and round, never by the production order's code", () => {
+    renderMessage(
+      cardMessageJson("SAMPLE_APPROVAL", samplePayload({ skus: ["KH-DEMO-CUP-01"] }), {
+        customerActions: ["APPROVE"],
+      }),
+    );
+    const card = screen.getByRole("region", { name: /Duyệt mẫu in/ });
+    expect(
+      within(card).getByRole("heading", { name: "KH-DEMO-CUP-01 · lần 1" }),
+    ).toBeInTheDocument();
+    expect(card).not.toHaveTextContent("PO-20261120-0001");
+  });
+
+  it("SF-UX-25: prefers the design name when the BE sends one", () => {
+    renderMessage(
+      cardMessageJson(
+        "SAMPLE_APPROVAL",
+        samplePayload({ designName: "Ly giấy 12oz logo đỏ", skus: ["KH-DEMO-CUP-01"], roundNo: 2 }),
+        { customerActions: ["APPROVE"] },
+      ),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Ly giấy 12oz logo đỏ · lần 2" }),
+    ).toBeInTheDocument();
   });
 
   it("REQUEST_REPRINT needs a note and posts it", async () => {
@@ -226,5 +268,22 @@ describe("image attachments (WF-02 item 52)", () => {
       ),
     );
     expect(get).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("CONTRACT card waiting for the signature", () => {
+  it("says it waits for the customer, from their side (SF-UX-2), with how to send it back", () => {
+    renderMessage(
+      cardMessageJson("CONTRACT", {
+        contractId: "66666666-6666-4666-8666-666666666666",
+        number: "HD-20261120-900001-1",
+        orderId: ORDER_ID,
+        status: "SENT",
+      }),
+    );
+    const card = screen.getByRole("region", { name: /Hợp đồng mua bán/ });
+    expect(within(card).getByText("Chờ bạn ký")).toBeInTheDocument();
+    expect(within(card).getByText(/gửi bản scan hoặc PDF có chữ ký/)).toBeInTheDocument();
+    expect(within(card).queryByText(/Đã gửi bản ký/)).not.toBeInTheDocument();
   });
 });

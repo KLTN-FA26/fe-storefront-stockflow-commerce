@@ -39,7 +39,8 @@ const CONTEXT_KIND: Record<string, string> = {
   QUOTE: "Báo giá",
   ORDER: "Đơn hàng",
   CONTRACT: "Hợp đồng",
-  PRODUCTION_ORDER: "Đơn sản xuất",
+  // Staff document: its chip is hidden (SF-UX-26); "Lô in" wherever its name still shows.
+  PRODUCTION_ORDER: "Lô in",
   EINVOICE: "Hoá đơn",
 };
 export const contextKindLabel = (kind: string) => CONTEXT_KIND[kind] ?? "Chứng từ";
@@ -68,6 +69,9 @@ export const requestStatusMeta = (status: string | null | undefined) =>
 export const quoteStatusMeta = (status: string) => meta(QUOTE_STATUS, status, "Báo giá");
 
 export const contractStatusMeta = (status: string) => meta(CONTRACT_STATUS, status, "Hợp đồng");
+
+/** A SENT contract whose signed copy the customer already sent in the chat: Sales have to record it (SF-UX-24). */
+export const SIGNED_COPY_SENT: StatusMeta = { label: "Chờ Sale xác nhận", tone: "info" };
 
 export const installmentStatusMeta = (status: string | null | undefined, overdue: boolean) =>
   installmentStatusOf(status, overdue);
