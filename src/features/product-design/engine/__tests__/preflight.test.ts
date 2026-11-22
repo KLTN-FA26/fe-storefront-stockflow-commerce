@@ -674,9 +674,9 @@ describe("EMPTY_DESIGN", () => {
     expect(runPreflight(input(doc)).issues).toEqual([empty]);
   });
 
-  it("fails a design with only a background colour or pattern (docs 12 §3)", () => {
+  it("passes a design with only a background colour or pattern (SD-8: as the BE, a background is printed)", () => {
     const solid = docOf({ LEFT: content([], { kind: "color", color: "#336699" }) });
-    expect(runPreflight(input(solid)).issues).toEqual([empty]);
+    expect(runPreflight(input(solid)).issues).toEqual([]);
 
     const pattern = docOf({
       FRONT: content([], {
@@ -687,7 +687,9 @@ describe("EMPTY_DESIGN", () => {
         rotationDeg: 0,
       }),
     });
-    expect(runPreflight(input(pattern)).issues).toEqual([empty]);
+    expect(runPreflight(input(pattern)).issues).toEqual([]);
+    // A background of kind "none" is no background: still empty.
+    expect(runPreflight(input(docOf({ FRONT: content([], NONE) }))).issues).toEqual([empty]);
   });
 
   it("is satisfied by one text on any surface", () => {
