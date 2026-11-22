@@ -295,9 +295,18 @@ describe("NewDesignScreen", () => {
     post.mockRejectedValueOnce(busy);
     const view = renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1), WAIT);
+    const keyBefore = keyOf(post, 0);
     view.unmount();
     await new Promise((resolve) => setTimeout(resolve, 1500));
     expect(post).toHaveBeenCalledTimes(1);
+    // The first request may still make the draft on the BE: the key stays, so coming back replays it.
+    const kept = Object.keys(window.sessionStorage)
+      .filter((k) => k.startsWith("sf.design.create-key:"))
+      .map((k) => window.sessionStorage.getItem(k));
+    expect(kept).toContain(keyBefore);
+    renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2), WAIT);
+    expect(keyOf(post, 1)).toBe(keyBefore);
   });
 
   it("a refusal the BE stores for the key is not retried with that key", async () => {

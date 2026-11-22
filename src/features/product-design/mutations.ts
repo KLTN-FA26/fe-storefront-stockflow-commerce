@@ -109,7 +109,8 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 /**
  * The create, tried again a little later while the BE still runs the request this key started
  * (409 `IDEMPOTENT_REQUEST_IN_PROGRESS`, `Retry-After` 1 s): a reload of the launcher meets it. The waits stop when
- * `signal` is aborted (the launcher was left), so no create is sent after the page is gone.
+ * `signal` is aborted (the launcher was left), so no create is sent after the page is gone; the IN_PROGRESS error is
+ * then thrown as it is, so the key is kept (`isRetryableWithSameKey`).
  */
 async function createDesignWhenFree(
   input: CreateDesignInput,
@@ -122,7 +123,11 @@ async function createDesignWhenFree(
       if (!hasErrorCode(error, "IDEMPOTENT_REQUEST_IN_PROGRESS") || attempt >= IN_PROGRESS_TRIES) {
         throw error;
       }
-      await sleep((error.retryAfterSeconds ?? 1) * 1000, signal);
+      // Left while waiting: the first request may still be drawing the design on the BE, so the caller must keep its
+      // key (a later visit replays it). Throw the IN_PROGRESS answer itself, never the abort, which reads as "gone".
+      await sleep((error.retryAfterSeconds ?? 1) * 1000, signal).catch(() => {
+        throw error;
+      });
     }
   }
 }
