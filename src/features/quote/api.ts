@@ -44,13 +44,14 @@ export async function getQuote(quoteId: string, signal?: AbortSignal): Promise<Q
 
 /**
  * GET /quotes/{id}/document — the quote drawn as a PDF (the offer as sent, or as accepted). The body
- * is the file itself, not an envelope; a refusal arrives as a blob too, so the error carries only
- * its HTTP status (the screen words it by status).
+ * is the file itself, not an envelope. A refusal is the JSON envelope (404 NOT_FOUND, 503
+ * SELLER_PROFILE_UNAVAILABLE), so the request accepts JSON too and the client reads the Blob body
+ * into the ApiError (lib/api/blob-error).
  */
 export async function getQuoteDocument(quoteId: string): Promise<Blob> {
   const { data } = await api.get<Blob>(`${path(quoteId)}/document`, {
     responseType: "blob",
-    headers: { Accept: "application/pdf" },
+    headers: { Accept: "application/pdf, application/json" },
   });
   return data;
 }

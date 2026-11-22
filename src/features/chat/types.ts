@@ -15,6 +15,7 @@ import type {
   quotePricingDtoSchema,
   rateInputSchema,
   requestChangesInputSchema,
+  requestReprintInputSchema,
   sendTextInputSchema,
 } from "./schemas";
 
@@ -34,6 +35,7 @@ export type OpenConversationInput = z.input<typeof openConversationInputSchema>;
 export type SendTextInput = z.input<typeof sendTextInputSchema>;
 export type AcceptQuoteInput = z.input<typeof acceptQuoteInputSchema>;
 export type RequestChangesInput = z.input<typeof requestChangesInputSchema>;
+export type RequestReprintInput = z.input<typeof requestReprintInputSchema>;
 export type RateInput = z.input<typeof rateInputSchema>;
 
 export interface SendAttachmentInput {
@@ -51,4 +53,6 @@ export interface ChatListParams {
 export type CardActionBody =
   | ({ action: "ACCEPT" } & AcceptQuoteInput)
   | ({ action: "REQUEST_CHANGES" } & RequestChangesInput)
+  | { action: "APPROVE" }
+  | ({ action: "REQUEST_REPRINT" } & RequestReprintInput)
   | ({ action: "RATE" } & RateInput);

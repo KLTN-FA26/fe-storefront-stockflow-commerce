@@ -221,3 +221,40 @@ describe("API authentication semantics", () => {
     expect(replace).toHaveBeenCalledWith("/login?next=%2Faccount%2Forders%3Fpage%3D2");
   });
 });
+
+describe("failed file downloads", () => {
+  it("lỗi 422 dạng Blob JSON → ApiError mang errorCode và message của BE", async () => {
+    api.defaults.adapter = async (config) => {
+      throw new AxiosError("Request failed", undefined, config, undefined, {
+        data: new Blob([JSON.stringify({ errorCode: "QUOTE_X", message: "Câu của BE" })], {
+          type: "application/json",
+        }),
+        status: 422,
+        statusText: "",
+        headers: {},
+        config,
+      });
+    };
+    const failure = await api
+      .get("/quotes/1/document", { responseType: "blob" })
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(ApiError);
+    expect(failure).toMatchObject({ status: 422, code: "QUOTE_X", message: "Câu của BE" });
+  });
+
+  it("a Blob that is not JSON keeps the HTTP status code", async () => {
+    api.defaults.adapter = async (config) => {
+      throw new AxiosError("Request failed", undefined, config, undefined, {
+        data: new Blob(["<html>"], { type: "text/html" }),
+        status: 502,
+        statusText: "",
+        headers: {},
+        config,
+      });
+    };
+    const failure = await api
+      .get("/quotes/1/document", { responseType: "blob" })
+      .catch((error: unknown) => error);
+    expect(failure).toMatchObject({ status: 502, code: "HTTP_502" });
+  });
+});

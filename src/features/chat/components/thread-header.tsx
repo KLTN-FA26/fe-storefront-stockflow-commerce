@@ -11,7 +11,7 @@ import { contextHref, conversationTitle, isEnded } from "../selectors";
 import type { ChatConversation } from "../types";
 import { ResponseExpectation } from "./response-expectation";
 
-/** Subject, status, Sale in charge (online or not), what it is about, when Sales should answer. */
+/** Subject, status, Sale in charge (marked online only when the BE says so), what it is about, when Sales should answer. */
 export function ThreadHeader({ conversation }: { conversation: ChatConversation }) {
   const status = conversationStatusMeta(conversation.status);
   const online = conversation.agentOnline === true;
@@ -31,12 +31,9 @@ export function ThreadHeader({ conversation }: { conversation: ChatConversation 
         <ToneBadge label={status.label} tone={status.tone} size="sm" />
       </div>
       <p className="text-ink-secondary flex items-center gap-2 text-sm">
-        <span
-          aria-hidden
-          className={cn("size-2 shrink-0 rounded-full", online ? "bg-positive" : "bg-ink-tertiary")}
-        />
+        {online ? <span aria-hidden className="bg-positive size-2 shrink-0 rounded-full" /> : null}
         {conversation.assignedAgentName
-          ? `${conversation.assignedAgentName} · ${online ? "Đang trực tuyến" : "Ngoại tuyến"}`
+          ? `Sale phụ trách: ${conversation.assignedAgentName}${online ? " · Đang trực tuyến" : ""}`
           : "Đang chờ Sale nhận cuộc trò chuyện"}
       </p>
       {conversation.contexts.length > 0 ? (

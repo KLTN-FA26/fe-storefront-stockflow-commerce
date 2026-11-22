@@ -1,8 +1,8 @@
 import { TriangleAlert } from "lucide-react";
 
+import { DELIVERY_FAILURE_REASON_LABEL } from "@/lib/domain/delivery-labels";
 import { formatDateTime } from "@/lib/format/date";
 
-import { DELIVERY_FAILURE_REASON_LABEL } from "../labels";
 import type { OrderShipment } from "../types";
 
 /**

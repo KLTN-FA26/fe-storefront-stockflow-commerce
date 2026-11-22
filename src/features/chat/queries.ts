@@ -8,6 +8,7 @@ import {
 import { QUERY_TIMES } from "@/lib/api/query-client";
 
 import {
+  getAttachmentLink,
   getMessages,
   getMyConversation,
   getMyUnread,
@@ -26,6 +27,8 @@ export const chatKeys = {
   messages: (id: string) => [...chatKeys.all, "messages", id] as const,
   catchUp: (id: string) => [...chatKeys.all, "catch-up", id] as const,
   unread: () => [...chatKeys.all, "unread"] as const,
+  attachmentLink: (id: string, attachmentId: string) =>
+    [...chatKeys.all, "attachment-link", id, attachmentId] as const,
   quotePricing: (quoteId: string) => [...chatKeys.all, "quote-pricing", quoteId] as const,
 };
 
@@ -142,5 +145,21 @@ export function useQuotePricing(quoteId: string, enabled: boolean) {
     enabled,
     staleTime: 0,
     retry: 1,
+  });
+}
+
+/**
+ * C7 link of an image attachment, fetched to draw its thumbnail. The link lives 10 minutes, so it is
+ * reused for 8 and dropped from the cache before it can expire.
+ */
+export function useAttachmentLink(id: string, attachmentId: string, enabled = true) {
+  return useQuery({
+    queryKey: chatKeys.attachmentLink(id, attachmentId),
+    queryFn: () => getAttachmentLink(id, attachmentId),
+    enabled,
+    retry: false,
+    refetchOnWindowFocus: false,
+    staleTime: 8 * 60_000,
+    gcTime: 9 * 60_000,
   });
 }

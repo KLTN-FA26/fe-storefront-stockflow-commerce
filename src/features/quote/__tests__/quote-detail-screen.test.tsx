@@ -1,7 +1,9 @@
 import { screen, waitFor, within } from "@testing-library/react";
+import { AxiosError } from "axios";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ToastProvider } from "@/components/shared/Toast";
 import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error";
 import { PERM } from "@/lib/auth/permission-codes";
@@ -149,7 +151,12 @@ describe("QuoteDetailScreen — accepting (TC-F03-01)", () => {
         ),
       );
     const user = userEvent.setup();
-    renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
+    renderWithProviders(
+      <>
+        <ToastProvider />
+        <QuoteDetailScreen quoteId={quoteId} />
+      </>,
+    );
 
     await screen.findByRole("spinbutton", { name: "Số thùng" });
     const reads = () => get.mock.calls.filter(([url]) => url === `/quotes/${quoteId}`).length;
@@ -157,7 +164,9 @@ describe("QuoteDetailScreen — accepting (TC-F03-01)", () => {
     await user.click(screen.getByRole("button", { name: "Chấp nhận báo giá" }));
     await user.click(await screen.findByRole("button", { name: "Chấp nhận" }));
 
+    // Said once, in the toast: the form repeats nothing (C8).
     expect(await screen.findByText(/Dữ liệu vừa thay đổi, đã tải lại/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Dữ liệu vừa thay đổi/)).toHaveLength(1);
     await waitFor(() => expect(reads()).toBeGreaterThan(before));
     expect(post).toHaveBeenCalledTimes(1);
   });
@@ -263,5 +272,191 @@ describe("QuoteDetailScreen — asking for changes", () => {
         feedback: "Giảm giá bậc 50 thùng",
       }),
     );
+  });
+
+  it.each([
+    ["INVALID_QUOTE_TRANSITION", 409, "Báo giá đang được Sale sửa: chưa thể trả lời.", 1],
+    ["VALIDATION_FAILED", 400, "Nội dung yêu cầu sửa quá dài.", 2],
+  ])(
+    "a %s refusal: said once when the toast says it, inline otherwise",
+    async (code, status, text, times) => {
+      backend(beSentQuote);
+      vi.spyOn(api, "post").mockRejectedValue(new ApiError(status, code, text));
+      const user = userEvent.setup();
+      renderWithProviders(
+        <>
+          <ToastProvider />
+          <QuoteDetailScreen quoteId={quoteId} />
+        </>,
+      );
+      await user.click(await screen.findByRole("button", { name: "Yêu cầu sửa" }));
+      const dialog = await screen.findByRole("dialog");
+      await user.type(within(dialog).getByLabelText(/Nội dung cần sửa/), "Giảm giá");
+      await user.click(within(dialog).getByRole("button", { name: "Gửi yêu cầu sửa" }));
+      if (times === 1) {
+        expect(await screen.findByText(text)).toBeInTheDocument();
+        expect(screen.getAllByText(text)).toHaveLength(1);
+        expect(within(dialog).queryByText(text)).not.toBeInTheDocument();
+      } else {
+        // Not a toasted code: the dialog says it itself.
+        expect(await within(dialog).findByText(text)).toBeInTheDocument();
+      }
+    },
+  );
+});
+
+const revising = {
+  ...beSentQuote,
+  status: "CHANGES_REQUESTED",
+  validUntil: "2020-01-01T00:00:00Z",
+  customerFeedback: "Xin thêm mốc giá",
+  history: [
+    { revision: 1, toStatus: "DRAFT", changedAt: "2099-11-19T02:00:00Z" },
+    { revision: 1, fromStatus: "DRAFT", toStatus: "SENT", changedAt: "2099-11-20T02:00:00Z" },
+    {
+      revision: 1,
+      fromStatus: "SENT",
+      toStatus: "CHANGES_REQUESTED",
+      changedAt: "2099-11-21T02:00:00Z",
+    },
+    {
+      revision: 2,
+      fromStatus: "CHANGES_REQUESTED",
+      toStatus: "DRAFT",
+      changedAt: "2099-11-22T02:00:00Z",
+    },
+  ],
+};
+
+describe("QuoteDetailScreen — a quote Sale is revising (PR #388)", () => {
+  it("báo giá đang sửa không hiện Hiệu lực đến và không có nút", async () => {
+    backend(revising);
+    renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
+
+    expect(
+      await screen.findByText(/Sale đang soạn bản sửa theo yêu cầu của bạn/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Hiệu lực đến")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Chấp nhận báo giá" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Yêu cầu sửa" })).not.toBeInTheDocument();
+  });
+
+  it("hides the Nháp rows of the history", async () => {
+    backend(revising);
+    renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
+
+    const history = (await screen.findByRole("heading", { name: "Lịch sử" })).closest("section")!;
+    expect(within(history).queryByText(/^Nháp/)).not.toBeInTheDocument();
+    expect(within(history).getAllByRole("listitem")).toHaveLength(2);
+  });
+
+  it("hiện câu beingRevised của BE sau khi form biến mất", async () => {
+    let current: Record<string, unknown> = beSentQuote;
+    backend(() => current);
+    const beingRevised = "Báo giá QT-20261120-9001 đang được Sale sửa: chưa thể trả lời.";
+    vi.spyOn(api, "post").mockImplementation(async () => {
+      current = revising;
+      throw new ApiError(409, "INVALID_QUOTE_TRANSITION", beingRevised);
+    });
+    const user = userEvent.setup();
+    renderWithProviders(
+      <>
+        <ToastProvider />
+        <QuoteDetailScreen quoteId={quoteId} />
+      </>,
+    );
+
+    await screen.findByRole("spinbutton", { name: "Số thùng" });
+    await user.click(screen.getByRole("button", { name: "Chấp nhận báo giá" }));
+    await user.click(await screen.findByRole("button", { name: "Chấp nhận" }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Chấp nhận báo giá" })).not.toBeInTheDocument(),
+    );
+    expect(await screen.findByText(beingRevised)).toBeInTheDocument();
+  });
+
+  it("INVALID_QUOTE_TRANSITION is said once (the toast), not again inside the form", async () => {
+    backend(beSentQuote);
+    const refusal = "Báo giá QT-20261120-9001 đã thay đổi: chưa thể trả lời.";
+    vi.spyOn(api, "post").mockRejectedValue(new ApiError(409, "INVALID_QUOTE_TRANSITION", refusal));
+    const user = userEvent.setup();
+    renderWithProviders(
+      <>
+        <ToastProvider />
+        <QuoteDetailScreen quoteId={quoteId} />
+      </>,
+    );
+
+    await screen.findByRole("spinbutton", { name: "Số thùng" });
+    await user.click(screen.getByRole("button", { name: "Chấp nhận báo giá" }));
+    await user.click(await screen.findByRole("button", { name: "Chấp nhận" }));
+
+    expect(await screen.findByText(refusal)).toBeInTheDocument();
+    expect(screen.getAllByText(refusal)).toHaveLength(1);
+    expect(screen.queryByText("Chưa chấp nhận được báo giá.")).not.toBeInTheDocument();
+  });
+
+  it("CONVERTED without an order yet says Sale is drawing up the contract", async () => {
+    backend({ ...beSentQuote, status: "CONVERTED" });
+    renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
+    expect(
+      await screen.findByText(/Sale đang lập hợp đồng; bạn sẽ nhận hợp đồng để ký/),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("QuoteDetailScreen — the PDF", () => {
+  let pdfAccept = "";
+  const originalAdapter = api.defaults.adapter;
+  afterEach(() => {
+    if (originalAdapter) api.defaults.adapter = originalAdapter;
+    pdfAccept = "";
+  });
+
+  const pdfFailure = (status: number, errorCode: string, message: string) => {
+    vi.spyOn(window, "open").mockReturnValue({ close: vi.fn() } as unknown as Window);
+    api.defaults.adapter = async (config) => {
+      const ok = (data: unknown) => ({ data, status: 200, statusText: "OK", headers: {}, config });
+      if (config.url === "/identity/me/permissions") {
+        return ok({ roles: ["CUSTOMER"], permissions, dataScope: "OWN" });
+      }
+      if (config.url === `/quotes/${quoteId}`) return ok(beSentQuote);
+      pdfAccept = String(config.headers.get("Accept"));
+      throw new AxiosError("failed", undefined, config, undefined, {
+        data: new Blob([JSON.stringify({ success: false, errorCode, message })], {
+          type: "application/json",
+        }),
+        status,
+        statusText: "",
+        headers: {},
+        config,
+      });
+    };
+  };
+
+  it("PDF lỗi 503 JSON → hiện câu BE", async () => {
+    pdfFailure(503, "SELLER_PROFILE_UNAVAILABLE", "Seller profile is not configured");
+    const user = userEvent.setup();
+    renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
+
+    await user.click(await screen.findByRole("button", { name: /Tải PDF báo giá/ }));
+    expect(
+      await screen.findByText("Chưa tạo được file PDF lúc này. Vui lòng thử lại sau."),
+    ).toBeInTheDocument();
+    expect(pdfAccept).toBe("application/pdf, application/json");
+  });
+
+  it("PDF lỗi 404 NOT_FOUND hiện câu không tìm thấy", async () => {
+    pdfFailure(404, "NOT_FOUND", "Không tìm thấy báo giá");
+    const user = userEvent.setup();
+    renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
+
+    await user.click(await screen.findByRole("button", { name: /Tải PDF báo giá/ }));
+    expect(
+      await screen.findByText(
+        "Không tìm thấy báo giá, hoặc báo giá không thuộc tài khoản của bạn.",
+      ),
+    ).toBeInTheDocument();
   });
 });

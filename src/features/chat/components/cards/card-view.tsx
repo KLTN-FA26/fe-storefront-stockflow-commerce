@@ -3,8 +3,11 @@
 import type { ChatCard } from "../../types";
 import { ContractCard } from "./contract-card";
 import { CsatCard } from "./csat-card";
+import { InvoiceCard } from "./invoice-card";
+import { OrderStatusCard } from "./order-status-card";
 import { QuoteCard } from "./quote-card";
 import { DesignQuoteRequestCard, ProjectQuoteRequestCard } from "./quote-request-card";
+import { SampleApprovalCard } from "./sample-approval-card";
 import { TransferCard } from "./transfer-card";
 
 interface CardViewProps {
@@ -44,6 +47,20 @@ export function CardView({ conversationId, messageId, card, body, canAct }: Card
     case "CSAT":
       return (
         <CsatCard
+          conversationId={conversationId}
+          messageId={messageId}
+          card={card}
+          payload={view.payload}
+          canAct={canAct}
+        />
+      );
+    case "ORDER_STATUS":
+      return <OrderStatusCard card={card} payload={view.payload} />;
+    case "INVOICE":
+      return <InvoiceCard card={card} payload={view.payload} />;
+    case "SAMPLE_APPROVAL":
+      return (
+        <SampleApprovalCard
           conversationId={conversationId}
           messageId={messageId}
           card={card}

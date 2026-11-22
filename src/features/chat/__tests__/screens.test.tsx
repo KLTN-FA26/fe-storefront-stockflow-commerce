@@ -112,3 +112,29 @@ describe("TC-F13-03: an internal note in the data is never rendered", () => {
     expect(screen.queryByText(/Internal note/i)).not.toBeInTheDocument();
   });
 });
+
+describe("the thread header's Sale line (audit item 12)", () => {
+  const open = async (agentOnline: boolean) => {
+    vi.spyOn(api, "get").mockImplementation(async (url: string) => {
+      if (url === "/identity/me/permissions") return { data: PERMISSIONS };
+      if (url.endsWith("/messages")) return { data: { items: [], lastSeq: 0 } };
+      return {
+        data: conversationJson({ agentOnline, expectedResponseAt: "2099-11-20T09:00:00Z" }),
+      };
+    });
+    renderWithProviders(<ChatThreadScreen conversationId={CONVERSATION_ID} />);
+    await screen.findByText(/Sale phụ trách: Nguyễn Minh \(Sale\)/);
+  };
+
+  it("Sale không trực tuyến: không ghi Ngoại tuyến, vẫn có giờ phản hồi dự kiến", async () => {
+    await open(false);
+    expect(screen.queryByText(/Ngoại tuyến/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Đang trực tuyến/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Sale dự kiến phản hồi/)).toBeInTheDocument();
+  });
+
+  it("says Đang trực tuyến only when the BE says the Sale is online", async () => {
+    await open(true);
+    expect(screen.getByText(/Đang trực tuyến/)).toBeInTheDocument();
+  });
+});

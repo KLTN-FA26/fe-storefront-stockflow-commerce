@@ -12,8 +12,8 @@ import { hasErrorCode } from "@/lib/api/describe-error";
 import { PERM } from "@/lib/auth/permission-codes";
 import { useHasPermission } from "@/lib/auth/my-permissions";
 
-import { describeQuoteError, isQuoteNotFound } from "../errors";
-import { allowedQuoteActions, effectiveStatus, QUOTE_STATUS_META } from "../lifecycle";
+import { describeQuoteError, isQuoteNotFound, isToastedQuoteError } from "../errors";
+import { allowedQuoteActions, effectiveStatus, quoteStatusHint } from "../lifecycle";
 import { useAcceptQuote, useRequestQuoteChanges } from "../mutations";
 import { useQuote } from "../queries";
 import { isValidQuoteId } from "../schemas";
@@ -85,7 +85,7 @@ export function QuoteDetailScreen({ quoteId: rawQuoteId }: { quoteId: string }) 
               </h1>
               <QuoteStatusBadge status={status} />
             </div>
-            <p className="text-ink-secondary text-sm">{QUOTE_STATUS_META[status].hint}</p>
+            <p className="text-ink-secondary text-sm">{quoteStatusHint(status, quote)}</p>
           </div>
           <div className="flex flex-wrap items-start gap-2">
             <QuoteDocumentButton quoteId={quote.id} quoteNumber={quote.quoteNumber} />
@@ -146,7 +146,11 @@ export function QuoteDetailScreen({ quoteId: rawQuoteId }: { quoteId: string }) 
         quoteNumber={quote.quoteNumber}
         onOpenChange={setAsking}
         pending={changes.isPending}
-        error={changes.error ? describeQuoteError(changes.error) : undefined}
+        error={
+          changes.error && !isToastedQuoteError(changes.error)
+            ? describeQuoteError(changes.error)
+            : undefined
+        }
         onSubmit={(feedback) =>
           changes.mutate(
             { quoteId: quote.id, version: quote.version, feedback },

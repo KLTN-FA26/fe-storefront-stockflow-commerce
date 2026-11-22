@@ -149,6 +149,58 @@ export const csatCardPayloadSchema = z.object({
   score: count,
 });
 
+/** B.7.7 ORDER_STATUS (`shipmentChanged`): a shipment was handed over, delivered or failed. */
+export const orderStatusCardPayloadSchema = z.object({
+  orderId: id,
+  orderNumber: text,
+  shipmentId: text,
+  shipmentCode: text,
+  status: z.string(),
+  failureReasonCode: text,
+  carrierName: text,
+  packageCount: count,
+  occurredAt: text,
+});
+
+/** B.7.8 INVOICE (`einvoiceIssued`): the issued e-invoice; `files` holds a path per kind or null. */
+export const invoiceCardPayloadSchema = z.object({
+  id,
+  code: text,
+  status: text,
+  orderId: text,
+  orderNumber: text,
+  templateCode: text,
+  symbol: text,
+  invoiceNumber: count,
+  issueDate: text,
+  currency: text,
+  subtotal: money,
+  taxTotal: money,
+  grandTotal: money,
+  hasXml: z.boolean().nullish(),
+  hasPdf: z.boolean().nullish(),
+});
+
+/** B.7.9 SAMPLE_APPROVAL (`samplePayload`): one print-sample round; WAITING offers the answers. */
+export const sampleCardPayloadSchema = z.object({
+  roundId: id,
+  roundNo: count,
+  productionOrderCode: text,
+  salesOrderId: text,
+  status: z.string(),
+  physicalSampleSentOn: text,
+  openedAt: text,
+  answeredAt: text,
+  skus: z
+    .array(z.unknown())
+    .nullish()
+    .transform((skus) => skus ?? []),
+  media: z
+    .array(z.object({ id, fileName: text, contentType: text, video: z.boolean().nullish() }))
+    .nullish()
+    .transform((media) => media ?? []),
+});
+
 export type DesignQuoteRequestPayload = z.infer<typeof designQuoteRequestPayloadSchema>;
 export type ProjectQuoteRequestPayload = z.infer<typeof projectQuoteRequestPayloadSchema>;
 export type QuoteCardPayload = z.infer<typeof quoteCardPayloadSchema>;
@@ -156,6 +208,9 @@ export type QuoteCardLine = QuoteCardPayload["lines"][number];
 export type ContractCardPayload = z.infer<typeof contractCardPayloadSchema>;
 export type TransferCardPayload = z.infer<typeof transferCardPayloadSchema>;
 export type CsatCardPayload = z.infer<typeof csatCardPayloadSchema>;
+export type OrderStatusCardPayload = z.infer<typeof orderStatusCardPayloadSchema>;
+export type InvoiceCardPayload = z.infer<typeof invoiceCardPayloadSchema>;
+export type SampleCardPayload = z.infer<typeof sampleCardPayloadSchema>;
 
 export type ChatCardView =
   | { type: "DESIGN_QUOTE_REQUEST"; payload: DesignQuoteRequestPayload }
@@ -164,6 +219,9 @@ export type ChatCardView =
   | { type: "CONTRACT"; payload: ContractCardPayload }
   | { type: "TRANSFER"; payload: TransferCardPayload; reminder: boolean }
   | { type: "CSAT"; payload: CsatCardPayload }
+  | { type: "ORDER_STATUS"; payload: OrderStatusCardPayload }
+  | { type: "INVOICE"; payload: InvoiceCardPayload }
+  | { type: "SAMPLE_APPROVAL"; payload: SampleCardPayload }
   | { type: "UNKNOWN" };
 
 const UNKNOWN: ChatCardView = { type: "UNKNOWN" };
@@ -200,6 +258,18 @@ export function cardViewOf(kind: string, payload: unknown): ChatCardView {
     case "CSAT_SURVEY": {
       const parsed = csatCardPayloadSchema.safeParse(payload);
       return parsed.success ? { type: "CSAT", payload: parsed.data } : UNKNOWN;
+    }
+    case "ORDER_STATUS": {
+      const parsed = orderStatusCardPayloadSchema.safeParse(payload);
+      return parsed.success ? { type: "ORDER_STATUS", payload: parsed.data } : UNKNOWN;
+    }
+    case "INVOICE": {
+      const parsed = invoiceCardPayloadSchema.safeParse(payload);
+      return parsed.success ? { type: "INVOICE", payload: parsed.data } : UNKNOWN;
+    }
+    case "SAMPLE_APPROVAL": {
+      const parsed = sampleCardPayloadSchema.safeParse(payload);
+      return parsed.success ? { type: "SAMPLE_APPROVAL", payload: parsed.data } : UNKNOWN;
     }
     default:
       return UNKNOWN;

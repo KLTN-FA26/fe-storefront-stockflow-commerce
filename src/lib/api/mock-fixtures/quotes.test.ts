@@ -233,3 +233,28 @@ describe("mock contracts mirror the BE customer contract", () => {
     ).toBeNull();
   });
 });
+
+describe("a quote Sale is revising (BE PR #388)", () => {
+  it("reads as CHANGES_REQUESTED at the sent revision, in the list too, with the DRAFT rows in its history", () => {
+    const view = body(book().get(IDS.revising)).data as {
+      status: string;
+      revision: number;
+      history: Array<{ toStatus: string }>;
+    };
+    expect(view).toMatchObject({ status: "CHANGES_REQUESTED", revision: 1 });
+    expect(view.history.some((row) => row.toStatus === "DRAFT")).toBe(true);
+
+    const page = body(book().page({ status: "CHANGES_REQUESTED" })).data as {
+      items: Array<{ id: string; status: string; revision: number }>;
+    };
+    expect(page.items.find((q) => q.id === IDS.revising)).toMatchObject({
+      status: "CHANGES_REQUESTED",
+      revision: 1,
+    });
+  });
+
+  it("refuses an answer with INVALID_QUOTE_TRANSITION before looking at the version", () => {
+    const refusal = body(book().requestChanges(IDS.revising, { version: 1, feedback: "x" }));
+    expect(refusal.errorCode).toBe("INVALID_QUOTE_TRANSITION");
+  });
+});

@@ -12,6 +12,7 @@ import {
   type OrderInstallments,
 } from "@/lib/installments";
 
+import { paymentSummary } from "../selectors";
 import type { Order } from "../types";
 import { OrderInstallmentRow } from "./order-installment-row";
 
@@ -30,19 +31,34 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-function Summary({ plan }: { plan: OrderInstallments }) {
+function Summary({ order, plan }: { order: Order; plan: OrderInstallments }) {
   const money = (amount: number) => formatMoney(amount, plan.currency);
+  const { rows, cancelledAndSettled } = paymentSummary(order, plan);
   return (
-    <dl className="space-y-2 text-sm">
-      {plan.contractNumber ? (
-        <Row label="Hợp đồng">
-          <span className="font-mono">{plan.contractNumber}</span>
-        </Row>
+    <>
+      <dl className="space-y-2 text-sm">
+        {plan.contractNumber ? (
+          <Row label="Hợp đồng">
+            <span className="font-mono">{plan.contractNumber}</span>
+          </Row>
+        ) : null}
+        {rows.includes("total") ? <Row label="Tổng theo hợp đồng">{money(plan.total)}</Row> : null}
+        {rows.includes("paid") ? (
+          <Row label={cancelledAndSettled ? "Bạn đã thanh toán" : "Đã thanh toán"}>
+            {money(plan.paid)}
+          </Row>
+        ) : null}
+        {rows.includes("outstanding") ? (
+          <Row label="Còn phải thanh toán">{money(plan.outstanding)}</Row>
+        ) : null}
+      </dl>
+      {cancelledAndSettled ? (
+        <p className="text-ink-secondary text-sm">
+          Đơn đã huỷ: các đợt chưa trả không còn phải thanh toán. Khoản hoàn (nếu có) ở mục Hoàn
+          tiền bên dưới.
+        </p>
       ) : null}
-      <Row label="Tổng theo hợp đồng">{money(plan.total)}</Row>
-      <Row label="Đã thanh toán">{money(plan.paid)}</Row>
-      <Row label="Còn phải thanh toán">{money(plan.outstanding)}</Row>
-    </dl>
+    </>
   );
 }
 
@@ -94,7 +110,7 @@ export function OrderPaymentCard({ order }: { order: Order }) {
         </div>
       ) : query.data ? (
         <>
-          <Summary plan={query.data} />
+          <Summary order={order} plan={query.data} />
           <ul className="space-y-2" aria-label="Các đợt thanh toán">
             {query.data.installments.map((installment) => (
               <OrderInstallmentRow key={installment.installmentId} installment={installment} />

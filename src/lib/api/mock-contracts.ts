@@ -49,11 +49,16 @@ const orderIdOf = (config: AxiosRequestConfig) =>
   (config as AxiosRequestConfig & { _mockParams?: Record<string, string> })._mockParams?.orderId ??
   "";
 
+const copyOf = (config: AxiosRequestConfig): string | undefined => {
+  const copy = (config.params as { copy?: unknown } | undefined)?.copy;
+  return typeof copy === "string" ? copy : undefined;
+};
+
 export function registerContractMockRoutes(): void {
   registerMockRoute("GET", "/orders/me/:orderId/contract", (config) =>
     respond(contracts().get(orderIdOf(config))),
   );
   registerMockRoute("GET", "/orders/me/:orderId/contract/document", (config) =>
-    respond(contracts().document(orderIdOf(config))),
+    respond(contracts().document(orderIdOf(config), copyOf(config))),
   );
 }

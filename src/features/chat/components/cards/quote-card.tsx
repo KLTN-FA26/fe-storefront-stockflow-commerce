@@ -140,12 +140,17 @@ export function QuoteCard({ conversationId, messageId, card, payload, canAct }: 
         </p>
       ) : null}
       {payload.convertedOrderId ? (
-        <Link
-          href={STORE_ROUTES.account.orders.detail(payload.convertedOrderId)}
-          className={CARD_LINK}
-        >
-          Đã lên đơn {payload.convertedOrderNumber ?? ""}
-        </Link>
+        // BE-17: the card payload carries `convertedOrder*` only once the order is past DRAFT (the
+        // contract sent) and is redrawn when the contract is withdrawn, so an id here is a real page.
+        <p className="text-ink-secondary">
+          <Link
+            href={STORE_ROUTES.account.orders.detail(payload.convertedOrderId)}
+            className={CARD_LINK}
+          >
+            Đã lên đơn{" "}
+            <span className="font-mono tabular-nums">{payload.convertedOrderNumber ?? ""}</span>
+          </Link>
+        </p>
       ) : null}
       {action.error && dialog === null ? (
         <p role="alert" className="text-danger">

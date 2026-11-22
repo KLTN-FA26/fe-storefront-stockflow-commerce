@@ -91,3 +91,29 @@ export const QUOTE_STATUS_FILTERS: readonly QuoteStatusFilter[] = [
 
 export const isQuoteStatusFilter = (value: string | null | undefined): value is QuoteStatusFilter =>
   value != null && (QUOTE_STATUS_FILTERS as readonly string[]).includes(value);
+
+/**
+ * The hint under a quote's status on its page. A CONVERTED quote's order only reaches the customer
+ * once the contract is sent (BE QuoteService.view hides a DRAFT order), so no `convertedOrder` means
+ * Sale is still drawing the contract up.
+ */
+export function quoteStatusHint(
+  status: QuoteStatus,
+  quote?: Pick<Quote, "convertedOrder">,
+): string {
+  if (status === "CONVERTED") {
+    return quote?.convertedOrder
+      ? `Đơn hàng ${quote.convertedOrder.orderNumber} đã được tạo. Xem hợp đồng và thanh toán ở trang đơn.`
+      : "Sale đang lập hợp đồng; bạn sẽ nhận hợp đồng để ký trong mục Chat và trang đơn hàng.";
+  }
+  return QUOTE_STATUS_META[status].hint;
+}
+
+/**
+ * The hint on a list row. The list's `convertedOrderId` is not filtered the way the page's order is,
+ * so a row cannot tell a draft order from a sent one: CONVERTED gets the general sentence.
+ */
+export const quoteListHint = (status: QuoteStatus): string =>
+  status === "CONVERTED"
+    ? "Đơn hàng đã được tạo; Sale sẽ gửi hợp đồng để bạn ký."
+    : QUOTE_STATUS_META[status].hint;

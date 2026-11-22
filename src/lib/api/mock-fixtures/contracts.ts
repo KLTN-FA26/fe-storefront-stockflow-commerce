@@ -193,9 +193,12 @@ export function mockSignedContract(order: MockOrder): MockContract {
   };
 }
 
-/** Where the order's PDF lives: the signed file once signed, else the contract as sent. */
-const documentUrl = (contract: MockContract) =>
-  contract.signedFileName
+/**
+ * Where the order's PDF lives: the signed file once signed, else the contract as sent; `?copy=sent`
+ * asks for the PDF as sent even once signed (BE SalesContractService.customerDocument).
+ */
+const documentUrl = (contract: MockContract, copy?: string) =>
+  contract.signedFileName && copy !== "sent"
     ? `https://files.example/contracts/${encodeURIComponent(contract.signedFileName)}`
     : `https://files.example/contracts/${contract.contractNumber}.pdf`;
 
@@ -233,11 +236,11 @@ export function createMockContractBook(
     },
 
     /** GET /orders/me/{orderId}/contract/document → DownloadLink. */
-    document(orderId: string): MockResult {
+    document(orderId: string, copy?: string): MockResult {
       const contract = own(orderId) ? sent(orderId) : undefined;
       if (!contract) return refusal(orderId);
       return ok({
-        url: documentUrl(contract),
+        url: documentUrl(contract, copy),
         expiresAt: new Date(Date.now() + 300_000).toISOString(),
       });
     },

@@ -249,6 +249,15 @@ export const requestChangesInputSchema = z.object({
     .max(QUOTE_FEEDBACK_MAX, `Ghi chú tối đa ${QUOTE_FEEDBACK_MAX} ký tự.`),
 });
 
+/** C10 REQUEST_REPRINT: the note is required (BE refusal.chat.reprintNote). */
+export const requestReprintInputSchema = z.object({
+  note: z
+    .string()
+    .trim()
+    .min(1, "Vui lòng ghi rõ điểm cần in lại.")
+    .max(QUOTE_FEEDBACK_MAX, `Ghi chú tối đa ${QUOTE_FEEDBACK_MAX} ký tự.`),
+});
+
 /** C11 / C10 RATE: 1–5 stars, an optional comment. */
 export const rateInputSchema = z.object({
   score: z.number().int().min(1, "Vui lòng chọn số sao.").max(5),

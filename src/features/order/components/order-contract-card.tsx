@@ -44,7 +44,17 @@ function Totals({ contract }: { contract: Contract }) {
   );
 }
 
-function DownloadButton({ orderId, contractNumber }: { orderId: string; contractNumber: string }) {
+function DownloadButton({
+  orderId,
+  contractNumber,
+  copy,
+  label,
+}: {
+  orderId: string;
+  contractNumber: string;
+  copy?: "sent";
+  label: string;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const open = () => {
@@ -53,7 +63,7 @@ function DownloadButton({ orderId, contractNumber }: { orderId: string; contract
     if (tab) tab.opener = null;
     setBusy(true);
     setError(null);
-    getMyOrderContractDocument(orderId)
+    getMyOrderContractDocument(orderId, copy)
       .then((link) => {
         if (tab) tab.location.replace(link.url);
         else window.location.assign(link.url);
@@ -72,10 +82,10 @@ function DownloadButton({ orderId, contractNumber }: { orderId: string; contract
         className="min-h-11 w-full rounded-[var(--r-md)] px-4"
         disabled={busy}
         onClick={open}
-        aria-label={`Tải hợp đồng ${contractNumber}`}
+        aria-label={`${label} ${contractNumber}`}
       >
         <FileDown aria-hidden className="mr-2 size-4" />
-        {busy ? "Đang tải..." : "Tải hợp đồng"}
+        {busy ? "Đang tải..." : label}
       </Button>
       {error ? (
         <p role="alert" className="text-danger text-sm">
@@ -154,7 +164,27 @@ export function OrderContractCard({ orderId }: { orderId: string }) {
           <ContractPaymentPlan plan={contract.paymentPlan} />
           <Totals contract={contract} />
           <div className="grid gap-2">
-            <DownloadButton orderId={orderId} contractNumber={contract.contractNumber} />
+            {contract.signedOn || contract.signedFileName ? (
+              <>
+                <DownloadButton
+                  orderId={orderId}
+                  contractNumber={contract.contractNumber}
+                  label="Tải bản đã ký"
+                />
+                <DownloadButton
+                  orderId={orderId}
+                  contractNumber={contract.contractNumber}
+                  copy="sent"
+                  label="Tải bản gửi ký"
+                />
+              </>
+            ) : (
+              <DownloadButton
+                orderId={orderId}
+                contractNumber={contract.contractNumber}
+                label="Tải hợp đồng"
+              />
+            )}
             <Button asChild variant="outline" className="min-h-11 rounded-[var(--r-md)] px-4">
               <Link href={STORE_ROUTES.chat.about("CONTRACT", contract.id)}>
                 <MessageCircle aria-hidden className="mr-2 size-4" />

@@ -9,7 +9,12 @@ import { Alert, ConfirmDialog } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { formatMoney } from "@/lib/format/money";
 
-import { belowMoqLineNo, describeQuoteError, lineFieldErrors } from "../errors";
+import {
+  belowMoqLineNo,
+  describeQuoteError,
+  isToastedQuoteError,
+  lineFieldErrors,
+} from "../errors";
 import { quoteAcceptanceFormSchema } from "../schemas";
 import { moqOf, previewAcceptance } from "../selectors";
 import type { Quote } from "../types";
@@ -124,7 +129,7 @@ export function QuoteAcceptForm({
         <p className="text-ink-tertiary mt-2 text-xs">
           Số tiền chính thức là số trên báo giá sau khi bạn chấp nhận.
         </p>
-        {error ? (
+        {error && !isToastedQuoteError(error) ? (
           <div role="alert" className="mt-3">
             <Alert tone="danger" title="Chưa chấp nhận được báo giá.">
               {describeQuoteError(error)}

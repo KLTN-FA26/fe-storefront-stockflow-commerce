@@ -4,7 +4,7 @@ import { FileText } from "lucide-react";
 import { STORE_ROUTES } from "@/constants";
 import { formatDate, formatDateTime } from "@/lib/format/date";
 
-import { QUOTE_STATUS_META } from "../lifecycle";
+import { quoteListHint } from "../lifecycle";
 import type { QuoteRow } from "../types";
 import { QuoteStatusBadge } from "./quote-states";
 
@@ -23,7 +23,6 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
  * card is one link target.
  */
 export function QuoteRowCard({ quote }: { quote: QuoteRow }) {
-  const meta = QUOTE_STATUS_META[quote.status];
   return (
     <article className="bg-bg-surface border-border-default hover:border-border-strong focus-within:ring-accent relative rounded-[var(--r-lg)] border shadow-[var(--card-shadow)] transition-colors focus-within:ring-2">
       <div className="border-border-default flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b px-[var(--card-pad)] py-3">
@@ -38,10 +37,12 @@ export function QuoteRowCard({ quote }: { quote: QuoteRow }) {
       <div className="space-y-2 px-[var(--card-pad)] py-3">
         <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <Fact label="Bản sửa">Số {quote.revision}</Fact>
-          <Fact label="Hiệu lực đến">{formatDateTime(quote.validUntil)}</Fact>
+          {quote.status === "CHANGES_REQUESTED" ? null : (
+            <Fact label="Hiệu lực đến">{formatDateTime(quote.validUntil)}</Fact>
+          )}
           <Fact label="Ngày gửi">{quote.sentAt ? formatDate(quote.sentAt) : "—"}</Fact>
         </dl>
-        <p className="text-ink-secondary text-sm">{meta.hint}</p>
+        <p className="text-ink-secondary text-sm">{quoteListHint(quote.status)}</p>
       </div>
       <div className="border-border-default flex justify-end border-t px-[var(--card-pad)] py-2.5">
         <Link

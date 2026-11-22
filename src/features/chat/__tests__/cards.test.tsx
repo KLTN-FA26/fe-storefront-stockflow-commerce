@@ -79,6 +79,27 @@ describe("TC-F13-02: card buttons are the customer's only", () => {
     expect(screen.getByText("Hết hiệu lực")).toBeInTheDocument();
   });
 
+  it("BE-17: a QUOTE card with convertedOrderId links to the order page", () => {
+    renderCard(
+      cardMessageJson(
+        "QUOTE",
+        quotePayload({
+          status: "CONVERTED",
+          convertedOrderId: "0c0e0000-0000-4000-8000-000000000001",
+          convertedOrderNumber: "SO-20260910-900001",
+        }),
+        { state: "ACTED" },
+      ),
+    );
+    const link = screen.getByRole("link", { name: /Đã lên đơn\s+SO-20260910-900001/ });
+    expect(link).toHaveAttribute("href", "/account/orders/0c0e0000-0000-4000-8000-000000000001");
+  });
+
+  it("BE-17: a QUOTE card without convertedOrderId has no order link", () => {
+    renderCard(cardMessageJson("QUOTE", quotePayload(), { state: "OPEN" }));
+    expect(screen.queryByRole("link", { name: /Đã lên đơn/ })).not.toBeInTheDocument();
+  });
+
   it("a SUPERSEDED quote card says it was replaced and offers nothing", () => {
     renderCard(cardMessageJson("QUOTE", quotePayload(), { state: "SUPERSEDED" }));
     expect(screen.getByText("Đã thay bằng bản mới")).toBeInTheDocument();
