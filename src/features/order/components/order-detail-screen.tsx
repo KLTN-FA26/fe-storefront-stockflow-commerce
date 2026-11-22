@@ -125,15 +125,24 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
             <h1 className="font-display text-ink-primary text-xl font-bold sm:text-2xl">
               Chi tiết đơn hàng
             </h1>
-            <div className="text-ink-secondary mt-1 flex flex-wrap items-center gap-x-1 text-sm">
-              <span>
-                Mã đơn{" "}
-                <span className="text-ink-primary font-mono font-semibold tabular-nums">
-                  {order.orderNumber}
+            {/* Two items, not one run of text: on a phone "Đặt lúc …" takes its own line, so no "·" is left starting a
+                line; from sm up they share one line with the dot between them. */}
+            <div className="text-ink-secondary mt-1 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-sm">
+              <span className="inline-flex items-center gap-x-1">
+                <span>
+                  Mã đơn{" "}
+                  <span className="text-ink-primary font-mono font-semibold tabular-nums">
+                    {order.orderNumber}
+                  </span>
                 </span>
+                <CopyOrderNumber orderNumber={order.orderNumber} />
               </span>
-              <CopyOrderNumber orderNumber={order.orderNumber} />
-              <span>· Đặt lúc {formatDateTime(order.placedAt)}</span>
+              <span className="basis-full sm:basis-auto">
+                <span aria-hidden="true" className="hidden sm:inline">
+                  ·{" "}
+                </span>
+                Đặt lúc {formatDateTime(order.placedAt)}
+              </span>
             </div>
           </div>
           <OrderReorder order={order} />

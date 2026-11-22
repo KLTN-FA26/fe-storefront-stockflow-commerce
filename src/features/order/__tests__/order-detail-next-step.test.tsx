@@ -198,6 +198,26 @@ describe("order page details (SF-UX-31..35)", () => {
     expect(screen.queryByRole("link", { name: /Đặt lại đơn/ })).not.toBeInTheDocument();
   });
 
+  it("puts 'Đặt lúc' on its own line on a phone, with no '·' left to start it", async () => {
+    backend({ order: beOrder });
+    renderWithProviders(<OrderDetailScreen orderId={orderId} />);
+
+    const placed = await screen.findByText(/^\s*Đặt lúc/);
+    expect(placed).toHaveTextContent(/^·?\s*Đặt lúc \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/);
+    // Its own flex item, full width below sm: it never wraps onto the order number's line.
+    expect(placed.className.split(" ")).toEqual(
+      expect.arrayContaining(["basis-full", "sm:basis-auto"]),
+    );
+    // The dot only exists from sm up, where both items share one line; it is decoration.
+    const dot = placed.querySelector("[aria-hidden='true']");
+    expect(dot).toHaveTextContent("·");
+    expect(dot?.className.split(" ")).toEqual(expect.arrayContaining(["hidden", "sm:inline"]));
+    // The order number keeps its copy button beside it.
+    const number = screen.getByText(beOrder.orderNumber);
+    expect(number.closest(".inline-flex")).not.toBeNull();
+    expect(placed.contains(number)).toBe(false);
+  });
+
   it("words the return window from the contract, with its last day", () => {
     expect(returnWindowText(10, "2026-11-23T03:00:00Z")).toBe(
       "Hàng nhận được bị lỗi, hỏng hoặc giao sai? Gửi yêu cầu trả hàng kèm ảnh trong 10 ngày kể từ ngày giao (đến hết 03/12/2026).",
