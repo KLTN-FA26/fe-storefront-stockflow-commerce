@@ -12,7 +12,7 @@ import { hasErrorCode } from "@/lib/api/describe-error";
 import { PERM } from "@/lib/auth/permission-codes";
 import { useHasPermission } from "@/lib/auth/my-permissions";
 
-import { describeQuoteError, isQuoteNotFound } from "../errors";
+import { describeQuoteError, isQuoteNotFound, isToastedQuoteError } from "../errors";
 import { allowedQuoteActions, effectiveStatus, quoteStatusHint } from "../lifecycle";
 import { useAcceptQuote, useRequestQuoteChanges } from "../mutations";
 import { useQuote } from "../queries";
@@ -146,7 +146,11 @@ export function QuoteDetailScreen({ quoteId: rawQuoteId }: { quoteId: string }) 
         quoteNumber={quote.quoteNumber}
         onOpenChange={setAsking}
         pending={changes.isPending}
-        error={changes.error ? describeQuoteError(changes.error) : undefined}
+        error={
+          changes.error && !isToastedQuoteError(changes.error)
+            ? describeQuoteError(changes.error)
+            : undefined
+        }
         onSubmit={(feedback) =>
           changes.mutate(
             { quoteId: quote.id, version: quote.version, feedback },

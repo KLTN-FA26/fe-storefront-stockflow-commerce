@@ -339,6 +339,27 @@ describe("QuoteDetailScreen — a quote Sale is revising (PR #388)", () => {
     expect(await screen.findByText(beingRevised)).toBeInTheDocument();
   });
 
+  it("INVALID_QUOTE_TRANSITION is said once (the toast), not again inside the form", async () => {
+    backend(beSentQuote);
+    const refusal = "Báo giá QT-20261120-9001 đã thay đổi: chưa thể trả lời.";
+    vi.spyOn(api, "post").mockRejectedValue(new ApiError(409, "INVALID_QUOTE_TRANSITION", refusal));
+    const user = userEvent.setup();
+    renderWithProviders(
+      <>
+        <ToastProvider />
+        <QuoteDetailScreen quoteId={quoteId} />
+      </>,
+    );
+
+    await screen.findByRole("spinbutton", { name: "Số thùng" });
+    await user.click(screen.getByRole("button", { name: "Chấp nhận báo giá" }));
+    await user.click(await screen.findByRole("button", { name: "Chấp nhận" }));
+
+    expect(await screen.findByText(refusal)).toBeInTheDocument();
+    expect(screen.getAllByText(refusal)).toHaveLength(1);
+    expect(screen.queryByText("Chưa chấp nhận được báo giá.")).not.toBeInTheDocument();
+  });
+
   it("CONVERTED without an order yet says Sale is drawing up the contract", async () => {
     backend({ ...beSentQuote, status: "CONVERTED" });
     renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
