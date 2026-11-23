@@ -35,6 +35,8 @@ export type {
 export {
   INSTALLMENT_MILESTONE_LABEL,
   INSTALLMENT_STATUS_LABEL,
+  installmentMilestoneLabel,
+  installmentName,
   installmentStatusMeta,
   installmentTitle,
   isDueNow,

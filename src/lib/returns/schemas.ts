@@ -105,6 +105,11 @@ export const returnRowDtoSchema = z.object({
   closedAt: z.string().nullish(),
   /** WF-05 BE-23 (BE fc931ff9): kho đang kiểm đếm một kiện của yêu cầu trên phiếu nháp — chưa rút được. */
   receiptDraftOpen: z.boolean().nullish(),
+  /**
+   * Audit r2 money L-6 (BE r3c): vì sao không hoàn, như ở chi tiết — chỉ mã cố định, BE gửi cho khách khi yêu cầu đã
+   * xong (RESOLVED); null khi không giữ lại gì. Mã lạ → UNKNOWN (không có nhãn, không hiện).
+   */
+  refusalReason: returnRefusalReasonSchema.nullish(),
   version: z.number(),
 });
 export const returnPageDtoSchema = pageResponseSchema(returnRowDtoSchema);

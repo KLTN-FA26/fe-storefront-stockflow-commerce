@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format/date";
 import { formatMoney } from "@/lib/format/money";
 import {
-  INSTALLMENT_MILESTONE_LABEL,
+  installmentMilestoneLabel,
   installmentStatusMeta,
   installmentTitle,
   isPayable,
@@ -66,7 +66,7 @@ export function OrderInstallmentRow({
         <div className="min-w-0">
           <p className="text-ink-primary font-semibold">{installmentTitle(installment)}</p>
           <p className="text-ink-secondary">
-            {INSTALLMENT_MILESTONE_LABEL[installment.milestone]}
+            {installmentMilestoneLabel(installment)}
             {installment.deliveryBatchSeq ? ` · đợt giao ${installment.deliveryBatchSeq}` : ""}
           </p>
         </div>

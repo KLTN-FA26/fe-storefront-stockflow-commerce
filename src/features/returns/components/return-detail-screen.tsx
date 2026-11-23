@@ -66,12 +66,39 @@ function NotRefunded({ request }: { request: CustomerReturn }) {
   );
 }
 
+/**
+ * Yêu cầu có hoàn tiền mà một phần hàng không được hoàn (audit r3 RAD-1, money L-6): lý do Sales nêu, và — vì thùng tính
+ * theo từng SKU — phần hàng đó vẫn của khách, theo lựa chọn Sales đã ghi (`custodyChoice`).
+ */
+function PartlyNotRefunded({ request }: { request: CustomerReturn }) {
+  const reason = refusalReasonText(request);
+  return (
+    <Alert tone="info" title={returnStatusMeta(request).label}>
+      <span className="block">
+        {reason
+          ? `Một phần hàng bạn gửi về không được hoàn tiền. Lý do: ${reason}.`
+          : "Một phần hàng bạn gửi về không được hoàn tiền."}
+      </span>
+      {request.refusalNote ? (
+        <span className="mt-1 block whitespace-pre-line">{request.refusalNote}</span>
+      ) : null}
+      {request.custodyChoice ? (
+        <span className="mt-1 block">{custodyChoiceText(request, true)}</span>
+      ) : null}
+      <span className="mt-1 block">Nếu cần giải thích thêm, hãy chat với Sales.</span>
+    </Alert>
+  );
+}
+
 /** Việc khách cần làm / đang chờ, theo trạng thái (17 §4.10). */
 function NextStep({ request }: { request: CustomerReturn }) {
   const meta = returnStatusMeta(request);
   const outcome = refundOutcome(request);
   if (outcome === "REFUSED" || outcome === "NOTHING_TO_REFUND") {
     return <NotRefunded request={request} />;
+  }
+  if (outcome === "REFUNDED" && (request.custodyChoice || request.refusalReason)) {
+    return <PartlyNotRefunded request={request} />;
   }
   if (request.status === "AWAITING_RETURN") {
     return (

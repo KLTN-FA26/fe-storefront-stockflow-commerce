@@ -157,7 +157,8 @@ export const INSTALLMENT_MILESTONE: Readonly<Record<InstallmentMilestoneKey, str
   ON_SIGNING: "Khi ký hợp đồng",
   BEFORE_DELIVERY: "Trước khi giao hàng",
   AFTER_DELIVERY: "Sau khi giao hàng",
-  CANCELLATION_FEE: "Phí huỷ đơn",
+  // Khoản phí lập khi huỷ đơn hoặc khi đóng phần còn lại; nhãn của từng khoản theo tên BE (`installmentMilestoneLabel`)
+  CANCELLATION_FEE: "Phí huỷ đơn / đóng phần còn lại",
   FAILED_TRIP_FEE: "Phí chuyến giao không thành",
   UNKNOWN: "Theo hợp đồng",
 };

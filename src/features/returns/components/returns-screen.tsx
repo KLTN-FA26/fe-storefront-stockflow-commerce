@@ -10,7 +10,13 @@ import { PageHeader } from "@/components/shared";
 import { ListPagination } from "@/components/storefront/list-pagination";
 import { ToneBadge } from "@/components/storefront/tone-badge";
 import { formatDate } from "@/lib/format/date";
-import { RETURN_REASON_LABEL, returnStatusMeta, useMyReturns, type ReturnRow } from "@/lib/returns";
+import {
+  RETURN_REASON_LABEL,
+  refusalReasonText,
+  returnStatusMeta,
+  useMyReturns,
+  type ReturnRow,
+} from "@/lib/returns";
 
 import { NoReturnsYet, ReturnListSkeleton, ReturnLoadError } from "./return-states";
 
@@ -33,6 +39,11 @@ const tabParser = parseAsStringLiteral(TAB_KEYS).withDefault("all");
 function ReturnRowCard({ row }: { row: ReturnRow }) {
   // A return settled with no money reads "Đã xử lý — không hoàn tiền", never "Đã hoàn tiền" (SF-01).
   const meta = returnStatusMeta(row);
+  // Audit r2 money L-6 (BE r3c): vì sao không hoàn, ngay ở danh sách — BE chỉ gửi khi yêu cầu đã xong
+  const refusal =
+    row.status === "RESOLVED"
+      ? refusalReasonText({ refusalReason: row.refusalReason, refusalReasonLabel: null })
+      : null;
   return (
     <Link
       href={STORE_ROUTES.account.returns.detail(row.id)}
@@ -53,6 +64,7 @@ function ReturnRowCard({ row }: { row: ReturnRow }) {
             ? ` · Gửi hàng về trước ${formatDate(row.returnDeadline)}`
             : ""}
         </p>
+        {refusal ? <p className="text-ink-secondary text-xs">Lý do không hoàn: {refusal}</p> : null}
       </div>
       <ChevronRight aria-hidden className="text-ink-tertiary size-5 shrink-0" />
     </Link>

@@ -186,9 +186,24 @@ export const goodsReceived = (request: Pick<CustomerReturn, "receivedAt" | "line
 
 /**
  * Câu về hàng giữ hộ sau một yêu cầu không hoàn tiền (WF-05 Q-4, audit r2 returns H1): theo lựa chọn Sales đã ghi
- * (`custodyChoice`); chưa ghi → Sales sẽ liên hệ; mã lạ → câu chung.
+ * (`custodyChoice`); chưa ghi → Sales sẽ liên hệ; mã lạ → câu chung. Audit r3 RAD-1: thùng tính theo từng SKU, nên một yêu
+ * cầu CÓ hoàn tiền vẫn có thể có thùng giữ hộ (SKU không được hoàn, thùng nguyên vượt số được hoàn) — `partial` nói về
+ * phần hàng không được hoàn đó.
  */
-export function custodyChoiceText(request: Pick<CustomerReturn, "custodyChoice">): string {
+export function custodyChoiceText(
+  request: Pick<CustomerReturn, "custodyChoice">,
+  partial = false,
+): string {
+  if (partial) {
+    switch (request.custodyChoice) {
+      case "SEND_BACK":
+        return "Với phần hàng không được hoàn tiền, bạn đã chọn nhận lại: kho sẽ gửi trả, phí vận chuyển do bạn chịu.";
+      case "DESTROY_ON_BEHALF":
+        return "Với phần hàng không được hoàn tiền, bạn đã đồng ý để công ty huỷ hộ (có biên bản).";
+      default:
+        return "Sales đã ghi lựa chọn của bạn cho phần hàng không được hoàn tiền. Hãy chat với Sales nếu cần biết thêm.";
+    }
+  }
   switch (request.custodyChoice) {
     case "SEND_BACK":
       return "Bạn đã chọn nhận lại hàng: kho sẽ gửi trả hàng bạn đã gửi về, phí vận chuyển do bạn chịu.";

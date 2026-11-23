@@ -72,6 +72,8 @@ export interface MockReturn {
   receiptDraftOpen?: boolean;
   /** WF-05 Q-4: what the customer chose for goods held for them, as Sales recorded it. */
   custodyChoice?: "SEND_BACK" | "DESTROY_ON_BEHALF" | null;
+  /** WF-05 Q-4: why units that came back were not refunded (fixed code), as Sales proposed it. */
+  refusalReason?: string | null;
   version: number;
 }
 
@@ -133,6 +135,7 @@ function toCustomer(r: MockReturn) {
     history: r.history,
     receiptDraftOpen: r.receiptDraftOpen ?? false,
     custodyChoice: r.custodyChoice ?? null,
+    refusalReason: r.refusalReason ?? null,
     version: r.version,
   };
 }
@@ -159,6 +162,8 @@ function toRow(r: MockReturn) {
     vatAdjustmentRequired: false,
     closedAt: r.closedAt,
     receiptDraftOpen: c.receiptDraftOpen,
+    // Audit r2 money L-6 (BE r3c): the code only, and on the customer's list only once the return is RESOLVED
+    refusalReason: r.status === "RESOLVED" ? (r.refusalReason ?? null) : null,
     version: r.version,
   };
 }

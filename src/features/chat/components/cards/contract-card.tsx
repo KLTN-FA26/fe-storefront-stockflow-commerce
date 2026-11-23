@@ -6,6 +6,7 @@ import { FileDown } from "lucide-react";
 import { STORE_ROUTES } from "@/constants";
 import { formatDate, formatDateTime } from "@/lib/format/date";
 import { formatNumber } from "@/lib/format/number";
+import { installmentName } from "@/lib/installments";
 
 import { Button } from "@/components/ui/button";
 
@@ -87,7 +88,7 @@ export function ContractCard({ payload, signedCopyAt }: ContractCardProps) {
               <li key={installment.seq} className="flex items-start justify-between gap-3 p-2.5">
                 <div className="min-w-0">
                   <p className="text-ink-primary font-medium">
-                    Đợt {installment.seq} · {installment.name}
+                    Đợt {installment.seq} · {installmentName(installment.name)}
                   </p>
                   <p className="text-ink-secondary">
                     {milestoneLabel(installment.milestone)}

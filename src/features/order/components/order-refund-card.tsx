@@ -8,7 +8,7 @@ import { useHasPermission, useMyPermissions } from "@/lib/auth/my-permissions";
 import { getMyRefundConfirmation } from "@/lib/documents";
 import { formatDate } from "@/lib/format/date";
 import { formatMoney } from "@/lib/format/money";
-import { shippingFeeWaivedOf, useMyOrderRefund } from "@/lib/refunds";
+import { carriedToFeeOf, shippingFeeWaivedOf, useMyOrderRefund } from "@/lib/refunds";
 
 import type { Order } from "../types";
 
@@ -64,6 +64,7 @@ export function OrderRefundCard({ order }: { order: Order }) {
   if (!allowed || !refund) return null;
   const money = (amount: number) => formatMoney(amount, refund.currency);
   const shippingFeeWaived = shippingFeeWaivedOf(refund);
+  const carriedToFee = carriedToFeeOf(refund);
 
   return (
     <section className={`${CARD} space-y-3`} aria-labelledby="order-refund-heading">
@@ -92,7 +93,19 @@ export function OrderRefundCard({ order }: { order: Order }) {
         {(refund.feeOwed ?? 0) > 0 ? (
           <Row label="Phí còn phải thanh toán" value={money(refund.feeOwed ?? 0)} />
         ) : null}
+        {carriedToFee > 0 ? (
+          <Row
+            label="Chuyển sang khoản phải trả khi đóng phần còn lại"
+            value={money(carriedToFee)}
+          />
+        ) : null}
       </dl>
+      {carriedToFee > 0 ? (
+        <p className="text-ink-tertiary text-xs">
+          Phí khuôn, phí vận chuyển của các đợt giao đã đóng chưa thanh toán được chuyển sang khoản
+          phải trả khi đóng phần còn lại, đến hạn từ ngày đóng — xem ở các đợt thanh toán của đơn.
+        </p>
+      ) : null}
       {shippingFeeWaived > 0 ? (
         <p className="text-ink-tertiary text-xs">
           Hàng bị đơn vị vận chuyển hoàn về nên phí vận chuyển của phần đó không tính cho bạn.

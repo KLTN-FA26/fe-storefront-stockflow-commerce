@@ -23,6 +23,11 @@ export const refundRecordDtoSchema = z.object({
 export const refundSettlementDtoSchema = z.object({
   kind: z.string().nullish(),
   shippingFeeWaived: z.number().nullish(),
+  /**
+   * Audit r3 LM-3 (BE r3a): đóng phần còn lại cả lô — phần đợt trả trước khi giao của lô đó còn phải trả (phí khuôn, phí
+   * vận chuyển của lô) chuyển sang khoản phải trả khi đóng phần còn lại, đến hạn từ ngày đóng. 0 / vắng với lần khác.
+   */
+  carriedToFee: z.number().nullish(),
 });
 
 /** BE `OrderRefundResponse` cho khách: số phải hoàn, đã hoàn, còn lại, các lần hoàn. */
@@ -44,6 +49,13 @@ export const orderRefundDtoSchema = z.object({
 export const shippingFeeWaivedOf = (refund: Pick<OrderRefund, "settlements">): number =>
   (refund.settlements ?? []).reduce(
     (sum, settlement) => sum + Math.max(settlement.shippingFeeWaived ?? 0, 0),
+    0,
+  );
+
+/** Phần phí của các đợt giao đã đóng chuyển sang khoản phải trả khi đóng phần còn lại (LM-3); 0 khi không có. */
+export const carriedToFeeOf = (refund: Pick<OrderRefund, "settlements">): number =>
+  (refund.settlements ?? []).reduce(
+    (sum, settlement) => sum + Math.max(settlement.carriedToFee ?? 0, 0),
     0,
   );
 
