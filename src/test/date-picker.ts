@@ -4,6 +4,7 @@
  */
 
 import { screen, waitFor, within } from "@testing-library/react";
+import { expect } from "vitest";
 
 import type { UserEvent } from "@testing-library/user-event";
 
@@ -15,13 +16,17 @@ export async function pickDate(user: UserEvent, trigger: HTMLElement, iso: strin
     screen.getByRole("combobox", { name: "Chọn tháng" }),
     String(month! - 1),
   );
-  // The grid redraws after the month changes; on a loaded runner the old month can still be there.
-  const cell = await waitFor(() => {
+  // The cell of that very day (a gridcell's data-day is yyyy-MM-dd), once the redrawn month shows it and it can be
+  // picked: on a loaded runner the previous month can still be on screen, and a click there picks nothing.
+  const button = await waitFor(() => {
     const found = within(screen.getByRole("grid"))
       .getAllByRole("gridcell")
-      .find((c) => c.textContent === String(day) && !c.hasAttribute("data-outside"));
-    if (!found) throw new Error(`No day ${iso} on the calendar`);
+      .find((c) => c.getAttribute("data-day") === iso && !c.hasAttribute("data-outside"))
+      ?.querySelector("button");
+    if (!found || found.disabled) throw new Error(`No day ${iso} on the calendar`);
     return found;
   });
-  await user.click(within(cell).getByRole("button"));
+  await user.click(button);
+  const shown = `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`;
+  await waitFor(() => expect(trigger).toHaveTextContent(shown));
 }
