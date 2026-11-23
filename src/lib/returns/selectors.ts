@@ -185,6 +185,23 @@ export const goodsReceived = (request: Pick<CustomerReturn, "receivedAt" | "line
   !!request.receivedAt || request.lines.some((line) => (line.receivedQuantity ?? 0) > 0);
 
 /**
+ * Câu về hàng giữ hộ sau một yêu cầu không hoàn tiền (WF-05 Q-4, audit r2 returns H1): theo lựa chọn Sales đã ghi
+ * (`custodyChoice`); chưa ghi → Sales sẽ liên hệ; mã lạ → câu chung.
+ */
+export function custodyChoiceText(request: Pick<CustomerReturn, "custodyChoice">): string {
+  switch (request.custodyChoice) {
+    case "SEND_BACK":
+      return "Bạn đã chọn nhận lại hàng: kho sẽ gửi trả hàng bạn đã gửi về, phí vận chuyển do bạn chịu.";
+    case "DESTROY_ON_BEHALF":
+      return "Bạn đã đồng ý để công ty huỷ hộ hàng bạn đã gửi về (có biên bản).";
+    case "UNKNOWN":
+      return "Sales đã ghi lựa chọn của bạn cho hàng bạn đã gửi về. Hãy chat với Sales nếu cần biết thêm.";
+    default:
+      return "Hàng bạn đã gửi về vẫn thuộc về bạn. Sales sẽ liên hệ để thống nhất gửi trả lại hoặc huỷ hộ (có biên bản).";
+  }
+}
+
+/**
  * Lý do không hoàn tiền như khách đọc: nhãn cố định của FE, hoặc `refusalReasonLabel` BE gửi cho
  * một mã mới hơn FE (BE `CustomerReturnResponse.refusalReasonLabel`, cùng bundle `_vi`).
  */

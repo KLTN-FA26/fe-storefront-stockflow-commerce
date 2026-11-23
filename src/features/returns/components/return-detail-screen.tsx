@@ -16,6 +16,7 @@ import {
   RETURN_REASON_LABEL,
   describeReturnError,
   canWithdrawReturn,
+  custodyChoiceText,
   withdrawHeldByCount,
   goodsReceived,
   isReturnNotFound,
@@ -56,11 +57,9 @@ function NotRefunded({ request }: { request: CustomerReturn }) {
       {request.refusalNote ? (
         <span className="mt-1 block whitespace-pre-line">{request.refusalNote}</span>
       ) : null}
-      {goodsBack ? (
-        <span className="mt-1 block">
-          Hàng bạn đã gửi về vẫn thuộc về bạn. Sales sẽ liên hệ để thống nhất gửi trả lại hoặc huỷ
-          hộ (có biên bản).
-        </span>
+      {goodsBack || request.custodyChoice ? (
+        // WF-05 Q-4 (audit r2 returns H1): lựa chọn Sales đã ghi, hoặc Sales sẽ liên hệ
+        <span className="mt-1 block">{custodyChoiceText(request)}</span>
       ) : null}
       <span className="mt-1 block">Nếu cần giải thích thêm, hãy chat với Sales.</span>
     </Alert>

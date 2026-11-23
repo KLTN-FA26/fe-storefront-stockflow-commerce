@@ -70,6 +70,8 @@ export interface MockReturn {
   history: { status: Status; occurredAt: string }[];
   /** WF-05 BE-23: a parcel of it is being counted on a DRAFT return receipt (`countParcel` hook). */
   receiptDraftOpen?: boolean;
+  /** WF-05 Q-4: what the customer chose for goods held for them, as Sales recorded it. */
+  custodyChoice?: "SEND_BACK" | "DESTROY_ON_BEHALF" | null;
   version: number;
 }
 
@@ -130,6 +132,7 @@ function toCustomer(r: MockReturn) {
     evidence: r.evidence.map((e) => ({ ...e, thumbnailUrl: null })),
     history: r.history,
     receiptDraftOpen: r.receiptDraftOpen ?? false,
+    custodyChoice: r.custodyChoice ?? null,
     version: r.version,
   };
 }

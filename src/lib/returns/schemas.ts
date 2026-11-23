@@ -75,6 +75,14 @@ export const RETURN_REFUSAL_REASONS = [
 ] as const;
 export const returnRefusalReasonSchema = tolerantEnum(RETURN_REFUSAL_REASONS);
 
+/**
+ * Lựa chọn của khách cho hàng giữ hộ sau một yêu cầu không hoàn tiền, do Sales ghi (BE
+ * `CustomerReturnResponse.custodyChoice`, WF-05 Q-4, audit r2 returns H1): gửi trả (khách chịu phí) hoặc
+ * công ty huỷ hộ (có biên bản). Mã lạ → UNKNOWN.
+ */
+export const RETURN_CUSTODY_CHOICES = ["SEND_BACK", "DESTROY_ON_BEHALF"] as const;
+export const returnCustodyChoiceSchema = tolerantEnum(RETURN_CUSTODY_CHOICES);
+
 /** BE `ReturnRequestRowResponse` — một dòng trong danh sách của khách. */
 export const returnRowDtoSchema = z.object({
   id: beId(),
@@ -165,6 +173,8 @@ export const customerReturnDtoSchema = z.object({
    * Vắng = BE cũ: nút rút vẫn hiện, 409 được giải thích sau.
    */
   receiptDraftOpen: z.boolean().nullish(),
+  /** Lựa chọn của khách cho hàng giữ hộ, Sales đã ghi; null khi chưa ghi (WF-05 Q-4). */
+  custodyChoice: returnCustodyChoiceSchema.nullish(),
   version: z.number(),
 });
 

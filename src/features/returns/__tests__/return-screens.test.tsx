@@ -271,6 +271,34 @@ describe("ReturnDetailScreen (kltn-docs 17 §4.10)", () => {
     expect(within(history).getByText("Đã xử lý — không hoàn tiền")).toBeInTheDocument();
   });
 
+  // Audit r2 returns H1: the customer's choice for goods held for them, as Sales recorded it.
+  it.each([
+    ["SEND_BACK", /kho sẽ gửi trả hàng bạn đã gửi về, phí vận chuyển do bạn chịu/],
+    ["DESTROY_ON_BEHALF", /đồng ý để công ty huỷ hộ/],
+    ["SOMETHING_NEW", /Sales đã ghi lựa chọn của bạn/],
+  ])("shows the recorded custody choice %s", async (custodyChoice, text) => {
+    vi.spyOn(api, "get").mockResolvedValue({
+      data: beReturn({
+        status: "RESOLVED",
+        outcome: "REFUSED",
+        refusalReason: "CUSTOMER_DAMAGE",
+        refundedAmount: 0,
+        offsetAmount: 0,
+        receivedAt: "2026-11-15T03:00:00Z",
+        custodyChoice,
+        lines: [
+          { ...beReturn().lines[0], receivedQuantity: 1, refundQuantity: 0, refundAmount: 0 },
+        ],
+      }),
+    });
+    renderWithProviders(<ReturnDetailScreen returnId={RETURN_ID} />);
+    const status = (await screen.findByText(/Lý do: Hư hỏng do bảo quản/)).closest(
+      "[role=status]",
+    )!;
+    expect(status).toHaveTextContent(text);
+    expect(status).not.toHaveTextContent(/Sales sẽ liên hệ để thống nhất/);
+  });
+
   it("reads a return closed at 0 by an older BE (no outcome) as not refunded", async () => {
     vi.spyOn(api, "get").mockResolvedValue({
       data: beReturn({ status: "RESOLVED", refundedAmount: 0, offsetAmount: 0 }),
