@@ -1,8 +1,12 @@
 import { api } from "@/lib/api/client";
 
 import {
+  customerEInvoiceDtoSchema,
+  customerEInvoiceErrorNoticesDtoSchema,
   customerEInvoicePageDtoSchema,
   fileLinkDtoSchema,
+  type CustomerEInvoice,
+  type CustomerEInvoiceErrorNotice,
   type CustomerEInvoicePage,
   type EInvoiceFileKind,
   type FileLink,
@@ -21,6 +25,33 @@ export async function listMyEInvoices(
 ): Promise<CustomerEInvoicePage> {
   const { data } = await api.get<unknown>(BASE, { params, ...(signal ? { signal } : {}) });
   return customerEInvoicePageDtoSchema.parse(data);
+}
+
+/**
+ * GET /einvoices/me/{id} (WF-05 F-19): một hoá đơn đã phát hành của khách. Của khách khác, bản nháp
+ * hay không có đều 404 `EINVOICE_NOT_FOUND`.
+ */
+export async function getMyEInvoice(id: string, signal?: AbortSignal): Promise<CustomerEInvoice> {
+  const { data } = await api.get<unknown>(
+    `${BASE}/${encodeURIComponent(id)}`,
+    signal ? { signal } : {},
+  );
+  return customerEInvoiceDtoSchema.parse(data);
+}
+
+/**
+ * GET /einvoices/me/{id}/error-notices: các thông báo hoá đơn ghi sai tên / địa chỉ của khách
+ * (04/SS-HĐĐT), cũ nhất trước; rỗng khi không có.
+ */
+export async function listMyEInvoiceErrorNotices(
+  id: string,
+  signal?: AbortSignal,
+): Promise<CustomerEInvoiceErrorNotice[]> {
+  const { data } = await api.get<unknown>(
+    `${BASE}/${encodeURIComponent(id)}/error-notices`,
+    signal ? { signal } : {},
+  );
+  return customerEInvoiceErrorNoticesDtoSchema.parse(data);
 }
 
 /** Link tải XML / PDF có hạn ngắn (docs 21 §4.3 bước 9). */

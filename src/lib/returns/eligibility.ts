@@ -3,9 +3,10 @@ import { RETURN_WINDOW_DAYS, returnWindowEnd } from "@/lib/domain/return-window"
 import { canOpenReturn } from "./selectors";
 
 /**
- * Trạng thái đơn mà BE vẫn nhận yêu cầu trả hàng của một lần giao đã đến, kể cả khi các lần giao
- * sau còn đang chuẩn bị / đang giao (BE `ReturnRequest.requireReturnable`, WF-05 TH-1 — Luật Thương
- * mại Điều 313: mỗi lần giao xử lý riêng). `COMPLETED` đã hết hạn; đơn đã tất toán / đóng thì nhờ Sales.
+ * Chỉ cho BE cũ không gửi `lines[].returnableQuantity` của lần giao: trạng thái đơn mà BE vẫn nhận
+ * yêu cầu trả hàng của một lần giao đã đến, kể cả khi các lần giao sau còn đang chuẩn bị / đang giao
+ * (BE `ReturnRequest.requireReturnable`, WF-05 TH-1 — Luật Thương mại Điều 313: mỗi lần giao xử lý
+ * riêng). Khi BE gửi số trả được, số đó quyết định — FE không giữ bản sao luật của BE (SF-05).
  */
 const RETURNABLE_WITH_DELIVERED_SHIPMENT: ReadonlySet<string> = new Set([
   "DELIVERED",
@@ -20,7 +21,8 @@ const RETURNABLE_WITH_DELIVERED_SHIPMENT: ReadonlySet<string> = new Set([
 
 /**
  * Một dòng đơn trong một lần giao (BE `CustomerOrderShipmentLine`): `returnableQuantity` là số tối
- * đa một yêu cầu mở bây giờ cho lần giao này được trả — 0 là không trả thêm được.
+ * đa một yêu cầu mở bây giờ cho lần giao này được trả — 0 là không trả thêm được (chưa giao, quá
+ * hạn, đã có yêu cầu mở, đã trả hết, hay lần giao đã được hoàn tiền — WF-05 Q-15).
  */
 export interface ReturnShipmentLine {
   orderLineId: string;
@@ -37,14 +39,25 @@ export interface ReturnShipmentSource {
   lines?: readonly ReturnShipmentLine[] | null | undefined;
 }
 
-/** Một lần giao đã đến: hàng của nó trả được tới `windowEnd` (hạn tính từ ngày giao của chính nó). */
+/** Một lần giao đã đến, và khách còn mở được yêu cầu trả hàng cho nó không. */
 export interface ReturnableShipment {
   /** Null: lần giao BE dựng từ mốc của đơn (đơn giao một lần, không ghi lần giao) — không cần gửi id. */
   shipmentId: string | null;
   shipmentCode: string | null;
-  deliveredAt: string;
-  windowEnd: Date;
+  /** Ngày giao (BE `outcomeAt`); null khi BE không gửi. */
+  deliveredAt: string | null;
+  /**
+   * Hạn đổi / trả tính tại FE (thời hạn hợp đồng, mặc định 7 ngày) — chỉ để viết ngày hạn cho
+   * khách, không quyết định gì: BE có thể tính khác (hợp đồng chưa đọc được, Sales nhận khiếu nại
+   * muộn). Null khi không biết ngày giao.
+   */
+  windowEnd: Date | null;
   windowOpen: boolean;
+  /**
+   * Khách mở được yêu cầu cho lần giao này bây giờ: có dòng nào BE cho `returnableQuantity` > 0. BE
+   * cũ không gửi số đó: theo hạn tại FE và trạng thái đơn.
+   */
+  returnable: boolean;
   /** Hàng của lần giao theo dòng đơn; null khi BE không gửi (BE cũ) — tối đa tính theo cả đơn. */
   lines: readonly ReturnShipmentLine[] | null;
 }
@@ -74,9 +87,12 @@ export interface ReturnEligibilityInput {
 }
 
 /**
- * Khách tự mở yêu cầu trả hàng được không, và với lần giao nào (BE `ReturnRequest.deliveredShipment`
- * + `requireReturnable`, BR-RMA-001, WF-05 TH-1). Hạn đổi / trả chạy từ ngày giao của từng lần giao
- * (Điều 318), dài `windowDays` — thời hạn hợp đồng ghi, không có thì 7 ngày. BE vẫn kiểm lại.
+ * Khách tự mở yêu cầu trả hàng được không, và với lần giao nào (BE `ReturnRequest.claimable`,
+ * BR-RMA-001, WF-05 TH-1, Q-15). Một lần giao đã đến trả được khi BE cho một dòng của nó
+ * `returnableQuantity` > 0 — số BE tính bằng đúng luật nó dùng để nhận yêu cầu, xét theo từng lần
+ * giao chứ không theo trạng thái đơn, nên một đơn đã hoàn tiền một lần giao vẫn trả được lần giao
+ * khác còn hạn. Hạn tại FE (`windowDays`, thời hạn hợp đồng, không có thì 7 ngày) chỉ dùng để viết
+ * ngày hạn và chọn lời giải thích. BE cũ không gửi số đó: theo hạn tại FE như trước. BE vẫn kiểm lại.
  */
 export function returnEligibility(
   order: ReturnEligibilityInput,
@@ -89,32 +105,51 @@ export function returnEligibility(
       ? { kind: "open", shipments: [], needsChoice: false, deliveredAt: order.deliveredAt }
       : { kind: "closed", reason: order.deliveredAt ? "WINDOW_CLOSED" : "NOT_DELIVERED" };
   }
+  const legacyStatusOk = RETURNABLE_WITH_DELIVERED_SHIPMENT.has(order.status);
   const delivered: ReturnableShipment[] = [];
   for (const shipment of shipments) {
-    if (shipment.status !== "DELIVERED" || !shipment.outcomeAt) continue;
-    const windowEnd = returnWindowEnd(shipment.outcomeAt, windowDays);
+    if (shipment.status !== "DELIVERED") continue;
+    const lines = shipment.lines ?? null;
+    const deliveredAt = shipment.outcomeAt ?? null;
+    // An older BE without the lines and without the day: nothing to go on, as before.
+    if (!lines && !deliveredAt) continue;
+    const windowEnd = deliveredAt ? returnWindowEnd(deliveredAt, windowDays) : null;
+    const windowOpen = windowEnd !== null && windowEnd.getTime() > now.getTime();
     delivered.push({
       shipmentId: shipment.shipmentId ?? null,
       shipmentCode: shipment.shipmentCode ?? null,
-      deliveredAt: shipment.outcomeAt,
+      deliveredAt,
       windowEnd,
-      windowOpen: windowEnd.getTime() > now.getTime(),
-      lines: shipment.lines ?? null,
+      windowOpen,
+      returnable: lines
+        ? lines.some((line) => line.returnableQuantity > 0)
+        : windowOpen && legacyStatusOk,
+      lines,
     });
   }
   if (delivered.length === 0) return { kind: "closed", reason: "NOT_DELIVERED" };
-  if (!RETURNABLE_WITH_DELIVERED_SHIPMENT.has(order.status)) {
-    return {
-      kind: "closed",
-      reason: order.status === "COMPLETED" ? "WINDOW_CLOSED" : "NOT_RETURNABLE",
-    };
-  }
-  if (!delivered.some((shipment) => shipment.windowOpen)) {
-    return { kind: "closed", reason: "WINDOW_CLOSED" };
+  if (!delivered.some((shipment) => shipment.returnable)) {
+    return { kind: "closed", reason: closedReason(order.status, delivered, legacyStatusOk) };
   }
   const needsChoice = delivered.length > 1;
-  if (needsChoice && delivered.some((s) => s.windowOpen && !s.shipmentId)) {
+  if (needsChoice && delivered.some((s) => s.returnable && !s.shipmentId)) {
     return { kind: "contactSales" };
   }
   return { kind: "open", shipments: delivered, needsChoice };
+}
+
+/**
+ * Why nothing delivered can be returned, for the text only: every window past by the FE's count
+ * reads "quá hạn"; otherwise the goods are claimed, settled or the order is closed. An older BE's
+ * status rule keeps its own reading (COMPLETED: past its window).
+ */
+function closedReason(
+  status: string,
+  delivered: readonly ReturnableShipment[],
+  legacyStatusOk: boolean,
+): ReturnClosedReason {
+  const fromBe = delivered.some((shipment) => shipment.lines !== null);
+  if (!fromBe && !legacyStatusOk)
+    return status === "COMPLETED" ? "WINDOW_CLOSED" : "NOT_RETURNABLE";
+  return delivered.every((shipment) => !shipment.windowOpen) ? "WINDOW_CLOSED" : "NOT_RETURNABLE";
 }

@@ -10,12 +10,7 @@ import { PageHeader } from "@/components/shared";
 import { ListPagination } from "@/components/storefront/list-pagination";
 import { ToneBadge } from "@/components/storefront/tone-badge";
 import { formatDate } from "@/lib/format/date";
-import {
-  RETURN_REASON_LABEL,
-  RETURN_STATUS_META,
-  useMyReturns,
-  type ReturnRow,
-} from "@/lib/returns";
+import { RETURN_REASON_LABEL, returnStatusMeta, useMyReturns, type ReturnRow } from "@/lib/returns";
 
 import { NoReturnsYet, ReturnListSkeleton, ReturnLoadError } from "./return-states";
 
@@ -36,7 +31,8 @@ const pageParser = parseAsInteger.withDefault(1).withOptions({ history: "push", 
 const tabParser = parseAsStringLiteral(TAB_KEYS).withDefault("all");
 
 function ReturnRowCard({ row }: { row: ReturnRow }) {
-  const meta = RETURN_STATUS_META[row.status];
+  // A return settled with no money reads "Đã xử lý — không hoàn tiền", never "Đã hoàn tiền" (SF-01).
+  const meta = returnStatusMeta(row);
   return (
     <Link
       href={STORE_ROUTES.account.returns.detail(row.id)}

@@ -55,19 +55,23 @@ export const QUOTE_STATUS: Readonly<Record<QuoteStatusKey, StatusMeta>> = {
 
 // ── Sales contract (kltn-docs 14 §5.2) ──
 
-export type ContractStatusKey = "DRAFT" | "SENT" | "SIGNED" | "COMPLETED" | "CANCELLED" | "UNKNOWN";
+export type ContractStatusKey =
+  "DRAFT" | "SENT" | "SIGNED" | "COMPLETED" | "LIQUIDATED" | "CANCELLED" | "UNKNOWN";
 
 export const CONTRACT_STATUS: Readonly<Record<ContractStatusKey, StatusMeta>> = {
   DRAFT: { label: "Nháp", tone: "neutral" },
   SENT: { label: "Chờ bạn ký", tone: "warning" },
   SIGNED: { label: "Đã ký", tone: "positive" },
   COMPLETED: { label: "Hoàn tất", tone: "muted" },
+  // WF-05 Q-6 (14 §5.2): the order ended with nothing delivered (all came back, all lost, cancelled
+  // after signing) and its money is settled. Not "Hoàn tất": the contract was not performed.
+  LIQUIDATED: { label: "Đã thanh lý", tone: "muted" },
   CANCELLED: { label: "Đã huỷ", tone: "danger" },
   UNKNOWN: { label: "Đang cập nhật", tone: "neutral" },
 };
 
 // ── Order, by the status group the BE reports to a customer (CustomerOrders.StatusGroup) plus
-// COMPLETED, which the BE folds into DELIVERED. ──
+// COMPLETED and CLOSED-after-completion, which the BE folds into DELIVERED. ──
 
 export type OrderDisplayGroupKey =
   | "AWAITING_CONTRACT"
@@ -83,6 +87,8 @@ export type OrderDisplayGroupKey =
   | "COMPLETED"
   | "CANCELLED"
   | "RETURNED"
+  | "PARTIALLY_RETURNED"
+  | "CLOSED"
   | "UNKNOWN";
 
 export const ORDER_STATUS: Readonly<Record<OrderDisplayGroupKey, StatusMeta>> = {
@@ -99,6 +105,11 @@ export const ORDER_STATUS: Readonly<Record<OrderDisplayGroupKey, StatusMeta>> = 
   COMPLETED: { label: "Hoàn tất", tone: "positive" },
   CANCELLED: { label: "Đã huỷ", tone: "danger" },
   RETURNED: { label: "Đã trả hàng", tone: "special" },
+  // WF-05 F-2 (BE-35): part delivered and kept, the rest came back (a return or the carrier) - not
+  // "Đã trả hàng", which would tell the customer they kept nothing.
+  PARTIALLY_RETURNED: { label: "Đã giao, một phần hoàn về", tone: "info" },
+  // A completed order the shop has since closed (SF-02): its journey is over.
+  CLOSED: { label: "Đã đóng", tone: "muted" },
   UNKNOWN: { label: "Đang xử lý", tone: "info" },
 };
 

@@ -5,8 +5,17 @@ import { ApiError } from "@/lib/api/error";
 
 import { addMyReturnPhoto, cancelMyReturn, getMyReturn, listMyReturns, openMyReturn } from "../api";
 import { describeReturnError } from "../errors";
-import { customerReturnDtoSchema, openReturnInputSchema } from "../schemas";
-import { canOpenReturn, canWithdrawReturn, claimedUnits, claimsByOrderLine } from "../selectors";
+import { customerReturnDtoSchema, openReturnInputSchema, returnRowDtoSchema } from "../schemas";
+import {
+  RETURN_REFUSAL_REASON_LABEL,
+  acceptsPhotos,
+  canOpenReturn,
+  canWithdrawReturn,
+  claimedUnits,
+  claimsByOrderLine,
+  refundOutcome,
+  returnStatusMeta,
+} from "../selectors";
 import { beReturn, ORDER_ID, ORDER_LINE_ID, RETURN_ID } from "./fixtures";
 
 afterEach(() => vi.restoreAllMocks());
@@ -163,5 +172,101 @@ describe("canWithdrawReturn (BE cancel: RETURN_GOODS_PARTLY_RECEIVED, WF-05 TH-3
   it("never offers it past the withdrawable statuses", () => {
     expect(canWithdrawReturn(ret({ status: "RECEIVED" }))).toBe(false);
     expect(canWithdrawReturn(ret({ status: "REJECTED" }))).toBe(false);
+  });
+});
+
+describe("a return closed without a refund never reads 'Đã hoàn tiền' (SF-01, WF-05 Q-4)", () => {
+  const resolved = (over: Record<string, unknown> = {}) =>
+    customerReturnDtoSchema.parse(
+      beReturn({
+        status: "RESOLVED",
+        refundedAmount: 0,
+        offsetAmount: 0,
+        lines: [
+          { ...beReturn().lines[0], receivedQuantity: 1, refundQuantity: 0, refundAmount: 0 },
+        ],
+        ...over,
+      }),
+    );
+
+  it("reads the BE's outcome and refusal reason, with the fixed Vietnamese labels", () => {
+    const refused = resolved({ outcome: "REFUSED", refusalReason: "CUSTOMER_DAMAGE" });
+    expect(refundOutcome(refused)).toBe("REFUSED");
+    expect(returnStatusMeta(refused).label).toBe("Đã xử lý — không hoàn tiền");
+    expect(RETURN_REFUSAL_REASON_LABEL[refused.refusalReason!]).toBe("Hư hỏng do bảo quản/sử dụng");
+    expect(RETURN_REFUSAL_REASON_LABEL.NOT_DEFECTIVE).toBe("Không phát hiện lỗi");
+    expect(RETURN_REFUSAL_REASON_LABEL.OUT_OF_POLICY).toBe("Ngoài chính sách đổi trả");
+    expect(RETURN_REFUSAL_REASON_LABEL.OTHER).toBe("Lý do khác");
+    // A reason newer than the FE: no guessed wording.
+    const newer = resolved({ outcome: "REFUSED", refusalReason: "SOMETHING_NEW" });
+    expect(newer.refusalReason).toBe("UNKNOWN");
+    expect(RETURN_REFUSAL_REASON_LABEL.UNKNOWN).toBeNull();
+    expect(refundOutcome(resolved({ outcome: "NOTHING_TO_REFUND" }))).toBe("NOTHING_TO_REFUND");
+  });
+
+  it("falls back to the money on a BE that sends no outcome: 0 refunded is not a refund", () => {
+    expect(refundOutcome(resolved())).toBe("NOTHING_TO_REFUND");
+    expect(refundOutcome(resolved({ refundedAmount: null, offsetAmount: null }))).toBe(
+      "NOTHING_TO_REFUND",
+    );
+    expect(returnStatusMeta(resolved()).label).not.toBe("Đã hoàn tiền");
+    // Only the deduction from installments still owed is still a refund to the customer.
+    const offset = resolved({ offsetAmount: 150_000 });
+    expect(refundOutcome(offset)).toBe("REFUNDED");
+    expect(returnStatusMeta(offset).label).toBe("Đã hoàn tiền");
+  });
+
+  it("never trusts a REFUNDED outcome that carries no money", () => {
+    expect(refundOutcome(resolved({ outcome: "REFUNDED" }))).toBe("NOTHING_TO_REFUND");
+    expect(refundOutcome(resolved({ outcome: "REFUNDED", refundedAmount: 200_000 }))).toBe(
+      "REFUNDED",
+    );
+  });
+
+  it("reads a list row the same way, from its own amounts", () => {
+    const row = (over: Record<string, unknown>) =>
+      returnRowDtoSchema.parse({
+        ...beReturn({ status: "RESOLVED" }),
+        settlementAmount: 0,
+        refundedAmount: 0,
+        offsetAmount: 0,
+        ...over,
+      });
+    expect(returnStatusMeta(row({})).label).toBe("Đã xử lý — không hoàn tiền");
+    expect(
+      returnStatusMeta(row({ settlementAmount: 300_000, refundedAmount: 300_000 })).label,
+    ).toBe("Đã hoàn tiền");
+    expect(returnStatusMeta(row({ outcome: "REFUSED", settlementAmount: 0 })).label).toBe(
+      "Đã xử lý — không hoàn tiền",
+    );
+  });
+
+  it("leaves every other status to the status table", () => {
+    const open = customerReturnDtoSchema.parse(beReturn({ status: "SETTLEMENT_PENDING" }));
+    expect(refundOutcome(open)).toBeNull();
+    expect(returnStatusMeta(open).label).toBe("Đang duyệt hoàn tiền");
+  });
+});
+
+describe("claim photos and claimed units (SF-04, BE-21)", () => {
+  it("takes claim photos while the return waits for approval or for its goods, as the BE does", () => {
+    expect(acceptsPhotos("REQUESTED")).toBe(true);
+    expect(acceptsPhotos("AWAITING_RETURN")).toBe(true);
+    for (const status of ["RECEIVED", "SETTLEMENT_PENDING", "RESOLVED", "REJECTED"] as const) {
+      expect(acceptsPhotos(status)).toBe(false);
+    }
+  });
+
+  it("holds the units that came back, even when nothing was refunded for them", () => {
+    const line = {
+      requestedQuantity: 3,
+      approvedQuantity: 2,
+      refundQuantity: 0,
+      receivedQuantity: 3,
+    };
+    expect(claimedUnits(line, "RECEIVED")).toBe(3);
+    expect(claimedUnits(line, "RESOLVED")).toBe(3);
+    expect(claimedUnits({ ...line, receivedQuantity: 1 }, "EXPIRED")).toBe(1);
+    expect(claimedUnits({ ...line, receivedQuantity: null }, "CANCELLED")).toBe(0);
   });
 });

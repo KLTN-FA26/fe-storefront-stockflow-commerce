@@ -77,6 +77,16 @@ describe("ReturnsScreen", () => {
     );
   });
 
+  it("never lists a return settled with no money as refunded (SF-01)", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({
+      data: page([row({ status: "RESOLVED" })].map((r) => ({ ...r, settlementAmount: 0 }))),
+    });
+    renderWithProviders(<ReturnsScreen />);
+    const link = await screen.findByRole("link", { name: /RMA-20261110-0001/ });
+    expect(within(link).getByText("Đã xử lý — không hoàn tiền")).toBeInTheDocument();
+    expect(within(link).queryByText("Đã hoàn tiền")).toBeNull();
+  });
+
   it("says when there is no return yet", async () => {
     vi.spyOn(api, "get").mockResolvedValue({ data: page([]) });
     renderWithProviders(<ReturnsScreen />);
@@ -149,6 +159,61 @@ describe("ReturnDetailScreen (kltn-docs 17 §4.10)", () => {
     vi.spyOn(api, "get").mockResolvedValue({ data: beReturn({ status: "REQUESTED" }) });
     renderWithProviders(<ReturnDetailScreen returnId={RETURN_ID} />);
     expect(await screen.findByText("Thêm ảnh", { selector: "label" })).toBeInTheDocument();
+  });
+
+  // SF-04: the BE takes claim photos while the goods are still on their way back.
+  it("lets the customer add photos while the approved goods are awaited", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ data: beReturn({ status: "AWAITING_RETURN" }) });
+    renderWithProviders(<ReturnDetailScreen returnId={RETURN_ID} />);
+    expect(await screen.findByText("Thêm ảnh", { selector: "label" })).toBeInTheDocument();
+  });
+
+  // SF-01 / Q-4: the refusal is the answer to the customer's claim, with its fixed reason.
+  it("shows a return refused by policy as handled without a refund, with its reason", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({
+      data: beReturn({
+        status: "RESOLVED",
+        outcome: "REFUSED",
+        refusalReason: "CUSTOMER_DAMAGE",
+        refusalNote: "Thùng bị ẩm do để ngoài trời.",
+        refundedAmount: 0,
+        offsetAmount: 0,
+        receivedAt: "2026-11-15T03:00:00Z",
+        lines: [
+          { ...beReturn().lines[0], receivedQuantity: 1, refundQuantity: 0, refundAmount: 0 },
+        ],
+        history: [
+          { status: "REQUESTED", occurredAt: "2026-11-10T03:00:00Z" },
+          { status: "RESOLVED", occurredAt: "2026-11-16T03:00:00Z" },
+        ],
+      }),
+    });
+    renderWithProviders(<ReturnDetailScreen returnId={RETURN_ID} />);
+    const status = (await screen.findByText(/Lý do: Hư hỏng do bảo quản/)).closest(
+      "[role=status]",
+    )!;
+    expect(status).toHaveTextContent("Đã xử lý — không hoàn tiền");
+    expect(status).toHaveTextContent("Lý do: Hư hỏng do bảo quản/sử dụng.");
+    expect(status).toHaveTextContent("Thùng bị ẩm do để ngoài trời.");
+    expect(status).toHaveTextContent(/vẫn thuộc về bạn/);
+    expect(screen.queryByText("Đã hoàn tiền")).toBeNull();
+    // No "0 ₫ / 0 ₫" money card, and the history step says the same.
+    expect(screen.queryByRole("region", { name: "Hoàn tiền" })).toBeNull();
+    const history = screen.getByRole("region", { name: "Lịch sử" });
+    expect(within(history).getByText("Đã xử lý — không hoàn tiền")).toBeInTheDocument();
+  });
+
+  it("reads a return closed at 0 by an older BE (no outcome) as not refunded", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({
+      data: beReturn({ status: "RESOLVED", refundedAmount: 0, offsetAmount: 0 }),
+    });
+    renderWithProviders(<ReturnDetailScreen returnId={RETURN_ID} />);
+    const status = (
+      await screen.findByText(/Yêu cầu đã kết thúc và không có khoản hoàn tiền nào/)
+    ).closest("[role=status]")!;
+    expect(status).toHaveTextContent("Đã xử lý — không hoàn tiền");
+    expect(screen.queryByText("Đã hoàn tiền")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Hoàn tiền" })).toBeNull();
   });
 
   it("is not found for a bad id, without asking the BE", () => {

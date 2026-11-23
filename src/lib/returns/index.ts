@@ -25,8 +25,10 @@ export {
   RETURN_DESCRIPTION_MAX,
   RETURN_PHOTO_MAX_BYTES,
   RETURN_PHOTO_MAX_COUNT,
+  RETURN_OUTCOMES,
   RETURN_PHOTO_TYPES,
   RETURN_REASONS,
+  RETURN_REFUSAL_REASONS,
   RETURN_STATUSES,
   customerReturnDtoSchema,
   openReturnInputSchema,
@@ -39,13 +41,17 @@ export type {
   CustomerReturnLine,
   CustomerReturnReason,
   OpenReturnInput,
+  ReturnOutcome,
   ReturnPage,
   ReturnReason,
+  ReturnRefusalReason,
   ReturnRow,
   ReturnStatus,
 } from "./schemas";
 export {
+  RETURN_NOT_REFUNDED_META,
   RETURN_REASON_LABEL,
+  RETURN_REFUSAL_REASON_LABEL,
   RETURN_STATUS_META,
   acceptsPhotos,
   canOpenReturn,
@@ -54,4 +60,7 @@ export {
   claimsByOrderLine,
   isReturnOpen,
   isWithdrawable,
+  refundOutcome,
+  returnStatusMeta,
 } from "./selectors";
+export type { RefundOutcome } from "./selectors";

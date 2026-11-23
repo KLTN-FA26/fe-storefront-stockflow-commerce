@@ -159,9 +159,15 @@ describe("OrderInvoicesCard — HT-1", () => {
       />,
     );
     const notes = await screen.findByRole("list", { name: "Điều kiện xuất hoá đơn" });
-    expect(notes).toHaveTextContent(/từng lần giao thành công/);
+    // WF-05 Q-1: issued by the system on the delivery day itself, never "the next working day".
+    expect(notes).toHaveTextContent(/Mỗi lần giao thành công có một hoá đơn VAT riêng/);
+    expect(notes).toHaveTextContent(/ngay trong ngày giao/);
+    expect(notes).not.toHaveTextContent(/ngày làm việc tiếp theo/);
     expect(notes).toHaveTextContent(/chưa có lần giao thành công/);
     expect(notes).toHaveTextContent(/không được xuất hoá đơn/);
+    // HĐ-3: an issued invoice is reduced by an adjustment, never cancelled.
+    expect(notes).toHaveTextContent(/hoá đơn điều chỉnh giảm/);
+    expect(notes).not.toHaveTextContent(/huỷ/);
   });
 
   it("says nothing more once the order is completed", async () => {

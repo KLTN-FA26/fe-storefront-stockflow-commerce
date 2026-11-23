@@ -4,8 +4,15 @@ import { RotateCcw } from "lucide-react";
 import { STORE_ROUTES } from "@/constants";
 import { Button } from "@/components/ui/button";
 
-import { displayGroup } from "../lifecycle";
+import { displayGroup, type OrderDisplayGroup } from "../lifecycle";
 import type { Order } from "../types";
+
+const GOODS_ARRIVED: ReadonlySet<OrderDisplayGroup> = new Set<OrderDisplayGroup>([
+  "DELIVERED",
+  "COMPLETED",
+  "CLOSED",
+  "PARTIALLY_RETURNED",
+]);
 
 /**
  * "Đặt lại" (kltn-docs 14 §4.1 step 6, WF-02 D4): the customer does not order on the portal, so
@@ -19,7 +26,8 @@ export function OrderReorder({
   order: Pick<Order, "orderId" | "orderNumber" | "status" | "statusGroup">;
 }) {
   const group = displayGroup(order);
-  if (group !== "DELIVERED" && group !== "COMPLETED") return null;
+  // Goods reached the customer: delivered, completed, closed after completion, or partly kept.
+  if (!GOODS_ARRIVED.has(group)) return null;
   return (
     <Button asChild variant="outline" className="min-h-11 rounded-[var(--r-md)] px-4">
       <Link

@@ -9,8 +9,18 @@ import { tolerantEnum } from "@/lib/validation/tolerant-enum";
 // without who sent / signed / cancelled it and never with `creditWarning`. Jackson runs with
 // `default-property-inclusion: non_null`, so every nullable field may be absent. ──
 
-/** BE SalesContractStatus. The customer never sees a DRAFT (404 until it is sent). */
-export const CONTRACT_STATUSES = ["DRAFT", "SENT", "SIGNED", "COMPLETED", "CANCELLED"] as const;
+/**
+ * BE SalesContractStatus. The customer never sees a DRAFT (404 until it is sent). LIQUIDATED (WF-05
+ * Q-6, F-3): the order ended with nothing delivered and its money settled.
+ */
+export const CONTRACT_STATUSES = [
+  "DRAFT",
+  "SENT",
+  "SIGNED",
+  "COMPLETED",
+  "LIQUIDATED",
+  "CANCELLED",
+] as const;
 export const contractStatusSchema = tolerantEnum(CONTRACT_STATUSES);
 
 const instantSchema = z.iso.datetime({ offset: true });

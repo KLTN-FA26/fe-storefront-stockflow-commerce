@@ -38,8 +38,8 @@ describe("order lifecycle mirrors BE OrderStatus / CustomerOrders.StatusGroup", 
 
   it("has wording for every status group the BE sends, plus UNKNOWN", () => {
     // CustomerOrders.StatusGroup: AWAITING_CONTRACT and AWAITING_STOCK came with the rescope,
-    // RETURN_REQUESTED with BE #380.
-    expect(ORDER_STATUS_GROUPS).toHaveLength(12);
+    // RETURN_REQUESTED with BE #380, PARTIALLY_RETURNED with WF-05 F-2 (BE-35).
+    expect(ORDER_STATUS_GROUPS).toHaveLength(13);
     expect(Object.keys(ORDER_STATUS_GROUP_META).sort()).toEqual(
       [...ORDER_STATUS_GROUPS, "UNKNOWN"].sort(),
     );
@@ -169,6 +169,36 @@ describe("order lifecycle mirrors BE OrderStatus / CustomerOrders.StatusGroup", 
     for (const group of [...ORDER_STATUS_GROUPS, "UNKNOWN"] as const) {
       expect(ORDER_DISPLAY_META[group]).toBe(ORDER_STATUS_GROUP_META[group]);
     }
+  });
+
+  // SF-02: the BE folds CLOSED-after-completion into DELIVERED too; read alone it would say again
+  // "Đơn hoàn tất khi hết hạn đổi trả".
+  it("shows an order closed after completion as closed, not as waiting to complete", () => {
+    expect(displayGroup({ status: "CLOSED", statusGroup: "DELIVERED" })).toBe("CLOSED");
+    expect(ORDER_DISPLAY_META.CLOSED).toMatchObject({ label: "Đã đóng", tone: "muted" });
+    expect(ORDER_DISPLAY_META.CLOSED.hint).not.toMatch(/hoàn tất khi/);
+    expect(ORDER_DISPLAY_META.CLOSED.hint).toMatch(/đã đóng/);
+    expect(orderProgress("CLOSED", null)!.every((step) => step.state === "done")).toBe(true);
+    // A CLOSED order of the refund branch keeps what happened to its goods.
+    expect(displayGroup({ status: "CLOSED", statusGroup: "RETURNED" })).toBe("RETURNED");
+    expect(displayGroup({ status: "CLOSED", statusGroup: "PARTIALLY_RETURNED" })).toBe(
+      "PARTIALLY_RETURNED",
+    );
+    // A group newer than the FE stays neutral, closed or not.
+    expect(displayGroup({ status: "CLOSED", statusGroup: "UNKNOWN" })).toBe("UNKNOWN");
+  });
+
+  // WF-05 F-2 (BE-35): one shipment brought back by the carrier, the rest kept.
+  it("never calls an order whose customer kept a delivered part 'Đã trả hàng'", () => {
+    const partly = ORDER_STATUS_GROUP_META.PARTIALLY_RETURNED;
+    expect(partly.label).not.toBe(ORDER_STATUS_GROUP_META.RETURNED.label);
+    expect(partly.label).not.toMatch(/trả hàng/i);
+    expect(partly.hint).toMatch(/giữ một phần hàng/);
+    expect(partly.hint).toMatch(/đơn vị vận chuyển hoàn về/);
+    expect(displayGroup({ status: "PARTIALLY_REFUNDED", statusGroup: "PARTIALLY_RETURNED" })).toBe(
+      "PARTIALLY_RETURNED",
+    );
+    expect(orderProgress("PARTIALLY_RETURNED", true)).toBeNull();
   });
 
   it("runs contract → first installment → production → delivery → done (SF-UX-30)", () => {

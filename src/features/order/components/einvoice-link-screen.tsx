@@ -13,9 +13,9 @@ export const INVOICES_ANCHOR = "order-invoices-heading";
 /**
  * `/einvoices/{id}` — where the BE links the "hoá đơn đã phát hành" notification
  * (EInvoiceIssuedNotificationListener, EInvoiceErrorNoticeNotificationListener). The storefront
- * shows invoices on their order's page, so this finds the invoice's order among the customer's
- * invoices and replaces the URL with that page's invoices card. Unknown or another customer's
- * invoice: not found.
+ * shows invoices on their order's page, so this reads the invoice by id (`GET /einvoices/me/{id}`,
+ * BE-60 — an older BE: the newest page of the customer's invoices) and replaces the URL with that
+ * order page's invoices card. Unknown or another customer's invoice: not found.
  */
 export function EInvoiceLinkScreen({ id }: { id: string }) {
   const router = useRouter();

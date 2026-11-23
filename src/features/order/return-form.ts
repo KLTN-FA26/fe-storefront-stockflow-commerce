@@ -135,13 +135,16 @@ export function returnFormSchema(
     .superRefine((values, ctx) => {
       if (delivery.needsChoice) {
         const shipment = delivery.shipments.find((s) => s.shipmentId === values.shipmentId);
-        if (!shipment || !shipment.windowOpen) {
+        // The BE's returnableQuantity decides (SF-05); the FE's window only words why not.
+        if (!shipment || !shipment.returnable) {
           ctx.addIssue({
             code: "custom",
             path: ["shipmentId"],
-            message: shipment
-              ? "Lần giao này đã quá hạn đổi / trả."
-              : "Chọn lần giao có hàng muốn trả.",
+            message: !shipment
+              ? "Chọn lần giao có hàng muốn trả."
+              : shipment.windowOpen
+                ? "Lần giao này không còn sản phẩm nào trả được."
+                : "Lần giao này đã quá hạn đổi / trả.",
           });
         }
       }

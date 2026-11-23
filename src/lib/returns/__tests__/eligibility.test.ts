@@ -97,6 +97,74 @@ describe("returnEligibility (BE ReturnRequest.deliveredShipment + requireReturna
   });
 });
 
+describe("returnEligibility reads the BE's returnableQuantity (SF-05, WF-05 Q-15)", () => {
+  const withLines = (shipmentId: string, outcomeAt: string, returnable: number) => ({
+    ...delivered(shipmentId, outcomeAt),
+    lines: [{ orderLineId: ORDER_LINE_ID, quantity: 2, returnableQuantity: returnable }],
+  });
+
+  it("makes a delivery returnable only when one of its lines has units left", () => {
+    const result = returnEligibility(
+      { status: "DELIVERED", shipments: [withLines(S1, SECOND, 0), withLines(S2, SECOND, 2)] },
+      7,
+      NOW,
+    );
+    expect(result.kind === "open" && result.shipments.map((s) => s.returnable)).toEqual([
+      false,
+      true,
+    ]);
+  });
+
+  it("closes the order when the BE takes nothing back, though the FE's window is open", () => {
+    expect(
+      returnEligibility({ status: "DELIVERED", shipments: [withLines(S1, SECOND, 0)] }, 7, NOW),
+    ).toEqual({ kind: "closed", reason: "NOT_RETURNABLE" });
+    // Past the FE's count as well: worded as the window.
+    expect(
+      returnEligibility({ status: "DELIVERED", shipments: [withLines(S1, FIRST, 0)] }, 7, NOW),
+    ).toEqual({ kind: "closed", reason: "WINDOW_CLOSED" });
+  });
+
+  it("opens what the BE takes, past the FE's own window and whatever the order's status", () => {
+    // A longer contract period than the FE read (or none read: 7 days), or a late claim accepted.
+    const late = returnEligibility(
+      { status: "DELIVERED", shipments: [withLines(S1, FIRST, 1)] },
+      7,
+      NOW,
+    );
+    expect(late).toMatchObject({ kind: "open", needsChoice: false });
+    expect(late.kind === "open" && late.shipments[0]).toMatchObject({
+      returnable: true,
+      windowOpen: false,
+    });
+    // Q-15: a refund settled on one delivery leaves the other one returnable.
+    expect(
+      returnEligibility(
+        {
+          status: "PARTIALLY_REFUNDED",
+          shipments: [withLines(S1, SECOND, 0), withLines(S2, SECOND, 1)],
+        },
+        7,
+        NOW,
+      ),
+    ).toMatchObject({ kind: "open", needsChoice: true });
+    // And a closed order is closed because the BE says 0, not because the FE knows CLOSED.
+    expect(
+      returnEligibility({ status: "CLOSED", shipments: [withLines(S1, SECOND, 0)] }, 7, NOW),
+    ).toEqual({ kind: "closed", reason: "NOT_RETURNABLE" });
+  });
+
+  it("does not ask for a delivery the BE did not date when it sends its lines", () => {
+    const undated = { shipmentId: S1, status: "DELIVERED", lines: withLines(S1, SECOND, 1).lines };
+    const result = returnEligibility({ status: "DELIVERED", shipments: [undated] }, 7, NOW);
+    expect(result.kind === "open" && result.shipments[0]).toMatchObject({
+      deliveredAt: null,
+      windowEnd: null,
+      returnable: true,
+    });
+  });
+});
+
 describe("per-delivery claims and refusals", () => {
   it("blocks a line only for an open return on the same delivery", () => {
     const onFirst = customerReturnDtoSchema.parse(beReturn({ shipmentId: S1 }));
@@ -116,6 +184,13 @@ describe("per-delivery claims and refusals", () => {
     );
     expect(describeReturnError(new ApiError(409, "RETURN_GOODS_PARTLY_RECEIVED", "x"))).toContain(
       "không thể rút",
+    );
+    // WF-05 Q-15: the delivery chosen was settled by a return already.
+    expect(describeReturnError(new ApiError(409, "RETURN_SHIPMENT_NOT_RETURNABLE", "x"))).toContain(
+      "đã được xử lý trả hàng và hoàn tiền",
+    );
+    expect(describeReturnError(new ApiError(409, "RETURN_ORDER_NOT_RETURNABLE", "x"))).toContain(
+      "đã đóng",
     );
   });
 

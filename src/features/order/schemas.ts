@@ -73,6 +73,10 @@ export const ORDER_STATUS_GROUPS = [
   "RETURN_REQUESTED",
   "CANCELLED",
   "RETURNED",
+  // WF-05 F-2 (BE-35): the customer kept the goods of at least one delivered shipment, and the rest
+  // came back - returned by them or brought back by the carrier. RETURNED stays for an order that
+  // kept nothing.
+  "PARTIALLY_RETURNED",
 ] as const;
 export type KnownOrderStatusGroup = (typeof ORDER_STATUS_GROUPS)[number];
 
@@ -94,6 +98,8 @@ export const DELIVERY_STATES = [
   "DELIVERY_FAILED",
   "DELIVERED",
   "RETURNED",
+  // WF-05 F-2: as the group of the same name - part delivered and kept, the rest came back.
+  "PARTIALLY_RETURNED",
 ] as const;
 export type KnownDeliveryState = (typeof DELIVERY_STATES)[number];
 export const DELIVERY_STATE_UNKNOWN = "UNKNOWN";
