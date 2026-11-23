@@ -56,6 +56,7 @@ export {
   acceptsPhotos,
   canOpenReturn,
   canWithdrawReturn,
+  withdrawHeldByCount,
   claimedUnits,
   claimsByOrderLine,
   goodsReceived,

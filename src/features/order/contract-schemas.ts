@@ -98,6 +98,11 @@ export const contractDtoSchema = z.object({
   signedAt: instantSchema.nullish(),
   completedAt: instantSchema.nullish(),
   returnWindowDays: z.number().int().nullish(),
+  /**
+   * WF-05 (BE 81214e74): GET …/contract/appendix answers 200 exactly when this is true - signed, and a
+   * delivery window in force differs from the one signed. Absent (an older BE): no appendix offered.
+   */
+  appendixAvailable: z.boolean().default(false),
   version: z.number().int().nonnegative(),
 });
 

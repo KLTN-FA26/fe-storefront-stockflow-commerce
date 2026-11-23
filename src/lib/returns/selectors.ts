@@ -137,13 +137,25 @@ export const isWithdrawable = (status: ReturnStatus) =>
   status === "REQUESTED" || status === "AWAITING_RETURN";
 
 /**
- * Khách rút được yêu cầu này không: trạng thái còn rút được và chưa kiện hàng trả nào về kho. Mỗi
- * kiện kho nhận ghi `receivedAt` và `lines[].receivedQuantity` trong khi yêu cầu vẫn
- * `AWAITING_RETURN`; khi đó BE từ chối rút (`RETURN_GOODS_PARTLY_RECEIVED`, WF-05 TH-3).
+ * Khách rút được yêu cầu này không: trạng thái còn rút được, chưa kiện hàng trả nào về kho, và kho
+ * không đang kiểm đếm kiện nào trên phiếu nháp. Mỗi kiện kho nhận ghi `receivedAt` và
+ * `lines[].receivedQuantity` trong khi yêu cầu vẫn `AWAITING_RETURN`; khi đó BE từ chối rút
+ * (`RETURN_GOODS_PARTLY_RECEIVED`, WF-05 TH-3). Trong lúc kho đếm (`receiptDraftOpen`, BE-23) BE
+ * từ chối bằng `RETURN_RECEIPT_DRAFT_OPEN`.
  */
 export const canWithdrawReturn = (
-  request: Pick<CustomerReturn, "status" | "receivedAt" | "lines">,
-): boolean => isWithdrawable(request.status) && !goodsReceived(request);
+  request: Pick<CustomerReturn, "status" | "receivedAt" | "lines" | "receiptDraftOpen">,
+): boolean =>
+  isWithdrawable(request.status) && !goodsReceived(request) && !withdrawHeldByCount(request);
+
+/**
+ * Chỉ vì kho đang kiểm đếm một kiện trên phiếu nháp mà chưa rút được (BE `receiptDraftOpen`): khi
+ * kho xác nhận, hàng đã về (không rút nữa); khi kho huỷ phiếu, khách rút lại được.
+ */
+export const withdrawHeldByCount = (
+  request: Pick<CustomerReturn, "status" | "receivedAt" | "lines" | "receiptDraftOpen">,
+): boolean =>
+  isWithdrawable(request.status) && !goodsReceived(request) && request.receiptDraftOpen === true;
 
 /**
  * Kho đã xác nhận nhận ít nhất một kiện hàng trả (`receivedAt`, `lines[].receivedQuantity`): từ lúc

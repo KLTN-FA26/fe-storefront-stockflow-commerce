@@ -72,7 +72,10 @@ const ENDED: ReadonlySet<OrderStatus> = new Set<OrderStatus>([
   "PARTIALLY_REFUNDED",
 ]);
 
-/** The papers that follow a signed contract (documents 1c, 2c): its appendix and its liquidation. */
+/**
+ * The papers that follow a signed contract (documents 1c, 2c): its appendix only when the BE says
+ * there is one (`appendixAvailable`: a delivery window moved since signing), and its liquidation.
+ */
 function ContractPapers({
   orderId,
   contract,
@@ -89,13 +92,15 @@ function ContractPapers({
     (orderStatus !== undefined && ENDED.has(orderStatus));
   return (
     <>
-      <DocumentDownloadButton
-        kind="contractAppendix"
-        className="w-full"
-        label="Tải phụ lục hợp đồng"
-        ariaLabel={`Tải phụ lục hợp đồng ${contract.contractNumber}`}
-        load={() => getMyContractAppendix(orderId, contract.contractNumber)}
-      />
+      {contract.appendixAvailable ? (
+        <DocumentDownloadButton
+          kind="contractAppendix"
+          className="w-full"
+          label="Tải phụ lục hợp đồng"
+          ariaLabel={`Tải phụ lục hợp đồng ${contract.contractNumber}`}
+          load={() => getMyContractAppendix(orderId, contract.contractNumber)}
+        />
+      ) : null}
       {liquidable ? (
         <DocumentDownloadButton
           kind="contractLiquidation"

@@ -11,6 +11,7 @@ import {
   acceptsPhotos,
   canOpenReturn,
   canWithdrawReturn,
+  withdrawHeldByCount,
   claimedUnits,
   claimsByOrderLine,
   goodsReceived,
@@ -191,6 +192,23 @@ describe("canWithdrawReturn (BE cancel: RETURN_GOODS_PARTLY_RECEIVED, WF-05 TH-3
   it("never offers it past the withdrawable statuses", () => {
     expect(canWithdrawReturn(ret({ status: "RECEIVED" }))).toBe(false);
     expect(canWithdrawReturn(ret({ status: "REJECTED" }))).toBe(false);
+  });
+
+  it("holds it while the warehouse counts a parcel on a draft receipt (receiptDraftOpen, BE-23)", () => {
+    const counting = ret({ status: "AWAITING_RETURN", receiptDraftOpen: true });
+    expect(canWithdrawReturn(counting)).toBe(false);
+    expect(withdrawHeldByCount(counting)).toBe(true);
+    expect(withdrawHeldByCount(ret({ status: "AWAITING_RETURN", receiptDraftOpen: false }))).toBe(
+      false,
+    );
+    // Absent (an older BE): still offered; the 409 is explained afterwards.
+    expect(canWithdrawReturn(ret({ status: "AWAITING_RETURN" }))).toBe(true);
+  });
+
+  it("reads receiptDraftOpen on the list row too", () => {
+    expect(
+      returnRowDtoSchema.parse({ ...beReturn(), receiptDraftOpen: true }).receiptDraftOpen,
+    ).toBe(true);
   });
 });
 

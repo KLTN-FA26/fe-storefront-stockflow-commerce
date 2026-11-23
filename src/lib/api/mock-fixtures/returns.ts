@@ -68,6 +68,8 @@ export interface MockReturn {
   lines: MockReturnLine[];
   evidence: { id: string; stage: "CLAIM"; originalName: string; uploadedAt: string }[];
   history: { status: Status; occurredAt: string }[];
+  /** WF-05 BE-23: a parcel of it is being counted on a DRAFT return receipt (`countParcel` hook). */
+  receiptDraftOpen?: boolean;
   version: number;
 }
 
@@ -127,6 +129,7 @@ function toCustomer(r: MockReturn) {
     discrepancies: [],
     evidence: r.evidence.map((e) => ({ ...e, thumbnailUrl: null })),
     history: r.history,
+    receiptDraftOpen: r.receiptDraftOpen ?? false,
     version: r.version,
   };
 }
@@ -152,6 +155,7 @@ function toRow(r: MockReturn) {
     currency: "VND",
     vatAdjustmentRequired: false,
     closedAt: r.closedAt,
+    receiptDraftOpen: c.receiptDraftOpen,
     version: r.version,
   };
 }
@@ -391,9 +395,20 @@ export function createMockReturnBook(
           "RETURN_GOODS_PARTLY_RECEIVED",
           "Some goods of this return are already back",
         );
+      // WF-05 BE-23: the warehouse is counting a parcel on a draft receipt.
+      if (r.receiptDraftOpen)
+        return fail(409, "RETURN_RECEIPT_DRAFT_OPEN", "A parcel of this return is being counted");
       move(r, "CANCELLED");
       r.closedAt = now().toISOString();
       return ok(toCustomer(r));
+    },
+
+    /** Test hook: the warehouse opens a draft receipt and counts a parcel of an approved return. */
+    countParcel(id: string) {
+      const r = own(id);
+      if (!r || r.status !== "AWAITING_RETURN") return;
+      r.receiptDraftOpen = true;
+      r.version += 1;
     },
 
     /** Test hook: one parcel of an approved return reached the warehouse; it stays AWAITING_RETURN. */

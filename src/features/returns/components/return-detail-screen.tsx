@@ -16,6 +16,7 @@ import {
   RETURN_REASON_LABEL,
   describeReturnError,
   canWithdrawReturn,
+  withdrawHeldByCount,
   goodsReceived,
   isReturnNotFound,
   isWithdrawable,
@@ -193,6 +194,12 @@ export function ReturnDetailScreen({ returnId: raw }: { returnId: string }) {
             >
               {withdraw.isPending ? "Đang rút..." : "Rút yêu cầu trả hàng"}
             </Button>
+          ) : withdrawHeldByCount(request) ? (
+            // WF-05 BE-23: the warehouse is counting a parcel on a draft receipt.
+            <p className="text-ink-secondary text-sm">
+              Kho đang kiểm đếm một kiện hàng trả của yêu cầu này nên tạm thời chưa rút được yêu
+              cầu. Khi kho xác nhận hoặc huỷ lần kiểm đếm, trang sẽ cập nhật.
+            </p>
           ) : isWithdrawable(request.status) ? (
             // A parcel is already in the warehouse (WF-05 TH-3): Sales settle what came back.
             <p className="text-ink-secondary text-sm">

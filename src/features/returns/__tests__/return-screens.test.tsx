@@ -136,6 +136,15 @@ describe("ReturnDetailScreen (kltn-docs 17 §4.10)", () => {
     expect(await screen.findByText(/không thể rút yêu cầu nữa/)).toBeInTheDocument();
   });
 
+  it("hides the withdrawal while the warehouse counts a parcel (receiptDraftOpen), and says why", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ data: beReturn({ receiptDraftOpen: true }) });
+    renderWithProviders(<ReturnDetailScreen returnId={RETURN_ID} />);
+    expect(
+      await screen.findByText(/Kho đang kiểm đếm một kiện hàng trả của yêu cầu này nên tạm thời/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Rút yêu cầu trả hàng" })).toBeNull();
+  });
+
   // G4 BE-23: a parcel being counted at the dock blocks the withdrawal; the BE says so with a code.
   it("explains a withdrawal refused while the warehouse counts a parcel (RETURN_RECEIPT_DRAFT_OPEN)", async () => {
     vi.spyOn(api, "get").mockResolvedValue({ data: beReturn() });

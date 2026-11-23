@@ -66,6 +66,7 @@ const contract = {
   totals: { netAmount: 1, taxAmount: 0, totalAmount: 1, currency: "VND" },
   deliverySchedule: [],
   paymentPlan: [],
+  appendixAvailable: true,
   version: 3,
 };
 
@@ -100,6 +101,15 @@ describe("contract papers on the order page (documents 1c, 2c)", () => {
     expect(screen.queryByRole("button", { name: /biên bản thanh lý/ })).toBeNull();
   });
 
+  it("offers no appendix while the BE says there is none (appendixAvailable=false)", async () => {
+    backend([], {
+      [`/orders/me/${orderId}/contract`]: json({ ...contract, appendixAvailable: false }),
+    });
+    renderWithProviders(<OrderContractCard orderId={orderId} orderStatus="COMPLETED" />);
+    expect(await screen.findByRole("button", { name: /biên bản thanh lý/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /phụ lục hợp đồng/ })).toBeNull();
+  });
+
   it("shows the BE's refusal of a liquidation while money is still open, in Vietnamese", async () => {
     backend([], {
       [`/orders/me/${orderId}/contract`]: json({ ...contract, status: "COMPLETED" }),
@@ -109,6 +119,23 @@ describe("contract papers on the order page (documents 1c, 2c)", () => {
     renderWithProviders(<OrderContractCard orderId={orderId} orderStatus="CLOSED" />);
     await userEvent.click(await screen.findByRole("button", { name: /biên bản thanh lý/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/số còn lại phải bằng 0/);
+  });
+
+  it("names the amounts left when the BE refuses with details.reason NOT_SETTLED", async () => {
+    backend([], {
+      [`/orders/me/${orderId}/contract`]: json({ ...contract, status: "COMPLETED" }),
+      [`/orders/me/${orderId}/contract/liquidation`]: () =>
+        new ApiError(409, "SALES_CONTRACT_STATUS_INVALID", "Not settled", undefined, undefined, {
+          reason: "NOT_SETTLED",
+          outstanding: 75600000,
+          toRefund: 0,
+        }),
+    });
+    renderWithProviders(<OrderContractCard orderId={orderId} orderStatus="CLOSED" />);
+    await userEvent.click(await screen.findByRole("button", { name: /biên bản thanh lý/ }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/bạn còn phải thanh toán 75\.600\.000/);
+    expect(alert).not.toHaveTextContent(/hoàn cho bạn/);
   });
 
   it("offers neither before the contract is signed", async () => {

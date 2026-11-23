@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error";
+import { formatVND } from "@/lib/format/money";
 
 import {
   describeDocumentError,
@@ -132,6 +133,46 @@ describe("describeDocumentError: every refusal reads in Vietnamese", () => {
     expect(describeDocumentError(error(404, "HTTP_404"), "returnReceiptVoucher")).toMatch(
       /chưa có phiếu nhập kho/,
     );
+  });
+
+  const refusal = (details: Record<string, unknown>) =>
+    new ApiError(
+      409,
+      "SALES_CONTRACT_STATUS_INVALID",
+      "English text",
+      undefined,
+      undefined,
+      details,
+    );
+
+  it("liquidation STILL_PERFORMED (BE 15cd13cf) says the order is still being performed", () => {
+    const message = describeDocumentError(
+      refusal({ reason: "STILL_PERFORMED" }),
+      "contractLiquidation",
+    );
+    expect(message).toMatch(/^Hợp đồng còn đang được thực hiện/);
+    expect(message).not.toMatch(/English text/);
+  });
+
+  it("liquidation NOT_SETTLED names both amounts in VND, and leaves a zero one out", () => {
+    const both = describeDocumentError(
+      refusal({ reason: "NOT_SETTLED", outstanding: 1200000, toRefund: 350000 }),
+      "contractLiquidation",
+    );
+    expect(both).toContain(`bạn còn phải thanh toán ${formatVND(1200000)}`);
+    expect(both).toContain(`bên bán còn phải hoàn cho bạn ${formatVND(350000)}`);
+    const refundOnly = describeDocumentError(
+      refusal({ reason: "NOT_SETTLED", outstanding: 0, toRefund: "350000" }),
+      "contractLiquidation",
+    );
+    expect(refundOnly).not.toContain("bạn còn phải thanh toán");
+    expect(refundOnly).toContain(formatVND(350000));
+  });
+
+  it("liquidation with an unknown reason falls back to the general text", () => {
+    expect(
+      describeDocumentError(refusal({ reason: "SOMETHING_NEW" }), "contractLiquidation"),
+    ).toMatch(/số còn lại phải bằng 0/);
   });
 
   // Coordinator 23/11: the BE refuses liquidation while Còn lại ≠ 0, under a code of its own.

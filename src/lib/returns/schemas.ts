@@ -95,6 +95,8 @@ export const returnRowDtoSchema = z.object({
   outcome: returnOutcomeSchema.nullish(),
   currency: currencySchema.nullish().catch(null),
   closedAt: z.string().nullish(),
+  /** WF-05 BE-23 (BE fc931ff9): kho đang kiểm đếm một kiện của yêu cầu trên phiếu nháp — chưa rút được. */
+  receiptDraftOpen: z.boolean().nullish(),
   version: z.number(),
 });
 export const returnPageDtoSchema = pageResponseSchema(returnRowDtoSchema);
@@ -157,6 +159,12 @@ export const customerReturnDtoSchema = z.object({
     .nullish(),
   evidence: z.array(customerReturnEvidenceDtoSchema).nullish(),
   history: z.array(z.object({ status: z.string(), occurredAt: z.string() })).nullish(),
+  /**
+   * WF-05 BE-23 (BE fc931ff9): kho đang kiểm đếm một kiện của yêu cầu trên phiếu nhập NHÁP — khách
+   * chưa rút được (BE trả 409 RETURN_RECEIPT_DRAFT_OPEN) tới khi kho xác nhận hoặc huỷ phiếu đó.
+   * Vắng = BE cũ: nút rút vẫn hiện, 409 được giải thích sau.
+   */
+  receiptDraftOpen: z.boolean().nullish(),
   version: z.number(),
 });
 
