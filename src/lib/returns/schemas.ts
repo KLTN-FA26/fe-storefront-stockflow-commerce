@@ -144,9 +144,11 @@ export const customerReturnDtoSchema = z.object({
   outcome: returnOutcomeSchema.nullish(),
   /** Mã lý do không hoàn tiền (danh sách cố định); chỉ khi `outcome` = REFUSED. */
   refusalReason: returnRefusalReasonSchema.nullish(),
+  /** Nhãn tiếng Việt của `refusalReason` do BE gửi (bundle `_vi`); dùng khi FE chưa biết mã. */
+  refusalReasonLabel: z.string().nullish(),
   /**
-   * Ghi chú công khai tuỳ chọn Sales viết cho khách kèm lý do (Q-4); ghi chú nội bộ không bao giờ
-   * tới đây. Tên trường là giả định của FE — thiếu thì không hiện gì.
+   * Ghi chú công khai tuỳ chọn Sales viết cho khách kèm lý do (BE `CustomerReturnResponse.refusalNote`,
+   * Q-4); ghi chú nội bộ không bao giờ tới đây.
    */
   refusalNote: z.string().nullish(),
   lines: z.array(customerReturnLineDtoSchema),

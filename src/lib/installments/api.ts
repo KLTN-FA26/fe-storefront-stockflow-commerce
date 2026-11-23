@@ -1,9 +1,11 @@
 import { api } from "@/lib/api/client";
 
 import {
+  installmentDtoSchema,
   installmentPageDtoSchema,
   installmentTransferDtoSchema,
   orderInstallmentsDtoSchema,
+  type Installment,
   type InstallmentPage,
   type InstallmentTransfer,
   type OrderInstallments,
@@ -26,6 +28,22 @@ export async function getMyOrderInstallments(
     withSignal(signal),
   );
   return orderInstallmentsDtoSchema.parse(data);
+}
+
+/**
+ * GET /installments/me/{installmentId} (BE InstallmentController.myOne): one of the customer's
+ * installments with the receipts that paid it - the live ones only. Their `receiptId` names the
+ * payment confirmation paper. Another customer's is 404 INSTALLMENT_NOT_FOUND.
+ */
+export async function getMyInstallment(
+  installmentId: string,
+  signal?: AbortSignal,
+): Promise<Installment> {
+  const { data } = await api.get<unknown>(
+    `${BASE}/${encodeURIComponent(installmentId)}`,
+    withSignal(signal),
+  );
+  return installmentDtoSchema.parse(data);
 }
 
 /**

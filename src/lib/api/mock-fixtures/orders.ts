@@ -702,6 +702,33 @@ export function createMockOrderBook(
       });
     },
 
+    /**
+     * GET /installments/me/{installmentId} (BE myOne): the installment with the receipt that paid
+     * it - one RECORDED receipt for the money the mock allocated to it, none when nothing was paid.
+     */
+    installment(installmentId: string): MockResult {
+      const installment = orders
+        .filter((o) => o.customerId === customerId)
+        .flatMap((o) => mockInstallmentsOf(o) ?? [])
+        .find((i) => i.installmentId === installmentId);
+      if (!installment) return fail(404, "INSTALLMENT_NOT_FOUND", "Installment not found");
+      const recordedAt = installment.paidAt ?? installment.reachedAt ?? new Date().toISOString();
+      const receipts =
+        installment.paidAmount > 0
+          ? [
+              {
+                receiptId: `2b6f00${installmentId.slice(6)}`,
+                reference: `FT${installment.contractNumber.replace(/\D/g, "").slice(-8)}${installment.seq}`,
+                receivedOn: recordedAt.slice(0, 10),
+                amount: installment.paidAmount,
+                status: "RECORDED",
+                recordedAt,
+              },
+            ]
+          : [];
+      return ok({ ...installment, receipts });
+    },
+
     /** GET /installments/me/{installmentId}/transfer-instructions (15 §4.2 step 5). */
     installmentTransfer(installmentId: string): MockResult {
       const installment = orders

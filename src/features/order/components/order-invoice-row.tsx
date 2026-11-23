@@ -4,10 +4,12 @@ import { useState } from "react";
 import { FileDown } from "lucide-react";
 import { cn } from "cn";
 
+import { DocumentDownloadButton } from "@/components/storefront/document-download-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { describeApiError } from "@/lib/api/describe-error";
+import { getMyEInvoiceAgreement } from "@/lib/documents";
 import {
+  describeEInvoiceError,
   errorNoticeStatusMeta,
   getMyEInvoiceFile,
   invoiceNumberText,
@@ -139,7 +141,7 @@ export function InvoiceRow({
       const link = await getMyEInvoiceFile(invoice.id, kind);
       window.open(link.url, "_blank", "noopener,noreferrer");
     } catch (failure: unknown) {
-      setError(describeApiError(failure));
+      setError(describeEInvoiceError(failure));
     } finally {
       setBusy(null);
     }
@@ -210,6 +212,16 @@ export function InvoiceRow({
           {error}
         </p>
       )}
+      {invoice.type === "ADJUSTMENT" || invoice.type === "REPLACEMENT" ? (
+        // The agreement both companies sign for this correction (documents/endpoints.md 7c).
+        <DocumentDownloadButton
+          kind="einvoiceAgreement"
+          className="w-full"
+          label="Tải biên bản thỏa thuận"
+          ariaLabel={`Tải biên bản thỏa thuận ${invoiceTypeLabel(invoice).toLowerCase()} ${invoiceNumberText(invoice)}`}
+          load={() => getMyEInvoiceAgreement(invoice.id, invoiceNumberText(invoice))}
+        />
+      ) : null}
     </li>
   );
 }

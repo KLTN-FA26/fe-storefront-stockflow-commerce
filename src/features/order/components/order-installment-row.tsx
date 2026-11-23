@@ -3,6 +3,7 @@
 import { ChevronDown } from "lucide-react";
 import { cn } from "cn";
 
+import { InstallmentReceipts } from "@/components/storefront/installment-receipts";
 import { TONE_BADGE_CLASSES } from "@/components/storefront/tone-badge";
 import { InstallmentTransferSection } from "@/components/storefront/transfer-instructions";
 import { Badge } from "@/components/ui/badge";
@@ -126,6 +127,7 @@ export function OrderInstallmentRow({
           ) : null}
         </>
       ) : null}
+      <InstallmentReceipts installment={installment} />
     </li>
   );
 }

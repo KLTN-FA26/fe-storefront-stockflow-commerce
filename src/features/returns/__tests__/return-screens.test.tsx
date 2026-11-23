@@ -136,6 +136,65 @@ describe("ReturnDetailScreen (kltn-docs 17 §4.10)", () => {
     expect(await screen.findByText(/không thể rút yêu cầu nữa/)).toBeInTheDocument();
   });
 
+  // G4 BE-23: a parcel being counted at the dock blocks the withdrawal; the BE says so with a code.
+  it("explains a withdrawal refused while the warehouse counts a parcel (RETURN_RECEIPT_DRAFT_OPEN)", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ data: beReturn() });
+    vi.spyOn(api, "post").mockRejectedValue(
+      new ApiError(409, "RETURN_RECEIPT_DRAFT_OPEN", "A parcel is still being counted"),
+    );
+    renderWithProviders(<ReturnDetailScreen returnId={RETURN_ID} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Rút yêu cầu trả hàng" }));
+    await userEvent.click(screen.getByRole("button", { name: "Rút yêu cầu" }));
+    expect(await screen.findByText(/Kho đang kiểm đếm một kiện hàng trả/)).toBeInTheDocument();
+    expect(screen.queryByText(/still being counted/)).toBeNull();
+  });
+
+  it("downloads the stock-in voucher once goods are received, and says why when there is none yet", async () => {
+    Object.assign(URL, { createObjectURL: vi.fn(() => "blob:voucher"), revokeObjectURL: vi.fn() });
+    const saved: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      saved.push(this.download);
+    });
+    const received = beReturn({
+      status: "RECEIVED",
+      receivedAt: "2026-11-15T03:00:00Z",
+      lines: [{ ...beReturn().lines[0], receivedQuantity: 1 }],
+    });
+    let voucherReady = false;
+    vi.spyOn(api, "get").mockImplementation(async (url: string) => {
+      if (url === `/returns/me/${RETURN_ID}/receipt-voucher`) {
+        if (!voucherReady) throw new ApiError(404, "GOODS_RECEIPT_NOT_FOUND", "Nothing confirmed");
+        return {
+          data: new Blob(["%PDF"]),
+          headers: {
+            "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent("Phiếu nhập kho NK-20261115-0001.pdf")}`,
+          },
+        };
+      }
+      return { data: received };
+    });
+    renderWithProviders(<ReturnDetailScreen returnId={RETURN_ID} />);
+    const button = await screen.findByRole("button", {
+      name: "Tải phiếu nhập kho hàng trả RMA-20261110-0001",
+    });
+    await userEvent.click(button);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Kho chưa xác nhận nhận hàng trả của yêu cầu này nên chưa có phiếu nhập kho.",
+    );
+    voucherReady = true;
+    await userEvent.click(button);
+    await vi.waitFor(() => expect(saved).toEqual(["Phiếu nhập kho NK-20261115-0001.pdf"]));
+  });
+
+  it("offers no voucher before anything came back", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ data: beReturn() });
+    renderWithProviders(<ReturnDetailScreen returnId={RETURN_ID} />);
+    expect(await screen.findByText("Gửi hàng về kho")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /phiếu nhập kho/ })).toBeNull();
+  });
+
   it("shows why a return was refused, and offers no withdrawal once closed", async () => {
     vi.spyOn(api, "get").mockResolvedValue({
       data: beReturn({ status: "REJECTED", rejectionReason: "Ảnh không thấy lỗi in." }),

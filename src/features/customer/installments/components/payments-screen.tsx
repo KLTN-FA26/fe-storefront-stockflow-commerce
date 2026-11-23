@@ -18,6 +18,7 @@ import {
   paymentRows,
   type PaymentFilter,
 } from "../filters";
+import { DebtReconciliationCard } from "./debt-reconciliation-card";
 import { INSTALLMENTS_PERMISSION } from "./my-installments";
 import { MyInstallmentRow } from "./my-installment-row";
 
@@ -119,6 +120,7 @@ export function PaymentsScreen() {
                 một đợt cần tìm.
               </p>
             ) : null}
+            {allowed ? <DebtReconciliationCard /> : null}
           </>
         )}
       </div>

@@ -115,10 +115,11 @@ export const ORDER_STATUS_GROUP_META: Record<
     ...ORDER_STATUS.RETURNED,
     hint: "Hàng của đơn đã về lại kho, do bạn trả hàng hoặc đơn vị vận chuyển hoàn về. Xem mục Thanh toán và Hoàn tiền để biết số tiền liên quan.",
   },
-  // WF-05 F-2 (BE-35): part delivered and kept, the rest came back. Never "Đã trả hàng".
+  // WF-05 F-2 (BE-35): part delivered and kept, the rest returned by the customer, brought back by
+  // the carrier, or lost once the deliveries were over (a partly fulfilled order). Never "Đã trả hàng".
   PARTIALLY_RETURNED: {
     ...ORDER_STATUS.PARTIALLY_RETURNED,
-    hint: "Bạn giữ một phần hàng của đơn; phần còn lại đã về lại kho, do bạn trả hàng hoặc đơn vị vận chuyển hoàn về. Xem mục Thanh toán và Hoàn tiền để biết số tiền liên quan.",
+    hint: "Bạn đã nhận và giữ một phần hàng của đơn. Phần còn lại không giao cho bạn nữa: bạn đã trả lại, đơn vị vận chuyển hoàn về kho hoặc làm thất lạc. Xem mục Thanh toán và Hoàn tiền để biết số tiền liên quan.",
   },
   // A group newer than this FE (see ORDER_STATUS_GROUP_UNKNOWN): neutral wording.
   UNKNOWN: {

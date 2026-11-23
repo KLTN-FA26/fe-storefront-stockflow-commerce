@@ -6,6 +6,7 @@ import { QUERY_TIMES } from "@/lib/api/query-client";
 import { ORDERS_QUERY_ROOT } from "@/lib/api/query-keys";
 
 import {
+  getMyInstallment,
   getMyInstallmentTransfer,
   getMyOrderInstallments,
   listMyInstallments,
@@ -20,6 +21,7 @@ export const installmentKeys = {
   all: [...ORDERS_QUERY_ROOT, "installments"] as const,
   ofOrder: (orderId: string) => [...installmentKeys.all, "order", orderId] as const,
   transfer: (installmentId: string) => [...installmentKeys.all, "transfer", installmentId] as const,
+  detail: (installmentId: string) => [...installmentKeys.all, "detail", installmentId] as const,
   list: (params: MyInstallmentsParams) => [...installmentKeys.all, "list", params] as const,
 };
 
@@ -49,6 +51,17 @@ export function useMyOrderInstallments(orderId: string, enabled = true) {
     enabled,
     retry: retryUnlessSettled,
     ...QUERY_TIMES.list,
+  });
+}
+
+/** One installment with the receipts that paid it, asked when the customer opens its payments. */
+export function useMyInstallment(installmentId: string, enabled = true) {
+  return useQuery({
+    queryKey: installmentKeys.detail(installmentId),
+    queryFn: ({ signal }) => getMyInstallment(installmentId, signal),
+    enabled,
+    retry: retryUnlessSettled,
+    ...QUERY_TIMES.detail,
   });
 }
 

@@ -7,17 +7,20 @@ import { ChevronLeft, PackageOpen } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
 import { Alert, ConfirmDialog } from "@/components/shared";
+import { DocumentDownloadButton } from "@/components/storefront/document-download-button";
 import { ToneBadge } from "@/components/storefront/tone-badge";
 import { Button } from "@/components/ui/button";
+import { getMyReturnReceiptVoucher } from "@/lib/documents";
 import { formatDate, formatDateTime } from "@/lib/format/date";
 import {
   RETURN_REASON_LABEL,
-  RETURN_REFUSAL_REASON_LABEL,
   describeReturnError,
   canWithdrawReturn,
+  goodsReceived,
   isReturnNotFound,
   isWithdrawable,
   refundOutcome,
+  refusalReasonText,
   returnStatusMeta,
   useCancelMyReturn,
   useMyReturn,
@@ -38,9 +41,8 @@ const isId = (value: string) => beId().safeParse(value).success;
  */
 function NotRefunded({ request }: { request: CustomerReturn }) {
   const outcome = refundOutcome(request);
-  const reason = request.refusalReason ? RETURN_REFUSAL_REASON_LABEL[request.refusalReason] : null;
-  const goodsBack =
-    !!request.receivedAt || request.lines.some((line) => (line.receivedQuantity ?? 0) > 0);
+  const reason = refusalReasonText(request);
+  const goodsBack = goodsReceived(request);
   return (
     <Alert tone="info" title={returnStatusMeta(request).label}>
       <span className="block">
@@ -170,6 +172,16 @@ export function ReturnDetailScreen({ returnId: raw }: { returnId: string }) {
         </div>
         <div className="space-y-5">
           <ReturnMoneyCard request={request} />
+          {goodsReceived(request) ? (
+            // Mẫu 01-VT of what the warehouse confirmed received (documents/endpoints.md 3c).
+            <DocumentDownloadButton
+              kind="returnReceiptVoucher"
+              className="w-full"
+              label="Tải phiếu nhập kho"
+              ariaLabel={`Tải phiếu nhập kho hàng trả ${request.rmaNumber}`}
+              load={() => getMyReturnReceiptVoucher(request.id, request.rmaNumber)}
+            />
+          ) : null}
           <ReturnHistoryCard request={request} />
           {canWithdrawReturn(request) ? (
             <Button

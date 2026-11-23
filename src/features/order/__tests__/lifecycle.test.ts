@@ -201,6 +201,16 @@ describe("order lifecycle mirrors BE OrderStatus / CustomerOrders.StatusGroup", 
     expect(orderProgress("PARTIALLY_RETURNED", true)).toBeNull();
   });
 
+  // G1: also a partly fulfilled order whose deliveries are over, some shipments back or lost.
+  it("reads a partly fulfilled order the carrier finished in part as kept in part, lost included", () => {
+    expect(displayGroup({ status: "PARTIALLY_FULFILLED", statusGroup: "PARTIALLY_RETURNED" })).toBe(
+      "PARTIALLY_RETURNED",
+    );
+    const partly = ORDER_STATUS_GROUP_META.PARTIALLY_RETURNED;
+    expect(partly.hint).toMatch(/thất lạc/);
+    expect(partly.hint).not.toMatch(/phần còn lại đã về lại kho/);
+  });
+
   it("runs contract → first installment → production → delivery → done (SF-UX-30)", () => {
     expect(orderProgress("AWAITING_CONTRACT", null)!.map((step) => step.label)).toEqual([
       "Hợp đồng",

@@ -1,4 +1,9 @@
-export { getMyInstallmentTransfer, getMyOrderInstallments, listMyInstallments } from "./api";
+export {
+  getMyInstallment,
+  getMyInstallmentTransfer,
+  getMyOrderInstallments,
+  listMyInstallments,
+} from "./api";
 export type { MyInstallmentsParams } from "./api";
 export {
   INSTALLMENT_NOT_FOUND_CODE,
@@ -6,6 +11,7 @@ export {
   TRANSFER_UNAVAILABLE_CODE,
   installmentKeys,
   isNoInstallments,
+  useMyInstallment,
   useMyInstallmentTransfer,
   useMyInstallments,
   useMyOrderInstallments,

@@ -105,9 +105,10 @@ export const ORDER_STATUS: Readonly<Record<OrderDisplayGroupKey, StatusMeta>> = 
   COMPLETED: { label: "Hoàn tất", tone: "positive" },
   CANCELLED: { label: "Đã huỷ", tone: "danger" },
   RETURNED: { label: "Đã trả hàng", tone: "special" },
-  // WF-05 F-2 (BE-35): part delivered and kept, the rest came back (a return or the carrier) - not
-  // "Đã trả hàng", which would tell the customer they kept nothing.
-  PARTIALLY_RETURNED: { label: "Đã giao, một phần hoàn về", tone: "info" },
+  // WF-05 F-2 (BE-35): the customer kept part of the goods; the rest came back (their return, the
+  // carrier's) or was lost - not "Đã trả hàng", which would say they kept nothing, nor "hoàn về",
+  // which a lost shipment never was.
+  PARTIALLY_RETURNED: { label: "Giữ một phần hàng", tone: "info" },
   // A completed order the shop has since closed (SF-02): its journey is over.
   CLOSED: { label: "Đã đóng", tone: "muted" },
   UNKNOWN: { label: "Đang xử lý", tone: "info" },

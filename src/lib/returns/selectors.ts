@@ -143,10 +143,25 @@ export const isWithdrawable = (status: ReturnStatus) =>
  */
 export const canWithdrawReturn = (
   request: Pick<CustomerReturn, "status" | "receivedAt" | "lines">,
-): boolean =>
-  isWithdrawable(request.status) &&
-  !request.receivedAt &&
-  !request.lines.some((line) => (line.receivedQuantity ?? 0) > 0);
+): boolean => isWithdrawable(request.status) && !goodsReceived(request);
+
+/**
+ * Kho đã xác nhận nhận ít nhất một kiện hàng trả (`receivedAt`, `lines[].receivedQuantity`): từ lúc
+ * đó có phiếu nhập kho (Mẫu 01-VT) để khách tải, và yêu cầu không rút được nữa.
+ */
+export const goodsReceived = (request: Pick<CustomerReturn, "receivedAt" | "lines">): boolean =>
+  !!request.receivedAt || request.lines.some((line) => (line.receivedQuantity ?? 0) > 0);
+
+/**
+ * Lý do không hoàn tiền như khách đọc: nhãn cố định của FE, hoặc `refusalReasonLabel` BE gửi cho
+ * một mã mới hơn FE (BE `CustomerReturnResponse.refusalReasonLabel`, cùng bundle `_vi`).
+ */
+export const refusalReasonText = (
+  request: Pick<CustomerReturn, "refusalReason" | "refusalReasonLabel">,
+): string | null =>
+  (request.refusalReason ? RETURN_REFUSAL_REASON_LABEL[request.refusalReason] : null) ??
+  request.refusalReasonLabel ??
+  null;
 
 /**
  * Ảnh vấn đề thêm được khi yêu cầu còn chờ duyệt hoặc đã duyệt và đang chờ hàng về — đúng hai trạng

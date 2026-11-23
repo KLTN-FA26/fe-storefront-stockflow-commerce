@@ -88,8 +88,10 @@ describe("an order partly brought back by the carrier (WF-05 F-2, BE-35)", () =>
         <OrderDeliveryCard order={current} />
       </>,
     );
-    expect(screen.getByText("Đã giao, một phần hoàn về")).toBeInTheDocument();
-    expect(screen.getByText("Đã giao một phần, phần còn lại đã về kho")).toBeInTheDocument();
+    expect(screen.getByText("Giữ một phần hàng")).toBeInTheDocument();
+    expect(
+      screen.getByText("Bạn giữ một phần hàng; phần còn lại đã trả về hoặc thất lạc"),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Đã trả hàng")).toBeNull();
     expect(screen.queryByText("Đã trả lại")).toBeNull();
   });

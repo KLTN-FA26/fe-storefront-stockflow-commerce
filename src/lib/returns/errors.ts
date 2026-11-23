@@ -20,6 +20,9 @@ const RETURN_MESSAGES: Record<string, string> = {
     "Đơn này được giao làm nhiều lần — hãy chọn lần giao có hàng muốn trả. Không thấy lần giao đó? Vui lòng liên hệ Sale.",
   RETURN_SHIPMENT_NOT_DELIVERED:
     "Lần giao bạn chọn chưa giao thành công nên chưa thể trả hàng của lần giao đó. Hãy chọn lần giao đã nhận hàng.",
+  // WF-05 BE-23: a parcel of it is being counted at the warehouse; that is goods back already.
+  RETURN_RECEIPT_DRAFT_OPEN:
+    "Kho đang kiểm đếm một kiện hàng trả của yêu cầu này nên chưa rút được yêu cầu. Hãy đợi kho xác nhận, hoặc chat với Sales nếu bạn cần hỗ trợ.",
   RETURN_GOODS_PARTLY_RECEIVED:
     "Kho đã nhận một phần hàng trả về nên không thể rút yêu cầu nữa. Sales sẽ hoàn tiền theo số hàng đã nhận — hãy chat với Sales nếu cần.",
   RETURN_LINE_ALREADY_OPEN:

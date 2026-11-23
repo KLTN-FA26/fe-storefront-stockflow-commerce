@@ -13,7 +13,9 @@ import {
   canWithdrawReturn,
   claimedUnits,
   claimsByOrderLine,
+  goodsReceived,
   refundOutcome,
+  refusalReasonText,
   returnStatusMeta,
 } from "../selectors";
 import { beReturn, ORDER_ID, ORDER_LINE_ID, RETURN_ID } from "./fixtures";
@@ -154,6 +156,23 @@ describe("customer returns — rules", () => {
   });
 });
 
+describe("goods received and the draft receipt refusal (G4 BE-23)", () => {
+  it("counts a return as received from its first confirmed parcel", () => {
+    const awaiting = customerReturnDtoSchema.parse(beReturn());
+    expect(goodsReceived(awaiting)).toBe(false);
+    expect(goodsReceived({ ...awaiting, receivedAt: "2026-11-15T03:00:00Z" })).toBe(true);
+    expect(
+      goodsReceived({ ...awaiting, lines: [{ ...awaiting.lines[0]!, receivedQuantity: 1 }] }),
+    ).toBe(true);
+  });
+
+  it("words RETURN_RECEIPT_DRAFT_OPEN in Vietnamese", () => {
+    expect(
+      describeReturnError(new ApiError(409, "RETURN_RECEIPT_DRAFT_OPEN", "being counted")),
+    ).toMatch(/^Kho đang kiểm đếm một kiện hàng trả của yêu cầu này nên chưa rút được yêu cầu/);
+  });
+});
+
 describe("canWithdrawReturn (BE cancel: RETURN_GOODS_PARTLY_RECEIVED, WF-05 TH-3)", () => {
   const ret = (over: Record<string, unknown>) => customerReturnDtoSchema.parse(beReturn(over));
   const received = (quantity: number) => [{ ...beReturn().lines[0], receivedQuantity: quantity }];
@@ -202,6 +221,22 @@ describe("a return closed without a refund never reads 'Đã hoàn tiền' (SF-0
     expect(newer.refusalReason).toBe("UNKNOWN");
     expect(RETURN_REFUSAL_REASON_LABEL.UNKNOWN).toBeNull();
     expect(refundOutcome(resolved({ outcome: "NOTHING_TO_REFUND" }))).toBe("NOTHING_TO_REFUND");
+  });
+
+  // G4: CustomerReturnResponse also carries refusalReasonLabel (the BE's _vi bundle) and refusalNote.
+  it("reads the BE's label for a reason newer than the FE, and the public note", () => {
+    const newer = resolved({
+      outcome: "REFUSED",
+      refusalReason: "SOMETHING_NEW",
+      refusalReasonLabel: "Lý do mới của BE",
+      refusalNote: "Ghi chú cho khách",
+    });
+    expect(refusalReasonText(newer)).toBe("Lý do mới của BE");
+    expect(newer.refusalNote).toBe("Ghi chú cho khách");
+    expect(
+      refusalReasonText(resolved({ refusalReason: "NOT_DEFECTIVE", refusalReasonLabel: "x" })),
+    ).toBe("Không phát hiện lỗi");
+    expect(refusalReasonText(resolved())).toBeNull();
   });
 
   it("falls back to the money on a BE that sends no outcome: 0 refunded is not a refund", () => {

@@ -4,6 +4,7 @@ export {
   listMyEInvoiceErrorNotices,
   listMyEInvoices,
 } from "./api";
+export { describeEInvoiceError } from "./errors";
 export {
   einvoiceKeys,
   MY_EINVOICES_SCAN_SIZE,

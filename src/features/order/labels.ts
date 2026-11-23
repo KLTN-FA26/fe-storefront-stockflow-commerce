@@ -29,8 +29,9 @@ export const DELIVERY_STATE_LABEL: Record<DeliveryState, string> = {
   DELIVERY_FAILED: "Giao không thành công",
   DELIVERED: "Đã giao",
   RETURNED: "Đã trả lại",
-  // WF-05 F-2: never "Đã trả lại" for an order whose customer kept a delivered part.
-  PARTIALLY_RETURNED: "Đã giao một phần, phần còn lại đã về kho",
+  // WF-05 F-2: never "Đã trả lại" for an order whose customer kept a delivered part. The rest may also
+  // be a shipment the carrier lost (BE-35 for a partly fulfilled order), so not "về kho" either.
+  PARTIALLY_RETURNED: "Bạn giữ một phần hàng; phần còn lại đã trả về hoặc thất lạc",
   UNKNOWN: "Đang cập nhật",
 };
 

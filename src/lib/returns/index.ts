@@ -58,9 +58,11 @@ export {
   canWithdrawReturn,
   claimedUnits,
   claimsByOrderLine,
+  goodsReceived,
   isReturnOpen,
   isWithdrawable,
   refundOutcome,
+  refusalReasonText,
   returnStatusMeta,
 } from "./selectors";
 export type { RefundOutcome } from "./selectors";
