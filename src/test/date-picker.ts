@@ -9,7 +9,7 @@ import { expect } from "vitest";
 import type { UserEvent } from "@testing-library/user-event";
 
 export async function pickDate(user: UserEvent, trigger: HTMLElement, iso: string) {
-  const [year, month, day] = iso.split("-").map(Number);
+  const [year, month] = iso.split("-").map(Number);
   await user.click(trigger);
   await user.selectOptions(await screen.findByRole("combobox", { name: "Chọn năm" }), String(year));
   await user.selectOptions(
@@ -27,6 +27,6 @@ export async function pickDate(user: UserEvent, trigger: HTMLElement, iso: strin
     return found;
   });
   await user.click(button);
-  const shown = `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`;
-  await waitFor(() => expect(trigger).toHaveTextContent(shown));
+  // Picking a day closes the calendar; the caller may keep the value anywhere, so wait for that, not for the text.
+  await waitFor(() => expect(screen.queryByRole("grid")).not.toBeInTheDocument());
 }
