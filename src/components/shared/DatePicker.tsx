@@ -104,6 +104,9 @@ export function DatePicker({
           formatters={{ formatWeekdayName: (date) => format(date, "EEEEE", { locale: vi }) }}
           className="[--cell-size:--spacing(10)] sm:[--cell-size:--spacing(11)]"
           selected={selected}
+          // The calendar's own "today" is the browser's day; min / max and "Hôm nay" use Vietnam's day.
+          // Outside UTC+7 the two differ for part of the day, and the marked today would be disabled.
+          today={toDate(today)}
           {...((selected ?? minDate) ? { defaultMonth: (selected ?? minDate) as Date } : {})}
           startMonth={new Date(year - YEAR_SPAN.back, 0)}
           endMonth={new Date(year + YEAR_SPAN.ahead, 11)}
