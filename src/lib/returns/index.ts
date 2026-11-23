@@ -59,6 +59,7 @@ export {
   withdrawHeldByCount,
   claimedUnits,
   claimsByOrderLine,
+  discrepancyKindText,
   goodsReceived,
   isReturnOpen,
   isWithdrawable,

@@ -4,6 +4,7 @@ import {
   RETURN_NOT_REFUNDED_META,
   RETURN_STATUSES,
   RETURN_STATUS_META,
+  discrepancyKindText,
   refundOutcome,
   type CustomerReturn,
   type ReturnStatus,
@@ -56,7 +57,7 @@ export function ReturnLinesCard({ request }: { request: CustomerReturn }) {
         <p className="text-ink-secondary text-sm">
           Kho ghi nhận chênh lệch:{" "}
           {(request.discrepancies ?? [])
-            .map((d) => `${d.sku} ${d.kind === "SHORT" ? "thiếu" : "thừa"} ${d.quantity}`)
+            .map((d) => `${d.sku} ${discrepancyKindText(d.kind)} ${d.quantity}`)
             .join(", ")}
           .
         </p>

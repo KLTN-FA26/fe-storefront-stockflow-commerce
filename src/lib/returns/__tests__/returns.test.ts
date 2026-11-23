@@ -14,6 +14,7 @@ import {
   withdrawHeldByCount,
   claimedUnits,
   claimsByOrderLine,
+  discrepancyKindText,
   goodsReceived,
   refundOutcome,
   refusalReasonText,
@@ -321,5 +322,15 @@ describe("claim photos and claimed units (SF-04, BE-21)", () => {
     expect(claimedUnits(line, "RESOLVED")).toBe(3);
     expect(claimedUnits({ ...line, receivedQuantity: 1 }, "EXPIRED")).toBe(1);
     expect(claimedUnits({ ...line, receivedQuantity: null }, "CANCELLED")).toBe(0);
+  });
+});
+
+describe("discrepancyKindText (audit r2 Low 14)", () => {
+  it("names every BE ReturnDiscrepancy.Kind, and never reads an unknown kind as excess", () => {
+    expect(discrepancyKindText("SHORT")).toBe("thiếu");
+    expect(discrepancyKindText("EXCESS")).toBe("thừa");
+    expect(discrepancyKindText("UNEXPECTED_ITEM")).toBe("ngoài yêu cầu");
+    expect(discrepancyKindText("WRONG_ITEM")).toBe("sai mã hàng");
+    expect(discrepancyKindText("SOMETHING_NEW")).toBe("chênh lệch");
   });
 });

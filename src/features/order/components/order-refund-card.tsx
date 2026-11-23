@@ -27,8 +27,9 @@ function Row({ label, value }: { label: string; value: string }) {
 
 /**
  * Hoàn tiền của đơn (kltn-docs 15 §4.5): số phải hoàn do huỷ, đóng phần còn lại hay trả hàng, số đã
- * hoàn và các lần Kế toán đã chuyển. Chỉ hiện khi có khoản phải hoàn — hoặc khi không đọc được, để
- * khách biết thông tin hoàn tiền chưa tải được thay vì tưởng là không có (HT-1).
+ * hoàn và các lần Kế toán đã chuyển; phí vận chuyển được miễn (Q-19) và phí còn phải thanh toán. Hiện khi có một trong
+ * các khoản đó (`hasRefundCard`) — không có tiền hoàn thì bỏ ba dòng tiền hoàn, vẫn hiện phí — hoặc khi không đọc được,
+ * để khách biết thông tin hoàn tiền chưa tải được thay vì tưởng là không có (HT-1).
  */
 export function OrderRefundCard({ order }: { order: Order }) {
   // Không hỏi gì khi danh sách quyền chưa về: tài khoản thiếu quyền không thấy thẻ nháy lên
@@ -72,10 +73,19 @@ export function OrderRefundCard({ order }: { order: Order }) {
       >
         Hoàn tiền
       </h2>
+      {refund.refundable > 0 ? null : (
+        <p className="text-ink-secondary text-sm">
+          Đơn này không có khoản tiền nào phải hoàn cho bạn.
+        </p>
+      )}
       <dl className="space-y-2 text-sm">
-        <Row label="Số tiền phải hoàn" value={money(refund.refundable)} />
-        <Row label="Đã hoàn" value={money(refund.refunded)} />
-        <Row label="Còn chờ hoàn" value={money(refund.remaining)} />
+        {refund.refundable > 0 ? (
+          <>
+            <Row label="Số tiền phải hoàn" value={money(refund.refundable)} />
+            <Row label="Đã hoàn" value={money(refund.refunded)} />
+            <Row label="Còn chờ hoàn" value={money(refund.remaining)} />
+          </>
+        ) : null}
         {shippingFeeWaived > 0 ? (
           <Row label="Phí vận chuyển được miễn" value={money(shippingFeeWaived)} />
         ) : null}

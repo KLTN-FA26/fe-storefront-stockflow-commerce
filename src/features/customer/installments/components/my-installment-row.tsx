@@ -119,6 +119,10 @@ export function MyInstallmentRow({
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
         <Cell label="Số tiền" value={money(installment.amount)} />
         <Cell label="Đã thanh toán" value={money(installment.paidAmount)} />
+        {/* audit r2 money L-5: Số tiền − Đã thanh toán ≠ Còn phải trả khi đợt đã được giảm (đóng phần còn lại, hàng trả / hoàn về) */}
+        {(installment.reducedAmount ?? 0) > 0 ? (
+          <Cell label="Đã giảm" value={money(installment.reducedAmount ?? 0)} />
+        ) : null}
         <Cell label="Còn phải trả" value={money(installment.outstanding)} strong={overdue} />
         <Cell
           label="Hạn thanh toán"

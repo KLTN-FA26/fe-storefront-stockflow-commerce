@@ -113,7 +113,7 @@ export const ORDER_STATUS_GROUP_META: Record<
   // carrier (WF-05 F-2). Closed or not, the outcome is the same to the customer.
   RETURNED: {
     ...ORDER_STATUS.RETURNED,
-    hint: "Hàng của đơn đã về lại kho, do bạn trả hàng hoặc đơn vị vận chuyển hoàn về. Xem mục Thanh toán và Hoàn tiền để biết số tiền liên quan.",
+    hint: "Đơn không còn hàng nào giao cho bạn: bạn đã trả hàng, đơn vị vận chuyển hoàn về kho, hoặc hàng thất lạc khi vận chuyển. Xem mục Thanh toán và Hoàn tiền để biết số tiền liên quan.",
   },
   // WF-05 F-2 (BE-35): part delivered and kept, the rest returned by the customer, brought back by
   // the carrier, or lost once the deliveries were over (a partly fulfilled order). Never "Đã trả hàng".

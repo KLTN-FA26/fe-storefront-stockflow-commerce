@@ -65,7 +65,8 @@ export const CONTRACT_STATUS: Readonly<Record<ContractStatusKey, StatusMeta>> = 
   COMPLETED: { label: "Hoàn tất", tone: "muted" },
   // WF-05 Q-6 (14 §5.2): the order ended with nothing delivered (all came back, all lost, cancelled
   // after signing) and its money is settled. Not "Hoàn tất": the contract was not performed.
-  LIQUIDATED: { label: "Đã thanh lý", tone: "muted" },
+  // Label exactly as decided ("Thanh lý", decision Q-6) and as the back office shows it.
+  LIQUIDATED: { label: "Thanh lý", tone: "muted" },
   CANCELLED: { label: "Đã huỷ", tone: "danger" },
   UNKNOWN: { label: "Đang cập nhật", tone: "neutral" },
 };

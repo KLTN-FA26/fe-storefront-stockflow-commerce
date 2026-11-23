@@ -120,7 +120,7 @@ describe("an order partly brought back by the carrier (WF-05 F-2, BE-35)", () =>
 });
 
 describe("a liquidated contract (WF-05 Q-6, F-3)", () => {
-  it("reads 'Đã thanh lý' on the order page and in the chat card", () => {
+  it("reads 'Thanh lý' (decision Q-6) on the order page and in the chat card", () => {
     const contract = contractDtoSchema.parse({
       id: "c0000000-0000-4000-8000-000000000001",
       contractNumber: "HD-2026-0001",
@@ -131,7 +131,7 @@ describe("a liquidated contract (WF-05 Q-6, F-3)", () => {
       version: 3,
     });
     expect(contract.status).toBe("LIQUIDATED");
-    expect(CONTRACT_STATUS_META.LIQUIDATED.label).toBe("Đã thanh lý");
+    expect(CONTRACT_STATUS_META.LIQUIDATED.label).toBe("Thanh lý");
     expect(contractStatusMeta("LIQUIDATED")).toEqual(CONTRACT_STATUS_META.LIQUIDATED);
     expect(CONTRACT_STATUS_META.LIQUIDATED.label).not.toBe(CONTRACT_STATUS_META.COMPLETED.label);
   });

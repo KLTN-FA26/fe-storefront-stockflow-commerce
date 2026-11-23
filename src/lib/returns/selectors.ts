@@ -81,6 +81,26 @@ export const RETURN_REFUSAL_REASON_LABEL: Record<ReturnRefusalReason, string | n
   UNKNOWN: null,
 };
 
+/**
+ * Chênh lệch kho ghi khi xác nhận phiếu nhập hàng trả (BE `ReturnDiscrepancy.Kind`): thiếu / thừa so với số đã duyệt,
+ * thùng của mã hàng yêu cầu không nêu (UNEXPECTED_ITEM), hoặc hàng lẻ khác mã (WRONG_ITEM, chỉ có ở dữ liệu cũ). Mã lạ:
+ * "chênh lệch" — không đoán là thừa (audit r2 Low 14).
+ */
+export function discrepancyKindText(kind: string): string {
+  switch (kind) {
+    case "SHORT":
+      return "thiếu";
+    case "EXCESS":
+      return "thừa";
+    case "UNEXPECTED_ITEM":
+      return "ngoài yêu cầu";
+    case "WRONG_ITEM":
+      return "sai mã hàng";
+    default:
+      return "chênh lệch";
+  }
+}
+
 /** Một yêu cầu đã xong mà không hoàn đồng nào (WF-05 Q-4, SF-01): không bao giờ "Đã hoàn tiền". */
 export const RETURN_NOT_REFUNDED_META: { label: string; tone: SemanticTone; help: string } = {
   label: "Đã xử lý — không hoàn tiền",

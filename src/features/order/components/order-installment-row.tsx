@@ -97,6 +97,15 @@ export function OrderInstallmentRow({
           </dd>
         </div>
       </dl>
+      {(installment.reducedAmount ?? 0) > 0 ? (
+        <p className="text-ink-secondary">
+          Đã giảm{" "}
+          <span className="text-ink-primary font-medium tabular-nums">
+            {money(installment.reducedAmount ?? 0)}
+          </span>{" "}
+          do đóng phần hàng chưa giao hoặc hàng trả / hoàn về.
+        </p>
+      ) : null}
       {due ? (
         <p
           className={cn(installment.overdue ? "text-danger-ink font-medium" : "text-ink-secondary")}
