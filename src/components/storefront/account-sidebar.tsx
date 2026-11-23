@@ -131,14 +131,14 @@ export function AccountSidebar() {
           <div className="bg-bg-surface border-border-default rounded-[var(--r-lg)] border px-4 pt-3 pb-1">
             <p className="text-ink-primary text-sm font-semibold">Cần hỗ trợ?</p>
             <p className="text-ink-secondary mt-1 text-xs">
-              Đội ngũ tư vấn sẵn sàng giúp bạn về đơn hàng và thiết kế.
+              Sale sẵn sàng giúp bạn về thiết kế, báo giá và đơn hàng.
             </p>
             <Link
               href={STORE_ROUTES.chat.list}
               className="text-accent focus-visible:ring-accent inline-flex min-h-11 items-center gap-2 rounded-[var(--r-md)] text-sm font-semibold hover:underline focus-visible:ring-2 focus-visible:outline-none"
             >
               <MessageCircle className="size-4" aria-hidden="true" />
-              Chat với tư vấn viên
+              Chat với Sale
             </Link>
           </div>
         </div>

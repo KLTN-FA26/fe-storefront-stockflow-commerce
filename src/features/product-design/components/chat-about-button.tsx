@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { MessageCircle } from "lucide-react";
 
-import { STORE_ROUTES } from "@/constants";
+import { CHAT_WITH_SALES, STORE_ROUTES } from "@/constants";
 import { Button } from "@/components/ui/button";
 import { PERM } from "@/lib/auth/permission-codes";
 import { useHasPermission } from "@/lib/auth/my-permissions";
@@ -32,9 +32,9 @@ export function ChatAboutButton({
   if (!allowed) return null;
   return (
     <Button asChild variant="outline" className={cn(ACTION_BUTTON, className)}>
-      <Link href={STORE_ROUTES.chat.about(kind, id)} aria-label={`Chat với Sale về ${name}`}>
+      <Link href={STORE_ROUTES.chat.about(kind, id)} aria-label={`${CHAT_WITH_SALES} về ${name}`}>
         <MessageCircle aria-hidden className="size-4" />
-        Chat với Sale
+        {CHAT_WITH_SALES}
       </Link>
     </Button>
   );

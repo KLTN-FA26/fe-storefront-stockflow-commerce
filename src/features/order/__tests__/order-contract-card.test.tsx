@@ -96,10 +96,10 @@ describe("OrderContractCard (WF-02 D3)", () => {
 
     expect(await screen.findByText("HD-20260910-900001-1")).toBeInTheDocument();
     expect(get).toHaveBeenCalledWith(`/orders/me/${orderId}/contract`, expect.anything());
-    expect(screen.getByText("Đã gửi")).toBeInTheDocument();
+    expect(screen.getByText("Chờ bạn ký")).toBeInTheDocument();
 
     const schedule = screen.getByRole("list", { name: "Lịch giao" });
-    expect(within(schedule).getAllByText(/× 30 thùng = 30\.000 cái/)).toHaveLength(2);
+    expect(within(schedule).getAllByText(/^30 thùng = 30\.000 cái$/)).toHaveLength(2);
     expect(within(schedule).getAllByText(/37\.260\.000/)).toHaveLength(2);
 
     const plan = screen.getByRole("list", { name: "Lịch thanh toán" });
@@ -109,7 +109,7 @@ describe("OrderContractCard (WF-02 D3)", () => {
     expect(within(plan).getByText("Trước khi giao hàng · đợt giao 1")).toBeInTheDocument();
     expect(within(plan).getByText("30 ngày sau khi giao hàng · đợt giao 2")).toBeInTheDocument();
 
-    expect(screen.getByText("Tổng có thuế").nextElementSibling).toHaveTextContent(/76\.140\.000/);
+    expect(screen.getByText("Tổng có VAT").nextElementSibling).toHaveTextContent(/76\.140\.000/);
     expect(screen.getByRole("link", { name: "Chat với Sale" })).toHaveAttribute(
       "href",
       `/chat/new?kind=CONTRACT&id=${contractId}`,
@@ -194,12 +194,76 @@ describe("OrderContractCard downloads (audit item 27)", () => {
   });
 });
 
-describe("OrderReorder (WF-02 D4)", () => {
-  it("opens a conversation with Sales about this order instead of POST /reorder", () => {
-    render(<OrderReorder order={{ orderId, orderNumber: "SO-20260910-900001" }} />);
+describe("OrderContractCard — signing and terms (SF-UX-24, SF-UX-36, L-9)", () => {
+  it("guides a SENT contract in three steps, the last one sending the signed copy in its chat", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ data: beContract });
+    const { container } = renderWithProviders(<OrderContractCard orderId={orderId} />);
+
+    const steps = await screen.findByRole("list", { name: "Các bước ký hợp đồng" });
+    expect(within(steps).getAllByRole("listitem")).toHaveLength(3);
+    expect(within(steps).getByText("Ký, đóng dấu")).toBeInTheDocument();
+    expect(within(steps).getByRole("link", { name: "Gửi bản đã ký" })).toHaveAttribute(
+      "href",
+      `/chat/new?kind=CONTRACT&id=${contractId}&attach=pdf`,
+    );
+    // Chat cards link to the section by this anchor.
+    expect(container.querySelector("section#hop-dong")).not.toBeNull();
+  });
+
+  it("has no signing steps once signed", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({
+      data: { ...beContract, status: "SIGNED", signedOn: "2026-11-18" },
+    });
+    renderWithProviders(<OrderContractCard orderId={orderId} />);
+    expect(await screen.findByText("Đã ký")).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Các bước ký hợp đồng" })).not.toBeInTheDocument();
+  });
+
+  it("shows the free sample rounds, the complaint period and what a batch's value includes", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ data: { ...beContract, returnWindowDays: 10 } });
+    renderWithProviders(<OrderContractCard orderId={orderId} />);
+
+    expect((await screen.findByText("In mẫu miễn phí")).nextElementSibling).toHaveTextContent(
+      "2 lần",
+    );
+    expect(screen.getByText("Thời hạn khiếu nại").nextElementSibling).toHaveTextContent(
+      "10 ngày sau mỗi đợt giao",
+    );
+    expect(
+      screen.getAllByText("Giá trị hàng của đợt (gồm VAT, chưa gồm phí)").length,
+    ).toBeGreaterThan(0);
+  });
+});
+
+describe("OrderReorder (WF-02 D4, SF-UX-35)", () => {
+  it("opens a conversation with Sales about a delivered order instead of POST /reorder", () => {
+    render(
+      <OrderReorder
+        order={{
+          orderId,
+          orderNumber: "SO-20260910-900001",
+          status: "DELIVERED",
+          statusGroup: "DELIVERED",
+        }}
+      />,
+    );
     expect(screen.getByRole("link", { name: /Đặt lại đơn SO-20260910-900001/ })).toHaveAttribute(
       "href",
       `/chat/new?kind=ORDER&id=${orderId}`,
     );
+  });
+
+  it("is not offered before the goods arrived", () => {
+    const { container } = render(
+      <OrderReorder
+        order={{
+          orderId,
+          orderNumber: "SO-20260910-900001",
+          status: "PENDING_CONTRACT",
+          statusGroup: "AWAITING_CONTRACT",
+        }}
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
   });
 });

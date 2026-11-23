@@ -3,18 +3,16 @@
  * value the table does not know keeps a neutral label instead of showing the BE's enum name.
  */
 
-import type { SemanticTone } from "@/lib/domain/types";
+import {
+  CONTRACT_STATUS,
+  QUOTE_STATUS,
+  installmentStatusOf,
+  milestoneLabelOf,
+  statusMetaOf as meta,
+  type StatusMeta,
+} from "@/lib/domain/status-map";
 
-export interface StatusMeta {
-  label: string;
-  tone: SemanticTone;
-}
-
-const meta = (
-  table: Record<string, StatusMeta>,
-  value: string | null | undefined,
-  fallback: string,
-) => (value ? table[value] : undefined) ?? { label: fallback, tone: "neutral" as const };
+export type { StatusMeta };
 
 /** ConversationStatus as the customer reads it: staff-side nuances collapse to "đang trao đổi". */
 const CONVERSATION_STATUS: Record<string, StatusMeta> = {
@@ -41,7 +39,8 @@ const CONTEXT_KIND: Record<string, string> = {
   QUOTE: "Báo giá",
   ORDER: "Đơn hàng",
   CONTRACT: "Hợp đồng",
-  PRODUCTION_ORDER: "Đơn sản xuất",
+  // Staff document: its chip is hidden (SF-UX-26); "Lô in" wherever its name still shows.
+  PRODUCTION_ORDER: "Lô in",
   EINVOICE: "Hoá đơn",
 };
 export const contextKindLabel = (kind: string) => CONTEXT_KIND[kind] ?? "Chứng từ";
@@ -66,43 +65,18 @@ const REQUEST_STATUS: Record<string, StatusMeta> = {
 export const requestStatusMeta = (status: string | null | undefined) =>
   meta(REQUEST_STATUS, status, "Đang chờ báo giá");
 
-const QUOTE_STATUS: Record<string, StatusMeta> = {
-  SENT: { label: "Chờ bạn trả lời", tone: "warning" },
-  ACCEPTED: { label: "Đã chấp nhận", tone: "positive" },
-  CHANGES_REQUESTED: { label: "Đã yêu cầu sửa", tone: "info" },
-  EXPIRED: { label: "Hết hiệu lực", tone: "muted" },
-  CANCELLED: { label: "Đã huỷ", tone: "danger" },
-  CONVERTED: { label: "Đã lên đơn", tone: "positive" },
-};
+/** Quote, contract and installment statuses and milestones: the shared map the pages read too. */
 export const quoteStatusMeta = (status: string) => meta(QUOTE_STATUS, status, "Báo giá");
 
-/** CONTRACT card status (plan E1): Đã gửi / Đã ký / Đã huỷ / Hoàn tất. */
-const CONTRACT_STATUS: Record<string, StatusMeta> = {
-  SENT: { label: "Đã gửi", tone: "info" },
-  SIGNED: { label: "Đã ký", tone: "positive" },
-  CANCELLED: { label: "Đã huỷ", tone: "danger" },
-  COMPLETED: { label: "Hoàn tất", tone: "muted" },
-};
 export const contractStatusMeta = (status: string) => meta(CONTRACT_STATUS, status, "Hợp đồng");
 
-const INSTALLMENT_STATUS: Record<string, StatusMeta> = {
-  NOT_DUE: { label: "Chưa đến hạn", tone: "neutral" },
-  DUE: { label: "Đến hạn", tone: "warning" },
-  PARTIALLY_PAID: { label: "Trả một phần", tone: "info" },
-  PAID: { label: "Đã thanh toán", tone: "positive" },
-  CANCELLED: { label: "Đã huỷ", tone: "muted" },
-};
-export const installmentStatusMeta = (status: string | null | undefined, overdue: boolean) =>
-  overdue && status !== "PAID" && status !== "CANCELLED"
-    ? { label: "Quá hạn", tone: "danger" as const }
-    : meta(INSTALLMENT_STATUS, status, "Đợt thanh toán");
+/** A SENT contract whose signed copy the customer already sent in the chat: Sales have to record it (SF-UX-24). */
+export const SIGNED_COPY_SENT: StatusMeta = { label: "Chờ Sale xác nhận", tone: "info" };
 
-const MILESTONE: Record<string, string> = {
-  ON_SIGNING: "Khi ký hợp đồng",
-  BEFORE_DELIVERY: "Trước khi giao",
-  AFTER_DELIVERY: "Sau khi giao",
-};
-export const milestoneLabel = (milestone: string) => MILESTONE[milestone] ?? "Theo hợp đồng";
+export const installmentStatusMeta = (status: string | null | undefined, overdue: boolean) =>
+  installmentStatusOf(status, overdue);
+
+export const milestoneLabel = (milestone: string) => milestoneLabelOf(milestone);
 
 /** ORDER_STATUS card: what happened to a shipment (BE shipmentChanged). */
 const SHIPMENT_STATUS: Record<string, StatusMeta> = {

@@ -30,7 +30,7 @@ const COPY = {
   cancel: {
     title: "Huỷ đơn hàng?",
     description:
-      "Đơn hàng sẽ bị huỷ và không thể khôi phục. Nếu bạn đã thanh toán, vui lòng liên hệ CSKH để được hỗ trợ.",
+      "Đơn hàng sẽ bị huỷ và không thể khôi phục. Nếu bạn đã thanh toán, vui lòng chat với Sale để được hỗ trợ.",
     confirm: "Xác nhận huỷ",
     pending: "Đang huỷ...",
   },

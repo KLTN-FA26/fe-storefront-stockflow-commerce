@@ -8,12 +8,16 @@ import { ApiError } from "@/lib/api/error";
 import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/design-seed";
 import { registerMockRoute } from "@/lib/api/mock-adapter";
 import { settle } from "@/test/fake-backend";
+import { pickDate } from "@/test/date-picker";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { getDesign } from "../api";
 import { DesignQuoteSummary, RequestQuoteButton } from "../components/design-quote-request";
 import type { Design } from "../types";
 import { designBackend, type DesignBackend } from "./design-backend";
+
+/** A day the picker offers (its years reach five ahead) and the "not in the past" rule allows. */
+const FUTURE_DAY = `${new Date().getFullYear() + 1}-12-31`;
 
 // "Yêu cầu báo giá" on an approved design (docs 12 §4.8.23) over the design mock: the open request
 // on its card, the dialog's checks, the answer for a new request (201) and for a changed one (200),
@@ -44,9 +48,16 @@ function renderDesign(design: Design) {
   );
 }
 
-async function openDialog(user: ReturnType<typeof userEvent.setup>, design: Design) {
+/** "Yêu cầu báo giá …", or "Sửa yêu cầu báo giá …" while the design has a request open. */
+async function openDialog(
+  user: ReturnType<typeof userEvent.setup>,
+  design: Design,
+  label = design.status === "APPROVED" && design.id === approved
+    ? "Sửa yêu cầu báo giá"
+    : "Yêu cầu báo giá",
+) {
   await user.click(
-    await screen.findByRole("button", { name: `Yêu cầu báo giá ${design.name}` }, FIRST_READ),
+    await screen.findByRole("button", { name: `${label} ${design.name}` }, FIRST_READ),
   );
   return screen.findByRole("dialog");
 }
@@ -104,7 +115,7 @@ describe("an approved design's quote request", () => {
     expect(screen.queryByRole("button", { name: /Yêu cầu báo giá/ })).not.toBeInTheDocument();
   });
 
-  it("checks the fields before sending: cartons required and a whole number in range, no past date", async () => {
+  it("checks the fields before sending: cartons required and a whole number in range, no past day offered", async () => {
     const user = userEvent.setup();
     settle(await backend.store.simulateApprove(pending));
     const design = await getDesign(pending);
@@ -115,16 +126,20 @@ describe("an approved design's quote request", () => {
     expect(await within(dialog).findByText("Nhập số thùng mong muốn.")).toBeInTheDocument();
 
     await user.type(within(dialog).getByLabelText("Số thùng mong muốn"), "0");
-    await user.type(
-      within(dialog).getByLabelText("Ngày giao mong muốn (không bắt buộc)"),
-      "2020-01-01",
-    );
     await user.click(within(dialog).getByRole("button", { name: "Gửi yêu cầu" }));
     expect(await within(dialog).findByText("Số thùng từ 1 đến 1.000.000.")).toBeInTheDocument();
-    expect(
-      within(dialog).getByText("Ngày giao mong muốn phải từ hôm nay trở đi."),
-    ).toBeInTheDocument();
     expect(backend.post).not.toHaveBeenCalled();
+    // The day is a dd/MM/yyyy picker (SF-UX-3) that does not offer a day before today.
+    const date = within(dialog).getByLabelText("Ngày giao mong muốn (không bắt buộc)");
+    expect(date).toHaveTextContent("Chọn ngày");
+    await user.click(date);
+    const today = screen.getAllByRole("gridcell").find((c) => c.hasAttribute("data-today"));
+    const before = today?.previousElementSibling;
+    if (before && !before.hasAttribute("data-outside")) {
+      expect(before.querySelector("button")).toBeDisabled();
+    }
+    expect(today?.querySelector("button")).toBeEnabled();
+    await user.keyboard("{Escape}");
     // Only a suggestion: the hint says so.
     expect(within(dialog).getByText(/Chỉ là gợi ý/)).toBeInTheDocument();
   });
@@ -137,9 +152,10 @@ describe("an approved design's quote request", () => {
     const dialog = await openDialog(user, design);
 
     await user.type(within(dialog).getByLabelText("Số thùng mong muốn"), "50");
-    await user.type(
+    await pickDate(
+      user,
       within(dialog).getByLabelText("Ngày giao mong muốn (không bắt buộc)"),
-      "2099-12-31",
+      FUTURE_DAY,
     );
     await user.click(within(dialog).getByRole("button", { name: "Gửi yêu cầu" }));
 
@@ -150,13 +166,13 @@ describe("an approved design's quote request", () => {
         FIRST_READ,
       ),
     ).toBeInTheDocument();
-    expect(within(dialog).getByRole("link", { name: "Mở chat" })).toHaveAttribute(
+    expect(within(dialog).getByRole("link", { name: "Chat với Sale" })).toHaveAttribute(
       "href",
       `/chat/new?kind=DESIGN&id=${pending}`,
     );
     expect(backend.post).toHaveBeenCalledWith(`/designs/${pending}/quote-requests`, {
       cartons: 50,
-      desiredDeliveryDate: "2099-12-31",
+      desiredDeliveryDate: FUTURE_DAY,
     });
     // The card follows once the dialog is closed: the request is the one it shows now.
     await user.click(within(dialog).getByRole("button", { name: "Đóng" }));
@@ -181,7 +197,7 @@ describe("an approved design's quote request", () => {
     expect(
       await within(dialog).findByText("Đã cập nhật yêu cầu.", undefined, FIRST_READ),
     ).toBeInTheDocument();
-    expect(within(dialog).getByRole("link", { name: "Mở chat" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("link", { name: "Chat với Sale" })).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByText("200 thùng").length).toBeGreaterThan(0));
   });
 
@@ -244,6 +260,31 @@ describe("an approved design's quote request", () => {
     ).toBeInTheDocument();
   });
 
+  it("offers to change, not to file again, while a request is open (the BE keeps one per design)", async () => {
+    const design = await getDesign(approved);
+    renderDesign(design);
+    await screen.findByText("120 thùng", undefined, FIRST_READ);
+    const button = await screen.findByRole(
+      "button",
+      { name: `Sửa yêu cầu báo giá ${design.name}` },
+      FIRST_READ,
+    );
+    expect(button).toHaveAttribute("data-variant", "outline");
+    expect(screen.queryByRole("button", { name: `Yêu cầu báo giá ${design.name}` })).toBeNull();
+  });
+
+  it("is the filled primary action of an approved design with no request open", async () => {
+    settle(await backend.store.simulateApprove(pending));
+    const design = await getDesign(pending);
+    renderDesign(design);
+    const button = await screen.findByRole(
+      "button",
+      { name: `Yêu cầu báo giá ${design.name}` },
+      FIRST_READ,
+    );
+    expect(button).toHaveAttribute("data-variant", "default");
+  });
+
   it("is not offered without design-quote-requests:CREATE", async () => {
     registerMockRoute("GET", "/identity/me/permissions", () => ({
       status: 200,
@@ -262,7 +303,7 @@ describe("an approved design's quote request", () => {
     // The card still shows the request; only asking is gated.
     expect(await screen.findByText("120 thùng", undefined, FIRST_READ)).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: /Yêu cầu báo giá/ })).not.toBeInTheDocument(),
+      expect(screen.queryByRole("button", { name: /yêu cầu báo giá/i })).not.toBeInTheDocument(),
     );
   });
 });

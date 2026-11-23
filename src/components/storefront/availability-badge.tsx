@@ -12,9 +12,9 @@ const labels = {
 } as const;
 
 const classNames = {
-  "in-stock": "bg-positive/10 text-positive",
-  "low-stock": "bg-warning/10 text-warning",
-  "out-of-stock": "bg-danger/10 text-danger",
+  "in-stock": "bg-positive/10 text-positive-ink",
+  "low-stock": "bg-warning/10 text-warning-ink",
+  "out-of-stock": "bg-danger/10 text-danger-ink",
 } as const;
 
 export function AvailabilityBadge({ status, quantity }: AvailabilityBadgeProps) {

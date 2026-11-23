@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/error";
 import { MOCK_DESIGN_IDS } from "@/lib/api/mock-fixtures/design-seed";
 import { settle } from "@/test/fake-backend";
+import { pickDate } from "@/test/date-picker";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import {
@@ -16,6 +17,9 @@ import {
 } from "../api";
 import { ProjectQuoteSection } from "../components/project-quote-section";
 import { designBackend, type DesignBackend } from "./design-backend";
+
+/** A day the picker offers (its years reach five ahead) and the "not in the past" rule allows. */
+const FUTURE_DAY = `${new Date().getFullYear() + 1}-12-31`;
 
 // "Yêu cầu báo giá cả dự án" (docs 12 §4.11) on the project page, over the design mock: one row per
 // APPROVED design, cartons per chosen design and one shared date, the body sent, a refusal of a line
@@ -52,10 +56,11 @@ async function renderSection(projectId: string) {
   return project;
 }
 
-const openDialog = async (user: ReturnType<typeof userEvent.setup>) => {
-  await user.click(
-    await screen.findByRole("button", { name: "Yêu cầu báo giá cả dự án" }, FIRST_READ),
-  );
+const openDialog = async (
+  user: ReturnType<typeof userEvent.setup>,
+  name = "Yêu cầu báo giá cả dự án",
+) => {
+  await user.click(await screen.findByRole("button", { name }, FIRST_READ));
   return screen.findByRole("dialog");
 };
 
@@ -79,9 +84,10 @@ describe("ProjectQuoteSection", () => {
 
     await user.click(within(dialog).getByLabelText(/Ly cà phê Nhà Mình 12oz/));
     await user.type(within(dialog).getByLabelText("Số thùng mong muốn"), "40");
-    await user.type(
+    await pickDate(
+      user,
       within(dialog).getByLabelText("Ngày giao mong muốn chung (không bắt buộc)"),
-      "2099-12-31",
+      FUTURE_DAY,
     );
     await user.click(within(dialog).getByRole("button", { name: "Gửi yêu cầu" }));
 
@@ -92,13 +98,13 @@ describe("ProjectQuoteSection", () => {
         FIRST_READ,
       ),
     ).toBeInTheDocument();
-    expect(within(dialog).getByRole("link", { name: "Mở chat" })).toHaveAttribute(
+    expect(within(dialog).getByRole("link", { name: "Chat với Sale" })).toHaveAttribute(
       "href",
       `/chat/new?kind=DESIGN_PROJECT&id=${id}`,
     );
     expect(backend.post).toHaveBeenCalledWith(`/design-projects/${id}/quote-requests`, {
       lines: [{ designId: approved, cartons: 40 }],
-      desiredDeliveryDate: "2099-12-31",
+      desiredDeliveryDate: FUTURE_DAY,
     });
 
     await user.click(within(dialog).getByRole("button", { name: "Đóng" }));
@@ -115,7 +121,8 @@ describe("ProjectQuoteSection", () => {
     await renderSection(id);
     await screen.findByText("10 thùng", undefined, FIRST_READ);
 
-    const dialog = await openDialog(user);
+    // An open request is changed, not doubled: the button says so.
+    const dialog = await openDialog(user, "Sửa yêu cầu báo giá cả dự án");
     const cartons = within(dialog).getByLabelText("Số thùng mong muốn");
     expect(cartons).toHaveValue(10);
     await user.clear(cartons);

@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 
 import { Alert } from "@/components/shared";
 import { Button } from "@/components/ui/button";
@@ -37,7 +37,7 @@ import {
 } from "./quote-request-parts";
 
 type Props = {
-  design: Pick<Design, "id" | "name">;
+  design: Pick<Design, "id" | "name"> & Partial<Pick<Design, "unitsPerCarton">>;
   /** The request still open: the form starts from it, and asking changes it (200). */
   current: DesignQuoteRequest | null;
   onClose: () => void;
@@ -47,6 +47,7 @@ type Props = {
 function QuoteRequestForm({ design, current, onClose }: Props) {
   const ask = useRequestDesignQuote(design.id);
   const {
+    control,
     register,
     handleSubmit,
     setError,
@@ -58,6 +59,8 @@ function QuoteRequestForm({ design, current, onClose }: Props) {
       desiredDeliveryDate: current?.desiredDeliveryDate ?? "",
     },
   });
+
+  const cartons = useWatch({ control, name: "cartons" });
 
   const submit = handleSubmit((input) =>
     ask.mutate(input, {
@@ -104,9 +107,12 @@ function QuoteRequestForm({ design, current, onClose }: Props) {
       </DialogHeader>
       <QuoteRequestFields
         register={register}
+        control={control}
         errors={errors}
         idPrefix={`quote-${design.id}`}
         disabled={ask.isPending}
+        unitsPerCarton={design.unitsPerCarton}
+        cartons={cartons}
       />
       {error && !onFields ? (
         <div role="alert">
@@ -139,7 +145,7 @@ function QuoteRequestForm({ design, current, onClose }: Props) {
 
 /**
  * "Yêu cầu báo giá" on an APPROVED design (docs 12 §4.8.23): the cartons wished for (a suggestion)
- * and, if any, a delivery date. Sent, it says so and offers "Mở chat"; a refusal is worded by the BE,
+ * and, if any, a delivery date. Sent, it says so and offers "Chat với Sale"; a refusal is worded by the BE,
  * under its field when it names one. A customer who is not active cannot ask again.
  */
 export function QuoteRequestDialog({

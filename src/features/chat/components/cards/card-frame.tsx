@@ -12,13 +12,22 @@ interface CardFrameProps {
   /** What kind of document, e.g. "Báo giá". */
   eyebrow: string;
   title: string;
+  /** A document number (mono, the default) or a name in plain text. */
+  titleMono?: boolean;
   status?: StatusMeta | null | undefined;
   children: ReactNode;
   footer?: ReactNode;
 }
 
 /** The shell every chat card shares: kind, name and status on top, actions at the bottom. */
-export function CardFrame({ eyebrow, title, status, children, footer }: CardFrameProps) {
+export function CardFrame({
+  eyebrow,
+  title,
+  titleMono = true,
+  status,
+  children,
+  footer,
+}: CardFrameProps) {
   return (
     <section
       aria-label={`${eyebrow}: ${title}`}
@@ -27,7 +36,12 @@ export function CardFrame({ eyebrow, title, status, children, footer }: CardFram
       <header className="border-border-default flex items-start justify-between gap-3 border-b px-[var(--card-pad)] py-3">
         <div className="min-w-0">
           <p className="text-ink-tertiary text-xs font-medium">{eyebrow}</p>
-          <h3 className="text-ink-primary font-mono font-semibold break-words tabular-nums">
+          <h3
+            className={cn(
+              "text-ink-primary font-semibold break-words",
+              titleMono && "font-mono tabular-nums",
+            )}
+          >
             {title}
           </h3>
         </div>

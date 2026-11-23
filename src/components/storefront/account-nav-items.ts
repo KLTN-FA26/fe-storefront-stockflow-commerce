@@ -1,4 +1,14 @@
-import { FileText, Lock, MapPin, Package, Undo2, UserRound, type LucideIcon } from "lucide-react";
+import {
+  FileText,
+  Landmark,
+  Lock,
+  MapPin,
+  Package,
+  Palette,
+  Undo2,
+  UserRound,
+  type LucideIcon,
+} from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
 
@@ -22,6 +32,13 @@ export const accountNavItems: readonly AccountNavItem[] = [
     exact: true,
   },
   {
+    // Outside the account pages, but it is where a customer's work starts (WF-02 D1).
+    href: STORE_ROUTES.design.list,
+    label: "Thiết kế của tôi",
+    description: "Thiết kế, gửi duyệt & yêu cầu báo giá",
+    icon: Palette,
+  },
+  {
     href: STORE_ROUTES.account.quotes.list,
     label: "Báo giá",
     description: "Báo giá Sale gửi cho bạn",
@@ -32,6 +49,12 @@ export const accountNavItems: readonly AccountNavItem[] = [
     label: "Đơn hàng",
     description: "Theo dõi & lịch sử mua",
     icon: Package,
+  },
+  {
+    href: STORE_ROUTES.account.payments,
+    label: "Thanh toán",
+    description: "Các đợt thanh toán theo hợp đồng",
+    icon: Landmark,
   },
   {
     href: STORE_ROUTES.account.returns.list,

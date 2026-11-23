@@ -81,7 +81,7 @@ describe("DESIGN_STATUS_META (spec §3.1)", () => {
       "Thiết kế được lưu tự động. Khi xong, bấm Gửi duyệt.",
     );
     expect(DESIGN_STATUS_META.PENDING_REVIEW.hint).toBe(
-      "Thiết kế đang được duyệt. Bạn sẽ nhận kết quả tại đây.",
+      "Thiết kế đang chờ duyệt. Bạn nhận thông báo khi có kết quả.",
     );
     expect(DESIGN_STATUS_META.APPROVED.hint).toBe(
       "Thiết kế đã duyệt và không sửa được nữa. Muốn thay đổi, hãy tạo bản sửa.",

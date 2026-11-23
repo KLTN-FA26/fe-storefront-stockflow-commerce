@@ -2,11 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useQueryStates } from "nuqs";
-import { Plus } from "lucide-react";
 
 import { APP_ROUTES, STORE_ROUTES } from "@/constants";
 import { PageShell } from "@/components/storefront/layout";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 
@@ -20,6 +18,7 @@ import { useDesignRevision } from "./design-list-revision";
 import { DesignListSkeleton, RevisionError } from "./design-list-states";
 import { TAB_IDS, TABS, designListUrlState, toTab } from "./design-list-tabs";
 import { LauncherSignIn } from "./launcher-states";
+import { NewDesignAction } from "./new-design-action";
 import { NewDesignDialog, type DesignableCatalogue } from "./new-design-dialog";
 
 /** Twelve divides the one-, two- and three-column grids evenly. */
@@ -83,16 +82,7 @@ function SignedInDesignList({ catalogue }: DesignListScreenProps) {
       breadcrumbs={CRUMBS}
       title="Thiết kế của tôi"
       subtitle="Tiếp tục chỉnh sửa, gửi duyệt và theo dõi các thiết kế của bạn."
-      actions={
-        <Button
-          type="button"
-          className="min-h-11 rounded-[var(--r-md)] px-5"
-          onClick={nextAction(() => setCreating(true))}
-        >
-          <Plus aria-hidden className="size-4" />
-          Thiết kế mới
-        </Button>
-      }
+      actions={<NewDesignAction onCreate={nextAction(() => setCreating(true))} />}
     >
       <DesignSectionSwitch current="designs" />
       {draftCount.data ? (

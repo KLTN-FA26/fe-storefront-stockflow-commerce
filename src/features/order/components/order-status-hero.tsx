@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 
 import { HOLD_REASON_LABEL } from "../labels";
-import { ORDER_DISPLAY_META, orderProgressOf, type OrderDisplayGroup } from "../lifecycle";
+import { ORDER_DISPLAY_META, type OrderDisplayGroup, type ProgressStep } from "../lifecycle";
 import type { HoldReason } from "../types";
 import { ORDER_TONE_CLASSES } from "./order-status-badge";
 import { OrderStepper } from "./order-stepper";
@@ -40,19 +40,27 @@ const GROUP_ICON: Record<OrderDisplayGroup, LucideIcon> = {
   UNKNOWN: Hourglass,
 };
 
-/** One place that says where the order is and what happens next, replacing badge + progress bar. */
+/**
+ * One place that says where the order is, what the customer does next (SF-UX-29) and how far it has
+ * come, replacing badge + progress bar.
+ */
 export function OrderStatusHero({
   group,
   holdReason,
+  progress,
+  action,
 }: {
   /** `displayGroup(order)`: the status group, or COMPLETED. */
   group: OrderDisplayGroup;
   /** Why an ON_HOLD order waits (BE holdReasonPublic); replaces the generic hint. */
   holdReason?: HoldReason | null | undefined;
+  /** `orderProgress(...)`; null leaves the stepper out. */
+  progress: readonly ProgressStep[] | null;
+  /** The state's own next step (sign, pay), when there is one. */
+  action?: React.ReactNode;
 }) {
   const { label, tone, hint } = ORDER_DISPLAY_META[group];
   const Icon = GROUP_ICON[group];
-  const done = orderProgressOf(group);
 
   return (
     <section
@@ -77,7 +85,8 @@ export function OrderStatusHero({
           </p>
         </div>
       </div>
-      {done !== null && <OrderStepper done={done} />}
+      {action}
+      {progress !== null && <OrderStepper steps={progress} />}
     </section>
   );
 }

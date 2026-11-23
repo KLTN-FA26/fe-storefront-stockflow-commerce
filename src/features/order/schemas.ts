@@ -184,6 +184,9 @@ export const orderLineDtoSchema = z.object({
   /** 4B-2 (14 BR-08): cartons ordered; `quantity` is cartons × unitsPerCarton pieces. */
   cartons: z.number().int().nullish(),
   unitsPerCarton: z.number().int().nullish(),
+  // R5-3, optional: the design printed on it and a short-lived preview URL (null when none).
+  designName: z.string().nullish(),
+  previewUrl: z.string().nullish(),
   // Only a line printed to the customer's design carries production progress.
   production: z
     .object({ state: productionStateSchema, goodQuantity: z.number().int().nonnegative() })
@@ -331,6 +334,9 @@ export const orderDtoSchema = z.object({
   // Set only while the order is ON_HOLD.
   holdReasonPublic: holdReasonSchema.nullish(),
   total: z.number().nonnegative(),
+  // Goods and fees without VAT, and the VAT: the split of `total` (absent on an older BE).
+  netAmount: z.number().nonnegative().nullish(),
+  taxAmount: z.number().nonnegative().nullish(),
   currency: currencySchema,
   placedAt: instantSchema,
   // Absent when the customer never asked to cancel.

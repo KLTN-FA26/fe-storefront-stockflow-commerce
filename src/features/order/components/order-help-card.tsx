@@ -4,6 +4,8 @@ import { Hourglass, MessageCircle, Undo2 } from "lucide-react";
 import { STORE_ROUTES } from "@/constants";
 import { Alert } from "@/components/shared";
 import { Button } from "@/components/ui/button";
+import { RETURN_WINDOW_DAYS, lastReturnDay } from "@/lib/domain/return-window";
+import { formatDate } from "@/lib/format/date";
 
 import { allowedCancellation, isCancellationRequestable, isOrderTerminal } from "../lifecycle";
 import { requestReason } from "../labels";
@@ -20,6 +22,10 @@ interface OrderHelpCardProps {
   requestPending: boolean;
   /** Where to open a return, when the order is delivered, in its window and the account may (17 §4.10). */
   returnHref?: string | null | undefined;
+  /** The contract's complaint period in days, else the BE default (SF-UX-34). */
+  windowDays?: number | undefined;
+  /** When the goods were delivered, for the last day a return can be asked. */
+  deliveredAt?: string | undefined;
 }
 
 type CancelMode = "cancel" | "request" | null;
@@ -35,31 +41,40 @@ function cancellationOf(order: Order, requestPending: boolean): CancelMode {
   return requestPending && isCancellationRequestable(order.status) ? "request" : null;
 }
 
+/**
+ * "… trong 10 ngày kể từ ngày giao (đến hết 03/12/2026)": the contract's own period, not a fixed
+ * seven days (SF-UX-34), and the last day when the delivery day is known.
+ */
+export function returnWindowText(days: number, deliveredAt: string | undefined): string {
+  const until = deliveredAt
+    ? ` (đến hết ${formatDate(lastReturnDay(deliveredAt, days).toISOString())})`
+    : "";
+  return `Hàng nhận được bị lỗi, hỏng hoặc giao sai? Gửi yêu cầu trả hàng kèm ảnh trong ${days} ngày kể từ ngày giao${until}.`;
+}
+
 function helpText(
   order: Order,
   mode: CancelMode,
   possible: CancelMode,
   mayCancel: boolean,
-  mayReturn: boolean,
+  returnWindow: { days: number; deliveredAt: string | undefined } | null,
 ) {
-  if (mayReturn) {
-    return "Hàng nhận được bị lỗi, hỏng hoặc giao sai? Gửi yêu cầu trả hàng kèm ảnh trong 7 ngày kể từ ngày giao.";
-  }
+  if (returnWindow) return returnWindowText(returnWindow.days, returnWindow.deliveredAt);
   if (mode === "cancel") {
-    return "Bạn có thể huỷ đơn khi đơn chưa chuyển cho kho hoặc sản xuất, hoặc chat với chúng tôi nếu cần đổi thông tin.";
+    return "Bạn có thể huỷ đơn khi đơn chưa chuyển cho kho hoặc sản xuất, hoặc chat với Sale nếu cần đổi thông tin.";
   }
   if (mode === "request") return requestReason(order.status, order.holdReasonPublic).help;
   if (possible !== null) {
     return mayCancel
-      ? "Có thắc mắc về đơn này? Đội chăm sóc khách hàng luôn sẵn sàng hỗ trợ."
-      : "Tài khoản của bạn hiện không thể tự huỷ đơn. Hãy chat với chúng tôi để được hỗ trợ.";
+      ? "Có thắc mắc về đơn này? Sale phụ trách đơn luôn sẵn sàng hỗ trợ qua chat."
+      : "Tài khoản của bạn hiện không thể tự huỷ đơn. Hãy chat với Sale để được hỗ trợ.";
   }
   if (order.status === ORDER_STATUS_UNKNOWN) {
-    return "Nếu bạn cần huỷ hoặc thay đổi đơn này, hãy chat với chúng tôi.";
+    return "Nếu bạn cần huỷ hoặc thay đổi đơn này, hãy chat với Sale.";
   }
   return isOrderTerminal(order.status)
-    ? "Có thắc mắc về đơn này? Đội chăm sóc khách hàng luôn sẵn sàng hỗ trợ."
-    : "Đơn đã được đóng gói hoặc giao đi nên không thể huỷ. Nếu cần trả hàng, hãy chat với chúng tôi.";
+    ? "Có thắc mắc về đơn này? Sale phụ trách đơn luôn sẵn sàng hỗ trợ qua chat."
+    : "Đơn đã được đóng gói hoặc giao đi nên không thể huỷ. Nếu cần trả hàng, hãy chat với Sale.";
 }
 
 /**
@@ -73,6 +88,8 @@ export function OrderHelpCard({
   mayCancel,
   requestPending,
   returnHref,
+  windowDays = RETURN_WINDOW_DAYS,
+  deliveredAt,
 }: OrderHelpCardProps) {
   const possible = cancellationOf(order, requestPending);
   const mode = mayCancel ? possible : null;
@@ -90,7 +107,13 @@ export function OrderHelpCard({
           Cần hỗ trợ?
         </h2>
         <p className="text-ink-secondary mt-1 text-sm">
-          {helpText(order, mode, possible, mayCancel, !!returnHref)}
+          {helpText(
+            order,
+            mode,
+            possible,
+            mayCancel,
+            returnHref ? { days: windowDays, deliveredAt } : null,
+          )}
         </p>
       </div>
       {requestPending && mode === "request" ? (
@@ -112,16 +135,19 @@ export function OrderHelpCard({
           </Button>
         ) : null}
         <Button asChild className="min-h-11 rounded-[var(--r-md)] px-5">
-          <Link href={STORE_ROUTES.chat.list}>
+          <Link
+            href={STORE_ROUTES.chat.about("ORDER", order.orderId)}
+            aria-label={`Chat với Sale về đơn ${order.orderNumber}`}
+          >
             <MessageCircle aria-hidden className="mr-2 size-4" />
-            Chat với CSKH
+            Chat với Sale
           </Link>
         </Button>
         {mode && !(requestPending && mode === "request") ? (
           <Button
             type="button"
             variant="outline"
-            className="border-border-strong text-danger hover:bg-bg-muted min-h-11 rounded-[var(--r-md)] px-5"
+            className="border-border-strong text-danger-ink hover:bg-bg-muted min-h-11 rounded-[var(--r-md)] px-5"
             onClick={() => onCancel(mode)}
             aria-label={`${mode === "cancel" ? "Huỷ đơn hàng" : "Gửi yêu cầu huỷ đơn hàng"} ${order.orderNumber}`}
           >

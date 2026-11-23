@@ -6,6 +6,7 @@
  *  - nuqs (URL search params)
  *  - Toast
  *  - Auth session (added in Phase 0b)
+ *  - The tab's one STOMP socket (`RealtimeProvider`, chat realtime; off in mock mode)
  *  - Mock mode flags (read server-side from USE_MOCK / DESIGN_USE_MOCK, threaded via
  *    context — see `useIsMock`, `useIsDesignMock`)
  */
@@ -18,6 +19,7 @@ import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { makeQueryClient } from "@/lib/api/query-client";
 import { activateDesignMockAdapter, activateMockAdapter } from "@/lib/api/mock-adapter";
 import { registerSessionQueryClient } from "@/lib/auth/session";
+import { RealtimeProvider } from "@/lib/realtime";
 
 const MockModeContext = createContext(false);
 const DesignMockModeContext = createContext(false);
@@ -70,7 +72,9 @@ export function AppProviders({
     <MockModeContext.Provider value={isMock}>
       <DesignMockModeContext.Provider value={designMocked}>
         <QueryClientProvider client={queryClient}>
-          <NuqsAdapter>{children}</NuqsAdapter>
+          <RealtimeProvider enabled={!isMock}>
+            <NuqsAdapter>{children}</NuqsAdapter>
+          </RealtimeProvider>
         </QueryClientProvider>
       </DesignMockModeContext.Provider>
     </MockModeContext.Provider>

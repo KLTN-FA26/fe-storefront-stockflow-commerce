@@ -14,15 +14,15 @@ interface AlertProps {
 const TONE_CONFIG: Record<AlertTone, { icon: typeof Info; classes: string }> = {
   info: {
     icon: Info,
-    classes: "text-info bg-[color-mix(in_srgb,var(--info)_10%,transparent)] border-[color-mix(in_srgb,var(--info)_26%,transparent)]",
+    classes: "text-info-ink bg-[color-mix(in_srgb,var(--info)_10%,transparent)] border-[color-mix(in_srgb,var(--info)_26%,transparent)]",
   },
   warning: {
     icon: AlertTriangle,
-    classes: "text-warning bg-[color-mix(in_srgb,var(--warning)_10%,transparent)] border-[color-mix(in_srgb,var(--warning)_26%,transparent)]",
+    classes: "text-warning-ink bg-[color-mix(in_srgb,var(--warning)_10%,transparent)] border-[color-mix(in_srgb,var(--warning)_26%,transparent)]",
   },
   danger: {
     icon: AlertCircle,
-    classes: "text-danger bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] border-[color-mix(in_srgb,var(--danger)_26%,transparent)]",
+    classes: "text-danger-ink bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] border-[color-mix(in_srgb,var(--danger)_26%,transparent)]",
   },
 };
 

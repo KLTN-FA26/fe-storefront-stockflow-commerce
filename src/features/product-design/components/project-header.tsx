@@ -9,6 +9,8 @@ import { PROJECT_DESIGN_LIMIT } from "../project-schemas";
 import type { DesignProject } from "../types";
 import { ChatAboutButton } from "./chat-about-button";
 import { CloseProjectDialog } from "./close-project-dialog";
+import { useDeviceFit } from "./desktop-only-gate";
+import { DESIGN_NEEDS_COMPUTER } from "./new-design-action";
 import { ProjectStatusBadge } from "./project-status-badge";
 import { ProjectTitle } from "./project-title";
 
@@ -61,6 +63,13 @@ function GatedButton({
  */
 export function ProjectHeader({ project, actions, onCreate, onAdd }: Props) {
   const [closing, setClosing] = useState(false);
+  // A new design opens the studio, which needs a computer: a phone or tablet is told here, before
+  // the product dialog (SF-UX-8), not after choosing a product.
+  const unsupported = useDeviceFit() === "unsupported";
+  const createGate: Gate =
+    unsupported && actions.createDesign.allowed
+      ? { allowed: false, reason: DESIGN_NEEDS_COMPUTER }
+      : actions.createDesign;
   const open = project.status === "ACTIVE";
   return (
     <header className="space-y-4">
@@ -82,7 +91,7 @@ export function ProjectHeader({ project, actions, onCreate, onAdd }: Props) {
       {open ? (
         <div className="flex flex-wrap items-start gap-3">
           <GatedButton
-            gate={actions.createDesign}
+            gate={createGate}
             label="Tạo bản mới trong dự án"
             reasonId="project-create-reason"
             onClick={onCreate}

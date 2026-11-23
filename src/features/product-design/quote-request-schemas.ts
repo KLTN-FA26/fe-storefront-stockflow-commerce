@@ -18,6 +18,17 @@ const localDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ngày giao không h�
 /** BE `QuoteRequestStatus`: OPEN until the sales staff close it as answered (or the draft is deleted). */
 export const quoteRequestStatusSchema = z.enum(["OPEN", "CLOSED"]);
 
+/**
+ * How a closed request ended (R5-5, optional until the BE sends it): `QUOTED` when Sales answered it
+ * with a quote (`quoteId`, `quoteNumber`), `CLOSED_BY_STAFF` when they closed it without one. A
+ * value this build does not know reads as plainly closed.
+ */
+const closedOutcomeFields = {
+  closedOutcome: z.string().nullish(),
+  quoteId: beId().nullish(),
+  quoteNumber: z.string().nullish(),
+};
+
 /** `DesignQuoteRequestResponse`: the request and the design as it is NOW (16 BR-11). */
 export const designQuoteRequestDtoSchema = z.object({
   id: beId(),
@@ -36,6 +47,7 @@ export const designQuoteRequestDtoSchema = z.object({
   /** When it was first asked, not re-asked. */
   requestedAt: instant,
   closedAt: instant.nullish(),
+  ...closedOutcomeFields,
 });
 
 /** One design of a project request; the BE sorts the lines by design id, not by input order. */
@@ -56,6 +68,7 @@ export const projectQuoteRequestDtoSchema = z.object({
   status: quoteRequestStatusSchema,
   requestedAt: instant,
   closedAt: instant.nullish(),
+  ...closedOutcomeFields,
   lines: z.array(projectQuoteRequestLineDtoSchema),
 });
 

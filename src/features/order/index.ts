@@ -6,9 +6,9 @@ export {
   ORDER_DISPLAY_META,
   ORDER_STATUS_GROUP_META,
   displayGroup,
-  orderProgressOf,
+  orderProgress,
 } from "./lifecycle";
-export type { OrderDisplayGroup } from "./lifecycle";
+export type { OrderDisplayGroup, ProgressStep } from "./lifecycle";
 export { describeError } from "./errors";
 export { ORDER_STATUSES, ORDER_STATUS_GROUPS } from "./schemas";
 export type {

@@ -3,15 +3,19 @@ import { cn } from "@/lib/cn";
 import { Badge } from "@/components/ui/badge";
 import type { SemanticTone } from "@/lib/domain/types";
 
-/** Nền nhạt + chữ theo tone ngữ nghĩa (design-tokens: positive, info, warning…). */
+/**
+ * Tinted background + text per semantic tone: the one table every status badge reads (SF-UX-1). The
+ * text is the tone's darker `-ink` shade, since the tone itself on its own 10% tint fails WCAG 1.4.3
+ * (warning 2.66:1); every ink is >= 5:1 there, light and dark (see `globals.css`).
+ */
 export const TONE_BADGE_CLASSES: Record<SemanticTone, string> = {
-  positive: "bg-positive/10 text-positive",
-  info: "bg-info/10 text-info",
-  warning: "bg-warning/10 text-warning",
-  danger: "bg-danger/10 text-danger",
-  neutral: "bg-neutral/10 text-neutral",
+  positive: "bg-positive/10 text-positive-ink",
+  info: "bg-info/10 text-info-ink",
+  warning: "bg-warning/10 text-warning-ink",
+  danger: "bg-danger/10 text-danger-ink",
+  neutral: "bg-neutral/10 text-neutral-ink",
   muted: "bg-bg-muted text-ink-secondary",
-  special: "bg-special/10 text-special",
+  special: "bg-special/10 text-special-ink",
 };
 
 /**

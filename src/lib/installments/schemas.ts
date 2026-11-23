@@ -112,6 +112,8 @@ export const installmentTransferDtoSchema = z.object({
   // What to write as the transfer content.
   reference: z.string().min(1),
   dueDate: isoDate.nullish(),
+  // R5-9, optional: the EMVCo / NAPAS VietQR payload, the same the chat transfer card draws.
+  vietQr: z.string().min(1).nullish(),
 });
 
 export const installmentPageDtoSchema = pageResponseSchema(installmentDtoSchema);

@@ -31,5 +31,6 @@ export {
   INSTALLMENT_STATUS_LABEL,
   installmentStatusMeta,
   installmentTitle,
+  isDueNow,
   isPayable,
 } from "./selectors";

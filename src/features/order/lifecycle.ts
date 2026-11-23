@@ -1,3 +1,4 @@
+import { ORDER_STATUS } from "@/lib/domain/status-map";
 import type { SemanticTone } from "@/lib/domain/types";
 
 import type { Order, OrderStatus, OrderStatusGroup } from "./types";
@@ -67,63 +68,52 @@ export const ORDER_STATUS_GROUP_META: Record<
   { label: string; tone: SemanticTone; hint: string }
 > = {
   AWAITING_CONTRACT: {
-    label: "Chờ ký hợp đồng",
-    tone: "warning",
+    ...ORDER_STATUS.AWAITING_CONTRACT,
     hint: "Hợp đồng mua bán đã được gửi. Đơn được xử lý khi hai bên ký hợp đồng.",
   },
   AWAITING_PAYMENT: {
-    label: "Chờ thanh toán",
-    tone: "warning",
-    hint: "Đơn sẽ được xử lý ngay khi bạn thanh toán.",
+    ...ORDER_STATUS.AWAITING_PAYMENT,
+    hint: "Đơn được xử lý sau khi kế toán ghi nhận khoản chuyển của bạn.",
   },
   UNDER_REVIEW: {
-    label: "Đang xem xét",
-    tone: "warning",
+    ...ORDER_STATUS.UNDER_REVIEW,
     hint: "Đơn đang được kiểm tra. Chúng tôi sẽ liên hệ bạn nếu cần thêm thông tin.",
   },
   CONFIRMED: {
-    label: "Đã xác nhận",
-    tone: "positive",
+    ...ORDER_STATUS.CONFIRMED,
     hint: "Chúng tôi đã xác nhận đơn và sắp bắt đầu chuẩn bị cho bạn.",
   },
   AWAITING_STOCK: {
-    label: "Đang chờ hàng",
-    tone: "info",
+    ...ORDER_STATUS.AWAITING_STOCK,
     hint: "Hàng của đơn đang được sản xuất và sẽ nhập kho trước khi giao cho bạn.",
   },
   IN_PRODUCTION: {
-    label: "Đang sản xuất",
-    tone: "info",
+    ...ORDER_STATUS.IN_PRODUCTION,
     hint: "Sản phẩm của bạn đang được sản xuất.",
   },
   PREPARING: {
-    label: "Đang chuẩn bị hàng",
-    tone: "info",
+    ...ORDER_STATUS.PREPARING,
     hint: "Kho đang lấy và đóng gói đơn hàng của bạn.",
   },
   SHIPPING: {
-    label: "Đang giao hàng",
-    tone: "info",
+    ...ORDER_STATUS.SHIPPING,
     hint: "Đơn đã rời kho và đang trên đường giao đến bạn.",
   },
   DELIVERED: {
-    label: "Đã giao hàng",
-    tone: "positive",
+    ...ORDER_STATUS.DELIVERED,
     hint: "Đơn đã được giao. Đơn hoàn tất khi hết hạn đổi trả và các đợt thanh toán đã đủ.",
   },
   // Apart from RETURNED: the goods are still with the customer while the return is decided.
   RETURN_REQUESTED: {
-    label: "Đang yêu cầu trả hàng",
-    tone: "warning",
+    ...ORDER_STATUS.RETURN_REQUESTED,
     hint: "Yêu cầu trả hàng của đơn đang được xử lý. Theo dõi từng bước trong mục Trả hàng.",
   },
-  CANCELLED: { label: "Đã huỷ", tone: "danger", hint: "Đơn đã bị huỷ và sẽ không được giao." },
-  RETURNED: { label: "Đã trả hàng", tone: "special", hint: "Đơn hàng đã được trả lại." },
+  CANCELLED: { ...ORDER_STATUS.CANCELLED, hint: "Đơn đã bị huỷ và sẽ không được giao." },
+  RETURNED: { ...ORDER_STATUS.RETURNED, hint: "Đơn hàng đã được trả lại." },
   // A group newer than this FE (see ORDER_STATUS_GROUP_UNKNOWN): neutral wording.
   UNKNOWN: {
-    label: "Đang xử lý",
-    tone: "info",
-    hint: "Đơn hàng đang được xử lý. Hãy chat với chúng tôi nếu bạn cần hỗ trợ.",
+    ...ORDER_STATUS.UNKNOWN,
+    hint: "Đơn hàng đang được xử lý. Hãy chat với Sale nếu bạn cần hỗ trợ.",
   },
 };
 
@@ -140,8 +130,7 @@ export const ORDER_DISPLAY_META: Record<
 > = {
   ...ORDER_STATUS_GROUP_META,
   COMPLETED: {
-    label: "Hoàn tất",
-    tone: "positive",
+    ...ORDER_STATUS.COMPLETED,
     hint: "Đơn đã hoàn tất: hết hạn đổi trả và các đợt thanh toán đã đủ.",
   },
 };
@@ -150,34 +139,67 @@ export const displayGroup = (order: Pick<Order, "status" | "statusGroup">): Orde
   order.status === "COMPLETED" ? "COMPLETED" : order.statusGroup;
 
 /**
- * Fulfilment progress derived from the status group alone — the BE order has no per-status timestamps.
- * `done` is how many steps are complete; CANCELLED/RETURNED leave the happy path (null).
+ * The order's progress as the B2B process runs (SF-UX-30): contract, first installment, production,
+ * delivery, done. Derived from the status group and whether the first installment is paid — the BE
+ * order has no per-step timestamps. CANCELLED / RETURNED leave the happy path, and a group newer than
+ * this FE has no known place on it: no stepper (null).
  */
-export const ORDER_PROGRESS_STEPS = [
-  { id: "placed", label: "Đặt hàng" },
-  { id: "paid", label: "Thanh toán" },
-  { id: "fulfilment", label: "Chuẩn bị" },
-  { id: "shipping", label: "Đang giao" },
-  { id: "received", label: "Đã nhận" },
-] as const;
+export type ProgressStepId = "contract" | "firstPayment" | "production" | "delivery" | "done";
+/** `owed`: a step the order has moved past while it is still unpaid (the first installment). */
+export type ProgressState = "done" | "current" | "owed" | "todo";
+export interface ProgressStep {
+  id: ProgressStepId;
+  label: string;
+  state: ProgressState;
+}
 
-const DONE_STEPS: Record<OrderDisplayGroup, number | null> = {
-  AWAITING_CONTRACT: 1,
-  AWAITING_STOCK: 2,
+const PROGRESS_STEPS: readonly { id: ProgressStepId; label: string }[] = [
+  { id: "contract", label: "Hợp đồng" },
+  { id: "firstPayment", label: "Thanh toán đợt đầu" },
+  { id: "production", label: "Sản xuất" },
+  { id: "delivery", label: "Giao hàng" },
+  { id: "done", label: "Hoàn tất" },
+];
+
+/** Index of the current step per group; COMPLETED is past the last one. */
+const CURRENT_STEP: Record<OrderDisplayGroup, number | null> = {
+  AWAITING_CONTRACT: 0,
   AWAITING_PAYMENT: 1,
   UNDER_REVIEW: 1,
   CONFIRMED: 2,
+  AWAITING_STOCK: 2,
   IN_PRODUCTION: 2,
-  PREPARING: 2,
+  PREPARING: 3,
   SHIPPING: 3,
-  DELIVERED: 5,
+  DELIVERED: 4,
   // The goods reached the customer; a return of them is being decided.
-  RETURN_REQUESTED: 5,
-  COMPLETED: 5,
+  RETURN_REQUESTED: 4,
+  COMPLETED: PROGRESS_STEPS.length,
   CANCELLED: null,
   RETURNED: null,
-  // Unknown to this FE, so where it sits on the happy path is unknown too: no stepper.
   UNKNOWN: null,
 };
 
-export const orderProgressOf = (group: OrderDisplayGroup) => DONE_STEPS[group];
+/**
+ * @param firstInstallmentPaid whether the contract's first installment is paid; null while unknown
+ *   (no installments read yet). The payment step is never ticked unless it is known to be paid:
+ *   installments before and after delivery may still be owed (shown in the payment card instead).
+ */
+export function orderProgress(
+  group: OrderDisplayGroup,
+  firstInstallmentPaid: boolean | null,
+): ProgressStep[] | null {
+  let current = CURRENT_STEP[group];
+  if (current === null) return null;
+  // Under review after signing: past payment once the first installment is in.
+  if (group === "UNDER_REVIEW" && firstInstallmentPaid) current = 2;
+  const completed = group === "COMPLETED";
+  return PROGRESS_STEPS.map((step, index) => {
+    let state: ProgressState = index < current! ? "done" : index === current ? "current" : "todo";
+    if (step.id === "firstPayment" && state === "done" && !completed && !firstInstallmentPaid) {
+      state = "owed";
+    }
+    const label = step.id === "firstPayment" && state === "done" ? "Đã trả đợt 1" : step.label;
+    return { id: step.id, label, state };
+  });
+}

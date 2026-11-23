@@ -14,6 +14,13 @@ import { ORDER_DISPLAY_META, displayGroup } from "../lifecycle";
 import { ORDER_PAGE_SIZE, useMyOrders } from "../queries";
 import { OrderStatusBadge } from "./order-status-badge";
 import {
+  NEEDS_CUSTOMER_STATUSES,
+  OrderViewTabs,
+  OverdueOrders,
+  orderViewParser,
+} from "./orders-filter";
+import {
+  NoOrdersNeedYou,
   NoOrdersYet,
   OrderListSkeleton,
   OrderLoadError,
@@ -25,11 +32,14 @@ const pageParser = parseAsInteger.withDefault(1).withOptions({ history: "push", 
 
 export function OrdersScreen() {
   const [urlPage, setPage] = useQueryState("page", pageParser);
+  const [view, setView] = useQueryState("xem", orderViewParser);
+  const needsYou = view === "can-xu-ly";
   // Never send page < 0 to the BE, whatever the URL says.
   const page = Number.isInteger(urlPage) && urlPage >= 1 ? urlPage : 1;
   const { data, isPending, isPaused, isFetching, isPlaceholderData, error, refetch } = useMyOrders({
     page,
     size: ORDER_PAGE_SIZE,
+    ...(needsYou ? { statuses: NEEDS_CUSTOMER_STATUSES } : {}),
   });
 
   // Bring an out-of-range URL page back to a real one (replace, so Back skips the bad URL).
@@ -44,6 +54,15 @@ export function OrdersScreen() {
     <>
       <PageHeader title="Đơn hàng của tôi" subtitle="Theo dõi trạng thái và giao hàng." />
       <div className="mt-6 space-y-4">
+        <OrderViewTabs
+          view={view}
+          onChange={(next) => {
+            // A new view starts from its first page.
+            void setPage(null);
+            void setView(next === "tat-ca" ? null : next);
+          }}
+        />
+        {needsYou ? <OverdueOrders /> : null}
         {/* isPending, not isLoading: a paused fetch (offline, hidden tab) has no data and no error
             yet, and must not fall through to the "no orders" empty state. */}
         {isPending ? (
@@ -73,7 +92,11 @@ export function OrdersScreen() {
             )}
           </div>
         ) : !data || data.totalElements === 0 ? (
-          <NoOrdersYet />
+          needsYou ? (
+            <NoOrdersNeedYou onShowAll={() => void setView(null)} />
+          ) : (
+            <NoOrdersYet />
+          )
         ) : (
           <>
             {error && (

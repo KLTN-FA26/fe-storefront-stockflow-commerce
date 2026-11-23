@@ -6,6 +6,7 @@ import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error";
 import type { DesignMockStore } from "@/lib/api/mock-fixtures/design-store";
 import { settle } from "@/test/fake-backend";
+import { pickDate } from "@/test/date-picker";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { listDesignQuoteRequests } from "../api";
@@ -17,6 +18,9 @@ import { cup12oz, PNG_1x1, textEl } from "../engine/__tests__/fixtures";
 import type { Design } from "../types";
 import { designBackend, draftIn, STUDIO_PRODUCTS } from "./design-backend";
 import { TEST_FONTS } from "./fixtures";
+
+/** A day the picker offers (its years reach five ahead) and the "not in the past" rule allows. */
+const FUTURE_DAY = `${new Date().getFullYear() + 1}-12-31`;
 
 // The print file needs its colour profiles: jsdom serves no `public/` files.
 vi.mock(
@@ -31,7 +35,7 @@ vi.mock("next/navigation", () => ({
 // "Gửi duyệt và yêu cầu báo giá" (docs 12 §4.8.24) in the studio's submit dialog, over the design
 // mock: the choice next to the plain submission, its fields checked before anything is drawn, the
 // body of the request for review (`quoteRequest`), the BE's refusal of the request under its field
-// (the files already sent are sent again as they are), and the notice with "Mở chat" at the end.
+// (the files already sent are sent again as they are), and the notice with "Chat với Sale" at the end.
 // The PDFs are stand-ins, as in `submit-dialog.test.tsx`.
 vi.mock("../engine", async (importOriginal) => {
   const engine = await importOriginal<typeof import("../engine")>();
@@ -145,7 +149,7 @@ describe("Gửi duyệt và yêu cầu báo giá", () => {
     expect(post.mock.calls.filter(([url]) => String(url).includes("/artifacts"))).toEqual([]);
   });
 
-  it("sends `quoteRequest` with the request for review and ends on the notice with Mở chat", async () => {
+  it("sends `quoteRequest` with the request for review and ends on the notice with Chat với Sale", async () => {
     const user = userEvent.setup();
     const { store, post } = await designBackend();
     const id = await passingDraft(store);
@@ -154,9 +158,10 @@ describe("Gửi duyệt và yêu cầu báo giá", () => {
 
     await user.click(within(dialog).getByRole("radio", { name: /Gửi duyệt và yêu cầu báo giá/ }));
     await user.type(within(dialog).getByLabelText("Số thùng mong muốn"), "40");
-    await user.type(
+    await pickDate(
+      user,
       within(dialog).getByLabelText("Ngày giao mong muốn (không bắt buộc)"),
-      "2099-12-31",
+      FUTURE_DAY,
     );
     await user.click(within(dialog).getByRole("button", { name: "Gửi duyệt và yêu cầu báo giá" }));
 
@@ -167,14 +172,14 @@ describe("Gửi duyệt và yêu cầu báo giá", () => {
         SUBMISSION,
       ),
     ).toBeInTheDocument();
-    expect(within(dialog).getByRole("link", { name: "Mở chat" })).toHaveAttribute(
+    expect(within(dialog).getByRole("link", { name: "Chat với Sale" })).toHaveAttribute(
       "href",
       `/chat/new?kind=DESIGN&id=${id}`,
     );
     const [[, body]] = reviewPosts(post, id) as [[string, unknown]];
     expect(body).toEqual({
       version: expect.any(Number),
-      quoteRequest: { cartons: 40, desiredDeliveryDate: "2099-12-31" },
+      quoteRequest: { cartons: 40, desiredDeliveryDate: FUTURE_DAY },
     });
     expect((settle(await store.get(id)).data as Design).status).toBe("PENDING_REVIEW");
     expect(await listDesignQuoteRequests(id)).toEqual([
@@ -211,9 +216,10 @@ describe("Gửi duyệt và yêu cầu báo giá", () => {
 
     await user.click(within(dialog).getByRole("radio", { name: /Gửi duyệt và yêu cầu báo giá/ }));
     await user.type(within(dialog).getByLabelText("Số thùng mong muốn"), "40");
-    await user.type(
+    await pickDate(
+      user,
       within(dialog).getByLabelText("Ngày giao mong muốn (không bắt buộc)"),
-      "2099-12-31",
+      FUTURE_DAY,
     );
     await user.click(within(dialog).getByRole("button", { name: "Gửi duyệt và yêu cầu báo giá" }));
 
@@ -232,7 +238,8 @@ describe("Gửi duyệt và yêu cầu báo giá", () => {
     const drawnOnce = uploads();
 
     // Without a date this time: the files are not drawn again, the request goes with the design.
-    await user.clear(date);
+    await user.click(date);
+    await user.click(await screen.findByRole("button", { name: "Xoá ngày" }));
     await user.click(within(dialog).getByRole("button", { name: "Gửi duyệt và yêu cầu báo giá" }));
     expect(
       await within(dialog).findByText(

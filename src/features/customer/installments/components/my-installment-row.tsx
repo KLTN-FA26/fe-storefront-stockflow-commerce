@@ -1,27 +1,24 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
+import { ChevronDown } from "lucide-react";
 import { cn } from "cn";
 
+import { TONE_BADGE_CLASSES } from "@/components/storefront/tone-badge";
+import { InstallmentTransferSection } from "@/components/storefront/transfer-instructions";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { STORE_ROUTES } from "@/constants";
-import type { SemanticTone } from "@/lib/domain/types";
 import { formatDate } from "@/lib/format/date";
 import { formatMoney } from "@/lib/format/money";
 import {
   INSTALLMENT_MILESTONE_LABEL,
   installmentStatusMeta,
   installmentTitle,
+  isPayable,
   type Installment,
 } from "@/lib/installments";
-
-const TONE_CLASSES: Record<SemanticTone, string> = {
-  positive: "bg-positive/10 text-positive",
-  info: "bg-info/10 text-info",
-  warning: "bg-warning/10 text-warning",
-  danger: "bg-danger/10 text-danger",
-  neutral: "bg-neutral/10 text-neutral",
-  muted: "bg-bg-muted text-ink-secondary",
-  special: "bg-special/10 text-special",
-};
 
 function Cell({
   label,
@@ -38,7 +35,7 @@ function Cell({
       <dd
         className={cn(
           "tabular-nums",
-          strong ? "text-danger font-semibold" : "text-ink-primary font-medium",
+          strong ? "text-danger-ink font-semibold" : "text-ink-primary font-medium",
         )}
       >
         {value}
@@ -47,12 +44,49 @@ function Cell({
   );
 }
 
+/** "Chuyển khoản": the transfer details of an owing installment, asked from the BE when opened. */
+function TransferDisclosure({ installment }: { installment: Installment }) {
+  const [open, setOpen] = useState(false);
+  const panelId = `my-installment-transfer-${installment.installmentId}`;
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        aria-expanded={open}
+        aria-controls={panelId}
+        aria-label={`${open ? "Ẩn" : "Xem"} thông tin chuyển khoản ${installmentTitle(installment)}, đơn ${installment.orderNumber}`}
+        className="min-h-11 w-full justify-between rounded-[var(--r-md)] px-3 sm:w-auto sm:gap-3"
+        onClick={() => setOpen((value) => !value)}
+      >
+        {open ? "Ẩn thông tin chuyển khoản" : "Chuyển khoản"}
+        <ChevronDown
+          aria-hidden
+          className={cn("size-4 transition-transform", open && "rotate-180")}
+        />
+      </Button>
+      {open ? (
+        <div id={panelId}>
+          <InstallmentTransferSection installmentId={installment.installmentId} />
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 /**
  * One installment of the customer's contracts: which order and contract, what it is for, the money,
- * its due day and standing - an overdue one highlighted (overdue is a flag, WF-05 fix plan §8). The
- * order page holds the transfer details, so the row links there.
+ * its due day and standing - an overdue one highlighted (overdue is a flag, WF-05 fix plan §8). With
+ * `withTransfer` (the "Thanh toán" page, SF-UX-39) an owing one opens its transfer details in place;
+ * otherwise the order page holds them, and the row links there.
  */
-export function MyInstallmentRow({ installment }: { installment: Installment }) {
+export function MyInstallmentRow({
+  installment,
+  withTransfer = false,
+}: {
+  installment: Installment;
+  withTransfer?: boolean;
+}) {
   const money = (amount: number) => formatMoney(amount, installment.currency);
   const meta = installmentStatusMeta(installment);
   const overdue = installment.overdue;
@@ -77,7 +111,7 @@ export function MyInstallmentRow({ installment }: { installment: Installment }) 
           </p>
           <p className="text-ink-tertiary font-mono text-xs">HĐ {installment.contractNumber}</p>
         </div>
-        <Badge className={cn("h-7 rounded-full px-3 font-semibold", TONE_CLASSES[meta.tone])}>
+        <Badge className={cn("h-7 rounded-full px-3 font-semibold", TONE_BADGE_CLASSES[meta.tone])}>
           {meta.label}
         </Badge>
       </div>
@@ -91,6 +125,9 @@ export function MyInstallmentRow({ installment }: { installment: Installment }) 
           strong={overdue}
         />
       </dl>
+      {withTransfer && isPayable(installment) ? (
+        <TransferDisclosure installment={installment} />
+      ) : null}
     </li>
   );
 }

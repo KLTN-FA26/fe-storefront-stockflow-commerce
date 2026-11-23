@@ -1,6 +1,6 @@
-import type { OrderInstallments } from "@/lib/installments";
+import { isPayable, type Installment, type OrderInstallments } from "@/lib/installments";
 
-import type { DeliveryMode, Order, OrderTimelineEntry } from "./types";
+import type { Order, OrderTimelineEntry } from "./types";
 
 /**
  * The timeline as the customer reads it: one step per status group. The BE history has a row per
@@ -22,22 +22,6 @@ export function customerTimeline(entries: readonly OrderTimelineEntry[] | null |
     steps.push(entry);
   }
   return steps;
-}
-
-/**
- * The delivery modes the coordinator chose. The order-level mode wins when the BE sends it; else
- * the shipments' modes, once each, in shipment order (an older BE, or an order the BE has no mode
- * for). Empty when neither carries one: the page then says the order is awaiting coordination.
- */
-export function deliveryModes(order: Pick<Order, "shipments" | "deliveryMode">): DeliveryMode[] {
-  if (order.deliveryMode) return [order.deliveryMode];
-  const modes: DeliveryMode[] = [];
-  for (const shipment of order.shipments ?? []) {
-    if (shipment.deliveryMode && !modes.includes(shipment.deliveryMode)) {
-      modes.push(shipment.deliveryMode);
-    }
-  }
-  return modes;
 }
 
 /** An order whose invoices are all settled, or that will have none: no conditions to explain. */
@@ -108,4 +92,34 @@ export function paymentSummary(
     ],
     cancelledAndSettled: true,
   };
+}
+
+/** An installment that can be paid now: owing, and due or overdue (a NOT_DUE one may wait). */
+const isDueNow = (installment: Installment) =>
+  isPayable(installment) &&
+  (installment.overdue || installment.status === "DUE" || installment.status === "PARTIALLY_PAID");
+
+/**
+ * The installment the customer should pay next (SF-UX-29): the earliest due-now one, overdue first,
+ * then by its number. Null when nothing is due now.
+ */
+export function nextPayable(
+  plan: Pick<OrderInstallments, "installments"> | undefined,
+): Installment | null {
+  const due = (plan?.installments ?? []).filter(isDueNow);
+  due.sort((a, b) => Number(b.overdue) - Number(a.overdue) || a.seq - b.seq);
+  return due[0] ?? null;
+}
+
+/**
+ * Whether the contract's first installment is paid, for the stepper (SF-UX-30); null while no
+ * installment is known (no contract signed yet, or not loaded). A cancelled one does not count.
+ */
+export function firstInstallmentPaid(
+  plan: Pick<OrderInstallments, "installments"> | undefined,
+): boolean | null {
+  const first = [...(plan?.installments ?? [])]
+    .filter((installment) => installment.status !== "CANCELLED")
+    .sort((a, b) => a.seq - b.seq)[0];
+  return first ? first.status === "PAID" : null;
 }

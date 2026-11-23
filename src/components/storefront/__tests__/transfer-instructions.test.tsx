@@ -53,6 +53,29 @@ describe("TransferInstructionsBlock", () => {
     expect(screen.queryByText("Hạn thanh toán")).not.toBeInTheDocument();
   });
 
+  it("draws the VietQR when the BE sends one, and says what happens after the transfer", () => {
+    const { unmount } = renderWithProviders(
+      <TransferInstructionsBlock
+        transfer={{ ...transfer, vietQr: "00020101021238570010A000000727" }}
+      />,
+    );
+    expect(screen.getByRole("img", { name: "Mã VietQR chuyển khoản" })).toBeInTheDocument();
+    expect(screen.getByText(/kế toán đối chiếu sao kê và ghi nhận/)).toBeInTheDocument();
+    unmount();
+    renderWithProviders(<TransferInstructionsBlock transfer={transfer} />);
+    expect(screen.queryByRole("img", { name: "Mã VietQR chuyển khoản" })).not.toBeInTheDocument();
+  });
+
+  it("copies the amount as plain digits for a bank app", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    renderWithProviders(<TransferInstructionsBlock transfer={transfer} />);
+
+    await user.click(screen.getByRole("button", { name: "Sao chép số tiền" }));
+    expect(writeText).toHaveBeenCalledWith("3750000");
+  });
+
   it("copies the account number and the transfer content", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     // userEvent.setup() installs its own clipboard stub; replace it for this test.

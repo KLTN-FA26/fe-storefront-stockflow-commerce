@@ -3,7 +3,6 @@ import type { SemanticTone } from "@/lib/domain/types";
 import type {
   CancellationReasonCode,
   CancellationRequestStatus,
-  DeliveryMode,
   DeliveryState,
   HoldReason,
   ProductionState,
@@ -32,16 +31,6 @@ export const DELIVERY_STATE_LABEL: Record<DeliveryState, string> = {
   RETURNED: "Đã trả lại",
   UNKNOWN: "Đang cập nhật",
 };
-
-/** How the goods travel, as the coordinator chose it (the customer does not choose). */
-export const DELIVERY_MODE_LABEL: Record<DeliveryMode, string> = {
-  PARCEL: "Giao lẻ",
-  FULL_TRUCKLOAD: "Xe nguyên chuyến",
-  UNKNOWN: "Đang cập nhật",
-};
-
-/** Shown while no shipment carries a mode: the coordinator has not set one, or not yet. */
-export const DELIVERY_MODE_PENDING_LABEL = "Đang chờ điều phối";
 
 /** Why an ON_HOLD order waits (BE holdReasonPublic): the only two things a customer is told. */
 export const HOLD_REASON_LABEL: Record<HoldReason, string> = {
@@ -88,19 +77,19 @@ export function requestReason(
         ? "Đơn đang chờ duyệt hạn mức công nợ"
         : "Đơn đang được chúng tôi xem xét";
     return {
-      help: `${state}, chưa chuyển cho sản xuất hoặc kho. Bạn có thể gửi yêu cầu huỷ để Sales xử lý, hoặc chat với chúng tôi.`,
+      help: `${state}, chưa chuyển cho sản xuất hoặc kho. Bạn có thể gửi yêu cầu huỷ để Sales xử lý, hoặc chat với Sale.`,
       dialog: `${state} và chưa được chuyển cho sản xuất hoặc kho. Yêu cầu huỷ của bạn sẽ được Sales xem xét; đơn giữ nguyên cho đến khi có quyết định.`,
     };
   }
   if (BEFORE_RELEASE.has(status)) {
     return {
-      help: "Đơn chưa chuyển cho kho. Bạn có thể gửi yêu cầu huỷ để Sales xử lý theo hợp đồng, hoặc chat với chúng tôi.",
+      help: "Đơn chưa chuyển cho kho. Bạn có thể gửi yêu cầu huỷ để Sales xử lý theo hợp đồng, hoặc chat với Sale.",
       dialog:
         "Đơn chưa được chuyển cho kho. Yêu cầu huỷ của bạn sẽ được Sales xem xét theo điều khoản hợp đồng; tiền đã thanh toán (nếu có) được hoàn theo hợp đồng. Đơn giữ nguyên cho đến khi có quyết định.",
     };
   }
   return {
-    help: "Đơn đã chuyển cho sản xuất hoặc kho nên cần Sales xem xét việc huỷ. Bạn có thể gửi yêu cầu huỷ hoặc chat với chúng tôi.",
+    help: "Đơn đã chuyển cho sản xuất hoặc kho nên cần Sales xem xét việc huỷ. Bạn có thể gửi yêu cầu huỷ hoặc chat với Sale.",
     dialog:
       "Đơn đã được chuyển cho sản xuất hoặc kho nên bạn không thể tự huỷ. Yêu cầu của bạn sẽ được Sales xem xét; việc huỷ có thể phát sinh chi phí cho phần việc đã làm. Đơn giữ nguyên cho đến khi có quyết định.",
   };
@@ -133,12 +122,12 @@ export const CANCELLATION_REQUEST_META: Record<
   EXPIRED: {
     label: "Đã đóng",
     tone: "muted",
-    note: "Đơn đã được đóng gói, giao đi, kết thúc hoặc huỷ theo cách khác trước khi Sales kịp quyết định, vì vậy yêu cầu huỷ này đã được đóng. Hãy xem trạng thái hiện tại của đơn; nếu cần hỗ trợ hoặc muốn trả hàng, hãy chat với chúng tôi.",
+    note: "Đơn đã được đóng gói, giao đi, kết thúc hoặc huỷ theo cách khác trước khi Sales kịp quyết định, vì vậy yêu cầu huỷ này đã được đóng. Hãy xem trạng thái hiện tại của đơn; nếu cần hỗ trợ hoặc muốn trả hàng, hãy chat với Sale.",
   },
   UNKNOWN: {
     label: "Đang cập nhật",
     tone: "muted",
-    note: "Hãy chat với chúng tôi nếu bạn cần biết tình trạng yêu cầu huỷ này.",
+    note: "Hãy chat với Sale nếu bạn cần biết tình trạng yêu cầu huỷ này.",
   },
 };
 

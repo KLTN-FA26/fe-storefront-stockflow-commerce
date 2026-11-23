@@ -5,7 +5,7 @@ import Link from "next/link";
 import { notFound, useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 
-import { STORE_ROUTES } from "@/constants";
+import { CHAT_WITH_SALES, STORE_ROUTES } from "@/constants";
 import { Alert } from "@/components/shared";
 import { toast } from "@/components/shared/Toast";
 import { Button } from "@/components/ui/button";
@@ -63,7 +63,7 @@ function Closed({ orderId, children }: { orderId: string; children: React.ReactN
           <Link href={STORE_ROUTES.account.orders.detail(orderId)}>Về đơn hàng</Link>
         </Button>
         <Button asChild className="min-h-11 rounded-[var(--r-md)] px-4">
-          <Link href={STORE_ROUTES.chat.list}>Chat với Sales</Link>
+          <Link href={STORE_ROUTES.chat.list}>{CHAT_WITH_SALES}</Link>
         </Button>
       </div>
     </div>

@@ -10,7 +10,11 @@ import { ThemeToggle } from "@/components/storefront/theme-toggle";
 
 import { HeaderSearch } from "./header-search";
 import { MobileNav } from "./mobile-nav";
-import { categoryLinks, utilityLinks } from "./nav-config";
+import { mainLinks, utilityLinks } from "./nav-config";
+import { NavLink } from "./nav-link";
+
+const mainHrefs = mainLinks.map((link) => link.href);
+const utilityHrefs = utilityLinks.map((link) => link.href);
 
 const container = "mx-auto flex h-full w-full max-w-7xl items-center px-4 sm:px-6 lg:px-8";
 const focusRing = "focus-visible:ring-accent focus-visible:ring-2 focus-visible:outline-none";
@@ -33,6 +37,7 @@ export function SiteHeader() {
           <MobileNav />
           <Link
             href="/"
+            aria-label={`${BRAND.name} – Trang chủ`}
             className={cn(
               "font-display shrink-0 rounded-sm text-base font-bold tracking-tight sm:text-lg",
               focusRing,
@@ -59,30 +64,32 @@ export function SiteHeader() {
 
       <div className="border-border-default hidden h-11 border-b md:block">
         <div className={cn(container, "justify-between gap-6")}>
-          <nav aria-label="Danh mục sản phẩm" className="-ml-2 flex items-center lg:-ml-3">
-            {categoryLinks.map((link) => (
-              <Link
+          <nav aria-label="Điều hướng chính" className="-ml-2 flex items-center lg:-ml-3">
+            {mainLinks.map((link) => (
+              <NavLink
                 key={link.label}
                 href={link.href}
-                className={cn(
-                  tier2Link,
-                  "hover:text-accent px-2 lg:px-3",
-                  link.highlight ? "text-accent font-semibold" : "text-ink-primary font-medium",
-                )}
+                siblings={mainHrefs}
+                className={cn(tier2Link, "hover:text-accent px-2 lg:px-3")}
+                currentClassName="text-accent font-semibold"
+                idleClassName="text-ink-primary font-medium"
               >
                 {link.label}
-              </Link>
+              </NavLink>
             ))}
           </nav>
           <nav aria-label="Tiện ích" className="-mr-3 hidden items-center lg:flex">
             {utilityLinks.map((link) => (
-              <Link
+              <NavLink
                 key={link.label}
                 href={link.href}
-                className={cn(tier2Link, "text-ink-secondary hover:text-ink-primary px-3")}
+                siblings={utilityHrefs}
+                className={cn(tier2Link, "hover:text-ink-primary px-3")}
+                currentClassName="text-ink-primary font-semibold"
+                idleClassName="text-ink-secondary"
               >
                 {link.label}
-              </Link>
+              </NavLink>
             ))}
           </nav>
         </div>

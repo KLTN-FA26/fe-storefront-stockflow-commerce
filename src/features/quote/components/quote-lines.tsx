@@ -1,3 +1,4 @@
+import { LineGoods } from "@/components/storefront/line-goods";
 import { formatMoney } from "@/lib/format/money";
 import { formatNumber } from "@/lib/format/number";
 
@@ -30,10 +31,13 @@ function LineItem({ line }: { line: QuoteLine }) {
   const moq = moqOf(line);
   return (
     <li className="space-y-3 py-3">
-      <p className="text-ink-primary text-sm">
-        <span className="text-ink-tertiary">Dòng {line.lineNo} · </span>
-        <span className="font-mono font-semibold break-all">{line.sku}</span>
-      </p>
+      <LineGoods
+        prefix={`Dòng ${line.lineNo} · `}
+        sku={line.sku}
+        designName={line.designName}
+        previewUrl={line.previewUrl}
+        unitsPerCarton={line.unitsPerCarton}
+      />
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Fact label="Số lượng">{cartonsText(shown.cartons, shown.units)}</Fact>
         <Fact label="MOQ">{moq == null ? "—" : `${formatNumber(moq)} thùng`}</Fact>

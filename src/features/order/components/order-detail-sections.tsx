@@ -1,23 +1,37 @@
 import { MapPin } from "lucide-react";
 
+import { LineGoods } from "@/components/storefront/line-goods";
 import { formatMoney } from "@/lib/format/money";
+import { formatNumber } from "@/lib/format/number";
 
-import { DELIVERY_MODE_LABEL, DELIVERY_MODE_PENDING_LABEL, DELIVERY_STATE_LABEL } from "../labels";
-import { deliveryModes } from "../selectors";
-import type { Order, OrderAddress } from "../types";
+import { DELIVERY_STATE_LABEL } from "../labels";
+import type { Order, OrderAddress, OrderLine } from "../types";
 import { LineProduction } from "./line-production";
 import { OrderDeliveryFailures } from "./order-delivery-failures";
 
 const CARD =
   "rounded-[var(--r-lg)] border border-border-default bg-bg-surface p-[var(--card-pad)] shadow-[var(--card-shadow)]";
 
+/** "40 thùng (20.000 cái)", the contract's wording; a line without cartons counts pieces. */
+export function lineQuantityText(line: Pick<OrderLine, "cartons" | "quantity">): string {
+  if (line.cartons == null) return `${formatNumber(line.quantity)} cái`;
+  return `${formatNumber(line.cartons)} thùng (${formatNumber(line.quantity)} cái)`;
+}
+
+/** "1 mặt hàng · 40 thùng", or pieces when a line has no cartons (an order before 4B-2). */
+function linesSummary(lines: readonly OrderLine[]): string {
+  const cartons = lines.every((line) => line.cartons != null)
+    ? `${formatNumber(lines.reduce((sum, line) => sum + (line.cartons ?? 0), 0))} thùng`
+    : `${formatNumber(lines.reduce((sum, line) => sum + line.quantity, 0))} cái`;
+  return `${formatNumber(lines.length)} mặt hàng · ${cartons}`;
+}
+
 /**
- * BE order lines carry SKU, quantity and prices only — no product name or image yet — so the SKU
- * is the line title until the BE exposes product details.
+ * The order's lines: the design's thumbnail and name when the BE sends them (R5-3), the SKU, cartons
+ * and pieces formatted as the quote and contract say them (SF-UX-31), the price per piece.
  */
 export function OrderLinesCard({ order }: { order: Order }) {
   const money = (amount: number) => formatMoney(amount, order.currency);
-  const units = order.lines.reduce((sum, line) => sum + line.quantity, 0);
   return (
     <section className={CARD} aria-labelledby="order-lines-heading">
       <h2
@@ -26,22 +40,25 @@ export function OrderLinesCard({ order }: { order: Order }) {
       >
         Sản phẩm{" "}
         <span className="text-ink-secondary text-sm font-normal tabular-nums">
-          ({order.lines.length} mặt hàng · {units} sản phẩm)
+          ({linesSummary(order.lines)})
         </span>
       </h2>
       <ul className="divide-border-default mt-1 divide-y">
         {order.lines.map((line) => (
           <li key={line.lineId} className="flex items-start justify-between gap-4 py-3">
-            <div className="min-w-0">
-              <p className="text-ink-primary font-mono text-sm font-semibold break-all">
-                {line.sku}
+            <div className="min-w-0 space-y-1">
+              <LineGoods
+                sku={line.sku}
+                designName={line.designName}
+                previewUrl={line.previewUrl}
+                unitsPerCarton={line.unitsPerCarton}
+              />
+              <p className="text-ink-secondary text-sm tabular-nums">
+                {lineQuantityText(line)} × {money(line.unitPrice)}/cái
               </p>
-              <p className="text-ink-secondary mt-1 text-sm tabular-nums">
-                {money(line.unitPrice)} × {line.quantity}
-              </p>
-              {line.designSnapshotId && (
-                <p className="text-accent mt-1 text-xs font-medium">Có thiết kế riêng</p>
-              )}
+              {line.designSnapshotId && !line.designName ? (
+                <p className="text-ink-secondary text-xs font-medium">Có thiết kế riêng</p>
+              ) : null}
               <LineProduction line={line} />
             </div>
             <p className="text-ink-primary shrink-0 font-semibold tabular-nums">
@@ -54,14 +71,25 @@ export function OrderLinesCard({ order }: { order: Order }) {
   );
 }
 
-/** The order total, shown as the payment summary at the top of the detail aside. */
+/**
+ * The order total, at the top of the detail aside: "Tổng có VAT", the one name the contract and the
+ * payment card use too, with its VAT split shown here once (SF-UX-32).
+ */
 export function OrderTotalCard({ order }: { order: Order }) {
+  const money = (amount: number) => formatMoney(amount, order.currency);
   return (
-    <div className={`${CARD} flex items-baseline justify-between gap-3`}>
-      <span className="text-ink-secondary">Tổng cộng</span>
-      <span className="font-display text-ink-primary text-xl font-bold tabular-nums">
-        {formatMoney(order.total, order.currency)}
-      </span>
+    <div className={`${CARD} space-y-1`}>
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-ink-secondary">Tổng có VAT</span>
+        <span className="font-display text-ink-primary text-xl font-bold tabular-nums">
+          {money(order.total)}
+        </span>
+      </div>
+      {order.netAmount != null && order.taxAmount != null ? (
+        <p className="text-ink-secondary text-right text-xs tabular-nums">
+          Chưa VAT {money(order.netAmount)} · VAT {money(order.taxAmount)}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -69,32 +97,11 @@ export function OrderTotalCard({ order }: { order: Order }) {
 const addressLine = (address: OrderAddress) =>
   [address.line1, address.line2, address.wardName, address.provinceName].filter(Boolean).join(", ");
 
-const CLOSED_STATUSES: ReadonlySet<Order["status"]> = new Set(["CANCELLED", "RETURNED"]);
-
-/**
- * Read-only: the delivery method is the coordinator's choice, never the customer's. Shown as the
- * order carries it, else as the shipments carry it ("Giao lẻ" / "Xe nguyên chuyến"), or as awaiting coordination while none does.
- * A cancelled or returned order has nothing left to coordinate, so it says nothing.
- */
-function DeliveryMethod({ order }: { order: Order }) {
-  const modes = deliveryModes(order);
-  if (modes.length === 0 && CLOSED_STATUSES.has(order.status)) return null;
-  return (
-    <p className="text-sm">
-      <span className="text-ink-secondary">Phương thức giao: </span>
-      <span className="text-ink-primary font-medium">
-        {modes.length > 0
-          ? modes.map((mode) => DELIVERY_MODE_LABEL[mode]).join(", ")
-          : DELIVERY_MODE_PENDING_LABEL}
-      </span>
-    </p>
-  );
-}
-
 /**
  * Where the order goes and where delivery stands. The customer view carries the shipping address
  * only (no contact or billing block), and NON_NULL omits it when the BE has none. The delivery
- * state is only what staff recorded: nothing is tracked after handover to the carrier.
+ * state is only what staff recorded: nothing is tracked after handover to the carrier. Every order
+ * ships as a full truckload, so there is no delivery method to show (SF-UX-33).
  */
 export function OrderDeliveryCard({ order }: { order: Order }) {
   const ship = order.shippingAddress;
@@ -113,7 +120,6 @@ export function OrderDeliveryCard({ order }: { order: Order }) {
           {DELIVERY_STATE_LABEL[order.deliveryState]}
         </p>
       ) : null}
-      <DeliveryMethod order={order} />
       <OrderDeliveryFailures shipments={order.shipments ?? []} />
       {ship ? (
         <div className="flex gap-3">

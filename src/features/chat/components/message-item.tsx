@@ -15,6 +15,8 @@ interface MessageItemProps {
   /** The customer may act (chat-conversations:UPDATE). */
   canAct: boolean;
   onTakeBack?: ((messageId: string) => void) | undefined;
+  /** A CONTRACT card's signed copy, sent later in the thread. */
+  signedCopyAt?: string | null | undefined;
 }
 
 const timeOf = (iso: string) => (isToday(iso) ? formatTime(iso) : formatDateTime(iso));
@@ -24,7 +26,13 @@ const timeOf = (iso: string) => (isToday(iso) ? formatTime(iso) : formatDateTime
  * before reaching here (schemas `isCustomerVisible`, 16 BR-07) and the storefront has no way to
  * draw one.
  */
-export function MessageItem({ conversationId, message, canAct, onTakeBack }: MessageItemProps) {
+export function MessageItem({
+  conversationId,
+  message,
+  canAct,
+  onTakeBack,
+  signedCopyAt,
+}: MessageItemProps) {
   const fromCustomer = message.senderType === "CUSTOMER";
   const side = fromCustomer ? "customer" : "agent";
   const author = message.senderType === "SYSTEM" ? "Hệ thống" : (message.senderName ?? "Sale");
@@ -50,6 +58,7 @@ export function MessageItem({ conversationId, message, canAct, onTakeBack }: Mes
           card={message.card}
           body={message.body}
           canAct={canAct}
+          signedCopyAt={signedCopyAt}
         />
       </div>
     );

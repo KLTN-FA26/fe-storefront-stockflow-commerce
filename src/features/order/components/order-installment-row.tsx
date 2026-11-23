@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "cn";
 
+import { TONE_BADGE_CLASSES } from "@/components/storefront/tone-badge";
 import { InstallmentTransferSection } from "@/components/storefront/transfer-instructions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,8 @@ import {
   type Installment,
 } from "@/lib/installments";
 
-import { ORDER_TONE_CLASSES } from "./order-status-badge";
+/** The row's DOM id: the status hero's "Thanh toán đợt n" scrolls to it (SF-UX-29). */
+export const installmentRowId = (installmentId: string) => `installment-${installmentId}`;
 
 /** When the installment is wanted, in the customer's words. */
 function dueText(installment: Installment): string | null {
@@ -32,10 +33,18 @@ function dueText(installment: Installment): string | null {
 /**
  * One installment of the order's contract: what it is for, its amount and what is still owed, its
  * standing (overdue in danger) and, while it still owes money, a toggle for its transfer details -
- * asked from the BE only when opened.
+ * asked from the BE only when opened. Open or closed is the payment card's to say: it opens the one
+ * due now, and the status hero opens one too.
  */
-export function OrderInstallmentRow({ installment }: { installment: Installment }) {
-  const [open, setOpen] = useState(false);
+export function OrderInstallmentRow({
+  installment,
+  open,
+  onOpenChange,
+}: {
+  installment: Installment;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const money = (amount: number) => formatMoney(amount, installment.currency);
   const meta = installmentStatusMeta(installment);
   const payable = isPayable(installment);
@@ -44,9 +53,11 @@ export function OrderInstallmentRow({ installment }: { installment: Installment 
 
   return (
     <li
+      id={installmentRowId(installment.installmentId)}
+      tabIndex={-1}
       data-overdue={installment.overdue || undefined}
       className={cn(
-        "space-y-2 rounded-[var(--r-md)] border p-3 text-sm",
+        "focus-visible:ring-accent scroll-mt-[var(--sticky-top)] space-y-2 rounded-[var(--r-md)] border p-3 text-sm focus:outline-none focus-visible:ring-2",
         installment.overdue ? "border-danger/40 bg-danger/5" : "border-border-default",
       )}
     >
@@ -62,7 +73,7 @@ export function OrderInstallmentRow({ installment }: { installment: Installment 
           data-tone={meta.tone}
           className={cn(
             "h-7 shrink-0 rounded-full px-3 font-semibold",
-            ORDER_TONE_CLASSES[meta.tone],
+            TONE_BADGE_CLASSES[meta.tone],
           )}
         >
           {meta.label}
@@ -78,7 +89,7 @@ export function OrderInstallmentRow({ installment }: { installment: Installment 
           <dd
             className={cn(
               "font-semibold tabular-nums",
-              installment.overdue ? "text-danger" : "text-ink-primary",
+              installment.overdue ? "text-danger-ink" : "text-ink-primary",
             )}
           >
             {money(installment.outstanding)}
@@ -86,7 +97,9 @@ export function OrderInstallmentRow({ installment }: { installment: Installment 
         </div>
       </dl>
       {due ? (
-        <p className={cn(installment.overdue ? "text-danger font-medium" : "text-ink-secondary")}>
+        <p
+          className={cn(installment.overdue ? "text-danger-ink font-medium" : "text-ink-secondary")}
+        >
           {due}
         </p>
       ) : null}
@@ -98,7 +111,7 @@ export function OrderInstallmentRow({ installment }: { installment: Installment 
             aria-expanded={open}
             aria-controls={panelId}
             className="min-h-11 w-full justify-between rounded-[var(--r-md)] px-3"
-            onClick={() => setOpen((value) => !value)}
+            onClick={() => onOpenChange(!open)}
           >
             {open ? "Ẩn thông tin chuyển khoản" : "Xem thông tin chuyển khoản"}
             <ChevronDown

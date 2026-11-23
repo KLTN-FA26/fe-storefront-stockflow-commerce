@@ -118,14 +118,38 @@ export function OrderStaleNotice({
   );
 }
 
+/**
+ * No order yet (SF-UX-28). There is no cart or checkout: an order is made when the customer accepts
+ * a quote, so the way forward is the quotes, not the catalog.
+ */
 export function NoOrdersYet() {
   return (
     <EmptyState
       title="Bạn chưa có đơn hàng nào"
-      description="Khi bạn đặt hàng lần đầu, lịch sử đơn hàng sẽ xuất hiện tại đây."
+      description="Đơn hàng được tạo khi bạn chấp nhận báo giá của Sale. Hợp đồng và lịch thanh toán của đơn sẽ hiện tại đây."
       action={
         <Button asChild className="min-h-11 rounded-[var(--r-md)] px-5">
-          <Link href={STORE_ROUTES.catalog.list}>Tiếp tục mua sắm</Link>
+          <Link href={STORE_ROUTES.account.quotes.list}>Xem báo giá</Link>
+        </Button>
+      }
+    />
+  );
+}
+
+/** The "Cần xử lý" view is empty: nothing to sign or pay, as distinct from no orders at all. */
+export function NoOrdersNeedYou({ onShowAll }: { onShowAll: () => void }) {
+  return (
+    <EmptyState
+      title="Không có đơn nào cần bạn xử lý"
+      description="Không có hợp đồng chờ ký hay đơn chờ thanh toán."
+      action={
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11 rounded-[var(--r-md)] px-5"
+          onClick={onShowAll}
+        >
+          Xem tất cả đơn
         </Button>
       }
     />

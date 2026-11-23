@@ -6,6 +6,7 @@
 import type { InfiniteData } from "@tanstack/react-query";
 
 import { STORE_ROUTES } from "@/constants";
+import { CHAT_ATTACH_INTENTS, type ChatAttachIntent } from "@/constants/routes";
 
 import { contextKindLabel } from "./labels";
 import { isCustomerVisible } from "./schemas";
@@ -71,6 +72,30 @@ export function upsertMessages(
   return { ...data, pages: [{ ...first, items: [...added, ...first.items] }, ...rest] };
 }
 
+/**
+ * Replaces messages already held (an edit, a deletion, a card that changed state) and ignores the rest: an update
+ * of a message on a page not loaded must not join the newest page out of its place.
+ */
+export function replaceMessages(
+  data: MessagePages | undefined,
+  items: readonly ChatMessage[],
+): MessagePages | undefined {
+  if (!data) return data;
+  const byId = new Map(items.filter(isCustomerVisible).map((message) => [message.id, message]));
+  if (byId.size === 0) return data;
+  let changed = false;
+  const pages = data.pages.map((page) => ({
+    ...page,
+    items: page.items.map((message) => {
+      const update = byId.get(message.id);
+      if (!update) return message;
+      changed = true;
+      return update;
+    }),
+  }));
+  return changed ? { ...data, pages } : data;
+}
+
 const ENDED = new Set(["RESOLVED", "AUTO_CLOSED", "CLOSED"]);
 
 /** "Ended" (plan B.0.1): RESOLVED, AUTO_CLOSED or CLOSED. */
@@ -109,13 +134,19 @@ export function quoteButtonsOf(
     .map((action) => ({ action, disabled: expired }));
 }
 
+/** The order page's contract section (sf-orders' `id="hop-dong"` on the order detail page). */
+export const ORDER_CONTRACT_ANCHOR = "hop-dong";
+
 /**
  * Where a context of the conversation opens in the customer's own pages; null when nowhere. A DRAFT quote or order
  * is not the customer's to see yet (BE: a draft quote answers 404 to the customer; 17 §5.2 for orders), so its chip
  * is not a link — it used to open a 404 page (WF-02 audit, item 6). `status` comes with the conversation detail only.
+ * A contract has no page of its own: it opens its order's contract section, when the thread knows the order
+ * (`contractOrderId`, SF-UX-26).
  */
 export function contextHref(
   context: Pick<ChatContext, "kind" | "refId"> & { status?: string | null | undefined },
+  contractOrderId?: string | null,
 ): string | null {
   if ((context.kind === "QUOTE" || context.kind === "ORDER") && context.status === "DRAFT")
     return null;
@@ -128,6 +159,10 @@ export function contextHref(
       return STORE_ROUTES.account.quotes.detail(context.refId);
     case "ORDER":
       return STORE_ROUTES.account.orders.detail(context.refId);
+    case "CONTRACT":
+      return contractOrderId
+        ? `${STORE_ROUTES.account.orders.detail(contractOrderId)}#${ORDER_CONTRACT_ANCHOR}`
+        : null;
     default:
       return null;
   }
@@ -169,4 +204,18 @@ export function canTakeBack(message: ChatMessage, now: Date = new Date()): boole
 /** A client message id for C5/C6 (`^[A-Za-z0-9._:-]{1,64}$`), kept across retries of one send. */
 export function newClientMessageId(): string {
   return `sf-${globalThis.crypto.randomUUID()}`;
+}
+
+/**
+ * The `?attach=` a page sent with the customer, kept only for a contract's conversation: `pdf` asks for the signed
+ * copy of the contract, which means nothing elsewhere. Anything else is dropped.
+ */
+export function signedCopyIntentOf(
+  contextKind: string | null | undefined,
+  attach: string | null | undefined,
+): ChatAttachIntent | undefined {
+  if (contextKind !== "CONTRACT") return undefined;
+  return (CHAT_ATTACH_INTENTS as readonly string[]).includes(attach ?? "")
+    ? (attach as ChatAttachIntent)
+    : undefined;
 }

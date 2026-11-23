@@ -36,6 +36,11 @@ export const designDraftDtoSchema = z.object({
   /** The customer's own SKU, on an APPROVED design only (BE-2); left out otherwise. */
   customerSku: z.string().nullish(),
   customerName: z.string().nullish(),
+  /**
+   * ASSUMPTION (BE ask, SF-UX-9): the variant's standard pieces per carton, named as on quote lines
+   * (R5-3). Not sent yet; the quote request dialogs say "1 thùng = N cái" once it is.
+   */
+  unitsPerCarton: z.number().int().positive().nullish(),
   parentSnapshotId: beId().nullish(),
   reviewRequestedAt: instant.nullish(),
   /** The reviewer's (Production Coordinator's) last decision; `reviewNotes` is the reason when they returned it. */

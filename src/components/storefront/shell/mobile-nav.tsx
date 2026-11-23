@@ -15,12 +15,12 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 
-import { accountLinks, categoryLinks, utilityLinks, type NavLink } from "./nav-config";
+import { accountLinks, mainLinks, supportLinks, type NavLink } from "./nav-config";
 
 const groups: { title: string; links: NavLink[] }[] = [
-  { title: "Danh mục", links: categoryLinks },
+  { title: "Sản phẩm & thiết kế", links: mainLinks },
   { title: "Tài khoản", links: accountLinks },
-  { title: "Hỗ trợ", links: utilityLinks },
+  { title: "Hỗ trợ", links: supportLinks },
 ];
 
 export function MobileNav() {
@@ -46,7 +46,9 @@ export function MobileNav() {
             <span>{BRAND.wordmark.primary}</span>
             <span className="text-accent">{BRAND.wordmark.accent}</span>
           </SheetTitle>
-          <SheetDescription className="sr-only">Danh mục, tài khoản và hỗ trợ</SheetDescription>
+          <SheetDescription className="sr-only">
+            Sản phẩm, thiết kế, tài khoản và hỗ trợ
+          </SheetDescription>
         </SheetHeader>
         <nav aria-label="Menu di động" className="grid gap-5 px-4 pb-6">
           {groups.map((group) => (

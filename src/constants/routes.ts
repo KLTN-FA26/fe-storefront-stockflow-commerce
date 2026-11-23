@@ -6,6 +6,17 @@
 export type ChatContextKind =
   "PRODUCT" | "CUSTOMER_SKU" | "DESIGN" | "DESIGN_PROJECT" | "QUOTE" | "ORDER" | "CONTRACT";
 
+/**
+ * What the page that sent the customer to the chat wants them to send there. `pdf`: the signed copy of the contract
+ * the conversation is about. The thread shows a prompt with a button that opens the file picker; a browser opens a
+ * picker only on a click, so the page never opens it by itself.
+ */
+export const CHAT_ATTACH_INTENTS = ["pdf"] as const;
+export type ChatAttachIntent = (typeof CHAT_ATTACH_INTENTS)[number];
+
+const attachQuery = (attach: ChatAttachIntent | undefined, joiner: "?" | "&") =>
+  attach ? `${joiner}attach=${attach}` : "";
+
 export const APP_ROUTES = {
   home: "/",
   login: "/login",
@@ -32,13 +43,13 @@ export const STORE_ROUTES = {
   },
   chat: {
     list: "/chat",
-    detail: (id: string) => `/chat/${id}`,
+    detail: (id: string, attach?: ChatAttachIntent) => `/chat/${id}${attachQuery(attach, "?")}`,
     /**
      * Opens, or reuses, a conversation about one of the customer's own documents (BE C1: the only
-     * way a customer attaches a context, BR-02). The chat page reads `kind` and `id`.
+     * way a customer attaches a context, BR-02). The chat page reads `kind`, `id` and `attach`.
      */
-    about: (kind: ChatContextKind, id: string) =>
-      `/chat/new?kind=${kind}&id=${encodeURIComponent(id)}`,
+    about: (kind: ChatContextKind, id: string, attach?: ChatAttachIntent) =>
+      `/chat/new?kind=${kind}&id=${encodeURIComponent(id)}${attachQuery(attach, "&")}`,
     /** "Chat với Sale" about nothing in particular. */
     new: "/chat/new",
   },
@@ -60,8 +71,9 @@ export const STORE_ROUTES = {
       list: "/account/quotes",
       detail: (id: string) => `/account/quotes/${id}`,
     },
+    /** The customer's installments to pay, overdue and due first (SF-UX-39). */
+    payments: "/account/payments",
     addresses: "/account/addresses",
     security: "/account/security",
-    privacy: "/account/privacy",
   },
 } as const;

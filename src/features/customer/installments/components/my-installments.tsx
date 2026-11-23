@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { CalendarClock, RefreshCw } from "lucide-react";
 import { useQueryState } from "nuqs";
 
+import { STORE_ROUTES } from "@/constants";
 import { Alert, Skeleton } from "@/components/shared";
 import { ListPagination } from "@/components/storefront/list-pagination";
 import { SurfaceCard } from "@/components/storefront/layout";
@@ -63,9 +65,20 @@ export function MyInstallments() {
 
   return (
     <SurfaceCard className="space-y-4">
-      <div className="flex items-center gap-2">
-        <CalendarClock aria-hidden className="text-accent size-5" />
-        <h2 className="font-display text-ink-primary text-lg font-bold">Lịch thanh toán của tôi</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <CalendarClock aria-hidden className="text-accent size-5" />
+          <h2 className="font-display text-ink-primary text-lg font-bold">
+            Lịch thanh toán của tôi
+          </h2>
+        </div>
+        {/* Overdue first, with the transfer details in place (SF-UX-39). */}
+        <Link
+          href={STORE_ROUTES.account.payments}
+          className="text-accent focus-visible:ring-accent inline-flex min-h-11 items-center rounded-[var(--r-sm)] text-sm font-semibold underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none"
+        >
+          Thanh toán các đợt
+        </Link>
       </div>
       <div role="group" aria-label="Lọc theo trạng thái" className="flex flex-wrap gap-2">
         {INSTALLMENT_FILTERS.map((option) => (

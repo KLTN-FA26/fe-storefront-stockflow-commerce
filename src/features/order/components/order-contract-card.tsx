@@ -1,41 +1,53 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { FileDown, MessageCircle, RefreshCw } from "lucide-react";
+import { MessageCircle, RefreshCw } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
 import { Alert, Skeleton } from "@/components/shared";
 import { ToneBadge } from "@/components/storefront/tone-badge";
 import { Button } from "@/components/ui/button";
 import { describeApiError } from "@/lib/api/describe-error";
+import { RETURN_WINDOW_DAYS } from "@/lib/domain/return-window";
 import { formatDate } from "@/lib/format/date";
 import { formatMoney } from "@/lib/format/money";
+import { formatNumber } from "@/lib/format/number";
 
-import { getMyOrderContractDocument } from "../contract-api";
 import { CONTRACT_STATUS_META } from "../contract-labels";
 import { useMyOrderContract } from "../contract-queries";
 import type { Contract } from "../contract-schemas";
+import { ContractDownloadButton } from "./contract-download-button";
+import { CONTRACT_SECTION_ID, ContractSigningSteps } from "./contract-signing-steps";
 import { ContractDeliverySchedule, ContractPaymentPlan } from "./order-contract-schedule";
 
 const CARD =
   "rounded-[var(--r-lg)] border border-border-default bg-bg-surface p-[var(--card-pad)] shadow-[var(--card-shadow)]";
 
-function Totals({ contract }: { contract: Contract }) {
-  const rows = [
-    ["Tổng chưa thuế", contract.totals.netAmount],
-    ["Thuế VAT", contract.totals.taxAmount],
-  ] as const;
+function Term({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <dl className="space-y-1.5 text-sm">
-      {rows.map(([label, amount]) => (
-        <div key={label} className="flex justify-between gap-4">
-          <dt className="text-ink-secondary">{label}</dt>
-          <dd className="text-ink-primary tabular-nums">{formatMoney(amount)}</dd>
-        </div>
-      ))}
+    <div className="flex justify-between gap-4">
+      <dt className="text-ink-secondary">{label}</dt>
+      <dd className="text-ink-primary text-right font-medium tabular-nums">{children}</dd>
+    </div>
+  );
+}
+
+/**
+ * The terms the chat's contract card shows too (SF-UX-36): the free print-sample rounds, the
+ * complaint period after each delivery, and the total — "Tổng có VAT", the one name for it on the
+ * page; the VAT split is in the order's total card (SF-UX-32).
+ */
+function Terms({ contract }: { contract: Contract }) {
+  return (
+    <dl className="border-border-default space-y-1.5 border-t pt-3 text-sm">
+      {contract.freeSampleRounds != null ? (
+        <Term label="In mẫu miễn phí">{formatNumber(contract.freeSampleRounds)} lần</Term>
+      ) : null}
+      <Term label="Thời hạn khiếu nại">
+        {formatNumber(contract.returnWindowDays ?? RETURN_WINDOW_DAYS)} ngày sau mỗi đợt giao
+      </Term>
       <div className="flex justify-between gap-4">
-        <dt className="text-ink-primary font-semibold">Tổng có thuế</dt>
+        <dt className="text-ink-primary font-semibold">Tổng có VAT</dt>
         <dd className="text-ink-primary font-bold tabular-nums">
           {formatMoney(contract.totals.totalAmount)}
         </dd>
@@ -44,62 +56,46 @@ function Totals({ contract }: { contract: Contract }) {
   );
 }
 
-function DownloadButton({
-  orderId,
-  contractNumber,
-  copy,
-  label,
-}: {
-  orderId: string;
-  contractNumber: string;
-  copy?: "sent";
-  label: string;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const open = () => {
-    // Opened in the click's own turn so the browser allows it; pointed at the link once known.
-    const tab = window.open("", "_blank");
-    if (tab) tab.opener = null;
-    setBusy(true);
-    setError(null);
-    getMyOrderContractDocument(orderId, copy)
-      .then((link) => {
-        if (tab) tab.location.replace(link.url);
-        else window.location.assign(link.url);
-      })
-      .catch((failure: unknown) => {
-        tab?.close();
-        setError(describeApiError(failure));
-      })
-      .finally(() => setBusy(false));
-  };
+function Files({ orderId, contract }: { orderId: string; contract: Contract }) {
+  const signed = Boolean(contract.signedOn || contract.signedFileName);
   return (
-    <div className="space-y-1">
-      <Button
-        type="button"
-        variant="outline"
-        className="min-h-11 w-full rounded-[var(--r-md)] px-4"
-        disabled={busy}
-        onClick={open}
-        aria-label={`${label} ${contractNumber}`}
-      >
-        <FileDown aria-hidden className="mr-2 size-4" />
-        {busy ? "Đang tải..." : label}
+    <div className="grid gap-2">
+      {signed ? (
+        <>
+          <ContractDownloadButton
+            orderId={orderId}
+            contractNumber={contract.contractNumber}
+            label="Tải bản đã ký"
+          />
+          <ContractDownloadButton
+            orderId={orderId}
+            contractNumber={contract.contractNumber}
+            copy="sent"
+            label="Tải bản gửi ký"
+          />
+        </>
+      ) : contract.status === "SENT" ? null : (
+        <ContractDownloadButton
+          orderId={orderId}
+          contractNumber={contract.contractNumber}
+          label="Tải hợp đồng"
+        />
+      )}
+      <Button asChild variant="outline" className="min-h-11 rounded-[var(--r-md)] px-4">
+        <Link href={STORE_ROUTES.chat.about("CONTRACT", contract.id)}>
+          <MessageCircle aria-hidden className="mr-2 size-4" />
+          Chat với Sale
+        </Link>
       </Button>
-      {error ? (
-        <p role="alert" className="text-danger text-sm">
-          {error}
-        </p>
-      ) : null}
     </div>
   );
 }
 
 /**
  * The order's sales contract once Sales sent it (WF-02 D3, kltn-docs 14 §4.3 step 13, 17 §5.2):
- * number, status, delivery schedule, payment plan, totals, signing date; the file (signed once
- * signed, else as sent) and a conversation with Sales about it. No contract yet: no card.
+ * number, status, the three signing steps while it waits on the customer (SF-UX-24), delivery
+ * schedule, payment plan, terms and total, signing date, its files and a conversation with Sales
+ * about it. No contract yet: no card. Its id, `hop-dong`, is where chat cards link to.
  */
 export function OrderContractCard({ orderId }: { orderId: string }) {
   const query = useMyOrderContract(orderId);
@@ -107,7 +103,11 @@ export function OrderContractCard({ orderId }: { orderId: string }) {
   const contract = query.data;
 
   return (
-    <section className={`${CARD} space-y-4`} aria-labelledby="order-contract-heading">
+    <section
+      id={CONTRACT_SECTION_ID}
+      className={`${CARD} scroll-mt-[var(--sticky-top)] space-y-4`}
+      aria-labelledby="order-contract-heading"
+    >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <h2
@@ -148,9 +148,11 @@ export function OrderContractCard({ orderId }: { orderId: string }) {
       ) : (
         <>
           {contract.status === "SENT" ? (
-            <p className="text-ink-secondary text-sm">
-              Hợp đồng đang chờ ký. Bạn có thể gửi lại file đã ký qua chat với Sale.
-            </p>
+            <ContractSigningSteps
+              orderId={orderId}
+              contractId={contract.id}
+              contractNumber={contract.contractNumber}
+            />
           ) : null}
           {contract.signedOn ? (
             <p className="text-ink-secondary text-sm">
@@ -162,36 +164,8 @@ export function OrderContractCard({ orderId }: { orderId: string }) {
           ) : null}
           <ContractDeliverySchedule batches={contract.deliverySchedule} />
           <ContractPaymentPlan plan={contract.paymentPlan} />
-          <Totals contract={contract} />
-          <div className="grid gap-2">
-            {contract.signedOn || contract.signedFileName ? (
-              <>
-                <DownloadButton
-                  orderId={orderId}
-                  contractNumber={contract.contractNumber}
-                  label="Tải bản đã ký"
-                />
-                <DownloadButton
-                  orderId={orderId}
-                  contractNumber={contract.contractNumber}
-                  copy="sent"
-                  label="Tải bản gửi ký"
-                />
-              </>
-            ) : (
-              <DownloadButton
-                orderId={orderId}
-                contractNumber={contract.contractNumber}
-                label="Tải hợp đồng"
-              />
-            )}
-            <Button asChild variant="outline" className="min-h-11 rounded-[var(--r-md)] px-4">
-              <Link href={STORE_ROUTES.chat.about("CONTRACT", contract.id)}>
-                <MessageCircle aria-hidden className="mr-2 size-4" />
-                Chat với Sale
-              </Link>
-            </Button>
-          </div>
+          <Terms contract={contract} />
+          <Files orderId={orderId} contract={contract} />
         </>
       )}
     </section>

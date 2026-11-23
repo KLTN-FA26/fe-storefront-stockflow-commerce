@@ -82,15 +82,19 @@ describe("Section", () => {
 });
 
 describe("TrustBar", () => {
-  it("renders the four default trust items", () => {
+  it("renders the four default value props of the B2B printing business (SF-UX-5)", () => {
     render(<TrustBar />);
     for (const title of [
-      "Giao hàng toàn quốc",
-      "Đổi trả 7 ngày",
-      "Thanh toán an toàn",
-      "Hỗ trợ thiết kế",
+      "In theo thiết kế của bạn",
+      "Báo giá theo số thùng",
+      "Giao nguyên chuyến",
+      "Chuyển khoản theo hợp đồng",
     ]) {
       expect(screen.getByText(title)).toBeInTheDocument();
+    }
+    // No retail promise: no return window, no parcel delivery time, no card payment.
+    for (const retail of ["Đổi trả 7 ngày", "Giao hàng toàn quốc", "Thanh toán an toàn"]) {
+      expect(screen.queryByText(retail)).not.toBeInTheDocument();
     }
   });
 });
@@ -101,7 +105,7 @@ describe("TrustBar custom items", () => {
       <TrustBar items={[{ icon: Package, title: "Đóng gói cẩn thận", desc: "Bảo vệ sản phẩm" }]} />,
     );
     expect(screen.getByText("Đóng gói cẩn thận")).toBeInTheDocument();
-    expect(screen.queryByText("Giao hàng toàn quốc")).not.toBeInTheDocument();
+    expect(screen.queryByText("Giao nguyên chuyến")).not.toBeInTheDocument();
   });
 });
 

@@ -1,19 +1,28 @@
 import { cn } from "cn";
 import { Check } from "lucide-react";
 
-import { ORDER_PROGRESS_STEPS } from "../lifecycle";
+import type { ProgressState, ProgressStep } from "../lifecycle";
+
+const SR_STATE: Record<ProgressState, string> = {
+  done: " (đã xong)",
+  current: " (hiện tại)",
+  owed: " (chưa thanh toán)",
+  todo: " (chưa tới)",
+};
 
 /**
- * Horizontal fulfilment stepper. `done` comes from the status alone (orderProgressOf); the step
- * after the completed ones is the current one. Room is left under each label for a timestamp once
- * the BE order history is wired in.
+ * Horizontal progress stepper over `orderProgress` (SF-UX-30). A step the order moved past while it
+ * is still unpaid (`owed`) keeps a hollow warning dot, never a tick. Room is left under each label
+ * for a timestamp once the BE order history is wired in.
  */
-export function OrderStepper({ done }: { done: number }) {
+export function OrderStepper({ steps }: { steps: readonly ProgressStep[] }) {
   return (
     <ol className="grid grid-cols-5" aria-label="Tiến trình đơn hàng">
-      {ORDER_PROGRESS_STEPS.map((step, index) => {
-        const complete = index < done;
-        const current = index === done;
+      {steps.map((step, index) => {
+        const done = step.state === "done";
+        const current = step.state === "current";
+        const owed = step.state === "owed";
+        const reached = steps.slice(index).some((later) => later.state !== "todo");
         return (
           <li
             key={step.id}
@@ -27,31 +36,35 @@ export function OrderStepper({ done }: { done: number }) {
                 aria-hidden
                 className={cn(
                   "absolute top-3 right-[calc(50%+0.75rem)] h-0.5 w-[calc(100%-1.5rem)] -translate-y-1/2",
-                  complete || current ? "bg-positive" : "bg-border-default",
+                  reached ? "bg-positive" : "bg-border-default",
                 )}
               />
             )}
             <span
               className={cn(
                 "relative flex size-6 items-center justify-center rounded-full border-2",
-                complete && "border-positive bg-positive text-ink-inverse",
+                done && "border-positive bg-positive text-ink-inverse",
                 current && "border-accent bg-bg-surface",
-                !complete && !current && "border-border-strong bg-bg-surface",
+                owed && "border-warning bg-bg-surface",
+                step.state === "todo" && "border-border-strong bg-bg-surface",
               )}
             >
-              {complete && <Check aria-hidden className="size-3.5" />}
+              {done && <Check aria-hidden className="size-3.5" />}
               {current && <span className="bg-accent size-2 rounded-full" />}
+              {owed && <span className="bg-warning size-2 rounded-full" />}
             </span>
             <span
               className={cn(
                 "text-xs leading-tight",
-                current ? "text-accent font-semibold" : "text-ink-secondary",
+                current
+                  ? "text-accent font-semibold"
+                  : owed
+                    ? "text-warning-ink font-medium"
+                    : "text-ink-secondary",
               )}
             >
               {step.label}
-              <span className="sr-only">
-                {complete ? " (đã xong)" : current ? " (hiện tại)" : " (chưa tới)"}
-              </span>
+              <span className="sr-only">{SR_STATE[step.state]}</span>
             </span>
           </li>
         );

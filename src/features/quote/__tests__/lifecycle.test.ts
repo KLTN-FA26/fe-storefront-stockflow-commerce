@@ -51,8 +51,8 @@ describe("TC-F03-03: a quote past its validity cannot be answered", () => {
 
 describe("status labels", () => {
   it("names every BE status in Vietnamese", () => {
-    expect(QUOTE_STATUS_META.SENT.label).toBe("Đã gửi");
-    expect(QUOTE_STATUS_META.CHANGES_REQUESTED.label).toBe("Yêu cầu sửa");
+    expect(QUOTE_STATUS_META.SENT.label).toBe("Chờ bạn phản hồi");
+    expect(QUOTE_STATUS_META.CHANGES_REQUESTED.label).toBe("Đã yêu cầu sửa");
     expect(QUOTE_STATUS_META.ACCEPTED.label).toBe("Đã chấp nhận");
     expect(QUOTE_STATUS_META.EXPIRED.label).toBe("Hết hiệu lực");
     expect(QUOTE_STATUS_META.CANCELLED.label).toBe("Đã huỷ");

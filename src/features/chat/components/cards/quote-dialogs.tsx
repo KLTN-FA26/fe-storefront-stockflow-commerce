@@ -9,12 +9,11 @@ import { previewAcceptance, type QuotePreview } from "@/lib/domain/quote-pricing
 import { formatNumber } from "@/lib/format/number";
 import { cn } from "@/lib/cn";
 
+import { PriceTierList } from "@/components/storefront/price-tier-list";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 
 import type { QuoteCardLine } from "../../card-payloads";
-import { QUOTE_FEEDBACK_MAX, requestChangesInputSchema } from "../../schemas";
 import type { QuotePricing } from "../../types";
 import { CardDialog } from "./card-dialog";
 import { cardMoney } from "./card-frame";
@@ -51,9 +50,10 @@ const cartonsOf = (lines: readonly QuoteCardLine[], values: AcceptForm["lines"] 
   Object.fromEntries(lines.map((line, i) => [line.id, values?.[i]?.cartons ?? Number.NaN]));
 
 /**
- * ACCEPT: cartons per line, the proposal by default (16 §4.3 step 7, plan B.2 C10), with the same live MOQ, tier
- * price, line total and total with tax as the quote page (F-03.1: below the MOQ is refused here first; the BE
- * refuses it too). The figures are a preview: the BE's are the official ones.
+ * ACCEPT: cartons per line, the proposal by default (16 §4.3 step 7, plan B.2 C10), with the same price tiers, live
+ * MOQ, tier price, line total and total with tax as the quote page (F-03.1: below the MOQ is refused here first; the
+ * BE refuses it too). The figures are a preview: the BE's are the official ones. Accepting waits for the pricing to
+ * load (SF-UX-21); if it cannot be read, the customer is told and may still accept (the BE checks the MOQ).
  */
 export function AcceptQuoteDialog({
   open,
@@ -116,6 +116,7 @@ export function AcceptQuoteDialog({
       description="Kiểm tra số thùng từng dòng. Số thùng phải đạt số lượng đặt tối thiểu (MOQ) của sản phẩm; đơn giá theo bậc số lượng do hệ thống tính lại."
       confirm="Chấp nhận báo giá"
       pending={pending}
+      confirmDisabled={!pricing && !pricingFailed}
       error={error}
       onSubmit={submit}
     >
@@ -129,6 +130,7 @@ export function AcceptQuoteDialog({
             : null;
         const id = `accept-line-${line.id}`;
         const linePreview = previewOf(line.id);
+        const tiers = pricing?.lines.find((candidate) => candidate.id === line.id)?.tiers;
         return (
           <div
             key={line.id}
@@ -157,6 +159,7 @@ export function AcceptQuoteDialog({
                 thùng{units !== null ? ` = ${formatNumber(units)} cái` : ""}
               </span>
             </div>
+            {tiers ? <PriceTierList tiers={tiers} applied={linePreview?.tier ?? null} /> : null}
             {linePreview ? (
               <dl className="text-ink-secondary grid grid-cols-2 gap-x-3 gap-y-0.5 text-sm tabular-nums">
                 <dt>MOQ</dt>
@@ -194,78 +197,17 @@ export function AcceptQuoteDialog({
             <dd className="text-ink-primary tabular-nums">{money(preview.tax)}</dd>
           </div>
           <div className="flex justify-between gap-4">
-            <dt className="text-ink-primary font-semibold">Tổng có thuế (tạm tính)</dt>
+            <dt className="text-ink-primary font-semibold">Tổng có VAT (tạm tính)</dt>
             <dd className="text-ink-primary font-semibold tabular-nums">{money(preview.total)}</dd>
           </div>
         </dl>
       ) : (
-        <p className="text-ink-tertiary text-sm" role={pricingFailed ? "status" : undefined}>
+        <p className="text-ink-secondary text-sm" role="status">
           {pricingFailed
             ? "Chưa tải được MOQ và giá tạm tính. Hệ thống vẫn kiểm MOQ khi bạn chấp nhận."
             : "Đang tải MOQ và giá tạm tính…"}
         </p>
       )}
-    </CardDialog>
-  );
-}
-
-const changesFormSchema = requestChangesInputSchema.pick({ note: true });
-type ChangesForm = z.infer<typeof changesFormSchema>;
-
-interface ChangesDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  pending: boolean;
-  error: string | null;
-  onRequest: (note: string) => void;
-}
-
-/** REQUEST_CHANGES: what Sales should change, required. */
-export function RequestChangesDialog({
-  open,
-  onOpenChange,
-  pending,
-  error,
-  onRequest,
-}: ChangesDialogProps) {
-  const { register, handleSubmit, reset, formState } = useForm<ChangesForm>({
-    resolver: zodResolver(changesFormSchema),
-    defaultValues: { note: "" },
-  });
-  useEffect(() => {
-    if (open) reset({ note: "" });
-  }, [open, reset]);
-  const noteError = formState.errors.note?.message;
-
-  return (
-    <CardDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Yêu cầu sửa báo giá"
-      description="Sale sẽ lập bản sửa theo góp ý của bạn và gửi lại trong cuộc trò chuyện này."
-      confirm="Gửi yêu cầu sửa"
-      pending={pending}
-      error={error}
-      onSubmit={handleSubmit((values) => onRequest(values.note))}
-    >
-      <div className="space-y-1.5">
-        <Label htmlFor="quote-change-note" className="text-sm font-medium">
-          Nội dung cần sửa (bắt buộc)
-        </Label>
-        <Textarea
-          id="quote-change-note"
-          rows={4}
-          maxLength={QUOTE_FEEDBACK_MAX}
-          aria-invalid={noteError ? true : undefined}
-          aria-describedby={noteError ? "quote-change-note-error" : undefined}
-          {...register("note")}
-        />
-        {noteError ? (
-          <p id="quote-change-note-error" role="alert" className="text-danger text-sm">
-            {noteError}
-          </p>
-        ) : null}
-      </div>
     </CardDialog>
   );
 }
