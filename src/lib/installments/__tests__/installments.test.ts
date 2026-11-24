@@ -4,7 +4,14 @@ import { api } from "@/lib/api/client";
 
 import { getMyInstallmentTransfer, getMyOrderInstallments, listMyInstallments } from "../api";
 import { installmentDtoSchema, orderInstallmentsDtoSchema } from "../schemas";
-import { installmentStatusMeta, installmentTitle, isPayable } from "../selectors";
+import {
+  installmentMilestoneNote,
+  installmentShortName,
+  installmentStatusMeta,
+  installmentTitle,
+  isFeeItem,
+  isPayable,
+} from "../selectors";
 import { ORDER_ID, beInstallment, beOrderInstallments } from "./fixtures";
 
 afterEach(() => vi.restoreAllMocks());
@@ -103,7 +110,43 @@ describe("installment selectors", () => {
   });
 
   it("titles an installment by its number and name", () => {
-    expect(installmentTitle({ seq: 2, name: "Đặt cọc" })).toBe("Đợt 2 · Đặt cọc");
-    expect(installmentTitle({ seq: 3, name: " " })).toBe("Đợt 3");
+    expect(installmentTitle({ seq: 2, name: "Đặt cọc", milestone: "ON_SIGNING" })).toBe(
+      "Đợt 2 · Đặt cọc",
+    );
+    expect(installmentTitle({ seq: 3, name: " ", milestone: "BEFORE_DELIVERY" })).toBe("Đợt 3");
+  });
+
+  describe("a fee item (WF-02 FE-7): its name, never 'Đợt 21'", () => {
+    const fee = (over: Record<string, unknown>) => parse({ seq: 21, ...over });
+
+    it("is told by its milestone, not by its number", () => {
+      expect(isFeeItem(fee({ milestone: "CANCELLATION_FEE" }))).toBe(true);
+      expect(isFeeItem(fee({ milestone: "FAILED_TRIP_FEE" }))).toBe(true);
+      expect(isFeeItem(fee({ milestone: "AFTER_DELIVERY" }))).toBe(false);
+    });
+
+    it("titles and refers to a fee by its name in Vietnamese", () => {
+      const cancellation = fee({ milestone: "CANCELLATION_FEE", name: "Cancellation fee" });
+      expect(installmentTitle(cancellation)).toBe("Phí huỷ đơn");
+      expect(installmentShortName(cancellation)).toBe("Phí huỷ đơn");
+      expect(installmentTitle(cancellation)).not.toMatch(/Đợt/);
+    });
+
+    it("falls back to the milestone's label when the BE sent no name", () => {
+      const trip = fee({ milestone: "FAILED_TRIP_FEE", name: "" });
+      expect(installmentTitle(trip)).toBe("Phí chuyến giao không thành");
+    });
+
+    it("keeps an ordinary installment's number", () => {
+      expect(installmentShortName(parse({ seq: 2, milestone: "BEFORE_DELIVERY" }))).toBe("Đợt 2");
+    });
+
+    it("does not repeat the title in the milestone line", () => {
+      const cancellation = fee({ milestone: "CANCELLATION_FEE", name: "Cancellation fee" });
+      expect(installmentMilestoneNote(cancellation)).toBeNull();
+      const carried = fee({ milestone: "CANCELLATION_FEE", name: "Fee for the rest closed" });
+      expect(installmentMilestoneNote(carried)).toBe("Khoản phải trả khi đóng phần còn lại");
+      expect(installmentMilestoneNote(parse({ milestone: "ON_SIGNING" }))).toBe("Khi ký hợp đồng");
+    });
   });
 });

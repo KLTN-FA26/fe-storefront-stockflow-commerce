@@ -8,7 +8,12 @@ import { STORE_ROUTES } from "@/constants";
 import { Button } from "@/components/ui/button";
 import { useHasPermission } from "@/lib/auth/my-permissions";
 import { formatMoney } from "@/lib/format/money";
-import { isPayable, useMyInstallments, type Installment } from "@/lib/installments";
+import {
+  installmentShortName,
+  isPayable,
+  useMyInstallments,
+  type Installment,
+} from "@/lib/installments";
 
 import type { OrderStatus } from "../types";
 
@@ -106,7 +111,7 @@ export function OverdueOrders() {
             </Link>
             <span className="text-ink-secondary tabular-nums">
               {" "}
-              · Đợt {installment.seq} còn{" "}
+              · {installmentShortName(installment)} còn{" "}
               {formatMoney(installment.outstanding, installment.currency)}
             </span>
           </li>

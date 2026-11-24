@@ -143,6 +143,38 @@ describe("order status hero — the next step (SF-UX-29)", () => {
     );
   });
 
+  it("names a fee item by its name on the hero and in the payment card, not 'đợt 21' (WF-02 FE-7)", async () => {
+    const plan = beOrderInstallments({
+      installments: [
+        beInstallment({
+          seq: 21,
+          name: "Cancellation fee",
+          milestone: "CANCELLATION_FEE",
+          status: "DUE",
+          paidAmount: 0,
+          outstanding: 500_000,
+          dueDate: "2099-11-26",
+          paidAt: undefined,
+        }),
+      ],
+    });
+    backend({
+      order: { ...beOrder, status: "PENDING_PAYMENT", statusGroup: "AWAITING_PAYMENT" },
+      installments: plan,
+    });
+    renderWithProviders(<OrderDetailScreen orderId={orderId} />);
+
+    const hero = await screen.findByRole("region", { name: "Chờ thanh toán" });
+    expect(
+      await within(hero).findByRole("button", {
+        name: /^Thanh toán phí huỷ đơn: 500\.000\s₫ trước 26\/11$/,
+      }),
+    ).toBeInTheDocument();
+    const payment = screen.getByRole("region", { name: "Thanh toán" });
+    expect(await within(payment).findByText("Phí huỷ đơn")).toBeInTheDocument();
+    expect(within(payment).queryByText(/Đợt 21/)).not.toBeInTheDocument();
+  });
+
   it("shows no next step while the order waits on the shop, and keeps payment unticked while owed", async () => {
     const owed = beOrderInstallments({
       installments: [

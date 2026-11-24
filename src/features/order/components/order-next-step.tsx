@@ -5,16 +5,21 @@ import { CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDayMonth } from "@/lib/format/date";
 import { formatMoney } from "@/lib/format/money";
-import type { Installment } from "@/lib/installments";
+import { installmentShortName, type Installment } from "@/lib/installments";
 
 import type { Contract } from "../contract-schemas";
 import type { OrderDisplayGroup } from "../lifecycle";
 import { ContractDownloadButton } from "./contract-download-button";
 import { CONTRACT_SECTION_ID } from "./contract-signing-steps";
 
-/** "Thanh toán đợt 1: 28.620.000 ₫ trước 26/11", or "… (quá hạn)" once the day has passed. */
+/**
+ * "Thanh toán đợt 1: 28.620.000 ₫ trước 26/11", or "… (quá hạn)" once the day has passed. A fee item
+ * goes by its name ("Thanh toán phí huỷ đơn: …"), never "đợt 21" (WF-02 FE-7).
+ */
 export function payLabel(installment: Installment): string {
-  const head = `Thanh toán đợt ${installment.seq}: ${formatMoney(installment.outstanding, installment.currency)}`;
+  const name = installmentShortName(installment);
+  const lowered = name.charAt(0).toLocaleLowerCase("vi") + name.slice(1);
+  const head = `Thanh toán ${lowered}: ${formatMoney(installment.outstanding, installment.currency)}`;
   if (installment.overdue) return `${head} (quá hạn)`;
   return installment.dueDate
     ? `${head} trước ${formatDayMonth(new Date(`${installment.dueDate}T00:00:00+07:00`))}`

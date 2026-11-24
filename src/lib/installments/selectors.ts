@@ -60,8 +60,33 @@ export function installmentName(name: string): string {
   return FEE_ITEM_NAMES[trimmed] ?? trimmed;
 }
 
-/** The installment's name as the customer reads it: "Đợt 1 · Đặt cọc". */
-export function installmentTitle(installment: Pick<Installment, "seq" | "name">): string {
+/**
+ * A fee the BE opens as an installment (cancellation, closing the rest, a failed trip charged before
+ * WF-05 Q-19). Told by its milestone, not by `seq`: the BE numbers fees from 21 (WF-02 FE-7), and
+ * "Đợt 21" is no installment the contract lists.
+ */
+export function isFeeItem(installment: Pick<Installment, "milestone">): boolean {
+  return (
+    installment.milestone === "CANCELLATION_FEE" || installment.milestone === "FAILED_TRIP_FEE"
+  );
+}
+
+/**
+ * How the customer refers to one installment in a sentence: "Đợt 1", or a fee item by its own name
+ * ("Phí huỷ đơn"), its milestone's label when the BE sent none.
+ */
+export function installmentShortName(
+  installment: Pick<Installment, "seq" | "name" | "milestone">,
+): string {
+  if (!isFeeItem(installment)) return `Đợt ${installment.seq}`;
+  return installmentName(installment.name) || INSTALLMENT_MILESTONE_LABEL[installment.milestone];
+}
+
+/** The installment's name as the customer reads it: "Đợt 1 · Đặt cọc", a fee item by its name alone. */
+export function installmentTitle(
+  installment: Pick<Installment, "seq" | "name" | "milestone">,
+): string {
+  if (isFeeItem(installment)) return installmentShortName(installment);
   const name = installmentName(installment.name);
   return name ? `Đợt ${installment.seq} · ${name}` : `Đợt ${installment.seq}`;
 }
@@ -79,6 +104,17 @@ export function installmentMilestoneLabel(
     return name === CANCELLATION_FEE_NAME ? "Phí huỷ đơn" : "Khoản phải trả khi đóng phần còn lại";
   }
   return INSTALLMENT_MILESTONE_LABEL[installment.milestone];
+}
+
+/**
+ * The milestone line under an installment's title, or null when it would only repeat the title (a
+ * fee item titled "Phí huỷ đơn" whose milestone also reads "Phí huỷ đơn").
+ */
+export function installmentMilestoneNote(
+  installment: Pick<Installment, "seq" | "name" | "milestone">,
+): string | null {
+  const label = installmentMilestoneLabel(installment);
+  return label === installmentTitle(installment) ? null : label;
 }
 
 /**
