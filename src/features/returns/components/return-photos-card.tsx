@@ -20,7 +20,10 @@ import {
 
 import { CARD } from "./return-detail-sections";
 
-/** Ảnh vấn đề khách đã gửi; thêm ảnh khi yêu cầu còn chờ duyệt (Sales duyệt trên ảnh). */
+/**
+ * Ảnh vấn đề khách đã gửi; thêm ảnh khi yêu cầu còn chờ duyệt hoặc đã duyệt và đang chờ hàng về
+ * (`acceptsPhotos`, như BE nhận) — Sales duyệt và đề nghị hoàn tiền dựa trên ảnh.
+ */
 export function ReturnPhotosCard({ request }: { request: CustomerReturn }) {
   const photos = request.evidence ?? [];
   const [picked, setPicked] = useState<File[]>([]);

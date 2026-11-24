@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { cn } from "cn";
 
+import { InstallmentReceipts } from "@/components/storefront/installment-receipts";
 import { TONE_BADGE_CLASSES } from "@/components/storefront/tone-badge";
 import { InstallmentTransferSection } from "@/components/storefront/transfer-instructions";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +14,7 @@ import { STORE_ROUTES } from "@/constants";
 import { formatDate } from "@/lib/format/date";
 import { formatMoney } from "@/lib/format/money";
 import {
-  INSTALLMENT_MILESTONE_LABEL,
+  installmentMilestoneLabel,
   installmentStatusMeta,
   installmentTitle,
   isPayable,
@@ -107,7 +108,7 @@ export function MyInstallmentRow({
             Đơn {installment.orderNumber}
           </Link>
           <p className="text-ink-secondary">
-            {installmentTitle(installment)} · {INSTALLMENT_MILESTONE_LABEL[installment.milestone]}
+            {installmentTitle(installment)} · {installmentMilestoneLabel(installment)}
           </p>
           <p className="text-ink-tertiary font-mono text-xs">HĐ {installment.contractNumber}</p>
         </div>
@@ -118,6 +119,10 @@ export function MyInstallmentRow({
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
         <Cell label="Số tiền" value={money(installment.amount)} />
         <Cell label="Đã thanh toán" value={money(installment.paidAmount)} />
+        {/* audit r2 money L-5: Số tiền − Đã thanh toán ≠ Còn phải trả khi đợt đã được giảm (đóng phần còn lại, hàng trả / hoàn về) */}
+        {(installment.reducedAmount ?? 0) > 0 ? (
+          <Cell label="Đã giảm" value={money(installment.reducedAmount ?? 0)} />
+        ) : null}
         <Cell label="Còn phải trả" value={money(installment.outstanding)} strong={overdue} />
         <Cell
           label="Hạn thanh toán"
@@ -128,6 +133,7 @@ export function MyInstallmentRow({
       {withTransfer && isPayable(installment) ? (
         <TransferDisclosure installment={installment} />
       ) : null}
+      {withTransfer ? <InstallmentReceipts installment={installment} /> : null}
     </li>
   );
 }

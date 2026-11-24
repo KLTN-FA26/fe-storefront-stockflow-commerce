@@ -7,8 +7,12 @@ const RETURN_MESSAGES: Record<string, string> = {
   CUSTOMER_NOT_FOUND: "Tài khoản chưa được liên kết với hồ sơ khách hàng.",
   ORDER_CANCELLED: "Đơn hàng đã huỷ nên không có hàng để trả.",
   RETURN_ORDER_NOT_DELIVERED: "Đơn chưa giao xong nên chưa thể yêu cầu trả hàng.",
+  // Since WF-05 Q-15 the BE sends this only for a closed order; an older BE also for one settled by a return.
   RETURN_ORDER_NOT_RETURNABLE:
-    "Đơn này đã được tất toán bằng một lần trả hàng. Hãy chat với Sales nếu bạn cần trả thêm.",
+    "Đơn này đã đóng hoặc đã được tất toán nên không nhận thêm yêu cầu trả hàng qua cổng. Hãy chat với Sales nếu bạn cần trả thêm.",
+  // WF-05 Q-15: the delivery chosen was already settled by a return (a refund was made on it).
+  RETURN_SHIPMENT_NOT_RETURNABLE:
+    "Hàng của lần giao này đã được xử lý trả hàng và hoàn tiền nên không mở thêm yêu cầu được. Hãy chọn lần giao khác, hoặc chat với Sales nếu bạn cần hỗ trợ.",
   RETURN_WINDOW_CLOSED:
     "Đã quá hạn đổi / trả kể từ ngày giao của lần giao này. Hãy chat với Sales nếu hàng có lỗi phát hiện muộn.",
   // WF-05 TH-1: đơn giao nhiều lần — mỗi yêu cầu trả hàng gắn với một lần giao đã đến.
@@ -16,6 +20,9 @@ const RETURN_MESSAGES: Record<string, string> = {
     "Đơn này được giao làm nhiều lần — hãy chọn lần giao có hàng muốn trả. Không thấy lần giao đó? Vui lòng liên hệ Sale.",
   RETURN_SHIPMENT_NOT_DELIVERED:
     "Lần giao bạn chọn chưa giao thành công nên chưa thể trả hàng của lần giao đó. Hãy chọn lần giao đã nhận hàng.",
+  // WF-05 BE-23: a parcel of it is being counted at the warehouse; that is goods back already.
+  RETURN_RECEIPT_DRAFT_OPEN:
+    "Kho đang kiểm đếm một kiện hàng trả của yêu cầu này nên chưa rút được yêu cầu. Hãy đợi kho xác nhận, hoặc chat với Sales nếu bạn cần hỗ trợ.",
   RETURN_GOODS_PARTLY_RECEIVED:
     "Kho đã nhận một phần hàng trả về nên không thể rút yêu cầu nữa. Sales sẽ hoàn tiền theo số hàng đã nhận — hãy chat với Sales nếu cần.",
   RETURN_LINE_ALREADY_OPEN:

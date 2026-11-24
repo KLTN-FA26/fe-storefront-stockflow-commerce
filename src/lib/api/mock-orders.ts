@@ -11,6 +11,7 @@
 import type { AxiosRequestConfig } from "axios";
 
 import { registerMockRoute } from "./mock-adapter";
+import { registerDocumentMockRoutes } from "./mock-documents";
 import { MOCK_CUSTOMER_ID } from "./mock-customer-addresses";
 import {
   createMockOrderBook,
@@ -69,6 +70,12 @@ export function registerOrderMockRoutes(
   registerMockRoute("GET", "/einvoices/me", (config) =>
     respond(book.myEInvoices(queryParams(config))),
   );
+  registerMockRoute("GET", "/einvoices/me/:id", (config) =>
+    respond(book.myEInvoice(pathParams(config).id ?? "")),
+  );
+  registerMockRoute("GET", "/einvoices/me/:id/error-notices", (config) =>
+    respond(book.myEInvoiceErrorNotices(pathParams(config).id ?? "")),
+  );
   registerMockRoute("GET", "/einvoices/me/:id/files/:kind", (config) =>
     respond(book.myEInvoiceFile(pathParams(config).id ?? "", pathParams(config).kind ?? "PDF")),
   );
@@ -83,6 +90,11 @@ export function registerOrderMockRoutes(
   );
   registerMockRoute("GET", "/installments/me/:installmentId/transfer-instructions", (config) =>
     respond(book.installmentTransfer(pathParams(config).installmentId ?? "")),
+  );
+  // Before `/installments/me/:installmentId`: the first registered pattern that matches wins.
+  registerDocumentMockRoutes();
+  registerMockRoute("GET", "/installments/me/:installmentId", (config) =>
+    respond(book.installment(pathParams(config).installmentId ?? "")),
   );
   registerMockRoute("POST", "/orders/:orderId/cancellation", (config) =>
     respond(book.cancel(pathParams(config).orderId ?? "", bodyOf(config))),

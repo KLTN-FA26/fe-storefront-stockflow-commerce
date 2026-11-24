@@ -172,7 +172,7 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
           {paymentFirst ? payment : null}
           <OrderCompletionHint order={order} windowDays={returnWindow.days} />
           <OrderLinesCard order={order} />
-          <OrderContractCard orderId={order.orderId} />
+          <OrderContractCard orderId={order.orderId} orderStatus={order.status} />
           <OrderTimelineCard order={order} />
         </div>
         <div className="space-y-5 lg:sticky lg:top-[var(--sticky-top)] lg:-mx-1 lg:max-h-[calc(100dvh-var(--sticky-top)-1rem)] lg:self-start lg:overflow-y-auto lg:px-1">

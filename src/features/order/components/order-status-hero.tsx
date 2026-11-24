@@ -1,5 +1,6 @@
 import { cn } from "cn";
 import {
+  Archive,
   BadgeCheck,
   CircleCheck,
   CircleX,
@@ -9,6 +10,7 @@ import {
   Hourglass,
   Package,
   PackageCheck,
+  PackageMinus,
   PackageSearch,
   PauseCircle,
   RotateCcw,
@@ -35,8 +37,10 @@ const GROUP_ICON: Record<OrderDisplayGroup, LucideIcon> = {
   DELIVERED: CircleCheck,
   RETURN_REQUESTED: RotateCcw,
   COMPLETED: PackageCheck,
+  CLOSED: Archive,
   CANCELLED: CircleX,
   RETURNED: Undo2,
+  PARTIALLY_RETURNED: PackageMinus,
   UNKNOWN: Hourglass,
 };
 

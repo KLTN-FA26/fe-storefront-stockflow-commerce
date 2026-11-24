@@ -55,6 +55,34 @@ export const NAMED_FAULT_REASONS: readonly CustomerReturnReason[] = [
   "WRONG_ITEM",
 ];
 
+/**
+ * Yêu cầu đã xong (`RESOLVED`) kết thúc thế nào (BE `CustomerReturnResponse.outcome`, WF-05 Q-4):
+ * hoàn tiền; Kế toán duyệt không hoàn theo chính sách (có lý do); hoặc không có gì để hoàn. Null khi
+ * yêu cầu chưa xong — và BE cũ không gửi trường này, khi đó FE đọc theo số tiền (`refundOutcome`).
+ */
+export const RETURN_OUTCOMES = ["REFUNDED", "REFUSED", "NOTHING_TO_REFUND"] as const;
+export const returnOutcomeSchema = tolerantEnum(RETURN_OUTCOMES);
+
+/**
+ * Lý do không hoàn tiền, trong danh sách cố định khách được xem (BE `ReturnRefusalReason`, WF-05
+ * Q-4 — lời từ chối là văn bản trả lời khiếu nại, Luật Thương mại Điều 318).
+ */
+export const RETURN_REFUSAL_REASONS = [
+  "CUSTOMER_DAMAGE",
+  "NOT_DEFECTIVE",
+  "OUT_OF_POLICY",
+  "OTHER",
+] as const;
+export const returnRefusalReasonSchema = tolerantEnum(RETURN_REFUSAL_REASONS);
+
+/**
+ * Lựa chọn của khách cho hàng giữ hộ sau một yêu cầu không hoàn tiền, do Sales ghi (BE
+ * `CustomerReturnResponse.custodyChoice`, WF-05 Q-4, audit r2 returns H1): gửi trả (khách chịu phí) hoặc
+ * công ty huỷ hộ (có biên bản). Mã lạ → UNKNOWN.
+ */
+export const RETURN_CUSTODY_CHOICES = ["SEND_BACK", "DESTROY_ON_BEHALF"] as const;
+export const returnCustodyChoiceSchema = tolerantEnum(RETURN_CUSTODY_CHOICES);
+
 /** BE `ReturnRequestRowResponse` — một dòng trong danh sách của khách. */
 export const returnRowDtoSchema = z.object({
   id: beId(),
@@ -71,8 +99,17 @@ export const returnRowDtoSchema = z.object({
   settlementAmount: z.number().nullish(),
   refundedAmount: z.number().nullish(),
   offsetAmount: z.number().nullish(),
+  /** Như trên chi tiết; dòng danh sách có thể không có — khi đó đọc theo số tiền. */
+  outcome: returnOutcomeSchema.nullish(),
   currency: currencySchema.nullish().catch(null),
   closedAt: z.string().nullish(),
+  /** WF-05 BE-23 (BE fc931ff9): kho đang kiểm đếm một kiện của yêu cầu trên phiếu nháp — chưa rút được. */
+  receiptDraftOpen: z.boolean().nullish(),
+  /**
+   * Audit r2 money L-6 (BE r3c): vì sao không hoàn, như ở chi tiết — chỉ mã cố định, BE gửi cho khách khi yêu cầu đã
+   * xong (RESOLVED); null khi không giữ lại gì. Mã lạ → UNKNOWN (không có nhãn, không hiện).
+   */
+  refusalReason: returnRefusalReasonSchema.nullish(),
   version: z.number(),
 });
 export const returnPageDtoSchema = pageResponseSchema(returnRowDtoSchema);
@@ -118,12 +155,31 @@ export const customerReturnDtoSchema = z.object({
   currency: currencySchema.nullish().catch(null),
   refundedAmount: z.number().nullish(),
   offsetAmount: z.number().nullish(),
+  /** WF-05 Q-4: RESOLVED kết thúc bằng hoàn tiền hay không; null trước khi xong. */
+  outcome: returnOutcomeSchema.nullish(),
+  /** Mã lý do không hoàn tiền (danh sách cố định); chỉ khi `outcome` = REFUSED. */
+  refusalReason: returnRefusalReasonSchema.nullish(),
+  /** Nhãn tiếng Việt của `refusalReason` do BE gửi (bundle `_vi`); dùng khi FE chưa biết mã. */
+  refusalReasonLabel: z.string().nullish(),
+  /**
+   * Ghi chú công khai tuỳ chọn Sales viết cho khách kèm lý do (BE `CustomerReturnResponse.refusalNote`,
+   * Q-4); ghi chú nội bộ không bao giờ tới đây.
+   */
+  refusalNote: z.string().nullish(),
   lines: z.array(customerReturnLineDtoSchema),
   discrepancies: z
     .array(z.object({ kind: z.string(), sku: z.string(), quantity: z.number().int() }))
     .nullish(),
   evidence: z.array(customerReturnEvidenceDtoSchema).nullish(),
   history: z.array(z.object({ status: z.string(), occurredAt: z.string() })).nullish(),
+  /**
+   * WF-05 BE-23 (BE fc931ff9): kho đang kiểm đếm một kiện của yêu cầu trên phiếu nhập NHÁP — khách
+   * chưa rút được (BE trả 409 RETURN_RECEIPT_DRAFT_OPEN) tới khi kho xác nhận hoặc huỷ phiếu đó.
+   * Vắng = BE cũ: nút rút vẫn hiện, 409 được giải thích sau.
+   */
+  receiptDraftOpen: z.boolean().nullish(),
+  /** Lựa chọn của khách cho hàng giữ hộ, Sales đã ghi; null khi chưa ghi (WF-05 Q-4). */
+  custodyChoice: returnCustodyChoiceSchema.nullish(),
   version: z.number(),
 });
 
@@ -164,6 +220,8 @@ export const openReturnInputSchema = z
 
 export type ReturnStatus = z.infer<typeof returnStatusSchema>;
 export type ReturnReason = z.infer<typeof returnReasonSchema>;
+export type ReturnOutcome = z.infer<typeof returnOutcomeSchema>;
+export type ReturnRefusalReason = z.infer<typeof returnRefusalReasonSchema>;
 export type ReturnRow = z.infer<typeof returnRowDtoSchema>;
 export type ReturnPage = z.infer<typeof returnPageDtoSchema>;
 export type CustomerReturn = z.infer<typeof customerReturnDtoSchema>;

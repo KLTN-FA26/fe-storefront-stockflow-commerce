@@ -12,7 +12,8 @@ import { ToneBadge } from "@/components/storefront/tone-badge";
 import { formatDate } from "@/lib/format/date";
 import {
   RETURN_REASON_LABEL,
-  RETURN_STATUS_META,
+  refusalReasonText,
+  returnStatusMeta,
   useMyReturns,
   type ReturnRow,
 } from "@/lib/returns";
@@ -36,7 +37,13 @@ const pageParser = parseAsInteger.withDefault(1).withOptions({ history: "push", 
 const tabParser = parseAsStringLiteral(TAB_KEYS).withDefault("all");
 
 function ReturnRowCard({ row }: { row: ReturnRow }) {
-  const meta = RETURN_STATUS_META[row.status];
+  // A return settled with no money reads "Đã xử lý — không hoàn tiền", never "Đã hoàn tiền" (SF-01).
+  const meta = returnStatusMeta(row);
+  // Audit r2 money L-6 (BE r3c): vì sao không hoàn, ngay ở danh sách — BE chỉ gửi khi yêu cầu đã xong
+  const refusal =
+    row.status === "RESOLVED"
+      ? refusalReasonText({ refusalReason: row.refusalReason, refusalReasonLabel: null })
+      : null;
   return (
     <Link
       href={STORE_ROUTES.account.returns.detail(row.id)}
@@ -57,6 +64,7 @@ function ReturnRowCard({ row }: { row: ReturnRow }) {
             ? ` · Gửi hàng về trước ${formatDate(row.returnDeadline)}`
             : ""}
         </p>
+        {refusal ? <p className="text-ink-secondary text-xs">Lý do không hoàn: {refusal}</p> : null}
       </div>
       <ChevronRight aria-hidden className="text-ink-tertiary size-5 shrink-0" />
     </Link>

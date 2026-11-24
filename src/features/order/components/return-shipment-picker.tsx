@@ -7,13 +7,26 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { formatDate } from "@/lib/format/date";
 import type { ReturnableShipment } from "@/lib/returns";
 
-const lastDay = (shipment: ReturnableShipment) =>
-  formatDate(new Date(shipment.windowEnd.getTime() - 1).toISOString());
+/**
+ * What the customer reads under a delivery. Whether it can be picked is the BE's answer
+ * (`returnable`, from `returnableQuantity`, SF-05); the FE's window only gives the last day, and only
+ * while it is still ahead — a delivery the BE takes past that count says nothing of a date.
+ */
+function windowText(shipment: ReturnableShipment): string {
+  if (!shipment.returnable) {
+    return shipment.windowOpen || !shipment.windowEnd
+      ? "Không còn sản phẩm nào trả được"
+      : "Đã quá hạn đổi / trả";
+  }
+  return shipment.windowOpen && shipment.windowEnd
+    ? `Đổi / trả đến hết ngày ${formatDate(new Date(shipment.windowEnd.getTime() - 1).toISOString())}`
+    : "Còn đổi / trả được";
+}
 
 /**
  * Chọn lần giao có hàng muốn trả (WF-05 TH-1): đơn giao làm nhiều lần thì mỗi yêu cầu trả hàng gắn
- * với một lần giao đã đến, và hạn đổi / trả tính từ ngày giao của lần đó. Lần đã quá hạn hiện để
- * khách hiểu, nhưng không chọn được.
+ * với một lần giao đã đến, và hạn đổi / trả tính từ ngày giao của lần đó. Lần không còn trả được
+ * (quá hạn, đã trả hết, đã được hoàn tiền — Q-15) hiện để khách hiểu, nhưng không chọn được.
  */
 export function ReturnShipmentPicker({
   shipments,
@@ -49,7 +62,7 @@ export function ReturnShipmentPicker({
               <RadioGroupItem
                 id={htmlId}
                 value={id}
-                disabled={!shipment.windowOpen}
+                disabled={!shipment.returnable}
                 className="mt-0.5"
               />
               <span className="min-w-0 space-y-0.5">
@@ -62,14 +75,12 @@ export function ReturnShipmentPicker({
                     </span>
                   ) : null}
                 </span>
-                <span className="text-ink-secondary block tabular-nums">
-                  Đã giao ngày {formatDate(shipment.deliveredAt)}
-                </span>
-                <span className="text-ink-tertiary block text-xs">
-                  {shipment.windowOpen
-                    ? `Đổi / trả đến hết ngày ${lastDay(shipment)}`
-                    : "Đã quá hạn đổi / trả"}
-                </span>
+                {shipment.deliveredAt ? (
+                  <span className="text-ink-secondary block tabular-nums">
+                    Đã giao ngày {formatDate(shipment.deliveredAt)}
+                  </span>
+                ) : null}
+                <span className="text-ink-tertiary block text-xs">{windowText(shipment)}</span>
               </span>
             </Label>
           );

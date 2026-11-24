@@ -33,10 +33,11 @@ const INVOICES_SETTLED: ReadonlySet<Order["status"]> = new Set([
 ]);
 
 /**
- * When the order's VAT invoices come, shown while it is not completed (kltn-docs 21 §4.1–4.2; BE
- * `IssueDeadline`, WF-05 HĐ-3): one invoice per successful delivery, dated the delivery day and
- * issued by the end of the next working day; a failed delivery gets none, and an invoice already
- * issued for it is reduced in full or voided. Null once the order is completed, closed or cancelled.
+ * When the order's VAT invoices come, shown while it is not completed (kltn-docs 21 §4.1–4.2; WF-05
+ * Q-1, HĐ-3): one invoice per successful delivery, issued by the system on the delivery day itself
+ * (SePay takes only today's date, so the invoice carries the day it is issued); a failed delivery
+ * gets none, and an invoice already issued for it is never cancelled — an adjustment reduces it.
+ * Null once the order is completed, closed or cancelled.
  */
 export function invoiceConditions(
   order: Pick<Order, "status" | "deliveryState" | "shipments">,
@@ -48,7 +49,7 @@ export function invoiceConditions(
     order.deliveryState === "PARTIALLY_DELIVERED" ||
     shipments.some((shipment) => shipment.status === "DELIVERED");
   const notes = [
-    "Hoá đơn VAT được lập cho từng lần giao thành công, ghi ngày giao, và phát hành chậm nhất vào ngày làm việc tiếp theo.",
+    "Mỗi lần giao thành công có một hoá đơn VAT riêng, được phát hành ngay trong ngày giao.",
   ];
   if (!delivered) {
     notes.push("Đơn chưa có lần giao thành công nên chưa có hoá đơn.");
@@ -60,7 +61,7 @@ export function invoiceConditions(
   }
   if (shipments.some((shipment) => shipment.status === "DELIVERY_FAILED")) {
     notes.push(
-      "Lần giao không thành công không được xuất hoá đơn; hoá đơn đã phát hành cho lần giao đó sẽ được điều chỉnh giảm hoặc huỷ.",
+      "Lần giao không thành công không được xuất hoá đơn; nếu hoá đơn của lần giao đó đã phát hành, chúng tôi sẽ lập hoá đơn điều chỉnh giảm cho nó.",
     );
   }
   return notes;

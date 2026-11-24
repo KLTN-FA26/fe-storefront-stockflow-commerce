@@ -1,7 +1,14 @@
 import { formatDate, formatDateTime } from "@/lib/format/date";
 import { formatMoney } from "@/lib/format/money";
-import { RETURN_STATUS_META, type CustomerReturn, type ReturnStatus } from "@/lib/returns";
-import { RETURN_STATUSES } from "@/lib/returns";
+import {
+  RETURN_NOT_REFUNDED_META,
+  RETURN_STATUSES,
+  RETURN_STATUS_META,
+  discrepancyKindText,
+  refundOutcome,
+  type CustomerReturn,
+  type ReturnStatus,
+} from "@/lib/returns";
 
 export const CARD =
   "rounded-[var(--r-lg)] border border-border-default bg-bg-surface p-[var(--card-pad)] shadow-[var(--card-shadow)]";
@@ -50,7 +57,7 @@ export function ReturnLinesCard({ request }: { request: CustomerReturn }) {
         <p className="text-ink-secondary text-sm">
           Kho ghi nhận chênh lệch:{" "}
           {(request.discrepancies ?? [])
-            .map((d) => `${d.sku} ${d.kind === "SHORT" ? "thiếu" : "thừa"} ${d.quantity}`)
+            .map((d) => `${d.sku} ${discrepancyKindText(d.kind)} ${d.quantity}`)
             .join(", ")}
           .
         </p>
@@ -59,9 +66,14 @@ export function ReturnLinesCard({ request }: { request: CustomerReturn }) {
   );
 }
 
-/** Tiền: phần trừ vào các đợt còn nợ và phần đã thanh toán sẽ được chuyển lại (15 §4.5). */
+/**
+ * Tiền: phần trừ vào các đợt còn nợ và phần đã thanh toán sẽ được chuyển lại (15 §4.5). Không hiện
+ * cho yêu cầu xong mà không hoàn đồng nào (SF-01): thẻ "0 ₫ / 0 ₫" đọc như một khoản hoàn.
+ */
 export function ReturnMoneyCard({ request }: { request: CustomerReturn }) {
   if (request.refundedAmount == null && request.offsetAmount == null) return null;
+  const outcome = refundOutcome(request);
+  if (outcome !== null && outcome !== "REFUNDED") return null;
   const currency = request.currency ?? "VND";
   const rows = [
     ["Trừ vào các đợt còn nợ", request.offsetAmount],
@@ -94,10 +106,20 @@ export function ReturnMoneyCard({ request }: { request: CustomerReturn }) {
   );
 }
 
-const statusLabel = (status: string) =>
-  (RETURN_STATUSES as readonly string[]).includes(status)
-    ? RETURN_STATUS_META[status as ReturnStatus].label
-    : status;
+/**
+ * A step of the history in the customer's words. The RESOLVED step of a return closed with no money
+ * reads as such, never "Đã hoàn tiền" (SF-01); a step newer than this FE keeps neutral wording.
+ */
+const statusLabel = (status: string, request: CustomerReturn) => {
+  if (!(RETURN_STATUSES as readonly string[]).includes(status)) {
+    return RETURN_STATUS_META.UNKNOWN.label;
+  }
+  if (status === "RESOLVED") {
+    const outcome = refundOutcome(request);
+    if (outcome !== null && outcome !== "REFUNDED") return RETURN_NOT_REFUNDED_META.label;
+  }
+  return RETURN_STATUS_META[status as ReturnStatus].label;
+};
 
 export function ReturnHistoryCard({ request }: { request: CustomerReturn }) {
   const steps = request.history ?? [];
@@ -113,7 +135,7 @@ export function ReturnHistoryCard({ request }: { request: CustomerReturn }) {
       <ol className="space-y-2 text-sm">
         {steps.map((step, index) => (
           <li key={`${step.status}-${index}`} className="flex justify-between gap-3">
-            <span className="text-ink-primary">{statusLabel(step.status)}</span>
+            <span className="text-ink-primary">{statusLabel(step.status, request)}</span>
             <time className="text-ink-tertiary tabular-nums" dateTime={step.occurredAt}>
               {formatDateTime(step.occurredAt)}
             </time>

@@ -1,12 +1,14 @@
 "use client";
 
 import { Alert } from "@/components/shared";
+import { DocumentDownloadButton } from "@/components/storefront/document-download-button";
 import { Button } from "@/components/ui/button";
 import { describeApiError } from "@/lib/api/describe-error";
 import { useHasPermission, useMyPermissions } from "@/lib/auth/my-permissions";
+import { getMyRefundConfirmation } from "@/lib/documents";
 import { formatDate } from "@/lib/format/date";
 import { formatMoney } from "@/lib/format/money";
-import { useMyOrderRefund } from "@/lib/refunds";
+import { carriedToFeeOf, shippingFeeWaivedOf, useMyOrderRefund } from "@/lib/refunds";
 
 import type { Order } from "../types";
 
@@ -25,8 +27,9 @@ function Row({ label, value }: { label: string; value: string }) {
 
 /**
  * Hoàn tiền của đơn (kltn-docs 15 §4.5): số phải hoàn do huỷ, đóng phần còn lại hay trả hàng, số đã
- * hoàn và các lần Kế toán đã chuyển. Chỉ hiện khi có khoản phải hoàn — hoặc khi không đọc được, để
- * khách biết thông tin hoàn tiền chưa tải được thay vì tưởng là không có (HT-1).
+ * hoàn và các lần Kế toán đã chuyển; phí vận chuyển được miễn (Q-19) và phí còn phải thanh toán. Hiện khi có một trong
+ * các khoản đó (`hasRefundCard`) — không có tiền hoàn thì bỏ ba dòng tiền hoàn, vẫn hiện phí — hoặc khi không đọc được,
+ * để khách biết thông tin hoàn tiền chưa tải được thay vì tưởng là không có (HT-1).
  */
 export function OrderRefundCard({ order }: { order: Order }) {
   // Không hỏi gì khi danh sách quyền chưa về: tài khoản thiếu quyền không thấy thẻ nháy lên
@@ -60,6 +63,8 @@ export function OrderRefundCard({ order }: { order: Order }) {
   }
   if (!allowed || !refund) return null;
   const money = (amount: number) => formatMoney(amount, refund.currency);
+  const shippingFeeWaived = shippingFeeWaivedOf(refund);
+  const carriedToFee = carriedToFeeOf(refund);
 
   return (
     <section className={`${CARD} space-y-3`} aria-labelledby="order-refund-heading">
@@ -69,20 +74,61 @@ export function OrderRefundCard({ order }: { order: Order }) {
       >
         Hoàn tiền
       </h2>
+      {refund.refundable > 0 ? null : (
+        <p className="text-ink-secondary text-sm">
+          Đơn này không có khoản tiền nào phải hoàn cho bạn.
+        </p>
+      )}
       <dl className="space-y-2 text-sm">
-        <Row label="Số tiền phải hoàn" value={money(refund.refundable)} />
-        <Row label="Đã hoàn" value={money(refund.refunded)} />
-        <Row label="Còn chờ hoàn" value={money(refund.remaining)} />
+        {refund.refundable > 0 ? (
+          <>
+            <Row label="Số tiền phải hoàn" value={money(refund.refundable)} />
+            <Row label="Đã hoàn" value={money(refund.refunded)} />
+            <Row label="Còn chờ hoàn" value={money(refund.remaining)} />
+          </>
+        ) : null}
+        {shippingFeeWaived > 0 ? (
+          <Row label="Phí vận chuyển được miễn" value={money(shippingFeeWaived)} />
+        ) : null}
+        {(refund.feeOwed ?? 0) > 0 ? (
+          <Row label="Phí còn phải thanh toán" value={money(refund.feeOwed ?? 0)} />
+        ) : null}
+        {carriedToFee > 0 ? (
+          <Row
+            label="Chuyển sang khoản phải trả khi đóng phần còn lại"
+            value={money(carriedToFee)}
+          />
+        ) : null}
       </dl>
+      {carriedToFee > 0 ? (
+        <p className="text-ink-tertiary text-xs">
+          Phí khuôn, phí vận chuyển của các đợt giao đã đóng chưa thanh toán được chuyển sang khoản
+          phải trả khi đóng phần còn lại, đến hạn từ ngày đóng — xem ở các đợt thanh toán của đơn.
+        </p>
+      ) : null}
+      {shippingFeeWaived > 0 ? (
+        <p className="text-ink-tertiary text-xs">
+          Hàng bị đơn vị vận chuyển hoàn về nên phí vận chuyển của phần đó không tính cho bạn.
+        </p>
+      ) : null}
       {(refund.records ?? []).length > 0 && (
-        <ul className="text-ink-secondary space-y-1 text-sm" aria-label="Các lần đã hoàn">
+        <ul className="text-ink-secondary space-y-2 text-sm" aria-label="Các lần đã hoàn">
           {(refund.records ?? []).map((record) => (
-            <li key={record.refundRecordId} className="flex justify-between gap-2 tabular-nums">
-              <span>
-                {formatDate(record.refundedOn)} ·{" "}
-                <span className="font-mono">{record.reference}</span>
-              </span>
-              <span>{money(record.amount)}</span>
+            <li key={record.refundRecordId} className="space-y-1">
+              <div className="flex justify-between gap-2 tabular-nums">
+                <span>
+                  {formatDate(record.refundedOn)} ·{" "}
+                  <span className="font-mono">{record.reference}</span>
+                </span>
+                <span>{money(record.amount)}</span>
+              </div>
+              <DocumentDownloadButton
+                kind="refundConfirmation"
+                size="sm"
+                label="Phiếu hoàn tiền"
+                ariaLabel={`Tải phiếu hoàn tiền ${record.reference}`}
+                load={() => getMyRefundConfirmation(record.refundRecordId, record.reference)}
+              />
             </li>
           ))}
         </ul>

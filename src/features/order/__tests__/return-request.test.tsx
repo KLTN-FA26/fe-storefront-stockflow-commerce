@@ -269,19 +269,21 @@ describe("ReturnRequestScreen — an order delivered in several shipments (WF-05
         {
           ...shipment(S1, 1, 3),
           lines: [
-            { orderLineId: TEE, sku: "TEE-CLASSIC-WHT-M", quantity: 1, returnableQuantity: 1 },
+            { orderLineId: TEE, sku: "TEE-CLASSIC-WHT-M", quantity: 2, returnableQuantity: 2 },
             { orderLineId: MUG, sku: "MUG-CERAMIC-11OZ", quantity: 1, returnableQuantity: 0 },
           ],
         },
         {
           ...shipment(S2, 2, 1),
           lines: [
-            { orderLineId: TEE, sku: "TEE-CLASSIC-WHT-M", quantity: 1, returnableQuantity: 0 },
+            { orderLineId: TEE, sku: "TEE-CLASSIC-WHT-M", quantity: 1, returnableQuantity: 1 },
           ],
         },
       ],
     });
-    const post = vi.spyOn(api, "post");
+    const post = vi.spyOn(api, "post").mockImplementation(async () => ({
+      data: beReturn({ status: "REQUESTED", orderId, shipmentId: S2 }),
+    }));
     renderWithProviders(<ReturnRequestScreen orderId={orderId} />);
 
     await userEvent.click(await screen.findByRole("radio", { name: /Lần giao 1/ }));
@@ -290,23 +292,124 @@ describe("ReturnRequestScreen — an order delivered in several shipments (WF-05
     expect(within(mugRow).getByText("Không trả thêm được")).toBeInTheDocument();
     const teeRow = screen.getByText("TEE-CLASSIC-WHT-M").closest("li")!;
     await userEvent.click(within(teeRow).getByRole("button", { name: "Tăng số lượng" }));
+    await userEvent.click(within(teeRow).getByRole("button", { name: "Tăng số lượng" }));
     expect(within(teeRow).getByRole("button", { name: "Tăng số lượng" })).toBeDisabled();
 
-    // The second delivery brought no mug, and its tee is already claimed: nothing is left chosen.
+    // The second delivery brought no mug and one tee: the two chosen tees refit to that one.
     await userEvent.click(screen.getByRole("radio", { name: /Lần giao 2/ }));
     expect(screen.queryByText("MUG-CERAMIC-11OZ")).toBeNull();
     const teeOnS2 = screen.getByText("TEE-CLASSIC-WHT-M").closest("li")!;
-    expect(within(teeOnS2).getByText("Không trả thêm được")).toBeInTheDocument();
+    expect(within(teeOnS2).getByRole("button", { name: "Tăng số lượng" })).toBeDisabled();
     await userEvent.click(screen.getByRole("radio", { name: /Giao sai hàng/ }));
     await userEvent.upload(
       screen.getByLabelText("Ảnh chụp lỗi hoặc hư hỏng"),
       new File(["x"], "sai.jpg", { type: "image/jpeg" }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Gửi yêu cầu trả hàng" }));
+    await vi.waitFor(() => expect(post).toHaveBeenCalled());
+    expect(post.mock.calls[0]?.[1]).toMatchObject({
+      shipmentId: S2,
+      lines: [{ orderLineId: TEE, quantity: 1 }],
+    });
+  });
+
+  // SF-05: the BE's returnableQuantity decides, not the FE's own copy of the window.
+  it("keeps a delivery the BE takes nothing more of out of reach, though its window is open", async () => {
+    backend({
+      ...delivered(),
+      shipments: [
+        {
+          ...shipment(S1, 1, 2),
+          lines: [
+            { orderLineId: TEE, sku: "TEE-CLASSIC-WHT-M", quantity: 1, returnableQuantity: 0 },
+          ],
+        },
+        {
+          ...shipment(S2, 2, 1),
+          lines: [
+            { orderLineId: TEE, sku: "TEE-CLASSIC-WHT-M", quantity: 1, returnableQuantity: 1 },
+          ],
+        },
+      ],
+    });
+    renderWithProviders(<ReturnRequestScreen orderId={orderId} />);
+    const first = await screen.findByRole("radio", { name: /Lần giao 1/ });
+    expect(first).toBeDisabled();
+    expect(screen.getByText("Không còn sản phẩm nào trả được")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Lần giao 2/ })).toBeChecked();
+  });
+
+  it("offers a delivery the BE still takes back after the FE's 7-day count, with no past date", async () => {
+    backend({
+      ...delivered(),
+      shipments: [
+        {
+          ...shipment(S1, 1, 10),
+          lines: [
+            { orderLineId: TEE, sku: "TEE-CLASSIC-WHT-M", quantity: 1, returnableQuantity: 1 },
+          ],
+        },
+        {
+          ...shipment(S2, 2, 9),
+          lines: [
+            { orderLineId: TEE, sku: "TEE-CLASSIC-WHT-M", quantity: 1, returnableQuantity: 0 },
+          ],
+        },
+      ],
+    });
+    renderWithProviders(<ReturnRequestScreen orderId={orderId} />);
+    const first = await screen.findByRole("radio", { name: /Lần giao 1/ });
+    expect(first).toBeEnabled();
+    expect(first).toBeChecked();
+    expect(screen.getByText("Còn đổi / trả được")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Lần giao 2/ })).toBeDisabled();
+    expect(screen.getByText("Đã quá hạn đổi / trả")).toBeInTheDocument();
+  });
+
+  it("says nothing is left to return when the BE takes no line of the only delivery", async () => {
+    backend({
+      ...delivered(),
+      shipments: [
+        {
+          ...shipment(S1, 1, 1),
+          lines: [
+            { orderLineId: TEE, sku: "TEE-CLASSIC-WHT-M", quantity: 2, returnableQuantity: 0 },
+          ],
+        },
+      ],
+    });
+    renderWithProviders(<ReturnRequestScreen orderId={orderId} />);
     expect(
-      await screen.findByText("Chọn ít nhất một sản phẩm và số lượng muốn trả."),
+      await screen.findByText(/Hiện không còn sản phẩm nào của đơn trả được/),
     ).toBeInTheDocument();
-    expect(post).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Gửi yêu cầu trả hàng" })).toBeNull();
+  });
+
+  // Q-15: a refund settled on one delivery does not close the others still in their window.
+  it("opens a return on another delivery of an order already partly refunded", async () => {
+    backend({
+      ...delivered(),
+      status: "PARTIALLY_REFUNDED",
+      statusGroup: "PARTIALLY_RETURNED",
+      deliveryState: "PARTIALLY_RETURNED",
+      shipments: [
+        {
+          ...shipment(S1, 1, 3),
+          lines: [
+            { orderLineId: TEE, sku: "TEE-CLASSIC-WHT-M", quantity: 1, returnableQuantity: 0 },
+          ],
+        },
+        {
+          ...shipment(S2, 2, 1),
+          lines: [
+            { orderLineId: TEE, sku: "TEE-CLASSIC-WHT-M", quantity: 1, returnableQuantity: 1 },
+          ],
+        },
+      ],
+    });
+    renderWithProviders(<ReturnRequestScreen orderId={orderId} />);
+    expect(await screen.findByRole("radio", { name: /Lần giao 2/ })).toBeChecked();
+    expect(screen.getByRole("button", { name: "Gửi yêu cầu trả hàng" })).toBeInTheDocument();
   });
 
   it("shows the BE refusal of a missing delivery in Vietnamese", async () => {

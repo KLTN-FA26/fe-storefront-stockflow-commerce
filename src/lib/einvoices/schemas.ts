@@ -44,6 +44,35 @@ export const customerEInvoiceDtoSchema = z.object({
 
 export const customerEInvoicePageDtoSchema = pageResponseSchema(customerEInvoiceDtoSchema);
 
+/**
+ * Trạng thái của một thông báo sai sót (BE `CustomerEInvoiceErrorNoticeResponse.status`): DRAFT —
+ * người bán đã ghi nhận, chưa qua hệ thống tới cơ quan thuế; SENT; ACCEPTED; REJECTED.
+ */
+export const ERROR_NOTICE_STATUSES = ["DRAFT", "SENT", "ACCEPTED", "REJECTED"] as const;
+
+/**
+ * Thông báo hoá đơn ghi sai tên / địa chỉ người mua, mã số thuế đúng (Mẫu 04/SS-HĐĐT, TT 91/2026
+ * Điều 10 khoản 1a): hoá đơn giữ nguyên giá trị, đây là thông tin đúng (BE
+ * `CustomerEInvoiceErrorNoticeResponse`). Không có ai ghi nhận hay mã của nhà cung cấp.
+ */
+export const customerEInvoiceErrorNoticeDtoSchema = z.object({
+  id: beId(),
+  einvoiceId: beId().nullish(),
+  formCode: z.string().nullish(),
+  /** Tên mẫu như luật in (`04/SS-HĐĐT`), để hiển thị. */
+  formName: z.string().nullish(),
+  reason: z.string().nullish(),
+  /** Tên hoá đơn đáng lẽ phải ghi; null khi tên đúng. */
+  correctBuyerName: z.string().nullish(),
+  /** Địa chỉ hoá đơn đáng lẽ phải ghi; null khi địa chỉ đúng. */
+  correctBuyerAddress: z.string().nullish(),
+  status: tolerantEnum(ERROR_NOTICE_STATUSES),
+  recordedAt: z.iso.datetime({ offset: true }).nullish(),
+  respondedAt: z.iso.datetime({ offset: true }).nullish(),
+});
+
+export const customerEInvoiceErrorNoticesDtoSchema = z.array(customerEInvoiceErrorNoticeDtoSchema);
+
 export const fileLinkDtoSchema = z.object({
   url: z.string().min(1),
   expiresAt: z.iso.datetime({ offset: true }),
@@ -52,4 +81,5 @@ export const fileLinkDtoSchema = z.object({
 export type CustomerEInvoice = z.infer<typeof customerEInvoiceDtoSchema>;
 export type EInvoiceReference = z.infer<typeof einvoiceReferenceDtoSchema>;
 export type CustomerEInvoicePage = z.infer<typeof customerEInvoicePageDtoSchema>;
+export type CustomerEInvoiceErrorNotice = z.infer<typeof customerEInvoiceErrorNoticeDtoSchema>;
 export type FileLink = z.infer<typeof fileLinkDtoSchema>;

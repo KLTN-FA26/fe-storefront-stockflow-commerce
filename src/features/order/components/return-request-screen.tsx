@@ -37,19 +37,20 @@ const CLOSED_TEXT: Record<ReturnClosedReason, (days: number) => string> = {
     "Chỉ gửi được yêu cầu trả hàng cho hàng đã giao tới bạn. Khi một lần giao của đơn đã đến, bạn có thể yêu cầu trả hàng của lần giao đó.",
   WINDOW_CLOSED: (days) =>
     `Đã quá hạn đổi / trả ${days} ngày kể từ ngày giao. Nếu hàng có lỗi phát hiện muộn, hãy chat với Sales.`,
+  // Every delivered unit is claimed by a return (open or settled, WF-05 Q-15), or the order is closed.
   NOT_RETURNABLE: () =>
-    "Đơn này đã được tất toán hoặc đã đóng. Hãy chat với Sales nếu bạn cần trả thêm hàng.",
+    "Hiện không còn sản phẩm nào của đơn trả được qua cổng: hàng đã có yêu cầu trả hàng đang xử lý hoặc đã được xử lý, hoặc đơn đã đóng. Theo dõi các yêu cầu ở mục Trả hàng, hoặc chat với Sales nếu bạn cần trả thêm.",
 };
 
 /**
  * The delivery the form starts on: "" names none (the order's only delivery, or the order as a
- * whole); several deliveries start on the only one still in its window, else on none.
+ * whole); several deliveries start on the only one the BE still takes a return for, else on none.
  */
 function defaultDelivery(eligibility: ReturnEligibility): string | undefined {
   if (eligibility.kind !== "open") return undefined;
   if (!eligibility.needsChoice) return eligibility.shipments[0]?.shipmentId ?? "";
-  const inWindow = eligibility.shipments.filter((shipment) => shipment.windowOpen);
-  return inWindow.length === 1 ? (inWindow[0]?.shipmentId ?? undefined) : undefined;
+  const returnable = eligibility.shipments.filter((shipment) => shipment.returnable);
+  return returnable.length === 1 ? (returnable[0]?.shipmentId ?? undefined) : undefined;
 }
 
 function Closed({ orderId, children }: { orderId: string; children: React.ReactNode }) {
@@ -127,9 +128,15 @@ export function ReturnRequestScreen({ orderId: raw }: { orderId: string }) {
   );
   const single =
     eligibility.kind === "open" && !eligibility.needsChoice ? eligibility.shipments[0] : undefined;
+  // The last day is the FE's own count (SF-05): shown only while that count says it is still ahead,
+  // never as a past date on a delivery the BE still takes a return for (a longer contract period).
   const deliveredAt =
     eligibility.kind === "open" && !eligibility.needsChoice
-      ? (single?.deliveredAt ?? eligibility.deliveredAt)
+      ? single
+        ? single.windowOpen
+          ? (single.deliveredAt ?? undefined)
+          : undefined
+        : eligibility.deliveredAt
       : undefined;
 
   const submit = async (values: ReturnFormValues) => {

@@ -4,19 +4,23 @@ import { useState } from "react";
 import { FileDown } from "lucide-react";
 import { cn } from "cn";
 
+import { DocumentDownloadButton } from "@/components/storefront/document-download-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { describeApiError } from "@/lib/api/describe-error";
+import { getMyEInvoiceAgreement } from "@/lib/documents";
 import {
+  describeEInvoiceError,
+  errorNoticeStatusMeta,
   getMyEInvoiceFile,
   invoiceNumberText,
   invoiceStatusMeta,
   invoiceTypeLabel,
+  useMyEInvoiceErrorNotices,
   type CustomerEInvoice,
   type EInvoiceFileKind,
   type EInvoiceReference,
 } from "@/lib/einvoices";
-import { formatDate } from "@/lib/format/date";
+import { formatDate, formatDateTime } from "@/lib/format/date";
 import { formatMoney } from "@/lib/format/money";
 
 import { ORDER_TONE_CLASSES } from "./order-status-badge";
@@ -46,6 +50,75 @@ function InvoiceLink({
 }
 
 /**
+ * Thông báo hoá đơn ghi sai tên / địa chỉ (Mẫu 04/SS-HĐĐT, TT 91/2026 Điều 10 khoản 1a; SF-03): hoá
+ * đơn giữ nguyên giá trị, đây là thông tin đúng. Trạng thái chỉ nói "đã gửi cơ quan thuế" khi BE ghi
+ * như vậy (`errorNoticeStatusMeta`). Không có thông báo: không hiện gì.
+ */
+function InvoiceErrorNotices({ invoiceId }: { invoiceId: string }) {
+  const query = useMyEInvoiceErrorNotices(invoiceId);
+  if (query.isError) {
+    return (
+      <p className="text-ink-tertiary flex flex-wrap items-center gap-x-2 text-xs">
+        Chưa tải được thông báo sai sót của hoá đơn này.
+        <button
+          type="button"
+          className="text-accent focus-visible:ring-accent min-h-11 rounded-sm font-medium underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:outline-none"
+          disabled={query.isFetching}
+          onClick={() => void query.refetch()}
+        >
+          Thử lại
+        </button>
+      </p>
+    );
+  }
+  const notices = query.data ?? [];
+  if (notices.length === 0) return null;
+  return (
+    <ul className="space-y-2" aria-label="Thông báo sai sót của hoá đơn">
+      {notices.map((notice) => {
+        const meta = errorNoticeStatusMeta(notice);
+        return (
+          <li key={notice.id} className="bg-bg-subtle space-y-1 rounded-[var(--r-md)] p-3 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-ink-primary font-medium">
+                Thông báo sai sót {notice.formName ?? "04/SS-HĐĐT"}
+              </p>
+              <Badge
+                className={cn(
+                  "h-7 shrink-0 rounded-full px-3 font-semibold",
+                  ORDER_TONE_CLASSES[meta.tone],
+                )}
+              >
+                {meta.label}
+              </Badge>
+            </div>
+            <p className="text-ink-secondary">
+              {notice.correctBuyerName || notice.correctBuyerAddress
+                ? "Hoá đơn ghi sai thông tin người mua nhưng vẫn giữ nguyên giá trị; thông tin đúng là:"
+                : "Hoá đơn ghi sai thông tin người mua nhưng vẫn giữ nguyên giá trị."}
+            </p>
+            {notice.correctBuyerName ? (
+              <p className="text-ink-primary">Tên người mua: {notice.correctBuyerName}</p>
+            ) : null}
+            {notice.correctBuyerAddress ? (
+              <p className="text-ink-primary">Địa chỉ: {notice.correctBuyerAddress}</p>
+            ) : null}
+            {notice.reason ? (
+              <p className="text-ink-secondary whitespace-pre-line">{notice.reason}</p>
+            ) : null}
+            {notice.recordedAt ? (
+              <p className="text-ink-tertiary text-xs tabular-nums">
+                Ghi nhận lúc {formatDateTime(notice.recordedAt)}
+              </p>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/**
  * Một hoá đơn của đơn: số, loại, ngày, trạng thái, tải PDF / XML. Hoá đơn "Đã bị thay thế" chỉ tới
  * hoá đơn đã thay nó (`replacedBy`), hoá đơn thay thế chỉ về hoá đơn nó thay (`replaces`) — BE nêu
  * từng mắt xích, không suy đoán.
@@ -68,7 +141,7 @@ export function InvoiceRow({
       const link = await getMyEInvoiceFile(invoice.id, kind);
       window.open(link.url, "_blank", "noopener,noreferrer");
     } catch (failure: unknown) {
-      setError(describeApiError(failure));
+      setError(describeEInvoiceError(failure));
     } finally {
       setBusy(null);
     }
@@ -118,6 +191,7 @@ export function InvoiceRow({
           )}
         </p>
       ) : null}
+      <InvoiceErrorNotices invoiceId={invoice.id} />
       <div className="flex gap-2">
         {(["PDF", "XML"] as const).map((kind) => (
           <Button
@@ -138,6 +212,16 @@ export function InvoiceRow({
           {error}
         </p>
       )}
+      {invoice.type === "ADJUSTMENT" || invoice.type === "REPLACEMENT" ? (
+        // The agreement both companies sign for this correction (documents/endpoints.md 7c).
+        <DocumentDownloadButton
+          kind="einvoiceAgreement"
+          className="w-full"
+          label="Tải biên bản thỏa thuận"
+          ariaLabel={`Tải biên bản thỏa thuận ${invoiceTypeLabel(invoice).toLowerCase()} ${invoiceNumberText(invoice)}`}
+          load={() => getMyEInvoiceAgreement(invoice.id, invoiceNumberText(invoice))}
+        />
+      ) : null}
     </li>
   );
 }

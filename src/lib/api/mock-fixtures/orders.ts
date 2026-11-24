@@ -549,6 +549,14 @@ export function createMockOrderBook(
   const own = (orderId: string) =>
     orders.find((o) => o.orderId === orderId && o.customerId === customerId);
   const notFound = (orderId: string) => fail(404, "NOT_FOUND", `No order with id ${orderId}`);
+  // The customer's issued invoices: one per delivery of a delivered or completed order.
+  const issuedInvoices = () =>
+    orders
+      .filter(
+        (o) =>
+          o.customerId === customerId && (o.status === "DELIVERED" || o.status === "COMPLETED"),
+      )
+      .flatMap((o, index) => mockInvoicesOf(o, index));
 
   const releaseStock = (order: MockOrder) => {
     if (!order.stockHeld || !deps.catalog) return;
@@ -601,12 +609,7 @@ export function createMockOrderBook(
      * replaced once, so the chain (`replaces` / `replacedBy`, omitted when null) is on screen.
      */
     myEInvoices(query: { orderId?: unknown } = {}): MockResult {
-      const items = orders
-        .filter(
-          (o) =>
-            o.customerId === customerId && (o.status === "DELIVERED" || o.status === "COMPLETED"),
-        )
-        .flatMap((o, index) => mockInvoicesOf(o, index))
+      const items = issuedInvoices()
         .filter((invoice) => query.orderId == null || invoice.orderId === query.orderId)
         // Newest invoice date first; the same day, the later issued first.
         .sort((a, b) => `${b.issueDate}${b.issuedAt}`.localeCompare(`${a.issueDate}${a.issuedAt}`));
@@ -619,6 +622,19 @@ export function createMockOrderBook(
         hasNext: false,
         hasPrevious: false,
       });
+    },
+
+    /** GET /einvoices/me/{id} (WF-05 F-19): one of the customer's issued invoices, else 404. */
+    myEInvoice(id: string): MockResult {
+      const invoice = issuedInvoices().find((i) => i.id === id);
+      return invoice ? ok(invoice) : fail(404, "EINVOICE_NOT_FOUND", `No e-invoice ${id}`);
+    },
+
+    /** GET /einvoices/me/{id}/error-notices: 04/SS notices of the invoice; the mock has none. */
+    myEInvoiceErrorNotices(id: string): MockResult {
+      return issuedInvoices().some((i) => i.id === id)
+        ? ok([])
+        : fail(404, "EINVOICE_NOT_FOUND", `No e-invoice ${id}`);
     },
 
     /** GET /einvoices/me/{id}/files/{kind}: a short-lived link to the file. */
@@ -684,6 +700,33 @@ export function createMockOrderBook(
         hasNext: page + 1 < totalPages,
         hasPrevious: page > 0,
       });
+    },
+
+    /**
+     * GET /installments/me/{installmentId} (BE myOne): the installment with the receipt that paid
+     * it - one RECORDED receipt for the money the mock allocated to it, none when nothing was paid.
+     */
+    installment(installmentId: string): MockResult {
+      const installment = orders
+        .filter((o) => o.customerId === customerId)
+        .flatMap((o) => mockInstallmentsOf(o) ?? [])
+        .find((i) => i.installmentId === installmentId);
+      if (!installment) return fail(404, "INSTALLMENT_NOT_FOUND", "Installment not found");
+      const recordedAt = installment.paidAt ?? installment.reachedAt ?? new Date().toISOString();
+      const receipts =
+        installment.paidAmount > 0
+          ? [
+              {
+                receiptId: `2b6f00${installmentId.slice(6)}`,
+                reference: `FT${installment.contractNumber.replace(/\D/g, "").slice(-8)}${installment.seq}`,
+                receivedOn: recordedAt.slice(0, 10),
+                amount: installment.paidAmount,
+                status: "RECORDED",
+                recordedAt,
+              },
+            ]
+          : [];
+      return ok({ ...installment, receipts });
     },
 
     /** GET /installments/me/{installmentId}/transfer-instructions (15 §4.2 step 5). */

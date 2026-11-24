@@ -109,7 +109,18 @@ export const ORDER_STATUS_GROUP_META: Record<
     hint: "Yêu cầu trả hàng của đơn đang được xử lý. Theo dõi từng bước trong mục Trả hàng.",
   },
   CANCELLED: { ...ORDER_STATUS.CANCELLED, hint: "Đơn đã bị huỷ và sẽ không được giao." },
-  RETURNED: { ...ORDER_STATUS.RETURNED, hint: "Đơn hàng đã được trả lại." },
+  // Kept nothing: every delivered unit came back, returned by the customer or brought back by the
+  // carrier (WF-05 F-2). Closed or not, the outcome is the same to the customer.
+  RETURNED: {
+    ...ORDER_STATUS.RETURNED,
+    hint: "Đơn không còn hàng nào giao cho bạn: bạn đã trả hàng, đơn vị vận chuyển hoàn về kho, hoặc hàng thất lạc khi vận chuyển. Xem mục Thanh toán và Hoàn tiền để biết số tiền liên quan.",
+  },
+  // WF-05 F-2 (BE-35): part delivered and kept, the rest returned by the customer, brought back by
+  // the carrier, or lost once the deliveries were over (a partly fulfilled order). Never "Đã trả hàng".
+  PARTIALLY_RETURNED: {
+    ...ORDER_STATUS.PARTIALLY_RETURNED,
+    hint: "Bạn đã nhận và giữ một phần hàng của đơn. Phần còn lại không giao cho bạn nữa: bạn đã trả lại, đơn vị vận chuyển hoàn về kho hoặc làm thất lạc. Xem mục Thanh toán và Hoàn tiền để biết số tiền liên quan.",
+  },
   // A group newer than this FE (see ORDER_STATUS_GROUP_UNKNOWN): neutral wording.
   UNKNOWN: {
     ...ORDER_STATUS.UNKNOWN,
@@ -118,11 +129,13 @@ export const ORDER_STATUS_GROUP_META: Record<
 };
 
 /**
- * What the badge and the status hero show: the status group, except a COMPLETED order. The BE folds
- * COMPLETED into the DELIVERED group (CustomerOrders.StatusGroup), so read alone the customer would
- * never see that the order is done — its return window over and its installments paid.
+ * What the badge and the status hero show: the status group, except a COMPLETED order and a CLOSED
+ * one that was completed first. The BE folds both into the DELIVERED group
+ * (CustomerOrders.StatusGroup), so read alone the customer would never see that the order is done —
+ * and a closed order would read "hoàn tất khi hết hạn đổi trả" again (SF-02). A CLOSED order of the
+ * refund branch keeps its group (RETURNED / PARTIALLY_RETURNED): that is what happened to its goods.
  */
-export type OrderDisplayGroup = OrderStatusGroup | "COMPLETED";
+export type OrderDisplayGroup = OrderStatusGroup | "COMPLETED" | "CLOSED";
 
 export const ORDER_DISPLAY_META: Record<
   OrderDisplayGroup,
@@ -133,10 +146,17 @@ export const ORDER_DISPLAY_META: Record<
     ...ORDER_STATUS.COMPLETED,
     hint: "Đơn đã hoàn tất: hết hạn đổi trả và các đợt thanh toán đã đủ.",
   },
+  CLOSED: {
+    ...ORDER_STATUS.CLOSED,
+    hint: "Đơn đã hoàn tất và đã đóng: hết hạn đổi trả, không còn khoản nào phải thanh toán.",
+  },
 };
 
-export const displayGroup = (order: Pick<Order, "status" | "statusGroup">): OrderDisplayGroup =>
-  order.status === "COMPLETED" ? "COMPLETED" : order.statusGroup;
+export function displayGroup(order: Pick<Order, "status" | "statusGroup">): OrderDisplayGroup {
+  if (order.status === "COMPLETED") return "COMPLETED";
+  if (order.status === "CLOSED" && order.statusGroup === "DELIVERED") return "CLOSED";
+  return order.statusGroup;
+}
 
 /**
  * The order's progress as the B2B process runs (SF-UX-30): contract, first installment, production,
@@ -161,7 +181,7 @@ const PROGRESS_STEPS: readonly { id: ProgressStepId; label: string }[] = [
   { id: "done", label: "Hoàn tất" },
 ];
 
-/** Index of the current step per group; COMPLETED is past the last one. */
+/** Index of the current step per group; COMPLETED and CLOSED are past the last one. */
 const CURRENT_STEP: Record<OrderDisplayGroup, number | null> = {
   AWAITING_CONTRACT: 0,
   AWAITING_PAYMENT: 1,
@@ -175,8 +195,11 @@ const CURRENT_STEP: Record<OrderDisplayGroup, number | null> = {
   // The goods reached the customer; a return of them is being decided.
   RETURN_REQUESTED: 4,
   COMPLETED: PROGRESS_STEPS.length,
+  CLOSED: PROGRESS_STEPS.length,
   CANCELLED: null,
   RETURNED: null,
+  // Goods came back: off the happy path, as RETURNED.
+  PARTIALLY_RETURNED: null,
   UNKNOWN: null,
 };
 
@@ -193,7 +216,7 @@ export function orderProgress(
   if (current === null) return null;
   // Under review after signing: past payment once the first installment is in.
   if (group === "UNDER_REVIEW" && firstInstallmentPaid) current = 2;
-  const completed = group === "COMPLETED";
+  const completed = group === "COMPLETED" || group === "CLOSED";
   return PROGRESS_STEPS.map((step, index) => {
     let state: ProgressState = index < current! ? "done" : index === current ? "current" : "todo";
     if (step.id === "firstPayment" && state === "done" && !completed && !firstInstallmentPaid) {

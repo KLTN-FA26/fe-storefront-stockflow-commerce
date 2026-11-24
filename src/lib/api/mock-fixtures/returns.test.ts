@@ -135,6 +135,20 @@ describe("mock returns (BE ReturnRequest.open refusals)", () => {
     expect(detail.status).toBe("AWAITING_RETURN");
     expect(detail.receivedAt).toBeTruthy();
   });
+
+  it("says receiptDraftOpen while the warehouse counts a parcel, and refuses the withdrawal (BE-23)", () => {
+    const { returns } = setup(new Date("2026-11-16T00:00:00Z"));
+    const rows = data(returns.mine()).items as { id: string; status: string }[];
+    const waiting = rows.find((r) => r.status === "AWAITING_RETURN")!;
+    expect(data(returns.one(waiting.id)).receiptDraftOpen).toBe(false);
+    returns.countParcel(waiting.id);
+    expect(data(returns.one(waiting.id)).receiptDraftOpen).toBe(true);
+    const row = (data(returns.mine()).items as { id: string; receiptDraftOpen: boolean }[]).find(
+      (r) => r.id === waiting.id,
+    );
+    expect(row?.receiptDraftOpen).toBe(true);
+    expect(code(returns.cancel(waiting.id))).toBe("RETURN_RECEIPT_DRAFT_OPEN");
+  });
 });
 
 describe("mock order shipments (BE CustomerOrderShipment.lines, WF-05 TH-1)", () => {

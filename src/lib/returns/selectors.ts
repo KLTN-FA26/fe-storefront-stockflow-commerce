@@ -1,9 +1,19 @@
 import type { SemanticTone } from "@/lib/domain/types";
 import { RETURN_WINDOW_DAYS, returnWindowEnd } from "@/lib/domain/return-window";
 
-import type { CustomerReturn, ReturnReason, ReturnStatus } from "./schemas";
+import type {
+  CustomerReturn,
+  ReturnReason,
+  ReturnRefusalReason,
+  ReturnRow,
+  ReturnStatus,
+} from "./schemas";
 
-/** Trạng thái khách đọc (BE `ReturnStatus`, 17 §4.10). */
+/**
+ * Trạng thái khách đọc (BE `ReturnStatus`, 17 §4.10). `RESOLVED` ở đây là nhãn của yêu cầu đã hoàn
+ * tiền; một yêu cầu xong mà không hoàn đồng nào đọc `RETURN_NOT_REFUNDED_META` — luôn qua
+ * `returnStatusMeta`, không đọc thẳng bảng này cho một yêu cầu cụ thể.
+ */
 export const RETURN_STATUS_META: Record<
   ReturnStatus,
   { label: string; tone: SemanticTone; help: string }
@@ -59,24 +69,170 @@ export const RETURN_REASON_LABEL: Record<ReturnReason, string> = {
   UNKNOWN: "Khác",
 };
 
+/**
+ * Nhãn tiếng Việt của lý do không hoàn tiền — đúng chữ của bundle `_vi` BE
+ * (`label.ReturnRefusalReason.*`, WF-05 Q-4). Lý do mới hơn FE: null, không đoán chữ.
+ */
+export const RETURN_REFUSAL_REASON_LABEL: Record<ReturnRefusalReason, string | null> = {
+  CUSTOMER_DAMAGE: "Hư hỏng do bảo quản/sử dụng",
+  NOT_DEFECTIVE: "Không phát hiện lỗi",
+  OUT_OF_POLICY: "Ngoài chính sách đổi trả",
+  OTHER: "Lý do khác",
+  UNKNOWN: null,
+};
+
+/**
+ * Chênh lệch kho ghi khi xác nhận phiếu nhập hàng trả (BE `ReturnDiscrepancy.Kind`): thiếu / thừa so với số đã duyệt,
+ * thùng của mã hàng yêu cầu không nêu (UNEXPECTED_ITEM), hoặc hàng lẻ khác mã (WRONG_ITEM, chỉ có ở dữ liệu cũ). Mã lạ:
+ * "chênh lệch" — không đoán là thừa (audit r2 Low 14).
+ */
+export function discrepancyKindText(kind: string): string {
+  switch (kind) {
+    case "SHORT":
+      return "thiếu";
+    case "EXCESS":
+      return "thừa";
+    case "UNEXPECTED_ITEM":
+      return "ngoài yêu cầu";
+    case "WRONG_ITEM":
+      return "sai mã hàng";
+    default:
+      return "chênh lệch";
+  }
+}
+
+/** Một yêu cầu đã xong mà không hoàn đồng nào (WF-05 Q-4, SF-01): không bao giờ "Đã hoàn tiền". */
+export const RETURN_NOT_REFUNDED_META: { label: string; tone: SemanticTone; help: string } = {
+  label: "Đã xử lý — không hoàn tiền",
+  tone: "neutral",
+  help: "Yêu cầu đã được xử lý xong và không có khoản hoàn tiền nào.",
+};
+
+/** Yêu cầu đã xong kết thúc thế nào, như khách đọc. */
+export type RefundOutcome = "REFUNDED" | "REFUSED" | "NOTHING_TO_REFUND";
+
+type OutcomeSource = Pick<ReturnRow, "status" | "refundedAmount" | "offsetAmount" | "outcome"> &
+  Partial<Pick<ReturnRow, "settlementAmount">> &
+  Partial<Pick<CustomerReturn, "refusalReason" | "lines">>;
+
+/**
+ * Một yêu cầu `RESOLVED` có hoàn tiền thật hay không (SF-01); null khi chưa xong. BE nói
+ * `outcome` (REFUSED / NOTHING_TO_REFUND được tin ngay); còn lại chỉ coi là đã hoàn khi có tiền
+ * thật — phần chuyển lại, phần trừ vào đợt còn nợ, tiền hoàn của dòng hay số đề nghị lớn hơn 0 —
+ * nên một yêu cầu xong với 0 đồng không bao giờ đọc "Đã hoàn tiền", kể cả trên BE cũ không gửi
+ * `outcome` (Σ`refundQuantity` = 0, hai khoản tiền 0 hay vắng).
+ */
+export function refundOutcome(request: OutcomeSource): RefundOutcome | null {
+  if (request.status !== "RESOLVED") return null;
+  if (request.outcome === "REFUSED" || request.outcome === "NOTHING_TO_REFUND") {
+    return request.outcome;
+  }
+  const lineMoney = (request.lines ?? []).reduce(
+    (sum, line) => sum + Math.max(line.refundAmount ?? 0, 0),
+    0,
+  );
+  const money = Math.max(
+    (request.refundedAmount ?? 0) + (request.offsetAmount ?? 0),
+    lineMoney,
+    request.settlementAmount ?? 0,
+  );
+  if (money > 0) return "REFUNDED";
+  return request.refusalReason ? "REFUSED" : "NOTHING_TO_REFUND";
+}
+
+/** Nhãn, màu và lời giải thích của một yêu cầu cụ thể: như bảng, trừ RESOLVED không hoàn tiền. */
+export function returnStatusMeta(request: OutcomeSource): {
+  label: string;
+  tone: SemanticTone;
+  help: string;
+} {
+  const outcome = refundOutcome(request);
+  return outcome !== null && outcome !== "REFUNDED"
+    ? RETURN_NOT_REFUNDED_META
+    : RETURN_STATUS_META[request.status];
+}
+
 /** Hàng chưa về: khách còn rút được (BE `cancel`: REQUESTED, AWAITING_RETURN). */
 export const isWithdrawable = (status: ReturnStatus) =>
   status === "REQUESTED" || status === "AWAITING_RETURN";
 
 /**
- * Khách rút được yêu cầu này không: trạng thái còn rút được và chưa kiện hàng trả nào về kho. Mỗi
- * kiện kho nhận ghi `receivedAt` và `lines[].receivedQuantity` trong khi yêu cầu vẫn
- * `AWAITING_RETURN`; khi đó BE từ chối rút (`RETURN_GOODS_PARTLY_RECEIVED`, WF-05 TH-3).
+ * Khách rút được yêu cầu này không: trạng thái còn rút được, chưa kiện hàng trả nào về kho, và kho
+ * không đang kiểm đếm kiện nào trên phiếu nháp. Mỗi kiện kho nhận ghi `receivedAt` và
+ * `lines[].receivedQuantity` trong khi yêu cầu vẫn `AWAITING_RETURN`; khi đó BE từ chối rút
+ * (`RETURN_GOODS_PARTLY_RECEIVED`, WF-05 TH-3). Trong lúc kho đếm (`receiptDraftOpen`, BE-23) BE
+ * từ chối bằng `RETURN_RECEIPT_DRAFT_OPEN`.
  */
 export const canWithdrawReturn = (
-  request: Pick<CustomerReturn, "status" | "receivedAt" | "lines">,
+  request: Pick<CustomerReturn, "status" | "receivedAt" | "lines" | "receiptDraftOpen">,
 ): boolean =>
-  isWithdrawable(request.status) &&
-  !request.receivedAt &&
-  !request.lines.some((line) => (line.receivedQuantity ?? 0) > 0);
+  isWithdrawable(request.status) && !goodsReceived(request) && !withdrawHeldByCount(request);
 
-/** Ảnh vấn đề chỉ thêm được khi yêu cầu còn chờ duyệt. */
-export const acceptsPhotos = (status: ReturnStatus) => status === "REQUESTED";
+/**
+ * Chỉ vì kho đang kiểm đếm một kiện trên phiếu nháp mà chưa rút được (BE `receiptDraftOpen`): khi
+ * kho xác nhận, hàng đã về (không rút nữa); khi kho huỷ phiếu, khách rút lại được.
+ */
+export const withdrawHeldByCount = (
+  request: Pick<CustomerReturn, "status" | "receivedAt" | "lines" | "receiptDraftOpen">,
+): boolean =>
+  isWithdrawable(request.status) && !goodsReceived(request) && request.receiptDraftOpen === true;
+
+/**
+ * Kho đã xác nhận nhận ít nhất một kiện hàng trả (`receivedAt`, `lines[].receivedQuantity`): từ lúc
+ * đó có phiếu nhập kho (Mẫu 01-VT) để khách tải, và yêu cầu không rút được nữa.
+ */
+export const goodsReceived = (request: Pick<CustomerReturn, "receivedAt" | "lines">): boolean =>
+  !!request.receivedAt || request.lines.some((line) => (line.receivedQuantity ?? 0) > 0);
+
+/**
+ * Câu về hàng giữ hộ sau một yêu cầu không hoàn tiền (WF-05 Q-4, audit r2 returns H1): theo lựa chọn Sales đã ghi
+ * (`custodyChoice`); chưa ghi → Sales sẽ liên hệ; mã lạ → câu chung. Audit r3 RAD-1: thùng tính theo từng SKU, nên một yêu
+ * cầu CÓ hoàn tiền vẫn có thể có thùng giữ hộ (SKU không được hoàn, thùng nguyên vượt số được hoàn) — `partial` nói về
+ * phần hàng không được hoàn đó.
+ */
+export function custodyChoiceText(
+  request: Pick<CustomerReturn, "custodyChoice">,
+  partial = false,
+): string {
+  if (partial) {
+    switch (request.custodyChoice) {
+      case "SEND_BACK":
+        return "Với phần hàng không được hoàn tiền, bạn đã chọn nhận lại: kho sẽ gửi trả, phí vận chuyển do bạn chịu.";
+      case "DESTROY_ON_BEHALF":
+        return "Với phần hàng không được hoàn tiền, bạn đã đồng ý để công ty huỷ hộ (có biên bản).";
+      default:
+        return "Sales đã ghi lựa chọn của bạn cho phần hàng không được hoàn tiền. Hãy chat với Sales nếu cần biết thêm.";
+    }
+  }
+  switch (request.custodyChoice) {
+    case "SEND_BACK":
+      return "Bạn đã chọn nhận lại hàng: kho sẽ gửi trả hàng bạn đã gửi về, phí vận chuyển do bạn chịu.";
+    case "DESTROY_ON_BEHALF":
+      return "Bạn đã đồng ý để công ty huỷ hộ hàng bạn đã gửi về (có biên bản).";
+    case "UNKNOWN":
+      return "Sales đã ghi lựa chọn của bạn cho hàng bạn đã gửi về. Hãy chat với Sales nếu cần biết thêm.";
+    default:
+      return "Hàng bạn đã gửi về vẫn thuộc về bạn. Sales sẽ liên hệ để thống nhất gửi trả lại hoặc huỷ hộ (có biên bản).";
+  }
+}
+
+/**
+ * Lý do không hoàn tiền như khách đọc: nhãn cố định của FE, hoặc `refusalReasonLabel` BE gửi cho
+ * một mã mới hơn FE (BE `CustomerReturnResponse.refusalReasonLabel`, cùng bundle `_vi`).
+ */
+export const refusalReasonText = (
+  request: Pick<CustomerReturn, "refusalReason" | "refusalReasonLabel">,
+): string | null =>
+  (request.refusalReason ? RETURN_REFUSAL_REASON_LABEL[request.refusalReason] : null) ??
+  request.refusalReasonLabel ??
+  null;
+
+/**
+ * Ảnh vấn đề thêm được khi yêu cầu còn chờ duyệt hoặc đã duyệt và đang chờ hàng về — đúng hai trạng
+ * thái BE nhận ảnh của khiếu nại (`ReturnRequest.requireEvidenceAllowed`, stage CLAIM; SF-04).
+ */
+export const acceptsPhotos = (status: ReturnStatus) =>
+  status === "REQUESTED" || status === "AWAITING_RETURN";
 
 /** Còn mở: giữ số lượng của dòng và giữ đơn khỏi hoàn tất (BE `ReturnStatus.isOpen`). */
 export const isReturnOpen = (status: ReturnStatus) =>
@@ -86,9 +242,10 @@ export const isReturnOpen = (status: ReturnStatus) =>
   status === "SETTLEMENT_PENDING";
 
 /**
- * Khách tự mở yêu cầu được không (BE `ReturnRequest.requireReturnable`, BR-RMA-001): đơn
- * `DELIVERED` / `RETURN_REQUESTED`, còn trong hạn (`windowDays`, mặc định 7) từ ngày giao. Ngoài hạn hay đơn đã tất toán
- * do trả hàng thì phải nhờ Sales. BE vẫn kiểm lại.
+ * Chỉ cho BE cũ không gửi lần giao nào kèm `returnableQuantity`: khách tự mở yêu cầu được không
+ * (BE `ReturnRequest.requireReturnable`, BR-RMA-001) — đơn `DELIVERED` / `RETURN_REQUESTED`, còn
+ * trong hạn (`windowDays`, mặc định 7) từ ngày giao. Khi BE gửi số trả được của từng lần giao thì
+ * `returnEligibility` đọc số đó, không dùng hàm này (SF-05). BE vẫn kiểm lại.
  */
 export function canOpenReturn(
   orderStatus: string,
@@ -102,29 +259,34 @@ export function canOpenReturn(
 }
 
 /**
- * Số cái của một dòng đơn khách còn yêu cầu trả được: đã giao trừ phần các yêu cầu khác còn giữ
- * (BE `ReturnLine.claimedUnits`: yêu cầu đang mở giữ số yêu cầu / duyệt; đã xong giữ số hoàn;
- * bị từ chối / rút / quá hạn không giữ gì).
+ * Số cái của một dòng đơn mà một yêu cầu đang giữ, như BE `ReturnLine.claimedUnits` tính sau BE-21
+ * (WF-05): hàng đã về kho luôn bị giữ, để không khiếu nại lại được hàng đã trả về. Đang chờ duyệt:
+ * số yêu cầu; đã duyệt, đang chờ hàng hay chờ hoàn: số lớn hơn giữa số duyệt và số kho đã nhận; đã
+ * xong: số lớn hơn giữa số được hoàn và số kho đã nhận (hoàn 0 đồng vẫn giữ hàng đã về); từ chối /
+ * rút / quá hạn: chỉ số kho đã nhận (thường là 0). Chỉ dùng để hiển thị và cho BE cũ không gửi
+ * `returnableQuantity`; số trả được thật là của BE.
  */
 export function claimedUnits(
   line: {
     requestedQuantity: number;
     approvedQuantity?: number | null | undefined;
+    receivedQuantity?: number | null | undefined;
     refundQuantity: number;
   },
   status: ReturnStatus,
 ): number {
+  const received = Math.max(line.receivedQuantity ?? 0, 0);
   switch (status) {
     case "REQUESTED":
-      return line.requestedQuantity;
+      return Math.max(line.requestedQuantity, received);
     case "AWAITING_RETURN":
     case "RECEIVED":
     case "SETTLEMENT_PENDING":
-      return line.approvedQuantity ?? 0;
+      return Math.max(line.approvedQuantity ?? 0, received);
     case "RESOLVED":
-      return line.refundQuantity;
+      return Math.max(line.refundQuantity, received);
     default:
-      return 0;
+      return received;
   }
 }
 

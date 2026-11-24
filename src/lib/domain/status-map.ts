@@ -55,19 +55,24 @@ export const QUOTE_STATUS: Readonly<Record<QuoteStatusKey, StatusMeta>> = {
 
 // ── Sales contract (kltn-docs 14 §5.2) ──
 
-export type ContractStatusKey = "DRAFT" | "SENT" | "SIGNED" | "COMPLETED" | "CANCELLED" | "UNKNOWN";
+export type ContractStatusKey =
+  "DRAFT" | "SENT" | "SIGNED" | "COMPLETED" | "LIQUIDATED" | "CANCELLED" | "UNKNOWN";
 
 export const CONTRACT_STATUS: Readonly<Record<ContractStatusKey, StatusMeta>> = {
   DRAFT: { label: "Nháp", tone: "neutral" },
   SENT: { label: "Chờ bạn ký", tone: "warning" },
   SIGNED: { label: "Đã ký", tone: "positive" },
   COMPLETED: { label: "Hoàn tất", tone: "muted" },
+  // WF-05 Q-6 (14 §5.2): the order ended with nothing delivered (all came back, all lost, cancelled
+  // after signing) and its money is settled. Not "Hoàn tất": the contract was not performed.
+  // Label exactly as decided ("Thanh lý", decision Q-6) and as the back office shows it.
+  LIQUIDATED: { label: "Thanh lý", tone: "muted" },
   CANCELLED: { label: "Đã huỷ", tone: "danger" },
   UNKNOWN: { label: "Đang cập nhật", tone: "neutral" },
 };
 
 // ── Order, by the status group the BE reports to a customer (CustomerOrders.StatusGroup) plus
-// COMPLETED, which the BE folds into DELIVERED. ──
+// COMPLETED and CLOSED-after-completion, which the BE folds into DELIVERED. ──
 
 export type OrderDisplayGroupKey =
   | "AWAITING_CONTRACT"
@@ -83,6 +88,8 @@ export type OrderDisplayGroupKey =
   | "COMPLETED"
   | "CANCELLED"
   | "RETURNED"
+  | "PARTIALLY_RETURNED"
+  | "CLOSED"
   | "UNKNOWN";
 
 export const ORDER_STATUS: Readonly<Record<OrderDisplayGroupKey, StatusMeta>> = {
@@ -99,6 +106,12 @@ export const ORDER_STATUS: Readonly<Record<OrderDisplayGroupKey, StatusMeta>> = 
   COMPLETED: { label: "Hoàn tất", tone: "positive" },
   CANCELLED: { label: "Đã huỷ", tone: "danger" },
   RETURNED: { label: "Đã trả hàng", tone: "special" },
+  // WF-05 F-2 (BE-35): the customer kept part of the goods; the rest came back (their return, the
+  // carrier's) or was lost - not "Đã trả hàng", which would say they kept nothing, nor "hoàn về",
+  // which a lost shipment never was.
+  PARTIALLY_RETURNED: { label: "Giữ một phần hàng", tone: "info" },
+  // A completed order the shop has since closed (SF-02): its journey is over.
+  CLOSED: { label: "Đã đóng", tone: "muted" },
   UNKNOWN: { label: "Đang xử lý", tone: "info" },
 };
 
@@ -144,7 +157,8 @@ export const INSTALLMENT_MILESTONE: Readonly<Record<InstallmentMilestoneKey, str
   ON_SIGNING: "Khi ký hợp đồng",
   BEFORE_DELIVERY: "Trước khi giao hàng",
   AFTER_DELIVERY: "Sau khi giao hàng",
-  CANCELLATION_FEE: "Phí huỷ đơn",
+  // Khoản phí lập khi huỷ đơn hoặc khi đóng phần còn lại; nhãn của từng khoản theo tên BE (`installmentMilestoneLabel`)
+  CANCELLATION_FEE: "Phí huỷ đơn / đóng phần còn lại",
   FAILED_TRIP_FEE: "Phí chuyến giao không thành",
   UNKNOWN: "Theo hợp đồng",
 };

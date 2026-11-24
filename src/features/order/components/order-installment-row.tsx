@@ -3,6 +3,7 @@
 import { ChevronDown } from "lucide-react";
 import { cn } from "cn";
 
+import { InstallmentReceipts } from "@/components/storefront/installment-receipts";
 import { TONE_BADGE_CLASSES } from "@/components/storefront/tone-badge";
 import { InstallmentTransferSection } from "@/components/storefront/transfer-instructions";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format/date";
 import { formatMoney } from "@/lib/format/money";
 import {
-  INSTALLMENT_MILESTONE_LABEL,
+  installmentMilestoneLabel,
   installmentStatusMeta,
   installmentTitle,
   isPayable,
@@ -65,7 +66,7 @@ export function OrderInstallmentRow({
         <div className="min-w-0">
           <p className="text-ink-primary font-semibold">{installmentTitle(installment)}</p>
           <p className="text-ink-secondary">
-            {INSTALLMENT_MILESTONE_LABEL[installment.milestone]}
+            {installmentMilestoneLabel(installment)}
             {installment.deliveryBatchSeq ? ` · đợt giao ${installment.deliveryBatchSeq}` : ""}
           </p>
         </div>
@@ -96,6 +97,15 @@ export function OrderInstallmentRow({
           </dd>
         </div>
       </dl>
+      {(installment.reducedAmount ?? 0) > 0 ? (
+        <p className="text-ink-secondary">
+          Đã giảm{" "}
+          <span className="text-ink-primary font-medium tabular-nums">
+            {money(installment.reducedAmount ?? 0)}
+          </span>{" "}
+          do đóng phần hàng chưa giao hoặc hàng trả / hoàn về.
+        </p>
+      ) : null}
       {due ? (
         <p
           className={cn(installment.overdue ? "text-danger-ink font-medium" : "text-ink-secondary")}
@@ -126,6 +136,7 @@ export function OrderInstallmentRow({
           ) : null}
         </>
       ) : null}
+      <InstallmentReceipts installment={installment} />
     </li>
   );
 }

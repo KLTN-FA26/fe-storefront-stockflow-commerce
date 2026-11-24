@@ -159,9 +159,15 @@ describe("OrderInvoicesCard — HT-1", () => {
       />,
     );
     const notes = await screen.findByRole("list", { name: "Điều kiện xuất hoá đơn" });
-    expect(notes).toHaveTextContent(/từng lần giao thành công/);
+    // WF-05 Q-1: issued by the system on the delivery day itself, never "the next working day".
+    expect(notes).toHaveTextContent(/Mỗi lần giao thành công có một hoá đơn VAT riêng/);
+    expect(notes).toHaveTextContent(/ngay trong ngày giao/);
+    expect(notes).not.toHaveTextContent(/ngày làm việc tiếp theo/);
     expect(notes).toHaveTextContent(/chưa có lần giao thành công/);
     expect(notes).toHaveTextContent(/không được xuất hoá đơn/);
+    // HĐ-3: an issued invoice is reduced by an adjustment, never cancelled.
+    expect(notes).toHaveTextContent(/hoá đơn điều chỉnh giảm/);
+    expect(notes).not.toHaveTextContent(/huỷ/);
   });
 
   it("says nothing more once the order is completed", async () => {
@@ -260,6 +266,71 @@ describe("OrderRefundCard (kltn-docs 15 §4.5)", () => {
     expect(await screen.findByText("Chưa tải được thông tin hoàn tiền")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Thử lại" }));
     expect(await screen.findByText("Còn chờ hoàn")).toBeInTheDocument();
+  });
+
+  it("audit r2 M-4: nothing paid, goods brought back → no refund rows, but the waived shipping fee shows", async () => {
+    backend(["payment-refunds:READ"], {
+      [`/refunds/me/orders/${orderId}`]: () => ({
+        orderId,
+        currency: "VND",
+        refundStatus: "NONE",
+        refundable: 0,
+        refunded: 0,
+        remaining: 0,
+        feeOwed: 0,
+        records: [],
+        settlements: [{ kind: "SHIPMENT_RETURNED", shippingFeeWaived: 810_000 }],
+      }),
+    });
+    renderWithProviders(<OrderRefundCard order={order()} />);
+    expect(await screen.findByText("Phí vận chuyển được miễn")).toBeInTheDocument();
+    expect(screen.getByText("Phí vận chuyển được miễn").nextElementSibling).toHaveTextContent(
+      /810\.000/,
+    );
+    expect(screen.getByText(/không có khoản tiền nào phải hoàn/)).toBeInTheDocument();
+    expect(screen.queryByText("Còn chờ hoàn")).not.toBeInTheDocument();
+  });
+
+  it("audit r2 M-4: a closure fee still owed shows with nothing refundable", async () => {
+    backend(["payment-refunds:READ"], {
+      [`/refunds/me/orders/${orderId}`]: () => ({
+        orderId,
+        currency: "VND",
+        refundStatus: "NONE",
+        refundable: 0,
+        refunded: 0,
+        remaining: 0,
+        feeOwed: 500_000,
+        records: [],
+        settlements: [],
+      }),
+    });
+    renderWithProviders(<OrderRefundCard order={order()} />);
+    expect(await screen.findByText("Phí còn phải thanh toán")).toBeInTheDocument();
+    expect(screen.getByText("Phí còn phải thanh toán").nextElementSibling).toHaveTextContent(
+      /500\.000/,
+    );
+  });
+
+  it("is absent when nothing is refundable, waived or owed (404 or all zero)", async () => {
+    backend(["payment-refunds:READ"], {
+      [`/refunds/me/orders/${orderId}`]: () => ({
+        orderId,
+        currency: "VND",
+        refundStatus: "NONE",
+        refundable: 0,
+        refunded: 0,
+        remaining: 0,
+        feeOwed: 0,
+        records: [],
+        settlements: [{ kind: "GOODS_RETURNED", shippingFeeWaived: 0 }],
+      }),
+    });
+    const { container } = renderWithProviders(<OrderRefundCard order={order()} />);
+    await vi.waitFor(() =>
+      expect(api.get).toHaveBeenCalledWith(`/refunds/me/orders/${orderId}`, expect.anything()),
+    );
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("is absent when nothing is refundable (404 or zero)", async () => {

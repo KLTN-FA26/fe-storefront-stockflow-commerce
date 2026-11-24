@@ -9,8 +9,18 @@ import { tolerantEnum } from "@/lib/validation/tolerant-enum";
 // without who sent / signed / cancelled it and never with `creditWarning`. Jackson runs with
 // `default-property-inclusion: non_null`, so every nullable field may be absent. ──
 
-/** BE SalesContractStatus. The customer never sees a DRAFT (404 until it is sent). */
-export const CONTRACT_STATUSES = ["DRAFT", "SENT", "SIGNED", "COMPLETED", "CANCELLED"] as const;
+/**
+ * BE SalesContractStatus. The customer never sees a DRAFT (404 until it is sent). LIQUIDATED (WF-05
+ * Q-6, F-3): the order ended with nothing delivered and its money settled.
+ */
+export const CONTRACT_STATUSES = [
+  "DRAFT",
+  "SENT",
+  "SIGNED",
+  "COMPLETED",
+  "LIQUIDATED",
+  "CANCELLED",
+] as const;
 export const contractStatusSchema = tolerantEnum(CONTRACT_STATUSES);
 
 const instantSchema = z.iso.datetime({ offset: true });
@@ -88,6 +98,11 @@ export const contractDtoSchema = z.object({
   signedAt: instantSchema.nullish(),
   completedAt: instantSchema.nullish(),
   returnWindowDays: z.number().int().nullish(),
+  /**
+   * WF-05 (BE 81214e74): GET …/contract/appendix answers 200 exactly when this is true - signed, and a
+   * delivery window in force differs from the one signed. Absent (an older BE): no appendix offered.
+   */
+  appendixAvailable: z.boolean().default(false),
   version: z.number().int().nonnegative(),
 });
 

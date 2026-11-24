@@ -67,6 +67,8 @@ export interface MockContract {
   signedFileName?: string;
   signedAt?: string;
   returnWindowDays?: number;
+  /** BE 81214e74: a delivery window in force differs from the one signed. */
+  appendixAvailable: boolean;
   version: number;
 }
 
@@ -139,6 +141,7 @@ export function mockSentContract(order: MockOrder, now: Date): MockContract {
     ],
     sentAt: new Date(now.getTime() - DAY).toISOString(),
     returnWindowDays: 7,
+    appendixAvailable: false,
     version: 3,
   };
 }
@@ -189,6 +192,8 @@ export function mockSignedContract(order: MockOrder): MockContract {
     signedFileName: `${mockContractNumber(order)}-da-ky.pdf`,
     signedAt,
     returnWindowDays: 7,
+    // The mock moves no delivery window after signing, so no signed mock contract has an appendix.
+    appendixAvailable: false,
     version: 5,
   };
 }

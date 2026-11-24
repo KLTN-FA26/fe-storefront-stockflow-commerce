@@ -7,15 +7,23 @@ import { STORE_ROUTES } from "@/constants";
 import { ToneBadge } from "@/components/storefront/tone-badge";
 import { useHasPermission, useMyPermissions } from "@/lib/auth/my-permissions";
 import { formatDate } from "@/lib/format/date";
-import { RETURN_STATUS_META, useMyOrderReturns } from "@/lib/returns";
+import { returnStatusMeta, useMyOrderReturns } from "@/lib/returns";
 
 import type { Order } from "../types";
 
 const CARD =
   "rounded-[var(--r-lg)] border border-border-default bg-bg-surface p-[var(--card-pad)] shadow-[var(--card-shadow)]";
 export const RETURNS_PERMISSION = "sales-rmas:READ";
-/** Chỉ đơn đã có lần giao mới có thể có yêu cầu trả hàng. */
-const SHIPPED_STATES = new Set(["DELIVERED", "PARTIALLY_DELIVERED", "RETURNED"]);
+/**
+ * Chỉ đơn đã có lần giao mới có thể có yêu cầu trả hàng — kể cả đơn giữ một phần hàng, phần còn lại
+ * đã về kho (`PARTIALLY_RETURNED`, WF-05 BE-35).
+ */
+const SHIPPED_STATES = new Set([
+  "DELIVERED",
+  "PARTIALLY_DELIVERED",
+  "PARTIALLY_RETURNED",
+  "RETURNED",
+]);
 
 /** Các yêu cầu trả hàng của đơn, mới nhất trước; mỗi cái dẫn tới trang theo dõi của nó. */
 export function OrderReturnsCard({ order }: { order: Order }) {
@@ -38,7 +46,7 @@ export function OrderReturnsCard({ order }: { order: Order }) {
       </h2>
       <ul className="space-y-2">
         {returns.map((request) => {
-          const meta = RETURN_STATUS_META[request.status];
+          const meta = returnStatusMeta(request);
           return (
             <li key={request.id}>
               <Link

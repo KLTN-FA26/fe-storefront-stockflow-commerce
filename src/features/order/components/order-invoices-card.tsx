@@ -13,8 +13,12 @@ import { InvoiceRow } from "./order-invoice-row";
 const CARD =
   "rounded-[var(--r-lg)] border border-border-default bg-bg-surface p-[var(--card-pad)] shadow-[var(--card-shadow)]";
 export const EINVOICES_PERMISSION = "einvoices:READ";
-/** Đã có lần giao thành công: hoá đơn của nó đang chờ Kế toán phát hành (docs 21 §4.1–4.2). */
-const DELIVERED_STATES = new Set(["DELIVERED", "PARTIALLY_DELIVERED"]);
+/**
+ * Đã có lần giao thành công: hoá đơn của nó đang được phát hành (docs 21 §4.1–4.2). Gồm cả đơn giữ
+ * một phần hàng, phần còn lại về kho (`PARTIALLY_RETURNED`, WF-05 BE-35): hoá đơn của phần đã giao
+ * vẫn phải hiện.
+ */
+const DELIVERED_STATES = new Set(["DELIVERED", "PARTIALLY_DELIVERED", "PARTIALLY_RETURNED"]);
 
 /**
  * Hoá đơn điện tử của đơn (kltn-docs 21 §4.3 bước 9, §5.2): mỗi lần giao thành công một hoá đơn, kèm
@@ -26,7 +30,9 @@ export function OrderInvoicesCard({ order }: { order: Order }) {
   const permissions = useMyPermissions();
   const allowed = useHasPermission(EINVOICES_PERMISSION) && !permissions.isPending;
   const query = useMyOrderEInvoices(order.orderId, allowed);
-  const delivered = DELIVERED_STATES.has(order.deliveryState ?? "");
+  const delivered =
+    DELIVERED_STATES.has(order.deliveryState ?? "") ||
+    (order.shipments ?? []).some((shipment) => shipment.status === "DELIVERED");
   const invoices = query.data ?? [];
   // Link "thay thế" hiện số hoá đơn khách thấy trên dòng kia, không phải mã nội bộ `code` của BE
   const numbers = new Map(invoices.map((invoice) => [invoice.id, invoiceNumberText(invoice)]));

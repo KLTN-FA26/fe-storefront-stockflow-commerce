@@ -8,8 +8,10 @@ import { tolerantEnum } from "@/lib/validation/tolerant-enum";
 // runs with `default-property-inclusion: non_null`, so every nullable field may be absent. ──
 
 /**
- * When an installment falls due (15 §4.1 step 2). CANCELLATION_FEE and FAILED_TRIP_FEE are fees the
- * customer pays like an installment (15 §4.6 step 18; a refused or misaddressed delivery's trip).
+ * When an installment falls due (15 §4.1 step 2). CANCELLATION_FEE is a fee the customer pays like an
+ * installment (15 §4.6 step 18). FAILED_TRIP_FEE is no longer charged (WF-05 Q-19, BE-53: a failed
+ * trip costs the customer nothing, and a carrier return waives its share of the shipping fee); it
+ * stays readable for rows charged before.
  */
 export const INSTALLMENT_MILESTONES = [
   "ON_SIGNING",
