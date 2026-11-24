@@ -66,7 +66,7 @@ export function ProductPurchasePanel({
           {designEntry ?? null}
           <Button
             asChild
-            variant={designEntry ? "secondary" : "default"}
+            variant={designEntry ? "outline" : "default"}
             className="min-h-11 rounded-[var(--r-md)]"
           >
             <Link href={chatHref}>

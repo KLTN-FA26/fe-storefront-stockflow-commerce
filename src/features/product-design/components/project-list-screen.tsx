@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useQueryStates } from "nuqs";
 import { Plus } from "lucide-react";
 
-import { APP_ROUTES, STORE_ROUTES } from "@/constants";
+import { STORE_ROUTES } from "@/constants";
 import { ListPagination } from "@/components/storefront/list-pagination";
 import { PageShell } from "@/components/storefront/layout";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { useSignedIn } from "@/lib/auth/use-signed-in";
 
 import { useProjects } from "../queries";
 import { CreateProjectDialog } from "./create-project-dialog";
+import { DesignAreaSkeleton } from "./design-area-skeleton";
 import { DesignSectionSwitch } from "./design-section-switch";
 import { DesignWaitingNotice } from "./design-list-states";
 import { LauncherSignIn } from "./launcher-states";
@@ -34,21 +35,17 @@ import {
 /** Twelve divides the one-, two- and three-column grids evenly. */
 const PROJECT_PAGE_SIZE = 12;
 
-const CRUMBS = [{ label: "Trang chủ", href: APP_ROUTES.home }, { label: "Dự án thiết kế" }];
 const TITLE = "Dự án thiết kế";
 
 /** `/design/projects`: signed-in customers only, like "Thiết kế của tôi" (ruling R18). */
 export function ProjectListScreen() {
   const signedIn = useSignedIn();
   if (signedIn) return <SignedInProjectList />;
+  if (signedIn === undefined) return <DesignAreaSkeleton section="projects" />;
   return (
-    <PageShell breadcrumbs={CRUMBS} title={TITLE}>
+    <PageShell title={TITLE}>
       <DesignSectionSwitch current="projects" />
-      {signedIn === undefined ? (
-        <ProjectListSkeleton />
-      ) : (
-        <LauncherSignIn from={STORE_ROUTES.design.projects} />
-      )}
+      <LauncherSignIn from={STORE_ROUTES.design.projects} />
     </PageShell>
   );
 }
@@ -86,12 +83,7 @@ function SignedInProjectList() {
   } else if (error && !data) {
     body = <ProjectLoadError error={error} onRetry={() => void refetch()} retrying={isFetching} />;
   } else if (!data || data.totalElements === 0) {
-    body =
-      tab === "active" ? (
-        <NoProjectsYet onCreate={() => setCreating(true)} />
-      ) : (
-        <NoClosedProjects onShowActive={showActive} />
-      );
+    body = tab === "active" ? <NoProjectsYet /> : <NoClosedProjects onShowActive={showActive} />;
   } else {
     body = (
       <>
@@ -124,7 +116,6 @@ function SignedInProjectList() {
 
   return (
     <PageShell
-      breadcrumbs={CRUMBS}
       title={TITLE}
       subtitle="Gom các bản thiết kế của một bộ sản phẩm và gửi duyệt cả bộ."
       actions={
@@ -145,15 +136,14 @@ function SignedInProjectList() {
         className="gap-5"
       >
         <TabsList
-          variant="line"
           aria-label="Lọc dự án theo trạng thái"
-          className="w-full justify-start overflow-x-auto group-data-horizontal/tabs:h-auto"
+          className="bg-bg-muted h-auto p-1 group-data-horizontal/tabs:h-auto"
         >
           {PROJECT_TAB_IDS.map((id) => (
             <TabsTrigger
               key={id}
               value={id}
-              className="min-h-11 flex-none px-4 text-base group-data-horizontal/tabs:after:bottom-0"
+              className="text-ink-secondary hover:text-ink-primary data-active:bg-bg-surface data-active:text-ink-primary focus-visible:ring-accent/40 min-h-10 flex-none rounded-[var(--r-md)] px-4 text-sm focus-visible:border-transparent focus-visible:ring-2 focus-visible:outline-none data-active:shadow-sm"
             >
               {PROJECT_TABS[id].label}
             </TabsTrigger>

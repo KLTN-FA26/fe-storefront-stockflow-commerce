@@ -61,7 +61,7 @@ export function NotificationBell() {
           type="button"
           variant="ghost"
           size="icon"
-          className="text-ink-secondary hover:bg-bg-muted focus-visible:ring-accent relative size-11 shrink-0 rounded-full focus-visible:ring-2"
+          className="text-ink-secondary hover:bg-bg-subtle focus-visible:ring-accent relative size-11 shrink-0 rounded-full focus-visible:ring-2"
           aria-label={unreadCount ? L.badge(unreadCount) : L.title}
           aria-expanded={open}
         >

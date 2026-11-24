@@ -4,7 +4,8 @@ import { useEffect } from "react";
 import { parseAsInteger, useQueryState } from "nuqs";
 
 import { STORE_ROUTES } from "@/constants";
-import { PageHeader, ScrollAfterItems } from "@/components/shared";
+import { PageHeader } from "@/components/shared";
+import { FillViewportScroll } from "@/components/shared/FillViewportScroll";
 import { Button } from "@/components/ui/button";
 import { ListPagination } from "@/components/storefront/list-pagination";
 import { OrderCard } from "@/components/storefront/order-card";
@@ -52,8 +53,8 @@ export function OrdersScreen() {
 
   return (
     <>
-      <PageHeader title="Đơn hàng của tôi" subtitle="Theo dõi trạng thái và giao hàng." />
-      <div className="mt-6 space-y-4">
+      <PageHeader titleHidden title="Đơn hàng của tôi" subtitle="Theo dõi trạng thái và giao hàng." />
+      <div className="space-y-4">
         <OrderViewTabs
           view={view}
           onChange={(next) => {
@@ -106,7 +107,7 @@ export function OrdersScreen() {
                 retrying={isFetching}
               />
             )}
-            <ScrollAfterItems visibleItems={4} label="Danh sách đơn hàng">
+            <FillViewportScroll label="Danh sách đơn hàng">
               <ul className="space-y-3" aria-busy={isPlaceholderData}>
                 {data.items.map((order) => (
                   <li key={order.orderId}>
@@ -128,7 +129,7 @@ export function OrdersScreen() {
                   </li>
                 ))}
               </ul>
-            </ScrollAfterItems>
+            </FillViewportScroll>
             <ListPagination
               label="Phân trang đơn hàng"
               page={data.page}

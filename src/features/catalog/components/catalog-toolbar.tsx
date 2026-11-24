@@ -1,13 +1,8 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SelectOption, TitledSelectContent } from "@/components/shared/TitledSelect";
+import { Select, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 import { CATALOG_RESULT_WINDOW } from "../schemas";
 import type { CatalogSort } from "../sorts";
@@ -77,18 +72,18 @@ export function CatalogToolbar({
         </div>
         <Select value={sort} onValueChange={(value) => onSortChange(value as CatalogSort)}>
           <SelectTrigger
-            aria-label="Sắp xếp"
-            className="border-border-default bg-bg-surface dark:bg-bg-surface dark:hover:bg-bg-muted text-ink-primary min-h-11 rounded-[var(--r-md)] lg:w-48"
+            aria-label="Sắp xếp theo"
+            className="border-border-default bg-bg-surface dark:bg-bg-surface dark:hover:bg-bg-subtle text-ink-primary min-h-11 rounded-[var(--r-md)] lg:w-48"
           >
             <SelectValue placeholder="Sắp xếp" />
           </SelectTrigger>
-          <SelectContent>
+          <TitledSelectContent title="Sắp xếp theo">
             {sortOptions(Boolean(query)).map((option) => (
-              <SelectItem key={option.value} value={option.value}>
+              <SelectOption key={option.value} value={option.value}>
                 {option.label}
-              </SelectItem>
+              </SelectOption>
             ))}
-          </SelectContent>
+          </TitledSelectContent>
         </Select>
       </div>
       {/* Outside the bar, which is sticky below lg: the note scrolls away with the list. */}

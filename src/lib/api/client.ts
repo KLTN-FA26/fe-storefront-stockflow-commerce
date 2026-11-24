@@ -97,8 +97,12 @@ function logoutAfterUnauthorized(): void {
 api.interceptors.response.use(unwrapSuccess, async (err: AxiosError<ApiErrorBody> | ApiError) => {
   // Already ours (the request interceptor refused an expired token): not an HTTP failure to translate.
   if (err instanceof ApiError) return Promise.reject(err);
-  // A wrong password is also 401, but it is the login form's to show: not a lost session.
-  if (err.response?.status === 401 && !isAnonymous(err.config?.url)) logoutAfterUnauthorized();
+  // A wrong password is also 401, but it is the login form's to show: not a lost session. Nor is a 401 to a visitor
+  // who never signed in (no bearer was sent): the public home page must not bounce them to the login page.
+  const sentToken = Boolean(err.config?.headers?.Authorization);
+  if (err.response?.status === 401 && !isAnonymous(err.config?.url) && sentToken) {
+    logoutAfterUnauthorized();
+  }
   // A failed file download carries its JSON envelope as a Blob: read it so the BE's code and message survive.
   if (err.config?.responseType === "blob" && err.response?.data instanceof Blob) {
     err.response.data = (await readBlobErrorBody(err.response.data)) as ApiErrorBody;

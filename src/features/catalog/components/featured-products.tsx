@@ -7,7 +7,7 @@ import { useSignedIn } from "@/lib/auth/use-signed-in";
 
 import { useCatalogListing } from "../use-catalog-listing";
 import { toGridItem } from "./catalog-screen";
-import { CatalogGridSkeleton, CatalogLoadError, SignInRequired } from "./catalog-states";
+import { CatalogGridSkeleton, CatalogLoadError } from "./catalog-states";
 
 const FEATURED_COUNT = 4;
 
@@ -23,7 +23,9 @@ export function FeaturedProducts() {
   if (signedIn === undefined || (signedIn && page.isPending)) {
     body = <CatalogGridSkeleton count={FEATURED_COUNT} />;
   } else if (!signedIn) {
-    body = <SignInRequired />;
+    // Products are for signed-in customers (13 BR-02): the public home page simply does not list them; the hero's
+    // buttons lead to the login page through the session gate.
+    return null;
   } else if (!page.data) {
     body = (
       <CatalogLoadError

@@ -86,7 +86,7 @@ export interface ListToolbarProps<
 }
 
 function commandItemClassName() {
-  return "data-selected:bg-transparent data-selected:text-ink-secondary hover:bg-bg-muted/60 hover:text-ink-primary";
+  return "data-selected:bg-transparent data-selected:text-ink-secondary hover:bg-bg-subtle/60 hover:text-ink-primary";
 }
 
 export function ListToolbar<Status extends string, Field extends string, Column extends string>({
@@ -152,7 +152,7 @@ export function ListToolbar<Status extends string, Field extends string, Column 
                         size="icon"
                         aria-label="Lọc trạng thái"
                         className={cn(
-                          "border-border-default bg-bg-surface text-ink-tertiary hover:bg-bg-muted hover:text-ink-primary rounded-[var(--r-sm)] focus-visible:ring-0",
+                          "border-border-default bg-bg-surface text-ink-tertiary hover:bg-bg-subtle hover:text-ink-primary rounded-[var(--r-sm)] focus-visible:ring-0",
                           hasStatusFilter &&
                             "border-info bg-info/10 text-info hover:bg-info/10 hover:text-info",
                         )}
@@ -275,7 +275,7 @@ export function ListToolbar<Status extends string, Field extends string, Column 
                         size="icon"
                         aria-label="Ẩn hiện cột"
                         className={cn(
-                          "border-border-default bg-bg-surface text-ink-tertiary hover:bg-bg-muted hover:text-ink-primary rounded-[var(--r-sm)] focus-visible:ring-0",
+                          "border-border-default bg-bg-surface text-ink-tertiary hover:bg-bg-subtle hover:text-ink-primary rounded-[var(--r-sm)] focus-visible:ring-0",
                           hasColumnConfig &&
                             "border-warning bg-warning/10 text-warning hover:bg-warning/10 hover:text-warning",
                         )}
@@ -383,7 +383,7 @@ export function ListToolbar<Status extends string, Field extends string, Column 
                   size="icon-xs"
                   onClick={item.onClear}
                   aria-label={item.clearLabel ?? `Xoá ${item.label}`}
-                  className="text-ink-tertiary hover:bg-bg-muted hover:text-ink-primary size-4 rounded-full p-0"
+                  className="text-ink-tertiary hover:bg-bg-subtle hover:text-ink-primary size-4 rounded-full p-0"
                 >
                   <X className="size-3" />
                 </Button>
@@ -397,7 +397,7 @@ export function ListToolbar<Status extends string, Field extends string, Column 
           size="xs"
           onClick={onResetAll}
           disabled={resetDisabled}
-          className="text-ink-tertiary hover:bg-bg-muted hover:text-ink-primary ml-auto rounded-[var(--r-sm)]"
+          className="text-ink-tertiary hover:bg-bg-subtle hover:text-ink-primary ml-auto rounded-[var(--r-sm)]"
         >
           <RotateCcw className="size-3" />
           Đặt lại
@@ -431,7 +431,7 @@ export function ColumnFilterButton({
           size="icon-xs"
           aria-label={`Lọc ${label}`}
           className={cn(
-            "text-ink-tertiary hover:bg-bg-muted hover:text-ink-primary size-6 rounded-[var(--r-sm)] focus-visible:ring-0",
+            "text-ink-tertiary hover:bg-bg-subtle hover:text-ink-primary size-6 rounded-[var(--r-sm)] focus-visible:ring-0",
             active && "bg-info/10 text-info hover:bg-info/10 hover:text-info",
           )}
         >

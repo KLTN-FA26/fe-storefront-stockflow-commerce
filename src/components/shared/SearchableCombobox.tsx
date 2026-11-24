@@ -85,7 +85,7 @@ export function SearchableCombobox({
             <CommandInput placeholder={`Tìm ${label.toLowerCase()}...`} />
             <CommandList>
               <CommandEmpty className="text-ink-secondary">Không tìm thấy.</CommandEmpty>
-              <CommandGroup>
+              <CommandGroup heading={label}>
                 {options.map((option) => (
                   <CommandItem
                     key={option.value}

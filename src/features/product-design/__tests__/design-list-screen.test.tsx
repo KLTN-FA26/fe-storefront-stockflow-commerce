@@ -40,6 +40,13 @@ async function cardOf(name: string) {
   return within(heading.closest("li") as HTMLElement);
 }
 
+/** Opens a card's "⋯" menu (everything but its main button lives there) and returns the open menu. */
+async function menuOf(card: ReturnType<typeof within>) {
+  await userEvent.click(card.getByRole("button", { name: /Thao tác khác/ }));
+  return within(await screen.findByRole("menu"));
+}
+const closeMenu = () => userEvent.keyboard("{Escape}");
+
 /** The catalogue as "Thiết kế mới" gets it: these tests do not open the dialog. */
 const catalogue: DesignableCatalogue = {
   status: "ready",
@@ -68,15 +75,13 @@ describe("DesignListScreen", () => {
       `/login?next=${encodeURIComponent("/design")}`,
     );
     expect(screen.queryByRole("button", { name: /Thiết kế mới/ })).not.toBeInTheDocument();
-    expect(screen.queryByText(/bản nháp$/)).not.toBeInTheDocument();
     expect(get).not.toHaveBeenCalled();
   });
 
-  it("shows the draft count and a card per listed status, never an archived design", async () => {
+  it("shows a card per listed status, never an archived design", async () => {
     render();
 
-    expect(await screen.findByText("2/50 bản nháp")).toBeInTheDocument();
-    const list = screen.getByRole("list", LIST);
+    const list = await screen.findByRole("list", LIST, FIRST_READ);
     expect(within(list).getAllByRole("listitem")).toHaveLength(4);
     expect(screen.queryByText("Bản nháp cũ")).not.toBeInTheDocument();
   });
@@ -90,8 +95,8 @@ describe("DesignListScreen", () => {
       "href",
       expect.stringMatching(/^\/design\/7d51f000-/),
     );
-    expect(card.getByRole("button", { name: /Xoá/ })).toBeInTheDocument();
     expect(card.queryByText("Bị trả lại")).not.toBeInTheDocument();
+    expect((await menuOf(card)).getByRole("menuitem", { name: /Xoá/ })).toBeInTheDocument();
   });
 
   it("a returned draft shows the Bị trả lại badge and the reason", async () => {
@@ -109,9 +114,10 @@ describe("DesignListScreen", () => {
 
     expect(card.getByText("Chờ duyệt")).toBeInTheDocument();
     expect(card.getByRole("link", { name: /^Xem/ })).toBeInTheDocument();
-    expect(card.queryByRole("button", { name: /Xoá/ })).not.toBeInTheDocument();
     expect(card.queryByRole("link", { name: /Tiếp tục thiết kế/ })).not.toBeInTheDocument();
-    expect(card.queryByRole("button", { name: /Tạo bản sửa/ })).not.toBeInTheDocument();
+    const menu = await menuOf(card);
+    expect(menu.queryByRole("menuitem", { name: /Xoá/ })).not.toBeInTheDocument();
+    expect(menu.queryByRole("menuitem", { name: /Tạo bản sửa/ })).not.toBeInTheDocument();
   });
 
   it("an approved design can be viewed or revised, and a revision opens its new draft", async () => {
@@ -119,18 +125,19 @@ describe("DesignListScreen", () => {
     const card = await cardOf("Ly cà phê Nhà Mình 12oz");
 
     expect(card.getByText("Đã duyệt")).toBeInTheDocument();
-    expect(card.getByRole("link", { name: /^Xem/ })).toBeInTheDocument();
-    await userEvent.click(card.getByRole("button", { name: /Tạo bản sửa/ }));
+    const menu = await menuOf(card);
+    expect(menu.getByRole("menuitem", { name: /^Xem/ })).toBeInTheDocument();
+    await userEvent.click(menu.getByRole("menuitem", { name: /Tạo bản sửa/ }));
 
     await waitFor(() => expect(env.push).toHaveBeenCalledTimes(1));
     expect(env.push.mock.calls[0]?.[0]).toMatch(/^\/design\/[0-9a-f-]{36}$/);
     expect(env.push.mock.calls[0]?.[0]).not.toContain("7d51f000-0000-4000-8000-000000000004");
   });
 
-  it("deletes a draft after confirmation: the card goes and the count drops", async () => {
+  it("deletes a draft after confirmation: the card goes", async () => {
     render();
     const card = await cardOf("Túi kraft tiệm bánh Hoa");
-    await userEvent.click(card.getByRole("button", { name: /Xoá/ }));
+    await userEvent.click((await menuOf(card)).getByRole("menuitem", { name: /Xoá/ }));
 
     const dialog = await screen.findByRole("dialog", { name: "Xoá bản nháp này?" });
     await userEvent.click(within(dialog).getByRole("button", { name: "Xoá bản nháp" }));
@@ -138,7 +145,6 @@ describe("DesignListScreen", () => {
     await waitFor(() =>
       expect(screen.queryByText("Túi kraft tiệm bánh Hoa")).not.toBeInTheDocument(),
     );
-    expect(await screen.findByText("1/50 bản nháp")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -146,7 +152,7 @@ describe("DesignListScreen", () => {
     const backend = await designBackend();
     render();
     const card = await cardOf("Túi kraft tiệm bánh Hoa");
-    await userEvent.click(card.getByRole("button", { name: /Xoá/ }));
+    await userEvent.click((await menuOf(card)).getByRole("menuitem", { name: /Xoá/ }));
     const dialog = await screen.findByRole("dialog", { name: "Xoá bản nháp này?" });
 
     // Another tab submits it first, so the version and status the card holds are stale.
@@ -163,7 +169,7 @@ describe("DesignListScreen", () => {
     const backend = await designBackend();
     render();
     const card = await cardOf("Túi kraft tiệm bánh Hoa");
-    await userEvent.click(card.getByRole("button", { name: /Xoá/ }));
+    await userEvent.click((await menuOf(card)).getByRole("menuitem", { name: /Xoá/ }));
     const dialog = await screen.findByRole("dialog", { name: "Xoá bản nháp này?" });
     const listReads = () => backend.get.mock.calls.filter(([url]) => url === "/designs").length;
     const readsBefore = listReads();
@@ -196,12 +202,15 @@ describe("DesignListScreen", () => {
     const first = await cardOf("Ly cà phê Nhà Mình 12oz");
     const second = await cardOf("Ly trà sữa Mây 500ml");
 
-    await userEvent.click(first.getByRole("button", { name: /Tạo bản sửa/ }));
+    await userEvent.click((await menuOf(first)).getByRole("menuitem", { name: /Tạo bản sửa/ }));
 
-    expect(first.getByRole("button", { name: /Tạo bản sửa/ })).toBeDisabled();
-    expect(first.getByText("Đang tạo...")).toBeInTheDocument();
-    expect(second.getByRole("button", { name: /Tạo bản sửa/ })).toBeDisabled();
-    expect(second.queryByText("Đang tạo...")).not.toBeInTheDocument();
+    let menu = await menuOf(first);
+    expect(menu.getByRole("menuitem", { name: /Tạo bản sửa/ })).toHaveAttribute("data-disabled");
+    expect(menu.getByText("Đang tạo...")).toBeInTheDocument();
+    await closeMenu();
+    menu = await menuOf(second);
+    expect(menu.getByRole("menuitem", { name: /Tạo bản sửa/ })).toHaveAttribute("data-disabled");
+    expect(menu.queryByText("Đang tạo...")).not.toBeInTheDocument();
   });
 
   describe("a revision that fails (L4)", () => {
@@ -210,7 +219,7 @@ describe("DesignListScreen", () => {
       backend.post.mockRejectedValueOnce(new ApiError(409, "DESIGN_NOT_DRAFT", "x"));
       render();
       const card = await cardOf("Ly cà phê Nhà Mình 12oz");
-      await userEvent.click(card.getByRole("button", { name: /Tạo bản sửa/ }));
+      await userEvent.click((await menuOf(card)).getByRole("menuitem", { name: /Tạo bản sửa/ }));
       expect(
         await screen.findByText("Thiết kế đã chuyển trạng thái, hãy tải lại."),
       ).toBeInTheDocument();
@@ -235,7 +244,9 @@ describe("DesignListScreen", () => {
     it("lets the customer try again: 'Tạo bản sửa' is on again", async () => {
       await failRevision();
       const card = await cardOf("Ly cà phê Nhà Mình 12oz");
-      expect(card.getByRole("button", { name: /Tạo bản sửa/ })).toBeEnabled();
+      expect(
+        (await menuOf(card)).getByRole("menuitem", { name: /Tạo bản sửa/ }),
+      ).not.toHaveAttribute("data-disabled");
     });
   });
 
@@ -246,14 +257,22 @@ describe("DesignListScreen", () => {
     const first = await cardOf("Ly cà phê Nhà Mình 12oz");
     const second = await cardOf("Ly trà sữa Mây 500ml");
 
-    await userEvent.click(first.getByRole("button", { name: /Tạo bản sửa/ }));
+    const before = within(screen.getByRole("list", LIST)).getAllByRole("listitem").length;
+    await userEvent.click((await menuOf(first)).getByRole("menuitem", { name: /Tạo bản sửa/ }));
     // The navigation is asked for; the test router never takes the list away.
     await waitFor(() => expect(env.push).toHaveBeenCalledTimes(1));
     // The list re-reads after the revision: wait for the new draft's card, then look again.
-    await waitFor(() => expect(screen.getByText("3/50 bản nháp")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(within(screen.getByRole("list", LIST)).getAllByRole("listitem")).toHaveLength(
+        before + 1,
+      ),
+    );
 
-    expect(first.getByRole("button", { name: /Tạo bản sửa/ })).toBeDisabled();
-    expect(second.getByRole("button", { name: /Tạo bản sửa/ })).toBeDisabled();
+    let menu = await menuOf(first);
+    expect(menu.getByRole("menuitem", { name: /Tạo bản sửa/ })).toHaveAttribute("data-disabled");
+    await closeMenu();
+    menu = await menuOf(second);
+    expect(menu.getByRole("menuitem", { name: /Tạo bản sửa/ })).toHaveAttribute("data-disabled");
   });
 
   it("puts the tab in the URL and resets the page when it changes", async () => {
@@ -329,7 +348,6 @@ describe("DesignListScreen", () => {
         "href",
         "/catalog",
       );
-      expect(screen.getByText("0/50 bản nháp")).toBeInTheDocument();
     });
 
     it("tells a customer that the tab is empty and lets them leave it", async () => {

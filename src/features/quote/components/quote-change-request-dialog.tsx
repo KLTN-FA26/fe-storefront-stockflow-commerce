@@ -102,7 +102,7 @@ export function QuoteChangeRequestDialog({
             <Button
               type="button"
               variant="outline"
-              className="border-border-strong bg-bg-surface text-ink-primary hover:bg-bg-muted min-h-11 rounded-[var(--r-sm)] px-4"
+              className="border-border-strong bg-bg-surface text-ink-primary hover:bg-bg-subtle min-h-11 rounded-[var(--r-sm)] px-4"
               onClick={() => onOpenChange(false)}
             >
               Quay lại

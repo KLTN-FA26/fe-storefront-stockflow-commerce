@@ -1,12 +1,7 @@
 "use client";
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SelectOption, TitledSelectContent } from "@/components/shared/TitledSelect";
+import { Select, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 import type { PrintAreaCode } from "../../engine";
@@ -64,13 +59,13 @@ export function SurfaceSwitcher() {
         >
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
+        <TitledSelectContent title="Mặt in">
           {surfaces.order.map((code) => (
-            <SelectItem key={code} value={code} className="min-h-11">
+            <SelectOption key={code} value={code} className="min-h-11">
               {nameOf(code)}
-            </SelectItem>
+            </SelectOption>
           ))}
-        </SelectContent>
+        </TitledSelectContent>
       </Select>
     </>
   );

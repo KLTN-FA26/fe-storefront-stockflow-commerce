@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { parseAsString, useQueryState } from "nuqs";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, LogIn } from "lucide-react";
+import { Loader2, LockKeyhole, LogIn, MailCheck, ShieldCheck } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
 import { Alert } from "@/components/shared";
-import { SurfaceCard } from "@/components/storefront/layout";
+import { PasswordInput } from "@/components/shared/PasswordInput";
+import { AuthHeading } from "@/components/storefront/auth/auth-heading";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,19 +54,20 @@ export function LoginScreen() {
   });
 
   return (
-    <SurfaceCard className="mx-auto w-full max-w-md space-y-5">
-      <div className="space-y-1">
-        <h1 className="font-display text-ink-primary text-2xl font-bold">Đăng nhập</h1>
-        <p className="text-ink-secondary text-sm">
-          Cổng khách hàng dành cho khách sỉ đã được StockFlow cấp tài khoản.
-        </p>
-      </div>
+    // The page (`(auth)` layout) is the frame: the form is not boxed in a card of its own.
+    <div className="w-full space-y-7">
+      <AuthHeading
+        icon={LockKeyhole}
+        title="Chào mừng trở lại"
+        description="Đăng nhập cổng khách sỉ để thiết kế ly, xem báo giá, hợp đồng và theo dõi đơn của doanh nghiệp bạn."
+      />
 
       <form onSubmit={onSubmit} noValidate className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="login-username">Tên đăng nhập</Label>
           <Input
             id="login-username"
+            placeholder="Email hoặc tên đăng nhập"
             type="text"
             autoComplete="username"
             autoCapitalize="none"
@@ -83,11 +85,10 @@ export function LoginScreen() {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="login-password">Mật khẩu</Label>
-          <Input
+          <PasswordInput
             id="login-password"
-            type="password"
+            placeholder="Nhập mật khẩu"
             autoComplete="current-password"
-            className="min-h-11"
             aria-invalid={errors.password ? true : undefined}
             aria-describedby={errors.password ? "login-password-error" : undefined}
             {...register("password")}
@@ -121,10 +122,22 @@ export function LoginScreen() {
         </Button>
       </form>
 
-      <p className="text-ink-tertiary text-xs">
-        Chưa có tài khoản hoặc quên mật khẩu? Tài khoản khách hàng do Sales cấp, vui lòng liên hệ
-        Sales của StockFlow để được hỗ trợ.
-      </p>
-    </SurfaceCard>
+      <div className="border-border-default text-ink-tertiary space-y-2.5 border-t pt-5 text-xs leading-5">
+        <p className="flex gap-2">
+          <MailCheck aria-hidden className="text-accent mt-0.5 size-4 shrink-0" />
+          <span>
+            <span className="text-ink-secondary font-medium">Lần đầu dùng cổng?</span> Mở link kích
+            hoạt trong email mời của StockFlow để đặt mật khẩu, rồi đăng nhập bằng email đó.
+          </span>
+        </p>
+        <p className="flex gap-2">
+          <ShieldCheck aria-hidden className="text-positive mt-0.5 size-4 shrink-0" />
+          <span>
+            Chưa có tài khoản hoặc quên mật khẩu? Tài khoản khách hàng do Sales cấp, vui lòng liên
+            hệ Sales của StockFlow để được hỗ trợ.
+          </span>
+        </p>
+      </div>
+    </div>
   );
 }

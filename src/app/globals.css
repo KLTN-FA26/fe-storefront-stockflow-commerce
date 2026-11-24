@@ -171,7 +171,9 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
+  /* Not var(--muted): :root's --muted is the muted *tone* (#9a9c95, `bg-muted-tone`) and, unlayered, it overrides the
+     theme's alias, so shadcn's bg-muted (dialog footers, hovers, skeletons) came out mid-grey. */
+  --color-muted: var(--bg-muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-destructive: var(--destructive);
   --color-border: var(--border);

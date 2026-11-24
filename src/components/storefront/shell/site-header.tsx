@@ -19,7 +19,7 @@ const utilityHrefs = utilityLinks.map((link) => link.href);
 const container = "mx-auto flex h-full w-full max-w-7xl items-center px-4 sm:px-6 lg:px-8";
 const focusRing = "focus-visible:ring-accent focus-visible:ring-2 focus-visible:outline-none";
 const actionLink = cn(
-  "text-ink-secondary hover:bg-bg-muted hover:text-ink-primary inline-flex h-11 min-w-11 items-center justify-center gap-2 rounded-[var(--r-md)] px-2.5 text-sm font-medium transition-colors",
+  "text-ink-secondary hover:bg-bg-subtle hover:text-ink-primary inline-flex h-11 min-w-11 items-center justify-center gap-2 rounded-[var(--r-md)] px-2.5 text-sm font-medium transition-colors",
   focusRing,
 );
 const tier2Link = cn(

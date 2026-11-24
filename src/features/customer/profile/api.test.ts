@@ -26,6 +26,14 @@ describe("customer profile API boundary", () => {
     await expect(getCustomerProfile()).resolves.toEqual(profile);
   });
 
+  it("reads the BE's real /customers/me: masked taxCode present, null phone and segment dropped (non_null)", async () => {
+    const { phone: _phone, segmentId: _segment, ...rest } = profile;
+    const live = { ...rest, taxCode: "031****074" };
+    vi.spyOn(api, "get").mockResolvedValueOnce({ data: live });
+
+    await expect(getCustomerProfile()).resolves.toMatchObject({ taxCode: "031****074" });
+  });
+
   it("rejects an invalid profile DTO instead of fabricating fields", () => {
     expect(() => customerProfileSchema.parse({ ...profile, version: "3" })).toThrow();
   });

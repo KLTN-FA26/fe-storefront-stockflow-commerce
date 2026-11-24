@@ -88,7 +88,7 @@ export function ConfirmDialog({
             type="button"
             variant="outline"
             onClick={() => { setReason(""); onOpenChange(false); }}
-            className="min-h-11 rounded-[var(--r-sm)] px-4 border-border-strong bg-bg-surface text-ink-primary hover:bg-bg-muted"
+            className="min-h-11 rounded-[var(--r-sm)] px-4 border-border-strong bg-bg-surface text-ink-primary hover:bg-bg-subtle"
           >
             {cancelLabel}
           </Button>

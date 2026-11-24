@@ -91,4 +91,4 @@ export const cardMoney = (amount: number, currency?: string | null) =>
 
 /** A secondary action of a card, as a link-styled 44px target. */
 export const CARD_LINK =
-  "text-accent hover:bg-bg-muted focus-visible:ring-accent inline-flex min-h-11 items-center gap-1.5 rounded-[var(--r-md)] px-2 text-sm font-medium focus-visible:ring-2 focus-visible:outline-none";
+  "text-accent hover:bg-bg-subtle focus-visible:ring-accent inline-flex min-h-11 items-center gap-1.5 rounded-[var(--r-md)] px-2 text-sm font-medium focus-visible:ring-2 focus-visible:outline-none";

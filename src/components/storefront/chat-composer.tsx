@@ -57,9 +57,9 @@ export function ChatComposer({
   };
 
   return (
-    <div className="border-border-default bg-bg-surface focus-within:border-border-strong rounded-[var(--r-lg)] border p-2 shadow-[var(--card-shadow)]">
-      {header}
-      <div className="flex items-end gap-2">
+    <div className="border-border-default bg-bg-surface focus-within:border-border-strong rounded-[1.5rem] border p-1 transition-colors">
+      {header ? <div className="px-1 pt-1">{header}</div> : null}
+      <div className="flex items-end gap-1">
         {leading}
         <Textarea
           value={message}
@@ -70,7 +70,8 @@ export function ChatComposer({
           maxLength={maxLength}
           disabled={disabled}
           rows={1}
-          className="max-h-40 min-h-11 resize-none border-0 shadow-none"
+          // One line sits in the middle of the 44px row; more lines grow it up to 10 rem.
+          className="max-h-40 min-h-11 resize-none border-0 bg-transparent px-2 py-2.5 text-sm leading-6 shadow-none focus-visible:ring-0 dark:bg-transparent"
         />
         <Button
           type="button"

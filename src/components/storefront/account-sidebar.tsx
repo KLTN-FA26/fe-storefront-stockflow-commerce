@@ -3,10 +3,12 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronRight, MessageCircle, UserRound } from "lucide-react";
+import { MessageCircle } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { STORE_ROUTES } from "@/constants";
+import { useHydrated } from "@/hooks/use-hydrated";
+import { useAuthStore } from "@/lib/auth/auth-store";
 
 import { LogoutButton } from "@/features/auth/components/logout-button";
 
@@ -39,7 +41,7 @@ export function AccountSidebar() {
       <nav
         ref={mobileNavRef}
         aria-label="Tài khoản"
-        className="-mx-4 overflow-x-auto px-4 sm:-mx-6 sm:px-6 lg:hidden"
+        className="border-border-default overflow-x-auto border-b px-4 py-3 sm:px-6 lg:hidden"
       >
         <ul className="flex w-max gap-2 pb-1">
           {accountNavItems.map((item) => {
@@ -53,7 +55,7 @@ export function AccountSidebar() {
                   className={cn(
                     "focus-visible:ring-accent inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm font-medium whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:outline-none",
                     active
-                      ? "border-accent bg-accent text-ink-inverse shadow-sm"
+                      ? "border-ink-primary bg-bg-muted text-ink-primary"
                       : "border-border-default bg-bg-surface text-ink-secondary hover:text-ink-primary",
                   )}
                 >
@@ -69,80 +71,96 @@ export function AccountSidebar() {
         </ul>
       </nav>
 
-      {/* Desktop: compact sticky sidebar card, pinned below the two-tier site header. */}
-      <aside className="hidden lg:sticky lg:top-[var(--sticky-top)] lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:block lg:self-start">
-        <div className="space-y-3">
-          <div className="border-border-default bg-bg-surface rounded-[var(--r-lg)] border p-2 shadow-[var(--card-shadow)]">
-            <div className="border-border-default mb-1 flex items-center gap-2.5 border-b px-2 pt-1 pb-3">
-              <span className="bg-accent/10 text-accent flex size-9 shrink-0 items-center justify-center rounded-full">
-                <UserRound className="size-4" aria-hidden="true" />
-              </span>
-              <div className="min-w-0">
-                <p className="font-display text-ink-primary truncate text-sm font-semibold">
-                  Tài khoản của tôi
-                </p>
-                <p className="text-ink-tertiary truncate text-xs">Quản lý hồ sơ & đơn hàng</p>
-              </div>
-            </div>
-
-            <nav aria-label="Tài khoản">
-              <ul className="space-y-0.5">
-                {accountNavItems.map((item) => {
-                  const active = isActive(pathname, item);
-                  const Icon = item.icon;
-                  return (
-                    <li key={item.href}>
-                      <Link
-                        href={item.href}
-                        aria-current={active ? "page" : undefined}
-                        className={cn(
-                          "group focus-visible:ring-accent relative flex min-h-11 items-center gap-2.5 rounded-[var(--r-md)] px-3 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none",
-                          active
-                            ? "bg-accent/10 text-accent font-semibold"
-                            : "text-ink-secondary hover:bg-bg-muted hover:text-ink-primary font-medium",
-                        )}
-                      >
-                        {active && (
-                          <span
-                            className="bg-accent absolute inset-y-2 left-0 w-1 rounded-full"
-                            aria-hidden="true"
-                          />
-                        )}
-                        <Icon className="size-4 shrink-0" aria-hidden="true" />
-                        <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                        <ChevronRight
-                          className={cn(
-                            "size-4 shrink-0 transition-transform group-hover:translate-x-0.5",
-                            active ? "opacity-100" : "opacity-0 group-hover:opacity-60",
-                          )}
-                          aria-hidden="true"
-                        />
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </nav>
-            <div className="border-border-default mt-1 border-t pt-1">
-              <LogoutButton className="text-ink-secondary hover:text-ink-primary w-full font-medium" />
-            </div>
-          </div>
-
-          <div className="bg-bg-surface border-border-default rounded-[var(--r-lg)] border px-4 pt-3 pb-1">
-            <p className="text-ink-primary text-sm font-semibold">Cần hỗ trợ?</p>
-            <p className="text-ink-secondary mt-1 text-xs">
-              Sale sẵn sàng giúp bạn về thiết kế, báo giá và đơn hàng.
-            </p>
-            <Link
-              href={STORE_ROUTES.chat.list}
-              className="text-accent focus-visible:ring-accent inline-flex min-h-11 items-center gap-2 rounded-[var(--r-md)] text-sm font-semibold hover:underline focus-visible:ring-2 focus-visible:outline-none"
-            >
-              <MessageCircle className="size-4" aria-hidden="true" />
-              Chat với Sale
-            </Link>
-          </div>
+      {/* Desktop: a rail flush with the window's left edge, as in the back office: full height under the site header,
+          sticky while the page scrolls. */}
+      <aside className="bg-bg-surface border-border-default hidden border-r px-3 pt-6 pb-3 lg:sticky lg:top-[var(--header-h)] lg:flex lg:h-[calc(100dvh-var(--header-h))] lg:flex-col lg:overflow-y-auto">
+        <p className="text-ink-tertiary px-3 pb-2 text-xs font-medium">Tài khoản của tôi</p>
+        <nav aria-label="Tài khoản">
+          <ul className="space-y-0.5">
+            {accountNavItems.map((item) => {
+              const active = isActive(pathname, item);
+              const Icon = item.icon;
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "focus-visible:ring-accent relative flex min-h-11 items-center gap-3 rounded-[var(--r-md)] px-3 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none",
+                      active
+                        ? "bg-bg-muted text-ink-primary font-semibold"
+                        : "text-ink-secondary hover:bg-bg-subtle hover:text-ink-primary",
+                    )}
+                  >
+                    {active ? (
+                      <span
+                        className="bg-accent absolute inset-y-2.5 left-0 w-0.5 rounded-full"
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                    <Icon
+                      className={cn("size-4 shrink-0", active ? "text-accent" : "text-ink-tertiary")}
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+        <div className="mt-auto space-y-3 pt-3">
+          <Link
+            href={STORE_ROUTES.chat.list}
+            className="text-ink-secondary hover:bg-bg-subtle hover:text-ink-primary focus-visible:ring-accent flex min-h-11 items-center gap-3 rounded-[var(--r-md)] px-3 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
+          >
+            <MessageCircle className="text-ink-tertiary size-4 shrink-0" aria-hidden="true" />
+            Chat với Sale
+          </Link>
+          <AccountFooter />
         </div>
       </aside>
     </>
+  );
+}
+
+/** Initials of a name for the avatar: "Công ty CP Trà Sữa Mây" → "CM". */
+function initialsOf(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "?";
+  const first = words[0]?.[0] ?? "";
+  const last = words.length > 1 ? (words[words.length - 1]?.[0] ?? "") : "";
+  return `${first}${last}`.toUpperCase();
+}
+
+/**
+ * The foot of the rail, as in the back office: who is signed in (name and e-mail, from the session) and an icon to
+ * sign out. The session lives in localStorage, so nothing is shown before hydration.
+ */
+function AccountFooter() {
+  const hydrated = useHydrated();
+  const user = useAuthStore((state) => state.user);
+  const name = hydrated ? (user?.fullName ?? "") : "";
+  const email = hydrated ? (user?.email ?? "") : "";
+  return (
+    <div className="border-border-default flex items-center gap-3 border-t px-1 pt-3">
+      <span
+        aria-hidden="true"
+        className="bg-accent/10 text-accent flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
+      >
+        {name ? initialsOf(name) : null}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-ink-primary truncate text-sm font-medium" title={name || undefined}>
+          {name || "Tài khoản"}
+        </p>
+        {email ? (
+          <p className="text-ink-tertiary truncate text-xs" title={email}>
+            {email}
+          </p>
+        ) : null}
+      </div>
+      <LogoutButton iconOnly className="text-ink-tertiary hover:text-danger shrink-0" />
+    </div>
   );
 }

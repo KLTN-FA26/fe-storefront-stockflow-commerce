@@ -25,22 +25,23 @@ export function AddressBookScreen() {
 
   return (
     <>
-      <PageHeader
-        title="Sổ địa chỉ"
-        subtitle="Quản lý địa chỉ giao hàng và thanh toán của bạn."
-        actions={
-          hasAddresses ? (
-            <Button asChild className="h-11 rounded-[var(--r-md)] px-4">
-              <Link href={NEW_ADDRESS_HREF}>
-                <Plus aria-hidden className="mr-2 size-4" />
-                Thêm địa chỉ mới
-              </Link>
-            </Button>
-          ) : undefined
-        }
-      />
+      <PageHeader titleHidden title="Sổ địa chỉ" />
 
-      <div className="mt-6 space-y-5">
+      {hasAddresses ? (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-ink-tertiary text-sm">
+            Sửa hoặc xoá địa chỉ không ảnh hưởng đến các đơn hàng đã đặt.
+          </p>
+          <Button asChild className="h-11 rounded-[var(--r-md)] px-4">
+            <Link href={NEW_ADDRESS_HREF}>
+              <Plus aria-hidden className="mr-2 size-4" />
+              Thêm địa chỉ mới
+            </Link>
+          </Button>
+        </div>
+      ) : null}
+
+      <div className="space-y-5">
         {error && addresses && (
           <AddressStaleNotice error={error} onRetry={() => void refetch()} retrying={isFetching} />
         )}
