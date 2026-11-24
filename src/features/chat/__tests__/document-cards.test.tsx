@@ -287,3 +287,36 @@ describe("CONTRACT card waiting for the signature", () => {
     expect(within(card).queryByText(/Đã gửi bản ký/)).not.toBeInTheDocument();
   });
 });
+
+describe("WF-02 FE-8: a CANCELLED contract card", () => {
+  it("says 'Đã huỷ', offers no download nor signing, and that a new one comes here", () => {
+    renderMessage(
+      cardMessageJson("CONTRACT", {
+        contractId: "66666666-6666-4666-8666-666666666666",
+        number: "HD-20261120-900001-1",
+        orderId: ORDER_ID,
+        status: "CANCELLED",
+      }),
+    );
+    const card = screen.getByRole("region", { name: /Hợp đồng mua bán/ });
+    expect(within(card).getByText("Đã huỷ")).toBeInTheDocument();
+    expect(within(card).queryByRole("button", { name: /Tải hợp đồng/ })).not.toBeInTheDocument();
+    expect(within(card).queryByText(/gửi bản scan hoặc PDF có chữ ký/)).not.toBeInTheDocument();
+    expect(
+      within(card).getByText(/bạn sẽ nhận bản mới trong cuộc trò chuyện này/),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the download on a SENT contract", () => {
+    renderMessage(
+      cardMessageJson("CONTRACT", {
+        contractId: "66666666-6666-4666-8666-666666666666",
+        number: "HD-20261120-900001-1",
+        orderId: ORDER_ID,
+        status: "SENT",
+      }),
+    );
+    const card = screen.getByRole("region", { name: /Hợp đồng mua bán/ });
+    expect(within(card).getByRole("button", { name: /Tải hợp đồng/ })).toBeEnabled();
+  });
+});

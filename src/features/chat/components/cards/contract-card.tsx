@@ -25,11 +25,14 @@ interface ContractCardProps {
 /**
  * CONTRACT card (plan B.7.4): no action for either side. The customer downloads the contract and
  * sends the signed scan back as a chat file; Sales record the signing on the contract's own page.
- * Once a file is sent, the card says so and that Sales still have to confirm it.
+ * Once a file is sent, the card says so and that Sales still have to confirm it. A CANCELLED
+ * contract (WF-02 FE-8, Q-12) offers no download: the link fetches the order's live contract, so an
+ * old card would hand out the redrawn one, or nothing to sign.
  */
 export function ContractCard({ payload, signedCopyAt }: ContractCardProps) {
   const download = useOpenLink();
   const waiting = payload.status === "SENT";
+  const cancelled = payload.status === "CANCELLED";
   const sentCopy = waiting && signedCopyAt ? signedCopyAt : null;
   return (
     <CardFrame
@@ -38,20 +41,22 @@ export function ContractCard({ payload, signedCopyAt }: ContractCardProps) {
       status={sentCopy ? SIGNED_COPY_SENT : contractStatusMeta(payload.status)}
       footer={
         <>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11 rounded-[var(--r-md)] px-4"
-            disabled={download.busy !== null}
-            onClick={() =>
-              download.open("contract", () =>
-                getContractDocumentLink(payload.documentPath, payload.orderId),
-              )
-            }
-          >
-            <FileDown aria-hidden className="size-4" />
-            {download.busy ? "Đang mở..." : "Tải hợp đồng"}
-          </Button>
+          {cancelled ? null : (
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 rounded-[var(--r-md)] px-4"
+              disabled={download.busy !== null}
+              onClick={() =>
+                download.open("contract", () =>
+                  getContractDocumentLink(payload.documentPath, payload.orderId),
+                )
+              }
+            >
+              <FileDown aria-hidden className="size-4" />
+              {download.busy ? "Đang mở..." : "Tải hợp đồng"}
+            </Button>
+          )}
           <Link href={STORE_ROUTES.account.orders.detail(payload.orderId)} className={CARD_LINK}>
             Xem đơn hàng
           </Link>
@@ -117,13 +122,18 @@ export function ContractCard({ payload, signedCopyAt }: ContractCardProps) {
         <p className="text-ink-secondary">
           Ký xong, bạn gửi bản scan hoặc PDF có chữ ký vào cuộc trò chuyện này bằng nút đính kèm.
         </p>
+      ) : cancelled ? (
+        <p className="text-ink-secondary">
+          Hợp đồng này đã huỷ, không dùng để ký. Nếu Sale lập lại hợp đồng, bạn sẽ nhận bản mới
+          trong cuộc trò chuyện này.
+        </p>
       ) : null}
       {download.error ? (
         <p role="alert" className="text-danger">
           {download.error}
         </p>
       ) : null}
-      {download.fallback ? (
+      {download.fallback && !cancelled ? (
         <a href={download.fallback} target="_blank" rel="noopener noreferrer" className={CARD_LINK}>
           Mở file hợp đồng
         </a>
