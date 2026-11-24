@@ -1,4 +1,5 @@
 import { LineGoods } from "@/components/storefront/line-goods";
+import { isUnsellable, UNSELLABLE_LINE_TAG } from "@/lib/domain/quote-purchasability";
 import { formatMoney } from "@/lib/format/money";
 import { formatNumber } from "@/lib/format/number";
 
@@ -26,7 +27,16 @@ export function cartonsText(cartons: number | null, units: number) {
   return `${formatNumber(cartons)} thùng = ${formatNumber(units)} cái`;
 }
 
-function LineItem({ line }: { line: QuoteLine }) {
+/** "Đã ngừng bán" next to a line whose SKU can no longer be bought (WF-02 FE-1, 01 BR-04). */
+export function UnsellableTag() {
+  return (
+    <span className="border-danger/30 bg-danger/5 text-danger-ink inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-xs font-medium">
+      {UNSELLABLE_LINE_TAG}
+    </span>
+  );
+}
+
+function LineItem({ line, markUnsellable }: { line: QuoteLine; markUnsellable: boolean }) {
   const shown = shownLine(line);
   const moq = moqOf(line);
   return (
@@ -38,6 +48,7 @@ function LineItem({ line }: { line: QuoteLine }) {
         previewUrl={line.previewUrl}
         unitsPerCarton={line.unitsPerCarton}
       />
+      {markUnsellable && isUnsellable(line.purchasability) ? <UnsellableTag /> : null}
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Fact label="Số lượng">{cartonsText(shown.cartons, shown.units)}</Fact>
         <Fact label="MOQ">{moq == null ? "—" : `${formatNumber(moq)} thùng`}</Fact>
@@ -86,8 +97,18 @@ export function QuoteFees({ fees }: { fees: readonly QuoteFee[] }) {
   );
 }
 
-/** The quote's lines and fees, read only: accepted figures once accepted, proposed before. */
-export function QuoteLinesCard({ quote }: { quote: Pick<Quote, "lines" | "fees"> }) {
+/**
+ * The quote's lines and fees, read only: accepted figures once accepted, proposed before.
+ * `markUnsellable` tags a line that can no longer be bought — only while the quote is still
+ * open, since an accepted or converted quote's lines are past that question.
+ */
+export function QuoteLinesCard({
+  quote,
+  markUnsellable = false,
+}: {
+  quote: Pick<Quote, "lines" | "fees">;
+  markUnsellable?: boolean;
+}) {
   return (
     <section className={QUOTE_CARD} aria-labelledby="quote-lines-heading">
       <h2
@@ -101,7 +122,7 @@ export function QuoteLinesCard({ quote }: { quote: Pick<Quote, "lines" | "fees">
       </h2>
       <ul className="divide-border-default divide-y">
         {quote.lines.map((line) => (
-          <LineItem key={line.id} line={line} />
+          <LineItem key={line.id} line={line} markUnsellable={markUnsellable} />
         ))}
       </ul>
       <QuoteFees fees={quote.fees} />
