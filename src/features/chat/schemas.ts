@@ -217,6 +217,9 @@ export const quotePricingDtoSchema = z.object({
         .nullish()
         .transform((tiers) => tiers ?? []),
       taxRate: z.number().nullish(),
+      // WF-02 FE-1: whether the SKU may still be bought (PURCHASABLE, PRODUCT_DISCONTINUED, …);
+      // null on a legacy line. The card's own payload does not carry it, so the card reads it here.
+      purchasability: z.string().nullish(),
     }),
   ),
   fees: z

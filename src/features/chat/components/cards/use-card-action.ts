@@ -46,6 +46,11 @@ export function useCardActionState(conversationId: string, messageId: string) {
             const lineNo = Number(failure.details?.lineNo);
             setBadLine(Number.isInteger(lineNo) ? lineNo : null);
           }
+          // WF-02 FE-1: a line can no longer be bought. Re-read the quote so the card blocks
+          // accepting and says why; the BE's own words stay on screen.
+          if (failure instanceof ApiError && failure.code === "SKU_NOT_SELLABLE") {
+            void client.invalidateQueries({ queryKey: [...chatKeys.all, "quote-pricing"] });
+          }
           if (failure instanceof ApiError && STALE_CODES.has(failure.code)) {
             toast.info("Dữ liệu vừa thay đổi, đã tải lại.");
             void client.invalidateQueries({ queryKey: chatKeys.messages(conversationId) });
