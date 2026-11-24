@@ -72,6 +72,15 @@ export function isFeeItem(installment: Pick<Installment, "milestone">): boolean 
 }
 
 /**
+ * A fee item told by its number, for a payload that carries no milestone (the chat's PAYMENT_INFO and
+ * PAYMENT_REMINDER cards): the BE numbers fee items 21 to 40 (`Installment.FIRST_FEE_SEQ`..`LAST_FEE_SEQ`)
+ * and the contract's own installments below that.
+ */
+export function isFeeSeq(seq: number | null | undefined): boolean {
+  return seq != null && seq >= 21 && seq <= 40;
+}
+
+/**
  * How the customer refers to one installment in a sentence: "Đợt 1", or a fee item by its own name
  * ("Phí huỷ đơn"), its milestone's label when the BE sent none.
  */

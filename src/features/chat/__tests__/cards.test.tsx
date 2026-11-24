@@ -364,6 +364,15 @@ describe("PAYMENT_INFO: the VietQR code (plan E1)", () => {
     ...overrides,
   });
 
+  it("titles a fee item by its name, not by its number (WF-02 FE-7)", () => {
+    renderCard(
+      cardMessageJson("PAYMENT_INFO", transferPayload({ seq: 21, name: "Cancellation fee" })),
+    );
+
+    expect(screen.getByText("Phí huỷ đơn")).toBeInTheDocument();
+    expect(screen.queryByText(/Đợt 21/)).not.toBeInTheDocument();
+  });
+
   it("draws the code the BE sent above the transfer details", () => {
     renderCard(cardMessageJson("PAYMENT_INFO", transferPayload()));
 

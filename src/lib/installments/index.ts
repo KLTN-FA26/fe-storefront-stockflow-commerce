@@ -43,5 +43,6 @@ export {
   installmentTitle,
   isDueNow,
   isFeeItem,
+  isFeeSeq,
   isPayable,
 } from "./selectors";
