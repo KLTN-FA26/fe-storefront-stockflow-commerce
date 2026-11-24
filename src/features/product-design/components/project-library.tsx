@@ -12,7 +12,8 @@ import { useProjectLibrary } from "../queries";
 import type { DesignProject, LibraryItem } from "../types";
 import { LibraryImagesPanel, LibraryTextsPanel } from "./project-library-panels";
 
-const TAB = "min-h-11 rounded-[var(--r-md)] px-4";
+const TAB =
+  "text-ink-secondary hover:text-ink-primary data-active:bg-bg-surface data-active:text-ink-primary focus-visible:ring-accent/40 min-h-10 flex-none rounded-[var(--r-md)] px-4 text-sm focus-visible:border-transparent focus-visible:ring-2 focus-visible:outline-none data-active:shadow-sm";
 
 /**
  * The project's library on its page (spec 2026-11-12 §5): "Ảnh" (upload, "n/30", grid, delete with
@@ -49,7 +50,10 @@ export function ProjectLibrary({ project }: { project: DesignProject }) {
         sao riêng.
       </p>
       <Tabs defaultValue="images">
-        <TabsList variant="line" aria-label="Thư viện dự án" className="h-auto">
+        <TabsList
+          aria-label="Thư viện dự án"
+          className="bg-bg-muted h-auto p-1 group-data-horizontal/tabs:h-auto"
+        >
           <TabsTrigger value="images" className={TAB}>
             Ảnh
           </TabsTrigger>

@@ -236,8 +236,10 @@ describe("thread header (SF-UX-22, -26, -27)", () => {
   ];
 
   it("links the contract to its order's contract section and hides the production order", async () => {
+    const user = userEvent.setup();
     mockBackend({ conversation: { contexts } });
     renderLive(<ChatThreadScreen conversationId={CONVERSATION_ID} />);
+    await user.click(await screen.findByRole("button", { name: /Chứng từ/ }));
     const chips = await screen.findByRole("list", { name: "Chứng từ của cuộc trò chuyện" });
     expect(within(chips).getByRole("link", { name: "Hợp đồng HD-1" })).toHaveAttribute(
       "href",
@@ -247,18 +249,17 @@ describe("thread header (SF-UX-22, -26, -27)", () => {
     expect(chips).not.toHaveTextContent("Đơn sản xuất");
   });
 
-  it("folds the documents and the expectation into 'Chi tiết' on a phone", async () => {
+  it("keeps the documents in a side panel behind 'Chứng từ (n)', counting only the shown ones", async () => {
     const user = userEvent.setup();
     mockBackend({ conversation: { contexts } });
     renderLive(<ChatThreadScreen conversationId={CONVERSATION_ID} />);
-    const toggle = await screen.findByRole("button", { name: "Chi tiết" });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    const region = document.getElementById(toggle.getAttribute("aria-controls") ?? "");
-    expect(region).toHaveClass("hidden", "sm:block");
+    const toggle = await screen.findByRole("button", { name: "Chứng từ (2)" });
+    expect(
+      screen.queryByRole("list", { name: "Chứng từ của cuộc trò chuyện" }),
+    ).not.toBeInTheDocument();
     await user.click(toggle);
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(region).toHaveClass("block");
-    expect(region).not.toHaveClass("hidden");
+    const panel = await screen.findByRole("dialog", { name: "Chứng từ của cuộc trò chuyện" });
+    expect(within(panel).getAllByRole("listitem")).toHaveLength(2);
   });
 
   it("promises nothing when the BE does not say it is business hours", async () => {

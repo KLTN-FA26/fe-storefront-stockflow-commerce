@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { MessageCircle } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
@@ -16,13 +19,19 @@ export function ConversationRow({ conversation }: { conversation: ChatConversati
   const status = conversationStatusMeta(conversation.status);
   const ended = isEnded(conversation.status);
   const unread = conversation.unread ?? 0;
+  const href = STORE_ROUTES.chat.detail(conversation.id);
+  const active = usePathname() === href;
   const kinds = [
     ...new Set(conversation.contexts.map((context) => contextKindLabel(context.kind))),
   ];
   return (
     <Link
-      href={STORE_ROUTES.chat.detail(conversation.id)}
-      className="hover:bg-bg-muted focus-visible:ring-accent flex min-h-16 items-start gap-3 px-[var(--card-pad)] py-3 transition-colors focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "focus-visible:ring-accent flex min-h-16 items-start gap-3 rounded-[var(--r-md)] px-3 py-2.5 transition-colors focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset",
+        active ? "bg-accent/10" : "hover:bg-bg-subtle",
+      )}
     >
       <span
         aria-hidden
@@ -37,7 +46,7 @@ export function ConversationRow({ conversation }: { conversation: ChatConversati
         <div className="flex items-start justify-between gap-2">
           <h2
             className={cn(
-              "truncate",
+              "truncate text-sm",
               unread > 0 ? "text-ink-primary font-bold" : "text-ink-primary font-semibold",
             )}
           >

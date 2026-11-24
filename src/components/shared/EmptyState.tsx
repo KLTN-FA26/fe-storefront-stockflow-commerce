@@ -10,32 +10,33 @@ interface EmptyStateProps {
   className?: string;
 }
 
-export function EmptyState({
-  icon,
-  title,
-  description,
-  action,
-  className,
-}: EmptyStateProps) {
+/**
+ * Nothing to list yet: a large icon on a soft tinted disc, a short title and one line on what will appear here, and
+ * the way to start. Open on the page, not boxed in a dashed frame.
+ */
+export function EmptyState({ icon, title, description, action, className }: EmptyStateProps) {
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center rounded-[var(--card-radius)] border border-dashed border-border-strong bg-bg-surface px-6 py-12 text-center",
-        className
+        "flex flex-col items-center justify-center px-6 py-14 text-center sm:py-16",
+        className,
       )}
     >
-      <div className="mb-2.5 text-2xl text-ink-tertiary">
-        {icon ?? <Inbox className="size-8" />}
+      <div
+        aria-hidden="true"
+        className="bg-accent/10 text-accent mb-5 flex size-16 items-center justify-center rounded-full [&_svg]:size-7"
+      >
+        {icon ?? <Inbox />}
       </div>
-      <h4 className="font-[family-name:var(--font-display)] text-[1.05rem] font-semibold text-ink-primary">
+      <h4 className="text-ink-primary font-[family-name:var(--font-display)] text-lg font-semibold">
         {title}
       </h4>
       {description && (
-        <p className="mx-auto mt-1 max-w-[42ch] text-[0.8125rem] text-ink-secondary">
+        <p className="text-ink-secondary mx-auto mt-1.5 max-w-[46ch] text-sm leading-6">
           {description}
         </p>
       )}
-      {action && <div className="mt-4">{action}</div>}
+      {action && <div className="mt-6">{action}</div>}
     </div>
   );
 }

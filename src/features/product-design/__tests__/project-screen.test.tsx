@@ -464,9 +464,10 @@ describe("ProjectScreen", () => {
     const n = await names();
     show(project.id);
     await userEvent.click(
-      within(await cardOf(n.draft)).getByRole("button", {
-        name: `Nhân bản ${n.draft} sang cỡ khác`,
-      }),
+      within(await cardOf(n.draft)).getByRole("button", { name: /Thao tác khác/ }),
+    );
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: `Nhân bản ${n.draft} sang cỡ khác` }),
     );
     expect(await screen.findByRole("dialog", { name: /Nhân bản/ })).toBeInTheDocument();
   });

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { SessionGuard } from "@/features/auth/components/session-guard";
 import { MockReviewPanel } from "@/features/product-design/components/mock-review-panel";
 import { DesktopOnlyGate } from "@/features/product-design/components/desktop-only-gate";
 
@@ -11,10 +12,12 @@ import { DesktopOnlyGate } from "@/features/product-design/components/desktop-on
 export default function StudioLayout({ children }: { children: ReactNode }) {
   return (
     <div className="bg-bg-subtle text-ink-primary flex min-h-dvh flex-col">
-      <DesktopOnlyGate>
-        {children}
-        <MockReviewPanel placement="studio" />
-      </DesktopOnlyGate>
+      <SessionGuard>
+        <DesktopOnlyGate>
+          {children}
+          <MockReviewPanel placement="studio" />
+        </DesktopOnlyGate>
+      </SessionGuard>
     </div>
   );
 }

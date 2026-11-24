@@ -1,6 +1,6 @@
 "use client";
 
-import { APP_ROUTES, STORE_ROUTES } from "@/constants";
+import { STORE_ROUTES } from "@/constants";
 import { PageShell } from "@/components/storefront/layout";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 
@@ -21,11 +21,6 @@ type ProjectScreenProps = {
   loadFonts: () => Promise<FontRegistry>;
 };
 
-const CRUMBS = (name: string | null) => [
-  { label: "Trang chủ", href: APP_ROUTES.home },
-  { label: "Dự án thiết kế", href: STORE_ROUTES.design.projects },
-  { label: name ?? "Dự án" },
-];
 
 /**
  * `/design/projects/[id]` (spec 2026-11-12 §5): signed-in customers only, like the other design
@@ -35,7 +30,7 @@ export function ProjectScreen(props: ProjectScreenProps) {
   const signedIn = useSignedIn();
   if (signedIn) return <SignedInProject {...props} />;
   return (
-    <PageShell breadcrumbs={CRUMBS(null)}>
+    <PageShell>
       <DesignSectionSwitch current="projects" />
       {signedIn === undefined ? (
         <ProjectSkeleton />
@@ -74,7 +69,7 @@ function SignedInProject({ projectId, catalogue, loadFonts }: ProjectScreenProps
     return <ProjectSkeleton />;
   })();
   return (
-    <PageShell breadcrumbs={CRUMBS(project.data?.name ?? null)}>
+    <PageShell>
       <DesignSectionSwitch current="projects" />
       {body}
     </PageShell>

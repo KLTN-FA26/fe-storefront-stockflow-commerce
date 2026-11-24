@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, LoaderCircle, ShieldCheck } from "lucide-react";
+import { CheckCircle2, LoaderCircle } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -101,16 +101,11 @@ export function ChangePasswordForm() {
 
   return (
     <section className="bg-bg-surface border-border-default rounded-[var(--r-lg)] border p-[var(--card-pad)] shadow-[var(--card-shadow)]">
-      <div className="border-border-default mb-5 flex items-start gap-3 border-b pb-4">
-        <span className="bg-accent/10 text-accent flex size-9 shrink-0 items-center justify-center rounded-full">
-          <ShieldCheck className="size-5" aria-hidden="true" />
-        </span>
-        <div className="min-w-0">
-          <h1 className="font-display text-ink-primary text-xl font-bold">Đổi mật khẩu</h1>
-          <p className="text-ink-secondary mt-1 text-sm">
-            Dùng mật khẩu dài từ 10 đến 72 ký tự, gồm chữ hoa, chữ thường và chữ số.
-          </p>
-        </div>
+      <div className="mb-4">
+        <h2 className="font-display text-ink-primary text-base font-semibold">Đổi mật khẩu</h2>
+        <p className="text-ink-secondary mt-0.5 text-sm">
+          Dùng mật khẩu dài từ 10 đến 72 ký tự, gồm chữ hoa, chữ thường và chữ số.
+        </p>
       </div>
 
       {serverError && (

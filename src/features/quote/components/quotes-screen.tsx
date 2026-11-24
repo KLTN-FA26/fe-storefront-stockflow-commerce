@@ -3,16 +3,12 @@
 import { useEffect } from "react";
 import { parseAsInteger, parseAsStringLiteral, useQueryStates } from "nuqs";
 
-import { PageHeader, ScrollAfterItems } from "@/components/shared";
+import { PageHeader } from "@/components/shared";
+import { FillViewportScroll } from "@/components/shared/FillViewportScroll";
 import { ListPagination } from "@/components/storefront/list-pagination";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SelectOption, TitledSelectContent } from "@/components/shared/TitledSelect";
+import { Select, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 import { isQuoteStatusFilter, QUOTE_STATUS_FILTERS, QUOTE_STATUS_META } from "../lifecycle";
 import { QUOTE_PAGE_SIZE, useMyQuotes } from "../queries";
@@ -55,7 +51,7 @@ export function QuotesScreen() {
 
   return (
     <>
-      <PageHeader title="Báo giá của tôi" subtitle="Báo giá Sale đã gửi cho bạn." />
+      <PageHeader titleHidden title="Báo giá của tôi" subtitle="Báo giá Sale đã gửi cho bạn." />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <Select value={status ?? ALL} onValueChange={filter}>
           <SelectTrigger
@@ -64,14 +60,14 @@ export function QuotesScreen() {
           >
             <SelectValue placeholder="Trạng thái" />
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>Tất cả trạng thái</SelectItem>
+          <TitledSelectContent title="Trạng thái">
+            <SelectOption value={ALL}>Tất cả trạng thái</SelectOption>
             {QUOTE_STATUS_FILTERS.map((value) => (
-              <SelectItem key={value} value={value}>
+              <SelectOption key={value} value={value}>
                 {QUOTE_STATUS_META[value].label}
-              </SelectItem>
+              </SelectOption>
             ))}
-          </SelectContent>
+          </TitledSelectContent>
         </Select>
       </div>
       <div className="space-y-4">
@@ -111,7 +107,7 @@ export function QuotesScreen() {
                 retrying={isFetching}
               />
             )}
-            <ScrollAfterItems visibleItems={4} label="Danh sách báo giá">
+            <FillViewportScroll label="Danh sách báo giá">
               <ul className="space-y-3" aria-busy={isPlaceholderData}>
                 {data.items.map((quote) => (
                   <li key={quote.id}>
@@ -119,7 +115,7 @@ export function QuotesScreen() {
                   </li>
                 ))}
               </ul>
-            </ScrollAfterItems>
+            </FillViewportScroll>
             <ListPagination
               label="Phân trang báo giá"
               page={data.page}

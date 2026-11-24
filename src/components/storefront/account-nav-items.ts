@@ -4,7 +4,6 @@ import {
   Lock,
   MapPin,
   Package,
-  Palette,
   Undo2,
   UserRound,
   type LucideIcon,
@@ -30,13 +29,6 @@ export const accountNavItems: readonly AccountNavItem[] = [
     description: "Thông tin liên hệ",
     icon: UserRound,
     exact: true,
-  },
-  {
-    // Outside the account pages, but it is where a customer's work starts (WF-02 D1).
-    href: STORE_ROUTES.design.list,
-    label: "Thiết kế của tôi",
-    description: "Thiết kế, gửi duyệt & yêu cầu báo giá",
-    icon: Palette,
   },
   {
     href: STORE_ROUTES.account.quotes.list,

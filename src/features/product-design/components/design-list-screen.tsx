@@ -3,19 +3,20 @@
 import { useEffect, useState } from "react";
 import { useQueryStates } from "nuqs";
 
-import { APP_ROUTES, STORE_ROUTES } from "@/constants";
+import { STORE_ROUTES } from "@/constants";
 import { PageShell } from "@/components/storefront/layout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 
-import { useDesignList, useDraftCount } from "../queries";
+import { useDesignList } from "../queries";
 import type { Design } from "../types";
 import { CloneDesignDialog } from "./clone-design-dialog";
 import { DeleteDesignDialog } from "./delete-design-dialog";
+import { DesignAreaSkeleton } from "./design-area-skeleton";
 import { DesignSectionSwitch } from "./design-section-switch";
 import { DesignListBody } from "./design-list-body";
 import { useDesignRevision } from "./design-list-revision";
-import { DesignListSkeleton, RevisionError } from "./design-list-states";
+import { RevisionError } from "./design-list-states";
 import { TAB_IDS, TABS, designListUrlState, toTab } from "./design-list-tabs";
 import { LauncherSignIn } from "./launcher-states";
 import { NewDesignAction } from "./new-design-action";
@@ -23,8 +24,6 @@ import { NewDesignDialog, type DesignableCatalogue } from "./new-design-dialog";
 
 /** Twelve divides the one-, two- and three-column grids evenly. */
 export const DESIGN_PAGE_SIZE = 12;
-
-const CRUMBS = [{ label: "Trang chủ", href: APP_ROUTES.home }, { label: "Thiết kế của tôi" }];
 
 /** The catalogue's printable products, for "Thiết kế mới": the page reads them. */
 type DesignListScreenProps = { catalogue: DesignableCatalogue };
@@ -36,14 +35,11 @@ type DesignListScreenProps = { catalogue: DesignableCatalogue };
 export function DesignListScreen(props: DesignListScreenProps) {
   const signedIn = useSignedIn();
   if (signedIn) return <SignedInDesignList {...props} />;
+  if (signedIn === undefined) return <DesignAreaSkeleton section="designs" />;
   return (
-    <PageShell breadcrumbs={CRUMBS} title="Thiết kế của tôi">
+    <PageShell title="Thiết kế của tôi">
       <DesignSectionSwitch current="designs" />
-      {signedIn === undefined ? (
-        <DesignListSkeleton />
-      ) : (
-        <LauncherSignIn from={STORE_ROUTES.design.list} />
-      )}
+      <LauncherSignIn from={STORE_ROUTES.design.list} />
     </PageShell>
   );
 }
@@ -54,7 +50,6 @@ function SignedInDesignList({ catalogue }: DesignListScreenProps) {
   const [deleting, setDeleting] = useState<Design | null>(null);
   const [cloning, setCloning] = useState<Design | null>(null);
   const revision = useDesignRevision();
-  const draftCount = useDraftCount();
   const tab = url.tab;
   // Never send page < 1 to the BE, whatever the URL says.
   const page = url.page >= 1 ? url.page : 1;
@@ -79,17 +74,11 @@ function SignedInDesignList({ catalogue }: DesignListScreenProps) {
 
   return (
     <PageShell
-      breadcrumbs={CRUMBS}
       title="Thiết kế của tôi"
       subtitle="Tiếp tục chỉnh sửa, gửi duyệt và theo dõi các thiết kế của bạn."
       actions={<NewDesignAction onCreate={nextAction(() => setCreating(true))} />}
     >
       <DesignSectionSwitch current="designs" />
-      {draftCount.data ? (
-        <p className="text-ink-secondary mb-4 text-sm tabular-nums">
-          {draftCount.data.drafts}/{draftCount.data.limit} bản nháp
-        </p>
-      ) : null}
       {revision.error ? (
         <RevisionError error={revision.error} onDismiss={revision.clearError} />
       ) : null}
@@ -99,15 +88,14 @@ function SignedInDesignList({ catalogue }: DesignListScreenProps) {
         className="gap-5"
       >
         <TabsList
-          variant="line"
           aria-label="Lọc thiết kế theo trạng thái"
-          className="w-full justify-start overflow-x-auto group-data-horizontal/tabs:h-auto"
+          className="bg-bg-muted h-auto p-1 group-data-horizontal/tabs:h-auto"
         >
           {TAB_IDS.map((id) => (
             <TabsTrigger
               key={id}
               value={id}
-              className="min-h-11 flex-none px-4 text-base group-data-horizontal/tabs:after:bottom-0"
+              className="text-ink-secondary hover:text-ink-primary data-active:bg-bg-surface data-active:text-ink-primary focus-visible:ring-accent/40 min-h-10 flex-none rounded-[var(--r-md)] px-4 text-sm focus-visible:border-transparent focus-visible:ring-2 focus-visible:outline-none data-active:shadow-sm"
             >
               {TABS[id].label}
             </TabsTrigger>

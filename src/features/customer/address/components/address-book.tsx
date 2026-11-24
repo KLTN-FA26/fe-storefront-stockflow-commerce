@@ -31,10 +31,8 @@ export function AddressBook({
 
   return (
     <>
-      <p className="text-ink-tertiary mb-5 text-sm">
-        Sửa hoặc xoá địa chỉ không ảnh hưởng đến các đơn hàng đã đặt.
-      </p>
-      <div className="space-y-8">
+      {/* The two kinds side by side on a wide screen, each its own column of cards. */}
+      <div className="grid gap-8 lg:grid-cols-2 lg:gap-6">
         {groupAddressesByType(addresses).map((group) => (
           <section
             key={group.type}
@@ -47,7 +45,7 @@ export function AddressBook({
             >
               Địa chỉ {ADDRESS_TYPE_LABELS[group.type].toLowerCase()}
             </h2>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-3">
               {group.items.map((address) => (
                 <AddressCard
                   key={address.addressId}
@@ -92,24 +90,23 @@ interface AddressCardProps {
   onSetDefault: () => void;
 }
 
+/**
+ * One address: who and which phone, the address, and the default mark on the left; edit and delete as icons at the top
+ * right; "Đặt làm mặc định" as a quiet action under it when it is not the default. Its kind is the column's heading.
+ */
 function AddressCard({ address, busy, onEdit, onDelete, onSetDefault }: AddressCardProps) {
   return (
-    <article
-      className={`bg-bg-surface flex h-full flex-col rounded-[var(--r-lg)] border p-[var(--card-pad)] shadow-[var(--card-shadow)] transition-shadow hover:shadow-md ${address.defaultAddress ? "border-accent" : "border-border-default"}`}
-    >
-      <div className="min-w-0 flex-1 space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
+    <article className="bg-bg-surface border-border-default hover:border-border-strong flex gap-3 rounded-[var(--r-lg)] border py-3 pr-2 pl-[var(--card-pad)] transition-colors">
+      <div className="min-w-0 flex-1 space-y-1.5 py-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <h3 className="text-ink-primary font-semibold">{address.recipientName}</h3>
           <span className="text-ink-secondary text-sm tabular-nums">{address.phone}</span>
-          <Badge variant="secondary" className="rounded-full">
-            {ADDRESS_TYPE_LABELS[address.type]}
-          </Badge>
           {address.defaultAddress && (
-            <Badge className="bg-accent text-ink-inverse rounded-full">Mặc định</Badge>
+            <Badge className="bg-accent/10 text-accent rounded-full">Mặc định</Badge>
           )}
         </div>
         <p className="text-ink-secondary flex gap-2 text-sm">
-          <MapPin aria-hidden className="mt-0.5 size-4 shrink-0" />
+          <MapPin aria-hidden className="text-ink-tertiary mt-0.5 size-4 shrink-0" />
           <span>{formatAddressLine(address)}</span>
         </p>
         {address.postalCode && (
@@ -117,42 +114,40 @@ function AddressCard({ address, busy, onEdit, onDelete, onSetDefault }: AddressC
             Mã bưu chính: {address.postalCode}
           </p>
         )}
-      </div>
-
-      <div className="border-border-default mt-4 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
         {!address.defaultAddress && (
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             disabled={busy}
-            className="border-border-strong text-ink-primary hover:bg-bg-muted h-11 rounded-[var(--r-md)] px-4"
+            className="text-accent hover:text-accent -ml-2 h-11 rounded-[var(--r-md)] px-2 text-sm font-medium hover:bg-transparent hover:underline"
             aria-label={`Đặt địa chỉ của ${address.recipientName} làm mặc định`}
             onClick={onSetDefault}
           >
             Đặt làm mặc định
           </Button>
         )}
-        <div className="ml-auto flex items-center gap-1">
-          <Button
-            type="button"
-            variant="ghost"
-            className="size-11 rounded-full"
-            aria-label={`Sửa địa chỉ của ${address.recipientName}`}
-            onClick={onEdit}
-          >
-            <Pencil aria-hidden className="text-ink-primary size-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            className="text-danger hover:bg-bg-muted hover:text-danger size-11 rounded-full"
-            aria-label={`Xoá địa chỉ của ${address.recipientName}`}
-            disabled={busy}
-            onClick={onDelete}
-          >
-            <Trash2 aria-hidden className="size-4" />
-          </Button>
-        </div>
+      </div>
+
+      <div className="flex shrink-0 items-start gap-0.5">
+        <Button
+          type="button"
+          variant="ghost"
+          className="text-ink-tertiary hover:text-ink-primary hover:bg-bg-subtle size-11 rounded-[var(--r-md)]"
+          aria-label={`Sửa địa chỉ của ${address.recipientName}`}
+          onClick={onEdit}
+        >
+          <Pencil aria-hidden className="size-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          className="text-ink-tertiary hover:text-danger hover:bg-bg-subtle size-11 rounded-[var(--r-md)]"
+          aria-label={`Xoá địa chỉ của ${address.recipientName}`}
+          disabled={busy}
+          onClick={onDelete}
+        >
+          <Trash2 aria-hidden className="size-4" />
+        </Button>
       </div>
     </article>
   );

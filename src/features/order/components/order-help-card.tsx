@@ -147,7 +147,7 @@ export function OrderHelpCard({
           <Button
             type="button"
             variant="outline"
-            className="border-border-strong text-danger-ink hover:bg-bg-muted min-h-11 rounded-[var(--r-md)] px-5"
+            className="border-border-strong text-danger-ink hover:bg-bg-subtle min-h-11 rounded-[var(--r-md)] px-5"
             onClick={() => onCancel(mode)}
             aria-label={`${mode === "cancel" ? "Huỷ đơn hàng" : "Gửi yêu cầu huỷ đơn hàng"} ${order.orderNumber}`}
           >

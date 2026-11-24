@@ -49,7 +49,7 @@ export function CsatForm({ idPrefix, pending, error, onRate }: CsatFormProps) {
                 aria-checked={field.value === score}
                 aria-label={`${score} sao`}
                 onClick={() => field.onChange(score)}
-                className="hover:bg-bg-muted focus-visible:ring-accent flex size-11 items-center justify-center rounded-full focus-visible:ring-2 focus-visible:outline-none"
+                className="hover:bg-bg-subtle focus-visible:ring-accent flex size-11 items-center justify-center rounded-full focus-visible:ring-2 focus-visible:outline-none"
               >
                 <Star
                   aria-hidden

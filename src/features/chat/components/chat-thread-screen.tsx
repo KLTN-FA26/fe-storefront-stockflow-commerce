@@ -66,7 +66,7 @@ export function ChatThreadScreen({ conversationId }: { conversationId: string })
   if (detail.isPending) return <ThreadSkeleton />;
   if (detail.error || !detail.data) {
     return (
-      <div className="mx-auto w-full max-w-3xl px-4 py-5 sm:px-6">
+      <div className="w-full px-4 py-5 sm:px-6">
         <LoadError
           title="Không mở được cuộc trò chuyện"
           error={detail.error}
@@ -92,8 +92,11 @@ export function ChatThreadScreen({ conversationId }: { conversationId: string })
     });
 
   return (
-    <section className="mx-auto flex h-[calc(100dvh-var(--header-h))] w-full max-w-3xl flex-col gap-2 px-4 py-3 sm:gap-3 sm:px-6 sm:py-4">
-      <ThreadHeader conversation={conversation} contractOrders={contractOrders} />
+    // The right pane of the chat area (ChatShell): header bar, messages filling the middle, composer at the foot.
+    <section className="flex min-h-0 flex-1 flex-col">
+      <div className="bg-bg-surface border-border-default border-b px-4 py-3 sm:px-6">
+        <ThreadHeader conversation={conversation} contractOrders={contractOrders} />
+      </div>
       <ThreadLog
         conversationId={conversationId}
         timeline={timeline}
@@ -136,31 +139,33 @@ export function ChatThreadScreen({ conversationId }: { conversationId: string })
           ) : null
         }
       />
-      {!canUpdate ? (
-        <p className="text-ink-secondary text-sm">
-          Tài khoản của bạn chỉ xem được cuộc trò chuyện, không gửi được tin nhắn.
-        </p>
-      ) : writable ? (
-        <>
-          {isEnded(conversation.status) ? (
-            <p className="text-ink-secondary text-sm">
-              Cuộc trò chuyện đã được giải quyết. Nhắn tiếp để mở lại.
-            </p>
-          ) : null}
-          <ThreadComposer
+      <div className="bg-bg-surface border-border-default space-y-2 border-t px-4 py-2 sm:px-6">
+        {!canUpdate ? (
+          <p className="text-ink-secondary text-sm">
+            Tài khoản của bạn chỉ xem được cuộc trò chuyện, không gửi được tin nhắn.
+          </p>
+        ) : writable ? (
+          <>
+            {isEnded(conversation.status) ? (
+              <p className="text-ink-secondary text-sm">
+                Cuộc trò chuyện đã được giải quyết. Nhắn tiếp để mở lại.
+              </p>
+            ) : null}
+            <ThreadComposer
+              conversationId={conversationId}
+              onEnded={() => setEndedByServer(true)}
+              askSignedCopy={attach === "pdf"}
+              onSignedCopyDone={() => void setAttach(null)}
+            />
+          </>
+        ) : (
+          <ReopenOffer
             conversationId={conversationId}
-            onEnded={() => setEndedByServer(true)}
-            askSignedCopy={attach === "pdf"}
-            onSignedCopyDone={() => void setAttach(null)}
+            onReopened={() => setEndedByServer(false)}
+            attach={attach ?? undefined}
           />
-        </>
-      ) : (
-        <ReopenOffer
-          conversationId={conversationId}
-          onReopened={() => setEndedByServer(false)}
-          attach={attach ?? undefined}
-        />
-      )}
+        )}
+      </div>
     </section>
   );
 }

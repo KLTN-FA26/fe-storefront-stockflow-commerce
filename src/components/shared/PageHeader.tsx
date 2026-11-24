@@ -6,9 +6,28 @@ interface PageHeaderProps {
   actions?: ReactNode;
   subtitle?: string;
   className?: string;
+  /**
+   * The page is already named elsewhere on screen (the account rail's current item): the heading stays for screen
+   * readers only, the subtitle is dropped, and only the actions, if any, are shown.
+   */
+  titleHidden?: boolean;
 }
 
-export function PageHeader({ title, actions, subtitle, className }: PageHeaderProps) {
+export function PageHeader({
+  title,
+  actions,
+  subtitle,
+  className,
+  titleHidden = false,
+}: PageHeaderProps) {
+  if (titleHidden) {
+    return (
+      <div className={cn(actions ? "mb-4 flex justify-end gap-2" : undefined, className)}>
+        <h1 className="sr-only">{title}</h1>
+        {actions}
+      </div>
+    );
+  }
   return (
     <div
       className={cn(

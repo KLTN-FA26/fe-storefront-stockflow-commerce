@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
 
-import { APP_ROUTES, CHAT_WITH_SALES, STORE_ROUTES } from "@/constants";
+import { CHAT_WITH_SALES, STORE_ROUTES } from "@/constants";
 import { EmptyState, Skeleton } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { ImageGallery } from "@/components/storefront/image-gallery";
@@ -32,11 +32,6 @@ function ProductSkeleton() {
   );
 }
 
-const crumbs = (title?: string) => [
-  { label: "Trang chủ", href: APP_ROUTES.home },
-  { label: "Sản phẩm", href: STORE_ROUTES.catalog.list },
-  ...(title ? [{ label: title }] : []),
-];
 
 export function ProductDetailScreen({
   slug,
@@ -63,14 +58,14 @@ export function ProductDetailScreen({
     );
   if (!signedIn) {
     return (
-      <PageShell breadcrumbs={crumbs()}>
+      <PageShell>
         <SignInRequired from={STORE_ROUTES.catalog.detail(slug)} />
       </PageShell>
     );
   }
   if (isProductNotFound(product.error)) {
     return (
-      <PageShell breadcrumbs={crumbs()}>
+      <PageShell>
         <EmptyState
           title="Sản phẩm không còn khả dụng"
           description="Sản phẩm này đã ngừng bán hoặc đường dẫn không đúng."
@@ -85,7 +80,7 @@ export function ProductDetailScreen({
   }
   if (isPriceUnavailable(product.error)) {
     return (
-      <PageShell breadcrumbs={crumbs()}>
+      <PageShell>
         <EmptyState
           title="Sản phẩm tạm thời chưa mở bán"
           description="Sản phẩm này chưa sẵn sàng trên sàn. Hãy chat với Sale để được tư vấn và báo giá."
@@ -106,7 +101,7 @@ export function ProductDetailScreen({
   const data = product.data;
   if (!data) {
     return (
-      <PageShell breadcrumbs={crumbs()}>
+      <PageShell>
         <CatalogLoadError
           title="Không tải được sản phẩm"
           error={product.error}
@@ -134,7 +129,7 @@ export function ProductDetailScreen({
     .map((image) => ({ src: image.url, alt: image.altText ?? data.title }));
 
   return (
-    <PageShell breadcrumbs={crumbs(data.title)}>
+    <PageShell>
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-10">
         <div className="lg:sticky lg:top-[var(--sticky-top)] lg:self-start">
           <ImageGallery key={sku} images={images} />

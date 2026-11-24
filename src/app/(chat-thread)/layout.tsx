@@ -1,3 +1,5 @@
+import { SessionGuard } from "@/features/auth/components/session-guard";
+
 import { StorefrontShell } from "@/components/storefront/storefront-shell";
 
 import type { ReactNode } from "react";
@@ -8,5 +10,9 @@ import type { ReactNode } from "react";
  * `(storefront)/chat` (the list and "new"), under the same `/chat` path, as `(studio)` does for `/design`.
  */
 export default function ChatThreadLayout({ children }: { children: ReactNode }) {
-  return <StorefrontShell footer={false}>{children}</StorefrontShell>;
+  return (
+    <StorefrontShell footer={false}>
+      <SessionGuard>{children}</SessionGuard>
+    </StorefrontShell>
+  );
 }

@@ -22,6 +22,21 @@ interface ThreadLogProps {
   after?: ReactNode;
 }
 
+/** Bubbles from the same person within this long of each other read as one run. */
+const RUN_GAP_MS = 5 * 60 * 1000;
+
+const isBubble = (message: ChatMessage) =>
+  message.kind !== "SYSTEM" && !(message.kind === "CARD" && message.card);
+
+const sameRun = (a: ChatMessage | undefined, b: ChatMessage | undefined) =>
+  !!a &&
+  !!b &&
+  isBubble(a) &&
+  isBubble(b) &&
+  a.senderType === b.senderType &&
+  a.senderName === b.senderName &&
+  Math.abs(Date.parse(b.sentAt) - Date.parse(a.sentAt)) <= RUN_GAP_MS;
+
 /**
  * The messages (`role="log"`), scrolled to the newest only while the customer is at the end; otherwise a
  * "Tin nhắn mới ↓" pill takes them there (SF-UX-23).
@@ -47,21 +62,29 @@ export function ThreadLog({
         role="log"
         aria-label="Tin nhắn"
         onScroll={onScroll}
-        className="bg-bg-subtle border-border-default min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain rounded-[var(--r-lg)] border p-[var(--card-pad)]"
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6"
       >
-        {before}
+        <div className="space-y-3">{before}</div>
         {status ??
-          timeline.map((message) => (
-            <MessageItem
-              key={message.id}
-              conversationId={conversationId}
-              message={message}
-              canAct={canAct}
-              onTakeBack={onTakeBack}
-              signedCopyAt={signedCopies[message.id]}
-            />
-          ))}
-        {after}
+          timeline.map((message, index) => {
+            const first = !sameRun(timeline[index - 1], message);
+            const last = !sameRun(message, timeline[index + 1]);
+            return (
+              // A run's bubbles sit close together; a new run starts further down.
+              <div key={message.id} className={index === 0 ? undefined : first ? "mt-4" : "mt-0.5"}>
+                <MessageItem
+                  conversationId={conversationId}
+                  message={message}
+                  canAct={canAct}
+                  onTakeBack={onTakeBack}
+                  signedCopyAt={signedCopies[message.id]}
+                  first={first}
+                  last={last}
+                />
+              </div>
+            );
+          })}
+        {after ? <div className="mt-4">{after}</div> : null}
       </div>
       {unseen > 0 ? (
         <Button

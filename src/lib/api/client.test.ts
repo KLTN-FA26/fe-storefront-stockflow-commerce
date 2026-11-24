@@ -124,6 +124,23 @@ describe("API authentication semantics", () => {
     expect(adapter.mock.calls[0]?.[0].url).toBe("/customer/profile");
   });
 
+  it("does not send a visitor who never signed in to the login page on a 401 (no bearer was sent)", async () => {
+    const replace = vi.fn();
+    vi.spyOn(window, "location", "get").mockReturnValue({
+      replace,
+      pathname: "/",
+      search: "",
+    } as unknown as Location);
+    api.defaults.adapter = rejectedAdapter(401, {
+      success: false,
+      errorCode: "UNAUTHORIZED",
+      message: "Not authenticated",
+    });
+
+    await expect(api.get("/notifications/unread-count")).rejects.toMatchObject({ status: 401 });
+    expect(replace).not.toHaveBeenCalled();
+  });
+
   it("does not clear auth state or redirect for a 400 password validation error", async () => {
     useAuthStore.getState().login(null, {
       accessToken: "valid",

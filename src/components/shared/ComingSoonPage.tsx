@@ -21,7 +21,7 @@ export function ComingSoonPage({ title, subtitle, icon: Icon }: ComingSoonPagePr
         actions={
           <Link
             href="/admin"
-            className="border-border-default bg-bg-surface text-ink-secondary hover:bg-bg-muted hover:text-ink-primary inline-flex items-center gap-1.5 rounded-[var(--r-sm)] border px-3 py-1.5 text-[0.8125rem] font-medium transition-colors"
+            className="border-border-default bg-bg-surface text-ink-secondary hover:bg-bg-subtle hover:text-ink-primary inline-flex items-center gap-1.5 rounded-[var(--r-sm)] border px-3 py-1.5 text-[0.8125rem] font-medium transition-colors"
           >
             <ArrowLeft className="size-3.5" />
             Về tổng quan

@@ -119,7 +119,7 @@ export function SubmittedFiles({
                 type="button"
                 onClick={() => open(file)}
                 disabled={opening !== null}
-                className="hover:bg-bg-muted focus-visible:ring-ring/50 flex min-h-11 w-full items-center gap-3 rounded-[var(--r-md)] px-2 py-1.5 text-left outline-none focus-visible:ring-3 disabled:opacity-60"
+                className="hover:bg-bg-subtle focus-visible:ring-ring/50 flex min-h-11 w-full items-center gap-3 rounded-[var(--r-md)] px-2 py-1.5 text-left outline-none focus-visible:ring-3 disabled:opacity-60"
               >
                 <Download aria-hidden className="text-ink-tertiary size-4 shrink-0" />
                 <span className="min-w-0 flex-1">

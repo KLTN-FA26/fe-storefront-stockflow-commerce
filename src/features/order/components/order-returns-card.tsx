@@ -51,7 +51,7 @@ export function OrderReturnsCard({ order }: { order: Order }) {
             <li key={request.id}>
               <Link
                 href={STORE_ROUTES.account.returns.detail(request.id)}
-                className="hover:bg-bg-muted focus-visible:ring-accent -mx-2 flex min-h-11 items-center gap-2 rounded-[var(--r-md)] px-2 py-1.5 focus-visible:ring-2 focus-visible:outline-none"
+                className="hover:bg-bg-subtle focus-visible:ring-accent -mx-2 flex min-h-11 items-center gap-2 rounded-[var(--r-md)] px-2 py-1.5 focus-visible:ring-2 focus-visible:outline-none"
               >
                 <span className="min-w-0 flex-1">
                   <span className="text-ink-primary block font-mono text-sm font-semibold">
