@@ -8,8 +8,14 @@ import {
   QUOTE_STATUS_META,
 } from "../lifecycle";
 import { QUOTE_STATUSES } from "../schemas";
+import type { QuoteLine } from "../types";
 
-const sent = { status: "SENT" as const, validUntil: "2026-12-04T02:00:00Z", legacy: false };
+const sent = {
+  status: "SENT" as const,
+  validUntil: "2026-12-04T02:00:00Z",
+  legacy: false,
+  lines: [] as Pick<QuoteLine, "purchasability">[],
+};
 const before = new Date("2026-12-04T01:59:59Z");
 const after = new Date("2026-12-04T02:00:00Z");
 
@@ -46,6 +52,45 @@ describe("TC-F03-03: a quote past its validity cannot be answered", () => {
     expect(
       allowedQuoteActions({ ...sent, legacy: true }, { canAnswer: true, now: before }).accept,
     ).toBe(false);
+  });
+});
+
+describe("WF-02 FE-1: a line that can no longer be bought", () => {
+  const withLines = (...purchasability: QuoteLine["purchasability"][]) => ({
+    ...sent,
+    lines: purchasability.map((value) => ({ purchasability: value })),
+  });
+
+  it.each([
+    "PRODUCT_INACTIVE",
+    "PRODUCT_DISCONTINUED",
+    "PRODUCT_NOT_APPROVED",
+    "VARIANT_NOT_ACTIVE",
+  ] as const)("blocks accepting but keeps the change request open when a line is %s", (verdict) => {
+    expect(
+      allowedQuoteActions(withLines("PURCHASABLE", verdict), { canAnswer: true, now: before }),
+    ).toEqual({ accept: false, requestChanges: true });
+  });
+
+  it("accepts when every line is PURCHASABLE, or has no verdict (a legacy line, an older BE)", () => {
+    expect(
+      allowedQuoteActions(withLines("PURCHASABLE", null, undefined), {
+        canAnswer: true,
+        now: before,
+      }),
+    ).toEqual({ accept: true, requestChanges: true });
+  });
+
+  it("accepts a line whose verdict this FE does not know yet (owner decision 13: the BE still refuses)", () => {
+    expect(
+      allowedQuoteActions(withLines("PURCHASABLE", "UNKNOWN"), { canAnswer: true, now: before }),
+    ).toEqual({ accept: true, requestChanges: true });
+  });
+
+  it("still offers nothing once the quote is past its validity", () => {
+    expect(
+      allowedQuoteActions(withLines("PRODUCT_DISCONTINUED"), { canAnswer: true, now: after }),
+    ).toEqual({ accept: false, requestChanges: false });
   });
 });
 

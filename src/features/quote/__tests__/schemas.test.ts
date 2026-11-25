@@ -37,6 +37,19 @@ describe("quote DTO schemas", () => {
     expect(quote.terms).toBeNull();
   });
 
+  it("reads each line's purchasability, absent on an older BE and UNKNOWN for a new verdict", () => {
+    const lineWith = (purchasability: unknown) =>
+      quoteDtoSchema.parse({
+        ...beSentQuote,
+        lines: [{ ...beSentQuote.lines[0], purchasability }],
+      }).lines[0]!.purchasability;
+    expect(quoteDtoSchema.parse(beSentQuote).lines[0]!.purchasability).toBeUndefined();
+    expect(lineWith(null)).toBeNull();
+    expect(lineWith("PURCHASABLE")).toBe("PURCHASABLE");
+    expect(lineWith("PRODUCT_DISCONTINUED")).toBe("PRODUCT_DISCONTINUED");
+    expect(lineWith("SOMETHING_NEW")).toBe("UNKNOWN");
+  });
+
   it("keeps a page with lists left out: a quote without fees or history", () => {
     const { fees: _fees, history: _history, ...bare } = beSentQuote;
     const quote = quoteDtoSchema.parse(bare);

@@ -1,7 +1,8 @@
+import { hasUnsellableLine } from "@/lib/domain/quote-purchasability";
 import { QUOTE_STATUS } from "@/lib/domain/status-map";
 import type { SemanticTone } from "@/lib/domain/types";
 
-import type { Quote, QuoteStatus, QuoteStatusFilter } from "./types";
+import type { Quote, QuoteLine, QuoteStatus, QuoteStatusFilter } from "./types";
 
 // Quote lifecycle as the customer meets it (kltn-docs 14 §5.1): Sales draft, the customer answers
 // a SENT quote within its validity, Sales take it from there. A customer never sees a DRAFT.
@@ -20,9 +21,12 @@ export function effectiveStatus(
 }
 
 export interface QuoteActions {
-  /** POST /acceptance: only a SENT, valid, non-legacy quote, and only the customer (sales-quotes:APPROVE). */
+  /**
+   * POST /acceptance: only a SENT, valid, non-legacy quote, only the customer (sales-quotes:APPROVE),
+   * and only while every line may still be bought (01 BR-04; the BE refuses SKU_NOT_SELLABLE).
+   */
   accept: boolean;
-  /** POST /change-request: same window as accepting. */
+  /** POST /change-request: same window as accepting, open even when a line can no longer be bought. */
   requestChanges: boolean;
 }
 
@@ -30,15 +34,19 @@ const NONE: QuoteActions = { accept: false, requestChanges: false };
 
 /**
  * What the customer may do with the quote now. UI gating only — the BE checks the status, the
- * validity and the version again (INVALID_QUOTE_TRANSITION, QUOTE_EXPIRED, OPTIMISTIC_LOCK).
- * EXPIRED, CANCELLED, CONVERTED, CHANGES_REQUESTED and ACCEPTED are read only.
+ * validity, the version and each SKU again (INVALID_QUOTE_TRANSITION, QUOTE_EXPIRED,
+ * OPTIMISTIC_LOCK, SKU_NOT_SELLABLE). EXPIRED, CANCELLED, CONVERTED, CHANGES_REQUESTED and ACCEPTED
+ * are read only. A line whose product was stopped (WF-02 FE-1) blocks accepting only: asking Sale
+ * to revise the quote is how the customer gets out of it.
  */
 export function allowedQuoteActions(
-  quote: Pick<Quote, "status" | "validUntil" | "legacy">,
+  quote: Pick<Quote, "status" | "validUntil" | "legacy"> & {
+    lines: readonly Pick<QuoteLine, "purchasability">[];
+  },
   { canAnswer, now = new Date() }: { canAnswer: boolean; now?: Date },
 ): QuoteActions {
   if (!canAnswer || quote.legacy || effectiveStatus(quote, now) !== "SENT") return NONE;
-  return { accept: true, requestChanges: true };
+  return { accept: !hasUnsellableLine(quote.lines), requestChanges: true };
 }
 
 /** What happens next for each status, under its badge. */

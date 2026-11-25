@@ -684,16 +684,20 @@ describe("OrderDetailScreen: asking Sales about an order on hold", () => {
       (o) => o.customerId === CUSTOMER && o.status === "ON_HOLD" && o.paymentTerm === term,
     ) ?? { ...seeded("ON_HOLD"), paymentTerm: term };
 
-  it("does not say an ON_HOLD order went to production or the warehouse: it never did", async () => {
+  it("says nothing about production or the warehouse for a hold other than credit (WF-02 LC-4)", async () => {
+    // Such a hold can come anywhere from CONFIRMED to PACKED, so neither "not yet" nor "already" is safe.
     const order = held("PREPAID");
     renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
-    await userEvent.click(await screen.findByRole("button", { name: /Gửi yêu cầu huỷ đơn hàng/ }));
+    const open = await screen.findByRole("button", { name: /Gửi yêu cầu huỷ đơn hàng/ });
+    const help = screen.getByRole("region", { name: "Cần hỗ trợ?" });
+    expect(within(help).getByText(/Đơn đang được chúng tôi xem xét/)).toBeInTheDocument();
+    expect(within(help).queryByText(/sản xuất hoặc kho/)).not.toBeInTheDocument();
 
+    await userEvent.click(open);
     const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText(/chưa được chuyển cho sản xuất hoặc kho/)).toBeInTheDocument();
     expect(within(dialog).getByText(/Đơn đang được chúng tôi xem xét/)).toBeInTheDocument();
-    expect(within(dialog).queryByText(/phát sinh chi phí/)).not.toBeInTheDocument();
-    expect(within(dialog).queryByText(/Đơn đã được chuyển cho sản xuất/)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/sản xuất hoặc kho/)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/hoàn toàn bộ/)).not.toBeInTheDocument();
   });
 
   it("names the credit approval when that is what the order waits for", async () => {
@@ -707,6 +711,24 @@ describe("OrderDetailScreen: asking Sales about an order on hold", () => {
         /Đơn đang chờ duyệt hạn mức công nợ, chưa chuyển cho sản xuất hoặc kho/,
       ),
     ).toBeInTheDocument();
+  });
+
+  it("tells a customer on a credit hold that a refusal refunds everything paid (WF-02 Q-10)", async () => {
+    const order = held("CREDIT");
+    book = createMockOrderBook(CUSTOMER, [order]);
+    renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
+
+    const refund =
+      "Nếu hạn mức không được duyệt, hợp đồng bị huỷ bỏ và bạn được hoàn toàn bộ số tiền đã trả.";
+    // The status hero names the hold, then the refund.
+    expect(
+      await screen.findByText(`Đơn đang chờ duyệt hạn mức công nợ. ${refund}`),
+    ).toBeInTheDocument();
+    const help = screen.getByRole("region", { name: "Cần hỗ trợ?" });
+    expect(within(help).getByText(new RegExp(refund))).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Gửi yêu cầu huỷ đơn hàng/ }));
+    expect(within(screen.getByRole("dialog")).getByText(new RegExp(refund))).toBeInTheDocument();
   });
 
   it("keeps the production wording for an order that really is released", async () => {

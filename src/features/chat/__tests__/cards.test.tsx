@@ -282,6 +282,56 @@ describe("accepting a quote on its card (C10)", () => {
     expect(screen.getByLabelText(/Dòng 1/)).toHaveValue(25);
   });
 
+  describe("WF-02 FE-1: a line no longer for sale", () => {
+    const NOTICE = "Báo giá có sản phẩm đã ngừng bán. Bạn có thể yêu cầu Sale sửa báo giá.";
+    const pricingWith = (purchasability: string | null) => {
+      const json = quotePricingJson();
+      return { ...json, lines: json.lines.map((line) => ({ ...line, purchasability })) };
+    };
+
+    it("disables ACCEPT and says why, while 'Yêu cầu sửa' stays", async () => {
+      vi.spyOn(api, "get").mockResolvedValue({ data: pricingWith("PRODUCT_DISCONTINUED") });
+      open();
+      expect(await screen.findByText(NOTICE)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Chấp nhận" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Yêu cầu sửa" })).toBeEnabled();
+    });
+
+    it.each([
+      ["no verdict (a legacy line)", null],
+      ["a verdict this FE does not know yet (owner decision 13)", "SOMETHING_NEW"],
+    ])("keeps ACCEPT for a line with %s", async (_, verdict) => {
+      const get = vi.spyOn(api, "get").mockResolvedValue({ data: pricingWith(verdict) });
+      open();
+      await waitFor(() =>
+        expect(get).toHaveBeenCalledWith(`/quotes/${QUOTE_ID}`, expect.anything()),
+      );
+      expect(screen.getByRole("button", { name: "Chấp nhận" })).toBeEnabled();
+      expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
+    });
+
+    it("on SKU_NOT_SELLABLE shows the BE message, re-reads the quote and blocks accepting", async () => {
+      const user = userEvent.setup();
+      let verdict = "PURCHASABLE";
+      vi.spyOn(api, "get").mockImplementation(async () => ({ data: pricingWith(verdict) }));
+      const message =
+        "Dòng 1 (LY-GIAY-DEMO-12OZ-XANH) đã ngừng bán nên chưa chấp nhận được báo giá. Hãy yêu cầu Sale sửa báo giá.";
+      vi.spyOn(api, "post").mockImplementation(async () => {
+        verdict = "PRODUCT_INACTIVE";
+        throw new ApiError(409, "SKU_NOT_SELLABLE", message);
+      });
+      open();
+      await user.click(screen.getByRole("button", { name: "Chấp nhận" }));
+      const dialog = await screen.findByRole("dialog");
+      await within(dialog).findByText("20 thùng");
+      await user.click(within(dialog).getByRole("button", { name: "Chấp nhận báo giá" }));
+
+      expect(await within(dialog).findByText(message)).toBeInTheDocument();
+      expect(await within(dialog).findByText(NOTICE)).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: "Chấp nhận báo giá" })).toBeDisabled();
+    });
+  });
+
   it("REQUEST_CHANGES requires a note before anything is sent", async () => {
     const user = userEvent.setup();
     const post = vi.spyOn(api, "post");
@@ -315,6 +365,15 @@ describe("PAYMENT_INFO: the VietQR code (plan E1)", () => {
     vietQr:
       "00020101021238530010A0000007270123000697000001090000000000208QRIBFTTA53037045408228420005802VN6304ABCD",
     ...overrides,
+  });
+
+  it("titles a fee item by its name, not by its number (WF-02 FE-7)", () => {
+    renderCard(
+      cardMessageJson("PAYMENT_INFO", transferPayload({ seq: 21, name: "Cancellation fee" })),
+    );
+
+    expect(screen.getByText("Phí huỷ đơn")).toBeInTheDocument();
+    expect(screen.queryByText(/Đợt 21/)).not.toBeInTheDocument();
   });
 
   it("draws the code the BE sent above the transfer details", () => {

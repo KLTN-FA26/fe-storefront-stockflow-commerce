@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format/date";
 import { formatMoney } from "@/lib/format/money";
 import {
-  installmentMilestoneLabel,
+  installmentMilestoneNote,
   installmentStatusMeta,
   installmentTitle,
   isPayable,
@@ -48,6 +48,13 @@ export function OrderInstallmentRow({
 }) {
   const money = (amount: number) => formatMoney(amount, installment.currency);
   const meta = installmentStatusMeta(installment);
+  // A fee item's milestone would only repeat its name (WF-02 FE-7).
+  const subtitle = [
+    installmentMilestoneNote(installment),
+    installment.deliveryBatchSeq ? `đợt giao ${installment.deliveryBatchSeq}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const payable = isPayable(installment);
   const due = dueText(installment);
   const panelId = `installment-transfer-${installment.installmentId}`;
@@ -65,10 +72,7 @@ export function OrderInstallmentRow({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-ink-primary font-semibold">{installmentTitle(installment)}</p>
-          <p className="text-ink-secondary">
-            {installmentMilestoneLabel(installment)}
-            {installment.deliveryBatchSeq ? ` · đợt giao ${installment.deliveryBatchSeq}` : ""}
-          </p>
+          {subtitle ? <p className="text-ink-secondary">{subtitle}</p> : null}
         </div>
         <Badge
           data-tone={meta.tone}

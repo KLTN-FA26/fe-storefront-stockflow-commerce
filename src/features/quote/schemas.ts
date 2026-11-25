@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { pageResponseSchema } from "@/lib/api/page-response";
+import { PURCHASABILITY_VALUES } from "@/lib/domain/quote-purchasability";
 import { beId, isoDate } from "@/lib/validation/primitives";
 import { tolerantEnum } from "@/lib/validation/tolerant-enum";
 
@@ -71,6 +72,8 @@ export const quoteLineDtoSchema = z.object({
   taxRate: z.number().nullish(),
   proposedTax: amountSchema.nullish(),
   acceptedTax: amountSchema.nullish(),
+  // WF-02 FE-1: whether the SKU may still be bought; null on a legacy line (BE Purchasability).
+  purchasability: tolerantEnum(PURCHASABILITY_VALUES).nullish(),
 });
 
 /** A fee line (QuoteResponse.Fee, 14 BR-17/BR-20): no cartons, never counted towards MOQ or tiers. */

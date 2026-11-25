@@ -172,12 +172,16 @@ describe("an answered quote request (SF-UX-10, R5-5)", () => {
     );
   });
 
-  it("reads 'Đã đóng' with no link when closed without a quote, or before the BE names it", () => {
-    for (const request of [
-      closed({ closedOutcome: "CLOSED_BY_STAFF" }),
-      closed({ closedOutcome: "QUOTED" }),
-      closed({}),
-    ]) {
+  it("WF-02 FE-2: closed as QUOTED before the quote is sent reads 'Sale đang soạn báo giá', no link", () => {
+    renderWithProviders(<QuoteRequestFacts request={closed({ closedOutcome: "QUOTED" })} />);
+    const badge = screen.getByText("Sale đang soạn báo giá");
+    expect(badge).toHaveAttribute("data-tone", "info");
+    expect(screen.queryByText("Đã đóng")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Xem báo giá" })).not.toBeInTheDocument();
+  });
+
+  it("reads 'Đã đóng' with no link when closed without a quote", () => {
+    for (const request of [closed({ closedOutcome: "CLOSED_BY_STAFF" }), closed({})]) {
       const view = renderWithProviders(<QuoteRequestFacts request={request} />);
       expect(screen.getByText("Đã đóng")).toBeInTheDocument();
       expect(screen.queryByRole("link", { name: "Xem báo giá" })).not.toBeInTheDocument();

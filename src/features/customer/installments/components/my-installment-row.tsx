@@ -14,7 +14,7 @@ import { STORE_ROUTES } from "@/constants";
 import { formatDate } from "@/lib/format/date";
 import { formatMoney } from "@/lib/format/money";
 import {
-  installmentMilestoneLabel,
+  installmentMilestoneNote,
   installmentStatusMeta,
   installmentTitle,
   isPayable,
@@ -110,7 +110,9 @@ export function MyInstallmentRow({
             Đơn {installment.orderNumber}
           </Link>
           <p className="text-ink-secondary">
-            {installmentTitle(installment)} · {installmentMilestoneLabel(installment)}
+            {[installmentTitle(installment), installmentMilestoneNote(installment)]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
           <p className="text-ink-tertiary font-mono text-xs">HĐ {installment.contractNumber}</p>
         </div>

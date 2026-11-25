@@ -29,6 +29,16 @@ function Harness({
   );
 }
 
+/** A page that renders again on every press inside it, as a busy form or studio does around the field. */
+function RerenderingPage() {
+  const [, setPresses] = useState(0);
+  return (
+    <div onPointerDownCapture={() => setPresses((n) => n + 1)}>
+      <Harness />
+    </div>
+  );
+}
+
 const nextYear = new Date().getFullYear() + 1;
 
 describe("DatePicker (dd/MM/yyyy, SF-UX-3)", () => {
@@ -64,6 +74,22 @@ describe("DatePicker (dd/MM/yyyy, SF-UX-3)", () => {
     await user.click(screen.getByRole("button", { name: "Xoá ngày" }));
     expect(onChange).toHaveBeenLastCalledWith("");
     expect(screen.getByLabelText("Ngày giao")).toHaveTextContent("Chọn ngày");
+  });
+
+  it("keeps its calendar when the page around it renders again: the month and year choices land", async () => {
+    // The press on a dropdown renders the page before the choice is made; a calendar rebuilt by that
+    // render dropped the choice on a detached <select> (the CI flake "No day … on the calendar").
+    const user = userEvent.setup();
+    render(<RerenderingPage />);
+    const trigger = screen.getByLabelText("Ngày giao");
+    await user.click(trigger);
+    const year = screen.getByRole("combobox", { name: "Chọn năm" });
+    await user.click(screen.getByRole("grid"));
+    expect(screen.getByRole("combobox", { name: "Chọn năm" })).toBe(year);
+    await user.keyboard("{Escape}");
+
+    await pickDate(user, trigger, `${nextYear}-12-31`);
+    expect(trigger).toHaveTextContent(`31/12/${nextYear}`);
   });
 
   it("puts aria-invalid on the button that opens the calendar", () => {

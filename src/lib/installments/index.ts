@@ -36,9 +36,13 @@ export {
   INSTALLMENT_MILESTONE_LABEL,
   INSTALLMENT_STATUS_LABEL,
   installmentMilestoneLabel,
+  installmentMilestoneNote,
   installmentName,
+  installmentShortName,
   installmentStatusMeta,
   installmentTitle,
   isDueNow,
+  isFeeItem,
+  isFeeSeq,
   isPayable,
 } from "./selectors";

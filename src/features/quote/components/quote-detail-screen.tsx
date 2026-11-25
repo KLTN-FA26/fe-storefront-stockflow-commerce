@@ -9,6 +9,7 @@ import { STORE_ROUTES } from "@/constants";
 import { Alert } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { hasErrorCode } from "@/lib/api/describe-error";
+import { hasUnsellableLine } from "@/lib/domain/quote-purchasability";
 import { daysLeftText, formatDateTime } from "@/lib/format/date";
 import { PERM } from "@/lib/auth/permission-codes";
 import { useHasPermission } from "@/lib/auth/my-permissions";
@@ -22,6 +23,7 @@ import { QuoteAcceptForm } from "./quote-accept-form";
 import { QuoteChangeRequestDialog } from "./quote-change-request-dialog";
 import { QuoteDocumentButton } from "./quote-document-button";
 import { QuoteLinesCard } from "./quote-lines";
+import { QuoteUnsellableNotice } from "./quote-unsellable-notice";
 import {
   QuoteDetailSkeleton,
   QuoteLoadError,
@@ -87,6 +89,12 @@ export function QuoteDetailScreen({ quoteId: rawQuoteId }: { quoteId: string }) 
     ? { accept: false, requestChanges: false }
     : allowedQuoteActions(quote, { canAnswer });
   const answering = accept.isPending || changes.isPending;
+  // WF-02 FE-1: a line that can no longer be bought blocks accepting; asking for changes stays open.
+  const unsellable = status === "SENT" && hasUnsellableLine(quote.lines);
+  const askForChanges = () => {
+    changes.reset();
+    setAsking(true);
+  };
 
   return (
     <div className="space-y-5">
@@ -138,16 +146,26 @@ export function QuoteDetailScreen({ quoteId: rawQuoteId }: { quoteId: string }) 
               quote={quote}
               pending={answering}
               error={accept.error}
-              onRequestChanges={() => {
-                changes.reset();
-                setAsking(true);
-              }}
+              onRequestChanges={askForChanges}
               onAccept={(lines) =>
                 accept.mutate({ quoteId: quote.id, version: quote.version, lines })
               }
             />
           ) : (
-            <QuoteLinesCard quote={quote} />
+            <>
+              {unsellable ? (
+                <QuoteUnsellableNotice
+                  refusal={
+                    hasErrorCode(accept.error, "SKU_NOT_SELLABLE")
+                      ? describeQuoteError(accept.error)
+                      : undefined
+                  }
+                  pending={answering}
+                  onRequestChanges={actions.requestChanges ? askForChanges : undefined}
+                />
+              ) : null}
+              <QuoteLinesCard quote={quote} markUnsellable={unsellable} />
+            </>
           )}
           <QuoteHistory quote={quote} />
         </div>

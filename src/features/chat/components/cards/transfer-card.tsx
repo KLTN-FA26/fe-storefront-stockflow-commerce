@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { STORE_ROUTES } from "@/constants";
-import type { InstallmentTransfer } from "@/lib/installments";
+import { type InstallmentTransfer, installmentName, isFeeSeq } from "@/lib/installments";
 
 import { Alert } from "@/components/shared";
 import { TransferInstructionsBlock } from "@/components/storefront/transfer-instructions";
@@ -12,6 +12,13 @@ import { CARD_LINK, CardFrame, Fact, Facts, cardMoney } from "./card-frame";
 import { VietQrCode } from "./viet-qr-code";
 
 const SETTLED = new Set(["PAID", "CANCELLED"]);
+
+/** "Đợt 1 · Đặt cọc", a fee item by its own name: "Đợt 21" is no installment the contract lists (WF-02 FE-7). */
+function transferTitle(payload: TransferCardPayload): string {
+  const name = payload.name ? installmentName(payload.name) : "";
+  if (isFeeSeq(payload.seq)) return name || "Khoản phí";
+  return `Đợt ${payload.seq ?? ""} · ${name || "Thanh toán"}`;
+}
 
 function asTransfer(payload: TransferCardPayload): InstallmentTransfer | null {
   if (!payload.bank) return null;
@@ -50,7 +57,7 @@ export function TransferCard({
   return (
     <CardFrame
       eyebrow={reminder ? "Nhắc thanh toán" : "Thông tin chuyển khoản"}
-      title={`Đợt ${payload.seq ?? ""} · ${payload.name ?? "Thanh toán"}`}
+      title={transferTitle(payload)}
       status={installmentStatusMeta(payload.status, overdue)}
       footer={
         payload.orderId ? (

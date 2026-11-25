@@ -35,9 +35,16 @@ export const DELIVERY_STATE_LABEL: Record<DeliveryState, string> = {
   UNKNOWN: "Đang cập nhật",
 };
 
+/**
+ * What happens to the money paid on an order waiting for its credit limit (WF-02 Q-10): a credit
+ * hold comes before CONFIRMED, so nothing is in production yet and a refusal refunds all of it.
+ */
+export const CREDIT_HOLD_REFUND =
+  "Nếu hạn mức không được duyệt, hợp đồng bị huỷ bỏ và bạn được hoàn toàn bộ số tiền đã trả.";
+
 /** Why an ON_HOLD order waits (BE holdReasonPublic): the only two things a customer is told. */
 export const HOLD_REASON_LABEL: Record<HoldReason, string> = {
-  AWAITING_CREDIT_APPROVAL: "Đơn đang chờ duyệt hạn mức công nợ.",
+  AWAITING_CREDIT_APPROVAL: `Đơn đang chờ duyệt hạn mức công nợ. ${CREDIT_HOLD_REFUND}`,
   UNDER_REVIEW: "Đơn đang được chúng tôi xem xét.",
   UNKNOWN: "Đơn đang được chúng tôi xem xét.",
 };
@@ -63,9 +70,11 @@ export const CUSTOMER_REASON_OPTIONS = [
 ] as const;
 
 /**
- * Why the customer is asking Sales rather than cancelling: a released order has work in progress,
- * but an ON_HOLD one (credit limit, review) never reached production or the warehouse, so it must
- * not be told it did. `holdReason` is the BE's holdReasonPublic.
+ * Why the customer is asking Sales rather than cancelling: a released order has work in progress.
+ * An ON_HOLD order is said to be short of production or the warehouse only on a credit hold, which
+ * comes before CONFIRMED (WF-02 LC-4). Any other hold (payment, a trip, a short pick, a review) can
+ * fall anywhere from CONFIRMED to PACKED, and the BE does not say where, so it gets a neutral
+ * sentence. `holdReason` is the BE's holdReasonPublic.
  */
 /** Signed or awaiting its contract, nothing released yet (BE OrderStatus, kltn-docs 17 §4.8). */
 const BEFORE_RELEASE = new Set(["DRAFT", "PENDING_CONTRACT", "PENDING_PAYMENT", "CONFIRMED"]);
@@ -74,14 +83,17 @@ export function requestReason(
   status: string,
   holdReason: HoldReason | null | undefined,
 ): { help: string; dialog: string } {
-  if (status === "ON_HOLD") {
-    const state =
-      holdReason === "AWAITING_CREDIT_APPROVAL"
-        ? "Đơn đang chờ duyệt hạn mức công nợ"
-        : "Đơn đang được chúng tôi xem xét";
+  if (status === "ON_HOLD" && holdReason === "AWAITING_CREDIT_APPROVAL") {
     return {
-      help: `${state}, chưa chuyển cho sản xuất hoặc kho. Bạn có thể gửi yêu cầu huỷ để Sales xử lý, hoặc chat với Sale.`,
-      dialog: `${state} và chưa được chuyển cho sản xuất hoặc kho. Yêu cầu huỷ của bạn sẽ được Sales xem xét; đơn giữ nguyên cho đến khi có quyết định.`,
+      help: `Đơn đang chờ duyệt hạn mức công nợ, chưa chuyển cho sản xuất hoặc kho. ${CREDIT_HOLD_REFUND} Bạn có thể gửi yêu cầu huỷ để Sales xử lý, hoặc chat với Sale.`,
+      dialog: `Đơn đang chờ duyệt hạn mức công nợ và chưa được chuyển cho sản xuất hoặc kho. ${CREDIT_HOLD_REFUND} Yêu cầu huỷ của bạn sẽ được Sales xem xét; đơn giữ nguyên cho đến khi có quyết định.`,
+    };
+  }
+  if (status === "ON_HOLD") {
+    return {
+      help: "Đơn đang được chúng tôi xem xét. Bạn có thể gửi yêu cầu huỷ để Sales xử lý, hoặc chat với Sale.",
+      dialog:
+        "Đơn đang được chúng tôi xem xét. Yêu cầu huỷ của bạn sẽ được Sales xem xét theo điều khoản hợp đồng; đơn giữ nguyên cho đến khi có quyết định.",
     };
   }
   if (BEFORE_RELEASE.has(status)) {

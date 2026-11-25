@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 
 import { STORE_ROUTES } from "@/constants";
+import { hasUnsellableLine, UNSELLABLE_QUOTE_NOTICE } from "@/lib/domain/quote-purchasability";
 import { formatDate, formatDateTime } from "@/lib/format/date";
 import { formatNumber } from "@/lib/format/number";
 import { cn } from "@/lib/cn";
@@ -45,8 +46,13 @@ export function QuoteCard({ conversationId, messageId, card, payload, canAct }: 
   const cartonLines = payload.lines.filter(
     (line) => line.cartons !== null && line.cartons !== undefined,
   );
-  // The card has no MOQ / tiers / fees: read them from the quote while the acceptance dialog is open.
-  const pricing = useQuotePricing(payload.quoteId, dialog === "ACCEPT");
+  // The card has no MOQ / tiers / fees, nor whether each line may still be bought: read them from
+  // the quote while ACCEPT is offered (WF-02 FE-1), and again when the acceptance dialog opens.
+  const acceptOffered = buttons.some(
+    ({ action: name, disabled }) => name === "ACCEPT" && !disabled,
+  );
+  const pricing = useQuotePricing(payload.quoteId, acceptOffered || dialog === "ACCEPT");
+  const unsellable = hasUnsellableLine(pricing.data?.lines ?? []);
   const close = (open: boolean) => {
     if (!open) {
       setDialog(null);
@@ -66,9 +72,12 @@ export function QuoteCard({ conversationId, messageId, card, payload, canAct }: 
               key={name}
               type="button"
               variant={name === "ACCEPT" ? "default" : "outline"}
-              disabled={disabled || action.pending}
+              disabled={disabled || action.pending || (name === "ACCEPT" && unsellable)}
               className="min-h-11 rounded-[var(--r-md)] px-4"
-              onClick={() => setDialog(name)}
+              onClick={() => {
+                if (name === "ACCEPT") void pricing.refetch();
+                setDialog(name);
+              }}
             >
               {BUTTON_LABEL[name]}
             </Button>
@@ -135,6 +144,9 @@ export function QuoteCard({ conversationId, messageId, card, payload, canAct }: 
           </Fact>
         ) : null}
       </Facts>
+      {unsellable && acceptOffered ? (
+        <p className="text-warning-ink">{UNSELLABLE_QUOTE_NOTICE}</p>
+      ) : null}
       {expired && card.state === "OPEN" ? (
         <p className="text-ink-secondary">
           Báo giá đã quá thời hạn hiệu lực. Vui lòng nhắn Sale để được lập báo giá mới.
@@ -167,6 +179,7 @@ export function QuoteCard({ conversationId, messageId, card, payload, canAct }: 
         badLine={action.badLine}
         pricing={pricing.data}
         pricingFailed={pricing.isError}
+        unsellable={unsellable}
         currency={payload.currency}
         onAccept={(cartons) =>
           action.submit({ action: "ACCEPT", version: payload.version, cartons }, () =>

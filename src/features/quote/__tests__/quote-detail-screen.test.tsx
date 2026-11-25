@@ -294,6 +294,78 @@ describe("QuoteDetailScreen — read only (TC-F03-03)", () => {
   });
 });
 
+describe("QuoteDetailScreen — a line that can no longer be bought (WF-02 FE-1)", () => {
+  const NOTICE = "Báo giá có sản phẩm đã ngừng bán. Bạn có thể yêu cầu Sale sửa báo giá.";
+  const withVerdict = (purchasability: string | null) => ({
+    ...beSentQuote,
+    lines: beSentQuote.lines.map((line) => ({ ...line, purchasability })),
+  });
+
+  it("blocks accepting, tags the line and keeps 'Yêu cầu sửa' open", async () => {
+    backend(withVerdict("PRODUCT_DISCONTINUED"));
+    const post = vi
+      .spyOn(api, "post")
+      .mockResolvedValue({ data: { ...beSentQuote, status: "CHANGES_REQUESTED", version: 4 } });
+    const user = userEvent.setup();
+    renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
+
+    expect(await screen.findByText(NOTICE)).toBeInTheDocument();
+    expect(screen.getByText("Đã ngừng bán")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Chấp nhận báo giá" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Yêu cầu sửa" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText(/Nội dung cần sửa/), "Đổi sang mã khác");
+    await user.click(within(dialog).getByRole("button", { name: "Gửi yêu cầu sửa" }));
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(`/quotes/${quoteId}/change-request`, {
+        version: 3,
+        feedback: "Đổi sang mã khác",
+      }),
+    );
+  });
+
+  it.each([
+    ["carries no verdict", null],
+    ["carries a verdict this FE does not know yet (owner decision 13)", "SOMETHING_NEW"],
+  ])("accepts as before when every line %s", async (_, verdict) => {
+    backend(withVerdict(verdict));
+    renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
+    expect(await screen.findByRole("button", { name: "Chấp nhận báo giá" })).toBeEnabled();
+    expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
+    expect(screen.queryByText("Đã ngừng bán")).not.toBeInTheDocument();
+  });
+
+  it("explains without a button to an account that may not answer", async () => {
+    permissions = [PERM.quotesRead];
+    backend(withVerdict("PRODUCT_INACTIVE"));
+    renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
+    expect(await screen.findByText(NOTICE)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Yêu cầu sửa" })).not.toBeInTheDocument();
+  });
+
+  it("shows the BE's SKU_NOT_SELLABLE message once the re-read quote blocks accepting", async () => {
+    let current: Record<string, unknown> = beSentQuote;
+    backend(() => current);
+    const message =
+      "Dòng 1 (LY-GIAY-DEMO-12OZ-XANH) đã ngừng bán nên chưa chấp nhận được báo giá. Hãy yêu cầu Sale sửa báo giá.";
+    vi.spyOn(api, "post").mockImplementation(async () => {
+      current = withVerdict("PRODUCT_DISCONTINUED");
+      throw new ApiError(409, "SKU_NOT_SELLABLE", message);
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
+
+    await user.click(await screen.findByRole("button", { name: "Chấp nhận báo giá" }));
+    await user.click(await screen.findByRole("button", { name: "Chấp nhận" }));
+
+    expect(await screen.findByText(NOTICE)).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    expect(screen.queryByRole("button", { name: "Chấp nhận báo giá" })).not.toBeInTheDocument();
+  });
+});
+
 describe("QuoteDetailScreen — asking for changes", () => {
   it("requires the feedback, then sends { version, feedback }", async () => {
     backend(beSentQuote);

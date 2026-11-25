@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import OrderDetailError from "@/app/(account)/account/orders/[id]/error";
+import OrderDetailNotFound from "@/app/(account)/account/orders/[id]/not-found";
 import OrdersError from "@/app/(account)/account/orders/error";
 import { ApiError } from "@/lib/api/error";
 
@@ -19,5 +20,20 @@ describe("order route error pages", () => {
       "/account/orders",
     );
     expect(screen.queryByText(/Missing permission/)).not.toBeInTheDocument();
+  });
+
+  it("WF-02 FE-3: the detail 404 reads right for a wrong id and an order being redrawn, with the chat", () => {
+    render(<OrderDetailNotFound />);
+    expect(screen.getByText("Chưa xem được đơn hàng này")).toBeInTheDocument();
+    expect(screen.getByText(/Sale đang lập lại hợp đồng cho đơn này/)).toBeInTheDocument();
+    expect(screen.queryByText(/không tồn tại/)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Chat với Sale" })).toHaveAttribute(
+      "href",
+      "/chat/new",
+    );
+    expect(screen.getByRole("link", { name: "Quay lại danh sách đơn hàng" })).toHaveAttribute(
+      "href",
+      "/account/orders",
+    );
   });
 });

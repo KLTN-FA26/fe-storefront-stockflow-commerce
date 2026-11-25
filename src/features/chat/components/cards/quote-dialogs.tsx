@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
 import { previewAcceptance, type QuotePreview } from "@/lib/domain/quote-pricing";
+import { UNSELLABLE_QUOTE_NOTICE } from "@/lib/domain/quote-purchasability";
 import { formatNumber } from "@/lib/format/number";
 import { cn } from "@/lib/cn";
 
@@ -42,6 +43,8 @@ interface AcceptDialogProps {
   /** MOQ, tiers, tax and fees from `GET /quotes/{id}`; undefined while loading or when it failed. */
   pricing: QuotePricing | undefined;
   pricingFailed: boolean;
+  /** A line can no longer be bought (WF-02 FE-1): accepting is blocked, the dialog says why. */
+  unsellable?: boolean | undefined;
   currency?: string | null | undefined;
   onAccept: (cartons: Record<string, number>) => void;
 }
@@ -64,6 +67,7 @@ export function AcceptQuoteDialog({
   badLine,
   pricing,
   pricingFailed,
+  unsellable = false,
   currency,
   onAccept,
 }: AcceptDialogProps) {
@@ -116,10 +120,15 @@ export function AcceptQuoteDialog({
       description="Kiểm tra số thùng từng dòng. Số thùng phải đạt số lượng đặt tối thiểu (MOQ) của sản phẩm; đơn giá theo bậc số lượng do hệ thống tính lại."
       confirm="Chấp nhận báo giá"
       pending={pending}
-      confirmDisabled={!pricing && !pricingFailed}
+      confirmDisabled={unsellable || (!pricing && !pricingFailed)}
       error={error}
       onSubmit={submit}
     >
+      {unsellable ? (
+        <p role="alert" className="text-warning-ink text-sm">
+          {UNSELLABLE_QUOTE_NOTICE}
+        </p>
+      ) : null}
       {lines.map((line, i) => {
         const fieldError = formState.errors.lines?.[i]?.cartons?.message;
         const refused = badLine === line.lineNo;

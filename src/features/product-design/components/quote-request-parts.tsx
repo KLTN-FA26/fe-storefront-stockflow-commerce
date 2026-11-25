@@ -32,6 +32,11 @@ const STATUS_META: Record<QuoteRequestStatus, { label: string; tone: SemanticTon
   CLOSED: { label: "Đã đóng", tone: "muted" },
 };
 const QUOTED_META = { label: "Đã có báo giá", tone: "positive" } as const;
+/**
+ * WF-02 FE-2: closed as QUOTED, but the quote is not the customer's to see yet (still a DRAFT, so
+ * the BE sends no `quoteId`). Sale is writing it: not "Đã đóng", which reads as an end.
+ */
+const DRAFTING_META = { label: "Sale đang soạn báo giá", tone: "info" } as const;
 
 /** What a request's closing says about it (R5-5): the fields the BE may not send yet. */
 type ClosedOutcome = Pick<
@@ -47,9 +52,18 @@ export function answeringQuote(request: ClosedOutcome): { id: string; number: st
   return { id: request.quoteId, number: request.quoteNumber?.trim() || "" };
 }
 
-/** "Đang chờ báo giá", "Đã có báo giá" once answered with a named quote, else "Đã đóng". */
+/**
+ * "Đang chờ báo giá"; "Đã có báo giá" once answered with a named quote; "Sale đang soạn báo giá"
+ * when closed as QUOTED before the quote is sent; else "Đã đóng".
+ */
+function statusMetaOf(request: ClosedOutcome): { label: string; tone: SemanticTone } {
+  if (answeringQuote(request)) return QUOTED_META;
+  if (request.status === "CLOSED" && request.closedOutcome === "QUOTED") return DRAFTING_META;
+  return STATUS_META[request.status];
+}
+
 export function QuoteRequestStatusBadge({ request }: { request: ClosedOutcome }) {
-  const { label, tone } = answeringQuote(request) ? QUOTED_META : STATUS_META[request.status];
+  const { label, tone } = statusMetaOf(request);
   return (
     <Badge data-tone={tone} className={cn(BADGE, TONE_CLASSES[tone])}>
       {label}
