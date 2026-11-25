@@ -289,7 +289,7 @@ describe("CONTRACT card waiting for the signature", () => {
 });
 
 describe("WF-02 FE-8: a CANCELLED contract card", () => {
-  it("says 'Đã huỷ', offers no download nor signing, and that a new one comes here", () => {
+  it("says 'Đã huỷ', offers no download, signing nor order link, and that a new one comes here", () => {
     renderMessage(
       cardMessageJson("CONTRACT", {
         contractId: "66666666-6666-4666-8666-666666666666",
@@ -301,13 +301,15 @@ describe("WF-02 FE-8: a CANCELLED contract card", () => {
     const card = screen.getByRole("region", { name: /Hợp đồng mua bán/ });
     expect(within(card).getByText("Đã huỷ")).toBeInTheDocument();
     expect(within(card).queryByRole("button", { name: /Tải hợp đồng/ })).not.toBeInTheDocument();
+    // Owner decision 15: the order may be back in DRAFT while Sale redraws it, and its page a 404.
+    expect(within(card).queryByRole("link", { name: "Xem đơn hàng" })).not.toBeInTheDocument();
     expect(within(card).queryByText(/gửi bản scan hoặc PDF có chữ ký/)).not.toBeInTheDocument();
     expect(
       within(card).getByText(/bạn sẽ nhận bản mới trong cuộc trò chuyện này/),
     ).toBeInTheDocument();
   });
 
-  it("keeps the download on a SENT contract", () => {
+  it("keeps the download and the order link on a SENT contract", () => {
     renderMessage(
       cardMessageJson("CONTRACT", {
         contractId: "66666666-6666-4666-8666-666666666666",
@@ -318,5 +320,9 @@ describe("WF-02 FE-8: a CANCELLED contract card", () => {
     );
     const card = screen.getByRole("region", { name: /Hợp đồng mua bán/ });
     expect(within(card).getByRole("button", { name: /Tải hợp đồng/ })).toBeEnabled();
+    expect(within(card).getByRole("link", { name: "Xem đơn hàng" })).toHaveAttribute(
+      "href",
+      `/account/orders/${ORDER_ID}`,
+    );
   });
 });

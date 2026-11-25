@@ -27,7 +27,8 @@ interface ContractCardProps {
  * sends the signed scan back as a chat file; Sales record the signing on the contract's own page.
  * Once a file is sent, the card says so and that Sales still have to confirm it. A CANCELLED
  * contract (WF-02 FE-8, Q-12) offers no download: the link fetches the order's live contract, so an
- * old card would hand out the redrawn one, or nothing to sign.
+ * old card would hand out the redrawn one, or nothing to sign. Nor "Xem đơn hàng" (owner decision
+ * 15): while Sale redraws the contract the order is back in DRAFT and its page answers 404.
  */
 export function ContractCard({ payload, signedCopyAt }: ContractCardProps) {
   const download = useOpenLink();
@@ -40,8 +41,8 @@ export function ContractCard({ payload, signedCopyAt }: ContractCardProps) {
       title={payload.number}
       status={sentCopy ? SIGNED_COPY_SENT : contractStatusMeta(payload.status)}
       footer={
-        <>
-          {cancelled ? null : (
+        cancelled ? null : (
+          <>
             <Button
               type="button"
               variant="outline"
@@ -56,11 +57,11 @@ export function ContractCard({ payload, signedCopyAt }: ContractCardProps) {
               <FileDown aria-hidden className="size-4" />
               {download.busy ? "Đang mở..." : "Tải hợp đồng"}
             </Button>
-          )}
-          <Link href={STORE_ROUTES.account.orders.detail(payload.orderId)} className={CARD_LINK}>
-            Xem đơn hàng
-          </Link>
-        </>
+            <Link href={STORE_ROUTES.account.orders.detail(payload.orderId)} className={CARD_LINK}>
+              Xem đơn hàng
+            </Link>
+          </>
+        )
       }
     >
       <Facts>
