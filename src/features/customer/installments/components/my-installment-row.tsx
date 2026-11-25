@@ -96,7 +96,9 @@ export function MyInstallmentRow({
       data-overdue={overdue || undefined}
       className={cn(
         "space-y-2 rounded-[var(--r-md)] border p-3 text-sm sm:p-4",
-        overdue ? "border-danger/40 bg-danger/5" : "border-border-default bg-bg-surface",
+        // Overdue is flagged by its badge and a red edge, not a red-washed block.
+        "bg-bg-surface border-border-default",
+        overdue && "border-l-danger border-l-2",
       )}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">

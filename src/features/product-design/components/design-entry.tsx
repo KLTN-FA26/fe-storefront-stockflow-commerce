@@ -48,7 +48,7 @@ export function DesignEntry({
   }
   if (config.data && isPrintConfigUsable(config.data)) {
     return (
-      <Button asChild variant="secondary" className="min-h-11 rounded-[var(--r-md)]">
+      <Button asChild variant="outline" className="min-h-11 rounded-[var(--r-md)]">
         <Link href={STORE_ROUTES.design.newFor(productSlug, sku)}>
           <Palette aria-hidden className="size-4" />
           Thiết kế

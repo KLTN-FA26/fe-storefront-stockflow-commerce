@@ -54,7 +54,7 @@ export function NotificationItems({
           <button
             type="button"
             onClick={() => onSelect(item)}
-            className={`hover:bg-bg-muted focus-visible:ring-accent flex min-h-11 w-full flex-col gap-1.5 px-4 py-3 text-left text-sm focus-visible:ring-2 focus-visible:outline-none ${item.read ? "" : "bg-info/5"}`}
+            className={`hover:bg-bg-subtle focus-visible:ring-accent flex min-h-11 w-full flex-col gap-1.5 px-4 py-3 text-left text-sm focus-visible:ring-2 focus-visible:outline-none ${item.read ? "" : "bg-info/5"}`}
           >
             <span className="flex w-full items-center justify-between gap-2">
               <SeverityBadge severity={item.severity} />

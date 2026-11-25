@@ -12,11 +12,11 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { SelectOption } from "@/components/shared/TitledSelect";
 import {
   Select,
   SelectContent,
   SelectGroup,
-  SelectItem,
   SelectLabel,
   SelectTrigger,
   SelectValue,
@@ -263,9 +263,9 @@ export function DataTable<T>({
                   <SelectGroup>
                     <SelectLabel>Dòng/trang</SelectLabel>
                     {pageSizeOptions.map((option) => (
-                    <SelectItem key={option} value={String(option)} className="text-xs">
+                    <SelectOption key={option} value={String(option)} className="text-xs">
                       {option}
-                    </SelectItem>
+                    </SelectOption>
                     ))}
                   </SelectGroup>
                 </SelectContent>
@@ -285,7 +285,7 @@ export function DataTable<T>({
                 size="icon-sm"
                 disabled={safePage === 0}
                 onClick={() => setPage((p) => p - 1)}
-                className="rounded-[var(--r-sm)] border-border-default bg-bg-surface text-ink-secondary hover:bg-bg-muted hover:text-ink-primary disabled:opacity-40"
+                className="rounded-[var(--r-sm)] border-border-default bg-bg-surface text-ink-secondary hover:bg-bg-subtle hover:text-ink-primary disabled:opacity-40"
                 aria-label="Trước"
               >
                 ‹
@@ -302,7 +302,7 @@ export function DataTable<T>({
                     "min-w-7 rounded-[var(--r-sm)] border text-xs",
                     i === safePage
                       ? "border-brand bg-brand font-medium text-ink-inverse hover:bg-brand hover:text-ink-inverse"
-                      : "border-border-default bg-bg-surface text-ink-secondary hover:bg-bg-muted hover:text-ink-primary"
+                      : "border-border-default bg-bg-surface text-ink-secondary hover:bg-bg-subtle hover:text-ink-primary"
                   )}
                 >
                   {i + 1}
@@ -314,7 +314,7 @@ export function DataTable<T>({
                 size="icon-sm"
                 disabled={safePage >= totalPages - 1}
                 onClick={() => setPage((p) => p + 1)}
-                className="rounded-[var(--r-sm)] border-border-default bg-bg-surface text-ink-secondary hover:bg-bg-muted hover:text-ink-primary disabled:opacity-40"
+                className="rounded-[var(--r-sm)] border-border-default bg-bg-surface text-ink-secondary hover:bg-bg-subtle hover:text-ink-primary disabled:opacity-40"
                 aria-label="Sau"
               >
                 ›

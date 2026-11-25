@@ -214,7 +214,7 @@ export function ReturnDetailScreen({ returnId: raw }: { returnId: string }) {
             <Button
               type="button"
               variant="outline"
-              className="border-border-strong text-danger hover:bg-bg-muted min-h-11 w-full rounded-[var(--r-md)]"
+              className="border-border-strong text-danger hover:bg-bg-subtle min-h-11 w-full rounded-[var(--r-md)]"
               disabled={withdraw.isPending}
               onClick={() => setConfirming(true)}
             >

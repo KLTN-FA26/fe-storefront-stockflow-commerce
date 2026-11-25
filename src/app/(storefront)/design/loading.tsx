@@ -1,10 +1,5 @@
-import { PageShell } from "@/components/storefront/layout";
-import { DesignListSkeleton } from "@/features/product-design/components/design-list-states";
+import { DesignAreaSkeleton } from "@/features/product-design/components/design-area-skeleton";
 
 export default function DesignListLoading() {
-  return (
-    <PageShell title="Thiết kế của tôi">
-      <DesignListSkeleton />
-    </PageShell>
-  );
+  return <DesignAreaSkeleton section="designs" />;
 }

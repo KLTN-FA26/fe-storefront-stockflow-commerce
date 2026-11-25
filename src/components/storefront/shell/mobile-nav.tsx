@@ -59,7 +59,7 @@ export function MobileNav() {
                   <Link
                     href={link.href}
                     className={cn(
-                      "hover:bg-bg-muted focus-visible:ring-accent flex min-h-11 items-center rounded-[var(--r-md)] px-3 text-sm focus-visible:ring-2 focus-visible:outline-none",
+                      "hover:bg-bg-subtle focus-visible:ring-accent flex min-h-11 items-center rounded-[var(--r-md)] px-3 text-sm focus-visible:ring-2 focus-visible:outline-none",
                       link.highlight ? "text-accent font-semibold" : "text-ink-primary font-medium",
                     )}
                   >

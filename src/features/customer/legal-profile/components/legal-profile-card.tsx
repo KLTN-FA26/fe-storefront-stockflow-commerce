@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Landmark, MessageCircle } from "lucide-react";
+import { MessageCircle } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
 import { SurfaceCard } from "@/components/storefront/layout";
@@ -41,15 +41,9 @@ export function LegalProfileCard() {
     <SurfaceCard className="space-y-4">
       <section aria-labelledby="legal-profile-heading" className="space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Landmark aria-hidden className="text-accent size-5" />
-            <h2
-              id="legal-profile-heading"
-              className="font-display text-ink-primary text-lg font-bold"
-            >
-              Thông tin pháp lý
-            </h2>
-          </div>
+          <h2 id="legal-profile-heading" className="font-display text-ink-primary text-base font-semibold">
+            Thông tin pháp lý
+          </h2>
           <Button asChild variant="outline" className="min-h-11 rounded-[var(--r-md)] px-4">
             <Link href={STORE_ROUTES.chat.new}>
               <MessageCircle aria-hidden className="mr-2 size-4" />

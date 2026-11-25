@@ -162,10 +162,9 @@ export function CustomerProfileForm() {
 
   return (
     <section className="bg-bg-surface border-border-default rounded-[var(--r-lg)] border p-[var(--card-pad)] shadow-[var(--card-shadow)]">
-      <div className="border-border-default mb-5 border-b pb-4">
-        <p className="text-ink-tertiary text-xs font-medium">Tài khoản</p>
-        <h1 className="font-display text-ink-primary text-xl font-bold">Thông tin cá nhân</h1>
-        <p className="text-ink-secondary mt-1 text-sm">Cập nhật thông tin liên hệ của bạn.</p>
+      <div className="mb-4">
+        <h2 className="font-display text-ink-primary text-base font-semibold">Thông tin liên hệ</h2>
+        <p className="text-ink-secondary mt-0.5 text-sm">Người đặt hàng và số điện thoại Sale gọi khi cần.</p>
       </div>
 
       {conflict && (

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileText } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
 import { ToneBadge } from "@/components/storefront/tone-badge";
@@ -11,11 +11,12 @@ import { effectiveStatus, quoteListHint } from "../lifecycle";
 import type { QuoteRow } from "../types";
 import { QuoteStatusBadge } from "./quote-states";
 
+/** "Bản sửa Số 1": a small label and its value, inline. */
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="min-w-0">
-      <dt className="text-ink-tertiary text-xs">{label}</dt>
-      <dd className="text-ink-primary text-sm font-medium tabular-nums">{children}</dd>
+    <div className="flex min-w-0 gap-1">
+      <dt>{label}</dt>
+      <dd className="text-ink-secondary tabular-nums">{children}</dd>
     </div>
   );
 }
@@ -41,59 +42,49 @@ function contentsOf(quote: QuoteRow): string | null {
 }
 
 /**
- * One quote of the list (BE QuoteRowResponse): number, status, what is quoted and its total with VAT
- * when the BE sends them, revision, validity, sent date; a SENT quote about to expire says so. The
- * whole card is one link target.
+ * One quote of the list (BE QuoteRowResponse), as one outlined row like an order: number and sent date, what is quoted,
+ * revision and validity, what happens next on the left; status, total with VAT (when the BE sends it) and the way in on
+ * the right. A SENT quote about to expire says so. The whole row is one link target.
  */
 export function QuoteRowCard({ quote, now }: { quote: QuoteRow; now?: Date }) {
   const chip = expiryChip(quote, now);
   const contents = contentsOf(quote);
   return (
-    <article className="bg-bg-surface border-border-default hover:border-border-strong focus-within:ring-accent relative rounded-[var(--r-lg)] border shadow-[var(--card-shadow)] transition-colors focus-within:ring-2">
-      <div className="border-border-default flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b px-[var(--card-pad)] py-3">
-        <p className="flex min-w-0 items-center gap-2">
-          <FileText aria-hidden className="text-ink-tertiary size-4 shrink-0" />
-          <span className="text-ink-primary font-mono font-semibold tabular-nums">
-            {quote.quoteNumber}
-          </span>
+    <article className="bg-bg-surface border-border-default hover:border-border-strong focus-within:ring-accent relative flex flex-col gap-3 rounded-[var(--r-lg)] border px-[var(--card-pad)] py-3.5 transition-colors focus-within:ring-2 sm:flex-row sm:items-center sm:gap-6">
+      <div className="min-w-0 flex-1 space-y-1">
+        <p className="flex flex-wrap items-baseline gap-x-2 text-sm">
+          <span className="text-ink-primary font-mono font-semibold tabular-nums">{quote.quoteNumber}</span>
+          {quote.sentAt ? (
+            <span className="text-ink-tertiary tabular-nums">{formatDate(quote.sentAt)}</span>
+          ) : null}
         </p>
-        <span className="flex flex-wrap items-center gap-2">
-          {chip ? <ToneBadge size="sm" tone="warning" label={chip} /> : null}
-          <QuoteStatusBadge status={quote.status} />
-        </span>
-      </div>
-      <div className="space-y-2 px-[var(--card-pad)] py-3">
-        {contents || quote.total != null ? (
-          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            {contents ? (
-              <p className="text-ink-primary min-w-0 text-sm font-medium break-words">{contents}</p>
-            ) : (
-              <span />
-            )}
-            {quote.total != null ? (
-              <p className="text-ink-primary text-base font-bold tabular-nums">
-                <span className="text-ink-secondary mr-1 text-xs font-normal">Tổng có VAT</span>
-                {formatMoney(quote.total)}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {contents ? <p className="text-ink-secondary text-sm break-words">{contents}</p> : null}
+        <dl className="text-ink-tertiary flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
           <Fact label="Bản sửa">Số {quote.revision}</Fact>
           {quote.status === "CHANGES_REQUESTED" ? null : (
             <Fact label="Hiệu lực đến">{formatDateTime(quote.validUntil)}</Fact>
           )}
-          <Fact label="Ngày gửi">{quote.sentAt ? formatDate(quote.sentAt) : "—"}</Fact>
         </dl>
-        <p className="text-ink-secondary text-sm">{quoteListHint(quote.status)}</p>
+        <p className="text-ink-tertiary text-xs">{quoteListHint(quote.status)}</p>
       </div>
-      <div className="border-border-default flex justify-end border-t px-[var(--card-pad)] py-2.5">
+
+      <div className="flex shrink-0 items-center justify-between gap-4 sm:justify-end">
+        <span className="flex flex-wrap items-center gap-2">
+          {chip ? <ToneBadge size="sm" tone="warning" label={chip} /> : null}
+          <QuoteStatusBadge status={quote.status} />
+        </span>
+        {quote.total != null ? (
+          <p className="text-ink-primary min-w-28 text-right text-base font-semibold tabular-nums">
+            <span className="sr-only">Tổng có VAT </span>
+            {formatMoney(quote.total)}
+          </p>
+        ) : null}
         <Link
           href={STORE_ROUTES.account.quotes.detail(quote.id)}
           aria-label={`Xem báo giá ${quote.quoteNumber}`}
-          className="border-border-strong text-ink-primary hover:bg-bg-muted inline-flex min-h-11 items-center rounded-[var(--r-md)] border px-4 text-sm font-semibold after:absolute after:inset-0 after:rounded-[var(--r-lg)] focus-visible:outline-none"
+          className="text-ink-tertiary hover:text-ink-primary inline-flex size-11 items-center justify-center rounded-[var(--r-md)] after:absolute after:inset-0 after:rounded-[var(--r-lg)] focus-visible:outline-none"
         >
-          Xem báo giá
+          <ChevronRight className="size-4" aria-hidden />
         </Link>
       </div>
     </article>

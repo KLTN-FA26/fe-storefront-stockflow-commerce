@@ -178,13 +178,18 @@ describe("the card and the list: Nhân bản sang cỡ khác", () => {
     const first = renderWithProviders(
       <DesignCard design={target} onDelete={vi.fn()} onRevise={vi.fn()} />,
     );
-    expect(screen.queryByRole("button", { name: /sang cỡ khác/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Thao tác khác/ }));
+    expect(await screen.findByRole("menu")).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /sang cỡ khác/ })).not.toBeInTheDocument();
     first.unmount();
 
     renderWithProviders(
       <DesignCard design={target} onDelete={vi.fn()} onRevise={vi.fn()} onClone={onClone} />,
     );
-    await userEvent.click(screen.getByRole("button", { name: "Nhân bản Ly sáng sang cỡ khác" }));
+    await userEvent.click(screen.getByRole("button", { name: /Thao tác khác/ }));
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: "Nhân bản Ly sáng sang cỡ khác" }),
+    );
     expect(onClone).toHaveBeenCalledWith(target);
   });
 
@@ -204,9 +209,10 @@ describe("the card and the list: Nhân bản sang cỡ khác", () => {
     const list = await screen.findByRole("list", { name: "Danh sách thiết kế" }, { timeout: 3000 });
     const heading = await within(list).findByRole("heading", { name: "Ly cà phê Sáng 8oz" });
     await userEvent.click(
-      within(heading.closest("li") as HTMLElement).getByRole("button", {
-        name: "Nhân bản Ly cà phê Sáng 8oz sang cỡ khác",
-      }),
+      within(heading.closest("li") as HTMLElement).getByRole("button", { name: /Thao tác khác/ }),
+    );
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: "Nhân bản Ly cà phê Sáng 8oz sang cỡ khác" }),
     );
 
     expect(

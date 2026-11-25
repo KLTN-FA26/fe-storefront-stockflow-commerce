@@ -94,7 +94,7 @@ export function FontCombobox({
             </div>
             <CommandList>
               <CommandEmpty className="text-ink-secondary">Không tìm thấy.</CommandEmpty>
-              <CommandGroup>
+              <CommandGroup heading="Phông chữ">
                 {options.map((option) => {
                   const note = status[option.code];
                   return (

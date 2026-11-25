@@ -1,14 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import {
-  ChevronRight,
-  FileSignature,
-  FileText,
-  Landmark,
-  ListChecks,
-  RotateCw,
-} from "lucide-react";
+import { ChevronRight, FileSignature, FileText, Landmark, RotateCw } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
@@ -98,10 +91,7 @@ export function AccountTodo() {
 
   return (
     <SurfaceCard as="section" className="space-y-3">
-      <div className="flex items-center gap-2">
-        <ListChecks aria-hidden className="text-accent size-5" />
-        <h2 className="font-display text-ink-primary text-lg font-bold">Việc cần làm</h2>
-      </div>
+      <h2 className="font-display text-ink-primary text-base font-semibold">Việc cần làm</h2>
       {pending ? (
         <Skeleton role="status" aria-label="Đang tải việc cần làm" className="h-12 w-full" />
       ) : rows.length > 0 ? (
@@ -110,9 +100,9 @@ export function AccountTodo() {
             <li key={key}>
               <Link
                 href={href}
-                className="border-border-default hover:bg-bg-muted focus-visible:ring-accent flex min-h-11 items-center gap-3 rounded-[var(--r-md)] border px-3 py-2 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                className="border-border-default hover:bg-bg-subtle focus-visible:ring-accent flex min-h-11 items-center gap-3 rounded-[var(--r-md)] border px-3 py-2 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
               >
-                <Icon aria-hidden className="text-accent size-5 shrink-0" />
+                <Icon aria-hidden className="text-ink-tertiary size-4 shrink-0" />
                 <span className="text-ink-primary min-w-0 flex-1 font-medium tabular-nums">
                   {text}
                 </span>

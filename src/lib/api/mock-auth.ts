@@ -17,6 +17,8 @@ export const MOCK_CUSTOMER_LOGIN = {
   userId: "USER-CUS-0010",
   fullName: "Nguyễn Hoài Nam",
 } as const;
+/** The mock invitation link's secret: open `/portal/activate#token=<this>` in mock mode. */
+export const MOCK_INVITATION_TOKEN = "mock-portal-invitation-token";
 const TTL_SECONDS = 8 * 60 * 60;
 
 // UTF-8 safe, like a real JWT: a Vietnamese name is not Latin-1, and btoa alone would throw.
@@ -108,6 +110,26 @@ export function registerAuthMockRoutes(
       tokenType: "Bearer",
       expiresInSeconds: TTL_SECONDS,
     });
+  });
+
+  // Portal activation (SCRUM-450). `MOCK_INVITATION_TOKEN` is the one live link, for the mock customer, and stays
+  // live (the BE consumes it). Like the BE, the link is judged before the password.
+  registerMockRoute("POST", "/customers/portal-activation", (config) => {
+    const { token, password } = bodyOf(config);
+    if (token !== MOCK_INVITATION_TOKEN) {
+      return failure(400, "PORTAL_INVITATION_INVALID", "This portal invitation is invalid or no longer available");
+    }
+    const strong =
+      typeof password === "string" &&
+      password.length >= 10 &&
+      password.length <= 72 &&
+      /[A-Z]/.test(password) &&
+      /[a-z]/.test(password) &&
+      /\d/.test(password);
+    if (!strong) {
+      return failure(400, "VALIDATION_FAILED", "Password must be 10-72 characters and contain upper-case, lower-case and digit characters");
+    }
+    return envelope({ email: MOCK_CUSTOMER_LOGIN.email });
   });
 
   registerMockRoute("GET", "/identity/me", (config) => {

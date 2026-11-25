@@ -2,19 +2,24 @@ import { z } from "zod";
 
 import { requiredString, vietnamPhone } from "@/lib/validation/primitives";
 
-export const customerProfileSchema = z
-  .object({
-    customerId: z.string().min(1),
-    userId: z.string().min(1),
-    fullName: z.string().min(1),
-    email: z.string().email(),
-    phone: z.string().nullable(),
-    segmentId: z.string().nullable(),
-    status: z.string().min(1),
-    version: z.number().int().nonnegative(),
-    createdAt: z.string().min(1),
-  })
-  .strict();
+/**
+ * BE `CustomerResponse` (GET/PUT /customers/me, masked). The BE drops null fields (Jackson non_null), so the optional
+ * ones may be missing as well as null; and it is not `.strict()`: a field the BE adds later (as `taxCode` was) must not
+ * make the profile fail to load.
+ */
+export const customerProfileSchema = z.object({
+  customerId: z.string().min(1),
+  userId: z.string().min(1),
+  fullName: z.string().min(1),
+  email: z.string().min(1),
+  phone: z.string().nullish(),
+  /** Masked by the BE (`031****074`): shown as it comes, never sent back. */
+  taxCode: z.string().nullish(),
+  segmentId: z.string().nullish(),
+  status: z.string().min(1),
+  version: z.number().int().nonnegative(),
+  createdAt: z.string().min(1),
+});
 
 const profilePhoneSchema = vietnamPhone.trim();
 

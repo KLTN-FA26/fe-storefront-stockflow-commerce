@@ -75,7 +75,7 @@ function IssueRow({ issue, onLocate }: { issue: ReportedPreflightIssue; onLocate
           onClick={onLocate}
           className={cn(
             row,
-            "text-ink-primary hover:bg-bg-muted focus-visible:ring-accent min-h-11 outline-none focus-visible:ring-2",
+            "text-ink-primary hover:bg-bg-subtle focus-visible:ring-accent min-h-11 outline-none focus-visible:ring-2",
           )}
         >
           {body}

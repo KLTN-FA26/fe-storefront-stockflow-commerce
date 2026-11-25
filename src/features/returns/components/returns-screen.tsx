@@ -89,10 +89,11 @@ export function ReturnsScreen() {
   return (
     <>
       <PageHeader
+        titleHidden
         title="Trả hàng"
         subtitle="Theo dõi yêu cầu trả hàng, hạn gửi hàng về và tiền hoàn."
       />
-      <div role="tablist" aria-label="Lọc theo trạng thái" className="mt-5 flex flex-wrap gap-2">
+      <div role="tablist" aria-label="Lọc theo trạng thái" className="flex flex-wrap gap-2">
         {TAB_KEYS.map((key) => (
           <button
             key={key}
@@ -102,7 +103,7 @@ export function ReturnsScreen() {
             onClick={() => void Promise.all([setTab(key), setPage(1)])}
             className={
               tab === key
-                ? "border-accent bg-accent text-ink-inverse focus-visible:ring-accent min-h-11 rounded-full border px-4 text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
+                ? "border-ink-primary bg-ink-primary text-ink-inverse focus-visible:ring-accent min-h-11 rounded-full border px-4 text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
                 : "border-border-default bg-bg-surface text-ink-secondary hover:text-ink-primary focus-visible:ring-accent min-h-11 rounded-full border px-4 text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
             }
           >

@@ -20,6 +20,8 @@ const attachQuery = (attach: ChatAttachIntent | undefined, joiner: "?" | "&") =>
 export const APP_ROUTES = {
   home: "/",
   login: "/login",
+  /** The invitation e-mail's page (BE `stockflow.customer.portal-activation-url`); the token follows in `#token=`. */
+  activate: "/portal/activate",
 } as const;
 
 export const STORE_ROUTES = {

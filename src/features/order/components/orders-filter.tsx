@@ -5,7 +5,7 @@ import { AlertTriangle } from "lucide-react";
 import { parseAsStringLiteral } from "nuqs";
 
 import { STORE_ROUTES } from "@/constants";
-import { Button } from "@/components/ui/button";
+import { FilterPill } from "@/components/storefront/filter-pill";
 import { useHasPermission } from "@/lib/auth/my-permissions";
 import { formatMoney } from "@/lib/format/money";
 import {
@@ -51,17 +51,14 @@ export function OrderViewTabs({
   return (
     <div role="group" aria-label="Lọc đơn hàng" className="flex flex-wrap gap-2">
       {ORDER_VIEWS.map((option) => (
-        <Button
+        <FilterPill
           key={option}
-          type="button"
-          size="sm"
-          variant={view === option ? "default" : "outline"}
+          active={view === option}
           aria-pressed={view === option}
-          className="min-h-11 rounded-full px-4"
           onClick={() => onChange(option)}
         >
           {VIEW_LABEL[option]}
-        </Button>
+        </FilterPill>
       ))}
     </div>
   );

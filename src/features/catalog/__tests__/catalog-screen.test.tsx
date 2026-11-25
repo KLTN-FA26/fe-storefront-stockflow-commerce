@@ -381,10 +381,11 @@ describe("FeaturedProducts (home)", () => {
     );
   });
 
-  it("invites a visitor to sign in instead of listing", async () => {
+  it("lists nothing for a visitor who is not signed in (the home page stays public)", async () => {
     signOut();
-    renderWithProviders(<FeaturedProducts />);
-    expect(await screen.findByText("Đăng nhập để xem sản phẩm")).toBeInTheDocument();
+    const { container } = renderWithProviders(<FeaturedProducts />);
+    await waitFor(() => expect(container).toBeEmptyDOMElement());
+    expect(screen.queryByText("Sản phẩm mới")).not.toBeInTheDocument();
     expect(api.get).not.toHaveBeenCalled();
   });
 

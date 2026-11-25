@@ -1,6 +1,6 @@
 "use client";
 
-import { WalletCards } from "lucide-react";
+
 
 import { Alert, Skeleton } from "@/components/shared";
 import { SurfaceCard } from "@/components/storefront/layout";
@@ -105,11 +105,8 @@ export function CreditCard() {
 
 function Heading() {
   return (
-    <div className="flex items-center gap-2">
-      <WalletCards aria-hidden className="text-accent size-5" />
-      <h2 id="credit-heading" className="font-display text-ink-primary text-lg font-bold">
-        Công nợ
-      </h2>
-    </div>
+    <h2 id="credit-heading" className="font-display text-ink-primary text-base font-semibold">
+      Công nợ
+    </h2>
   );
 }

@@ -1,12 +1,8 @@
 import { z } from "zod";
 
-const passwordPolicy = z
-  .string()
-  .min(10, "Mật khẩu phải có ít nhất 10 ký tự")
-  .max(72, "Mật khẩu tối đa 72 ký tự")
-  .regex(/[A-Z]/, "Mật khẩu phải có ít nhất một chữ hoa")
-  .regex(/[a-z]/, "Mật khẩu phải có ít nhất một chữ thường")
-  .regex(/\d/, "Mật khẩu phải có ít nhất một chữ số");
+import { newPasswordSchema } from "@/lib/auth/password-policy";
+
+const passwordPolicy = newPasswordSchema;
 
 export const changePasswordSchema = z
   .object({

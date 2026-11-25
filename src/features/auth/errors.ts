@@ -25,3 +25,24 @@ export function describeLoginError(error: unknown): string {
 }
 
 export const isWrongCredentials = (error: unknown) => hasErrorCode(error, "UNAUTHORIZED");
+
+/**
+ * Activation failures by BE `errorCode`. A link that is unknown, expired, already used, replaced by a newer one or for
+ * a customer no longer awaiting activation is one answer on purpose (PORTAL_INVITATION_INVALID); the BE judges the link
+ * before the password, so VALIDATION_FAILED means the link is good and only the password was refused.
+ */
+const ACTIVATION_MESSAGE_BY_CODE: Record<string, string> = {
+  PORTAL_INVITATION_INVALID:
+    "Link kích hoạt không hợp lệ, đã hết hạn hoặc đã được dùng. Vui lòng liên hệ Sales để nhận link mới.",
+  VALIDATION_FAILED:
+    "Mật khẩu chưa đạt yêu cầu: 10–72 ký tự, có chữ hoa, chữ thường và chữ số.",
+  // 10 activations a minute per IP.
+  RATE_LIMITED: "Bạn thử quá nhanh. Vui lòng đợi khoảng một phút rồi thử lại.",
+};
+
+export function describeActivationError(error: unknown): string {
+  return describeApiError(error, ACTIVATION_MESSAGE_BY_CODE);
+}
+
+export const isInvitationInvalid = (error: unknown) =>
+  hasErrorCode(error, "PORTAL_INVITATION_INVALID");

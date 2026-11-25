@@ -2,18 +2,26 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Palette } from "lucide-react";
+import { Copy, Eye, FilePen, MessageCircle, MoreHorizontal, Palette, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { STORE_ROUTES } from "@/constants";
+import { CHAT_WITH_SALES, STORE_ROUTES } from "@/constants";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useHasPermission } from "@/lib/auth/my-permissions";
+import { PERM } from "@/lib/auth/permission-codes";
 import { isRemoteImage } from "@/lib/remote-image";
 
 import { allowedActions, isReturned } from "../lifecycle";
 import { designCardView } from "../selectors";
 import { mayHaveQuoteRequest } from "../quote-request-rules";
 import type { Design } from "../types";
-import { ChatAboutButton } from "./chat-about-button";
 import { DesignQuoteSummary, RequestQuoteButton } from "./design-quote-request";
 import { DesignStatusBadge } from "./design-status-badge";
 
@@ -40,6 +48,8 @@ function Thumbnail({ src, alt }: { src: string | null; alt: string }) {
 }
 
 const ACTION_CLASS = "min-h-11 rounded-[var(--r-md)] px-4";
+/** A menu row: 40px tall, with shadcn's neutral highlight (the project's `accent` token is the brand blue). */
+const MENU_ITEM = "focus:bg-bg-muted focus:text-ink-primary min-h-10 px-2.5";
 
 type DesignCardProps = {
   design: Design;
@@ -83,6 +93,9 @@ export function DesignCard({
     designCardView(design);
   const actions = allowedActions(design);
   const href = STORE_ROUTES.design.detail(design.id);
+  const quoteOffered =
+    useHasPermission(PERM.designQuoteRequest) && actions.includes("requestQuote");
+  const mayChat = useHasPermission(PERM.chatCreate);
   return (
     <article className="bg-bg-surface border-border-default flex h-full flex-col overflow-hidden rounded-[var(--r-lg)] border shadow-[var(--card-shadow)] transition-shadow duration-200 hover:shadow-[var(--sh-md)]">
       <div className="bg-bg-subtle relative aspect-[4/3] overflow-hidden">
@@ -114,11 +127,12 @@ export function DesignCard({
           {notes}
           {mayHaveQuoteRequest(design) ? <DesignQuoteSummary design={design} /> : null}
         </div>
-        {/* One primary (filled) button per status (SF-UX-7): "Tiếp tục thiết kế" on a draft,
-            "Yêu cầu báo giá" on an approved design, the WF-02 next step, first; the rest outline. */}
-        <div className="mt-auto flex flex-wrap gap-2">
-          {actions.includes("requestQuote") ? <RequestQuoteButton design={design} /> : null}
-          {actions.includes("edit") ? (
+        {/* One primary button per status (SF-UX-7): "Yêu cầu báo giá" on an approved design (the WF-02 next step),
+            else "Tiếp tục thiết kế" on a draft, else "Xem". Everything else sits in the "more" menu beside it. */}
+        <div className="mt-auto flex flex-wrap items-center gap-2">
+          {quoteOffered ? (
+            <RequestQuoteButton design={design} />
+          ) : actions.includes("edit") ? (
             <Button asChild className={ACTION_CLASS}>
               <Link href={href} aria-label={`Tiếp tục thiết kế ${title}`}>
                 Tiếp tục thiết kế
@@ -131,43 +145,79 @@ export function DesignCard({
               </Link>
             </Button>
           )}
-          {onRevise && actions.includes("createRevision") ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={ACTION_CLASS}
-              disabled={reviseDisabled}
-              aria-label={`Tạo bản sửa ${title}`}
-              onClick={() => onRevise(design)}
-            >
-              {revising ? "Đang tạo..." : "Tạo bản sửa"}
-            </Button>
-          ) : null}
-          {/* Any design can be talked over in chat (PO 2026-11-22, Q7: as the BE — Sale sees its
-              name and status, never a draft's content). */}
-          <ChatAboutButton kind="DESIGN" id={design.id} name={title} />
-          {onClone ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={ACTION_CLASS}
-              aria-label={`Nhân bản ${title} sang cỡ khác`}
-              onClick={() => onClone(design)}
-            >
-              Nhân bản sang cỡ khác
-            </Button>
-          ) : null}
-          {onDelete && actions.includes("delete") ? (
-            <Button
-              type="button"
-              variant="ghost"
-              className={ACTION_CLASS}
-              aria-label={`Xoá ${title}`}
-              onClick={() => onDelete(design)}
-            >
-              Xoá
-            </Button>
-          ) : null}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                className="ml-auto size-11 rounded-full p-0"
+                aria-label={`Thao tác khác với ${title}`}
+              >
+                <MoreHorizontal aria-hidden className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-52">
+              {quoteOffered ? (
+                <DropdownMenuItem asChild className={MENU_ITEM}>
+                  <Link
+                    href={href}
+                    aria-label={`${actions.includes("edit") ? "Tiếp tục thiết kế" : "Xem"} ${title}`}
+                  >
+                    <Eye aria-hidden />
+                    {actions.includes("edit") ? "Tiếp tục thiết kế" : "Xem"}
+                  </Link>
+                </DropdownMenuItem>
+              ) : null}
+              {onRevise && actions.includes("createRevision") ? (
+                <DropdownMenuItem
+                  className={MENU_ITEM}
+                  disabled={reviseDisabled}
+                  aria-label={`Tạo bản sửa ${title}`}
+                  onSelect={() => onRevise(design)}
+                >
+                  <FilePen aria-hidden />
+                  {revising ? "Đang tạo..." : "Tạo bản sửa"}
+                </DropdownMenuItem>
+              ) : null}
+              {onClone ? (
+                <DropdownMenuItem
+                  className={MENU_ITEM}
+                  aria-label={`Nhân bản ${title} sang cỡ khác`}
+                  onSelect={() => onClone(design)}
+                >
+                  <Copy aria-hidden />
+                  Nhân bản sang cỡ khác
+                </DropdownMenuItem>
+              ) : null}
+              {/* Any design can be talked over in chat (PO 2026-11-22, Q7: as the BE — Sale sees its
+                  name and status, never a draft's content). */}
+              {mayChat ? (
+                <DropdownMenuItem asChild className={MENU_ITEM}>
+                  <Link
+                    href={STORE_ROUTES.chat.about("DESIGN", design.id)}
+                    aria-label={`${CHAT_WITH_SALES} về ${title}`}
+                  >
+                    <MessageCircle aria-hidden />
+                    {CHAT_WITH_SALES}
+                  </Link>
+                </DropdownMenuItem>
+              ) : null}
+              {onDelete && actions.includes("delete") ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    className="min-h-10 px-2.5"
+                    aria-label={`Xoá ${title}`}
+                    onSelect={() => onDelete(design)}
+                  >
+                    <Trash2 aria-hidden />
+                    Xoá
+                  </DropdownMenuItem>
+                </>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
           {extraActions}
         </div>
       </div>

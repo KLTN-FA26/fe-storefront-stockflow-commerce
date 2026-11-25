@@ -1,5 +1,7 @@
 "use client";
 
+import { Archive, FolderOpen } from "lucide-react";
+
 import { Alert, EmptyState, Skeleton } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 
@@ -39,17 +41,13 @@ export function ProjectLoadError({
   );
 }
 
-/** The customer has no project at all: what one is for, and a way to make the first. */
-export function NoProjectsYet({ onCreate }: { onCreate: () => void }) {
+/** The customer has no project at all: what one is for. The way to make the first is the page's "Tạo dự án". */
+export function NoProjectsYet() {
   return (
     <EmptyState
+      icon={<FolderOpen />}
       title="Bạn chưa có dự án nào"
       description="Dự án gom các bản thiết kế của một bộ sản phẩm, dùng chung ảnh và mẫu chữ, rồi gửi duyệt cả bộ cùng lúc."
-      action={
-        <Button type="button" className="min-h-11 rounded-[var(--r-md)] px-5" onClick={onCreate}>
-          Tạo dự án
-        </Button>
-      }
     />
   );
 }
@@ -58,6 +56,7 @@ export function NoProjectsYet({ onCreate }: { onCreate: () => void }) {
 export function NoClosedProjects({ onShowActive }: { onShowActive: () => void }) {
   return (
     <EmptyState
+      icon={<Archive />}
       title="Chưa có dự án nào đã đóng"
       description="Dự án bạn đóng sẽ nằm ở đây, chỉ để xem lại."
       action={

@@ -4,6 +4,7 @@ import { RefreshCw } from "lucide-react";
 import { useQueryState } from "nuqs";
 
 import { Alert, PageHeader, Skeleton } from "@/components/shared";
+import { FilterPill } from "@/components/storefront/filter-pill";
 import { Button } from "@/components/ui/button";
 import { describeApiError } from "@/lib/api/describe-error";
 import { useHasPermission, useMyPermissions } from "@/lib/auth/my-permissions";
@@ -52,10 +53,11 @@ export function PaymentsScreen() {
   return (
     <>
       <PageHeader
+        titleHidden
         title="Thanh toán"
         subtitle="Các đợt thanh toán theo hợp đồng: đợt quá hạn và đến hạn ở trên cùng."
       />
-      <div className="mt-6 space-y-4">
+      <div className="space-y-4">
         {!permissions.isPending && !allowed ? (
           <Alert tone="info" title="Tài khoản chưa xem được lịch thanh toán.">
             Hãy chat với Sale nếu bạn cần biết các đợt thanh toán của mình.
@@ -64,19 +66,16 @@ export function PaymentsScreen() {
           <>
             <div role="group" aria-label="Lọc đợt thanh toán" className="flex flex-wrap gap-2">
               {PAYMENT_FILTERS.map((option) => (
-                <Button
+                <FilterPill
                   key={option}
-                  type="button"
-                  size="sm"
-                  variant={filter === option ? "default" : "outline"}
+                  active={filter === option}
                   aria-pressed={filter === option}
-                  className="min-h-11 rounded-full px-4 tabular-nums"
                   onClick={() => void setFilter(option === "can-tra" ? null : option)}
                 >
                   {query.data && option !== "tat-ca"
                     ? `${PAYMENT_FILTER_LABEL[option]} (${formatNumber(count(option))})`
                     : PAYMENT_FILTER_LABEL[option]}
-                </Button>
+                </FilterPill>
               ))}
             </div>
             {query.isPending ? (

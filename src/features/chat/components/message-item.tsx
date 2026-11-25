@@ -1,5 +1,7 @@
 "use client";
 
+import { Undo2 } from "lucide-react";
+
 import { formatDateTime, formatTime, isToday } from "@/lib/format/date";
 
 import { ChatBubble } from "@/components/storefront/chat-bubble";
@@ -17,6 +19,9 @@ interface MessageItemProps {
   onTakeBack?: ((messageId: string) => void) | undefined;
   /** A CONTRACT card's signed copy, sent later in the thread. */
   signedCopyAt?: string | null | undefined;
+  /** First / last of a run of bubbles from the same person (ThreadLog `sameRun`); a lone one is both. */
+  first?: boolean;
+  last?: boolean;
 }
 
 const timeOf = (iso: string) => (isToday(iso) ? formatTime(iso) : formatDateTime(iso));
@@ -32,6 +37,8 @@ export function MessageItem({
   canAct,
   onTakeBack,
   signedCopyAt,
+  first = true,
+  last = true,
 }: MessageItemProps) {
   const fromCustomer = message.senderType === "CUSTOMER";
   const side = fromCustomer ? "customer" : "agent";
@@ -40,7 +47,14 @@ export function MessageItem({
 
   if (message.deleted) {
     return (
-      <ChatBubble side={side} author={fromCustomer ? undefined : author} timestamp={time} muted>
+      <ChatBubble
+        side={side}
+        author={fromCustomer ? undefined : author}
+        timestamp={time}
+        muted
+        first={first}
+        last={last}
+      >
         Tin nhắn đã được thu hồi
       </ChatBubble>
     );
@@ -48,8 +62,9 @@ export function MessageItem({
 
   if (message.kind === "CARD" && message.card) {
     return (
-      <div className="flex flex-col items-start gap-1">
-        <p className="text-ink-tertiary text-xs tabular-nums">
+      // A card sits where Sale's bubbles do: after the avatar's room, with who sent it and when above it.
+      <div className="flex flex-col items-start gap-1 pl-10">
+        <p className="text-ink-tertiary px-1 text-xs tabular-nums">
           {author} · {time}
         </p>
         <CardView
@@ -78,14 +93,18 @@ export function MessageItem({
       side={side}
       author={fromCustomer ? undefined : author}
       timestamp={message.editedAt ? `${time} · Đã chỉnh sửa` : time}
-      footer={
+      first={first}
+      last={last}
+      actions={
         takeBack ? (
           <button
             type="button"
             onClick={() => onTakeBack(message.id)}
-            className="focus-visible:ring-ink-inverse -mb-2 inline-flex min-h-11 items-center text-xs underline underline-offset-2 focus-visible:ring-2 focus-visible:outline-none"
+            aria-label="Thu hồi"
+            title="Thu hồi tin nhắn"
+            className="text-ink-tertiary hover:text-ink-primary hover:bg-bg-muted focus-visible:ring-accent inline-flex size-11 items-center justify-center rounded-full focus-visible:ring-2 focus-visible:outline-none"
           >
-            Thu hồi
+            <Undo2 aria-hidden className="size-4" />
           </button>
         ) : undefined
       }
