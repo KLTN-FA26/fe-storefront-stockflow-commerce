@@ -66,7 +66,6 @@ describe("WF-02 FE-1: a line that can no longer be bought", () => {
     "PRODUCT_DISCONTINUED",
     "PRODUCT_NOT_APPROVED",
     "VARIANT_NOT_ACTIVE",
-    "UNKNOWN",
   ] as const)("blocks accepting but keeps the change request open when a line is %s", (verdict) => {
     expect(
       allowedQuoteActions(withLines("PURCHASABLE", verdict), { canAnswer: true, now: before }),
@@ -79,6 +78,12 @@ describe("WF-02 FE-1: a line that can no longer be bought", () => {
         canAnswer: true,
         now: before,
       }),
+    ).toEqual({ accept: true, requestChanges: true });
+  });
+
+  it("accepts a line whose verdict this FE does not know yet (owner decision 13: the BE still refuses)", () => {
+    expect(
+      allowedQuoteActions(withLines("PURCHASABLE", "UNKNOWN"), { canAnswer: true, now: before }),
     ).toEqual({ accept: true, requestChanges: true });
   });
 

@@ -297,8 +297,11 @@ describe("accepting a quote on its card (C10)", () => {
       expect(screen.getByRole("button", { name: "Yêu cầu sửa" })).toBeEnabled();
     });
 
-    it("keeps ACCEPT for lines PURCHASABLE or with no verdict", async () => {
-      const get = vi.spyOn(api, "get").mockResolvedValue({ data: pricingWith(null) });
+    it.each([
+      ["no verdict (a legacy line)", null],
+      ["a verdict this FE does not know yet (owner decision 13)", "SOMETHING_NEW"],
+    ])("keeps ACCEPT for a line with %s", async (_, verdict) => {
+      const get = vi.spyOn(api, "get").mockResolvedValue({ data: pricingWith(verdict) });
       open();
       await waitFor(() =>
         expect(get).toHaveBeenCalledWith(`/quotes/${QUOTE_ID}`, expect.anything()),

@@ -326,8 +326,11 @@ describe("QuoteDetailScreen — a line that can no longer be bought (WF-02 FE-1)
     );
   });
 
-  it("accepts as before when every line is PURCHASABLE or carries no verdict", async () => {
-    backend(withVerdict(null));
+  it.each([
+    ["carries no verdict", null],
+    ["carries a verdict this FE does not know yet (owner decision 13)", "SOMETHING_NEW"],
+  ])("accepts as before when every line %s", async (_, verdict) => {
+    backend(withVerdict(verdict));
     renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
     expect(await screen.findByRole("button", { name: "Chấp nhận báo giá" })).toBeEnabled();
     expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
