@@ -8,12 +8,15 @@ import { Button } from "@/components/ui/button";
 import { AvailabilityBadge } from "@/components/storefront/availability-badge";
 import { VariantSelector } from "@/components/storefront/variant-selector";
 import { badgeStatus } from "@/lib/catalog/selectors";
+import { variantLabel } from "@/lib/catalog/variant-label";
 import type { Availability } from "@/lib/catalog/types";
 
 import type { CatalogVariant } from "../types";
 
 interface ProductPurchasePanelProps {
   variants: CatalogVariant[];
+  /** The product's title: a variant's name starts with it, so only what follows is shown. */
+  productTitle: string;
   sku: string;
   onSkuChange: (sku: string) => void;
   /** Stock per SKU: the richer /availability answer, else the detail's own IN/OUT. */
@@ -32,6 +35,7 @@ interface ProductPurchasePanelProps {
  */
 export function ProductPurchasePanel({
   variants,
+  productTitle,
   sku,
   onSkuChange,
   availabilityOf,
@@ -40,22 +44,28 @@ export function ProductPurchasePanel({
 }: ProductPurchasePanelProps) {
   const availability = availabilityOf(sku);
   const status = badgeStatus(availability);
+  const chosen = variants.find((variant) => variant.sku === sku);
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-2">
         {status ? <AvailabilityBadge status={status} /> : null}
-        <span className="text-ink-tertiary font-mono text-xs">{sku}</span>
+        {chosen?.name ? (
+          <span className="text-ink-primary text-sm font-medium">
+            {variantLabel(chosen, productTitle)}
+          </span>
+        ) : null}
+        <span className="text-ink-tertiary font-mono text-xs">Mã {sku}</span>
       </div>
 
       {variants.length > 1 ? (
         <VariantSelector
-          label="Phiên bản (mã SKU)"
+          label="Quy cách"
           value={sku}
           onChange={onSkuChange}
           options={variants.map((variant) => ({
             id: variant.sku,
-            label: variant.sku,
+            label: variantLabel(variant, productTitle),
             disabled: availabilityOf(variant.sku) === "OUT_OF_STOCK" && variant.sku !== sku,
           }))}
         />
@@ -82,7 +92,7 @@ export function ProductPurchasePanel({
         </p>
         {availability === "OUT_OF_STOCK" ? (
           <p className="bg-bg-subtle text-ink-secondary rounded-[var(--r-md)] p-3 text-sm">
-            Phiên bản này đang hết hàng. Chọn phiên bản khác hoặc chat với Sale.
+            Quy cách này đang hết hàng. Chọn quy cách khác hoặc chat với Sale.
           </p>
         ) : null}
       </div>

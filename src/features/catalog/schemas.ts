@@ -43,7 +43,10 @@ export const catalogPageDtoSchema = pageResponseSchema(catalogCardDtoSchema);
 
 export const catalogVariantDtoSchema = z.object({
   sku: z.string().min(1),
-  // BE CatalogProductResponse.VariantResponse carries the SKU only: no price on the portal and no
+  // The variant's name (BE CatalogProductResponse.VariantResponse, the same as the list card's CardSku.name):
+  // volume and material in words. Absent on an older BE.
+  name: z.string().nullish(),
+  // BE CatalogProductResponse.VariantResponse carries no price on the portal and no
   // stock (kltn-docs 13 BR-04, BR-11) - the indicator is GET /catalog/products/availability.
   // An older BE sent one; read it when present.
   availability: availabilitySchema.nullish(),

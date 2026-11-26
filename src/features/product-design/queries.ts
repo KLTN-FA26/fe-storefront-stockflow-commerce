@@ -28,6 +28,7 @@ import {
   listDesigns,
   printConfigOfSku,
   readProductCustomization,
+  readProductId,
 } from "./api";
 import type { Design, DesignListParams, DownloadLink, PrintConfig } from "./types";
 
@@ -63,8 +64,10 @@ export const designKeys = {
   /** The latest submission's files, or the approved snapshot's: two reads, two entries. */
   fileList: (id: string, approved: boolean) =>
     [...designKeys.files(id), approved ? "approved" : "latest"] as const,
-  /** The SKUs of a product's variants, read for "Nhân bản sang cỡ khác". */
+  /** The SKUs of a product's variants, read for "Nhân bản sang quy cách khác". */
   variantSkus: (productSlug: string) => [...designKeys.all, "variant-skus", productSlug] as const,
+  /** A product's id by its slug, for the Sales chat about it. */
+  productId: (productSlug: string) => [...designKeys.all, "product-id", productSlug] as const,
   downloadLink: (designId: string, assetId: string) =>
     [...designKeys.all, "download-link", designId, assetId] as const,
 };
@@ -298,6 +301,20 @@ export function useDesignPrintConfig(design: Design | undefined) {
     design ?? { id: "", product: { slug: null, title: "" }, variant: { sku: "", label: "" } },
   );
   return useQuery({ ...query, enabled: design !== undefined });
+}
+
+/**
+ * The id of a product by its slug, so a "Chat với Sale" can carry it as context (chat kind PRODUCT). Undefined while it
+ * loads or when it cannot be read: the link then opens the chat without a context instead of failing.
+ */
+export function useProductId(productSlug: string, enabled = true) {
+  return useQuery({
+    queryKey: designKeys.productId(productSlug),
+    queryFn: ({ signal }) => readProductId(productSlug, signal),
+    enabled,
+    retry: retryTransient,
+    ...QUERY_TIMES.detail,
+  }).data;
 }
 
 /** The variant's print configuration, or `null` when it has none (catalog BR-14: no "Thiết kế"). */

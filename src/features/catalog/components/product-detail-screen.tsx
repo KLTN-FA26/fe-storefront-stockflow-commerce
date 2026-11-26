@@ -32,7 +32,6 @@ function ProductSkeleton() {
   );
 }
 
-
 export function ProductDetailScreen({
   slug,
   renderDesignEntry,
@@ -146,15 +145,16 @@ export function ProductDetailScreen({
             ) : null}
           </div>
           {variants.length === 0 ? (
-            <EmptyState title="Sản phẩm chưa có phiên bản để đặt" />
+            <EmptyState title="Sản phẩm chưa có quy cách để xem" />
           ) : (
             <ProductPurchasePanel
               variants={variants}
+              productTitle={data.title}
               sku={sku}
               onSkuChange={setPicked}
               availabilityOf={availabilityOf}
               designEntry={data.kind === "CUSTOMIZABLE" ? renderDesignEntry?.(sku) : undefined}
-              chatHref={STORE_ROUTES.chat.list}
+              chatHref={STORE_ROUTES.chat.about("PRODUCT", data.productId)}
             />
           )}
         </div>
