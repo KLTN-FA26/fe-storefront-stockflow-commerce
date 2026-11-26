@@ -16,8 +16,8 @@ import { RetryButton } from "./design-list-states";
 
 /**
  * The launcher lives in the studio route group, which has no storefront header: it frames itself with a slim bar (the
- * brand, the way to the products, the designs and the chat), so a customer whose design could not start still has
- * the menu and the way back instead of a bare page.
+ * brand, the products, the design projects and the orders), so a customer whose design could not start still has a
+ * way to the rest of the site instead of a bare page.
  */
 export function LauncherFrame({ children }: { children: ReactNode }) {
   const link =
@@ -61,14 +61,18 @@ export function LauncherFrame({ children }: { children: ReactNode }) {
  */
 export function ProductChatLink({
   productSlug,
+  productId: knownId,
   variant = "default",
   className,
 }: {
   productSlug: string;
+  /** The product's id when the page already has it (the product page): then nothing is read. */
+  productId?: string | undefined;
   variant?: "default" | "outline";
   className?: string;
 }) {
-  const productId = useProductId(productSlug);
+  const fetched = useProductId(productSlug, knownId === undefined);
+  const productId = knownId ?? fetched;
   return (
     <Button
       asChild

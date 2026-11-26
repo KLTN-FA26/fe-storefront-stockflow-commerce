@@ -132,7 +132,9 @@ export function DesignCard({
             <p className="text-ink-secondary line-clamp-3 text-sm">Lý do trả lại: {returnReason}</p>
           ) : null}
           {notes}
-          {mayHaveQuoteRequest(design) ? <DesignQuoteSummary design={design} /> : null}
+          {mayHaveQuoteRequest(design) ? (
+            <DesignQuoteSummary design={design} quoteLink={!quoteOffered} />
+          ) : null}
         </div>
         {/* One primary button per status (SF-UX-7): "Yêu cầu báo giá" on an approved design (the WF-02 next step),
             else "Tiếp tục thiết kế" on a draft, else "Xem". Everything else sits in the "more" menu beside it. */}

@@ -19,9 +19,12 @@ import { ProductChatLink } from "./launcher-states";
 export function DesignEntry({
   productSlug,
   sku,
+  productId,
   withSalesChat = true,
 }: {
   productSlug: string;
+  /** The product's id, when the page has it: the Sales chat is then about this product without reading it again. */
+  productId?: string | undefined;
   sku: string;
   /**
    * Offer "Chat với Sale" beside the reason. false where the page already offers it, so the
@@ -65,7 +68,12 @@ export function DesignEntry({
   return (
     <div className="space-y-2">
       <p className="text-ink-secondary text-sm">Quy cách này chưa nhận thiết kế</p>
-      <ProductChatLink productSlug={productSlug} variant="outline" className="w-full px-0" />
+      <ProductChatLink
+        productSlug={productSlug}
+        productId={productId}
+        variant="outline"
+        className="w-full px-0"
+      />
     </div>
   );
 }

@@ -105,6 +105,7 @@ export function NewDesignScreen({ product, sku }: { product: string; sku: string
           title="Không bắt đầu được thiết kế"
           message={describeLauncherError(
             create.error ?? (configFailed ? config.error : count.error),
+            { chat: hopeless && !refused },
           )}
           {...(refused || hopeless ? {} : { onRetry: retry })}
           retrying={create.isPending || config.isFetching || count.isFetching}

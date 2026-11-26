@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 
-import { usePrintConfig } from "../queries";
+import { usePrintConfig, usePrintConfigs } from "../queries";
 import { isPrintConfigUsable } from "../selectors";
 import {
   ProductList,
@@ -100,14 +100,34 @@ function NewDesignForm({
       : null;
   const product = picked ?? only;
   // A search box for a handful of products is a hurdle, not a help: it comes with a long list.
+  // Not while the catalogue loads (or failed): the box would appear and then vanish for a short list.
   const searchable =
     query !== "" ||
-    catalogue.status !== "ready" ||
-    catalogue.more !== null ||
-    catalogue.products.length >= SEARCH_FROM;
+    (catalogue.status === "ready" &&
+      (catalogue.more !== null || catalogue.products.length >= SEARCH_FROM));
   // The variant list read this configuration already: the cache answers it.
   const config = usePrintConfig(product?.slug ?? "", sku ?? "", Boolean(product && sku));
   const accepted = config.data != null && isPrintConfigUsable(config.data);
+  // What is still missing, named under the button (R7). The variants' checks are the ones the list below already runs
+  // (the cache answers them): nothing is said while they are under way, and a product none of whose variants takes
+  // designs is said so instead of asking for a choice there is none to make.
+  const checks = usePrintConfigs(product?.slug ?? "", product?.skus ?? []);
+  const checking = checks.some((check) => check.isPending);
+  const noneTakesDesigns =
+    product !== null &&
+    !checking &&
+    checks.every((check) => check.data == null || !isPrintConfigUsable(check.data));
+  const missing = accepted
+    ? null
+    : !product
+      ? "Chọn sản phẩm và quy cách để tiếp tục"
+      : checking
+        ? null
+        : noneTakesDesigns
+          ? "Sản phẩm này chưa có quy cách nhận thiết kế"
+          : sku === null
+            ? "Chọn quy cách để tiếp tục"
+            : null;
 
   return (
     <>
@@ -160,12 +180,6 @@ function NewDesignForm({
         />
       ) : null}
 
-      {accepted ? null : (
-        <p role="status" className="text-ink-secondary text-sm">
-          {product ? "Chọn quy cách để tiếp tục" : "Chọn sản phẩm và quy cách để tiếp tục"}
-        </p>
-      )}
-
       <DialogFooter className="gap-2">
         <Button
           type="button"
@@ -187,6 +201,11 @@ function NewDesignForm({
           Bắt đầu
         </Button>
       </DialogFooter>
+      {missing ? (
+        <p role="status" className="text-ink-secondary -mt-2 text-right text-sm">
+          {missing}
+        </p>
+      ) : null}
     </>
   );
 }

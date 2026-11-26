@@ -320,7 +320,7 @@ describe("the launcher's words when a design cannot be started", () => {
     new ApiError(status, code, "dev text", undefined, "6f23cf84-7f4b-4e07-91f1-eef9e1f8e1e3");
 
   it("never shows the lookup id, and a generic 400 says what to do instead of 'reload the page'", () => {
-    const text = describeLauncherError(withLookup(400, "VALIDATION_FAILED"));
+    const text = describeLauncherError(withLookup(400, "VALIDATION_FAILED"), { chat: true });
     expect(text).toBe(generic);
     expect(text).not.toMatch(/6f23cf84|Mã tra cứu|tải lại trang/);
   });
@@ -328,6 +328,25 @@ describe("the launcher's words when a design cannot be started", () => {
   it("keeps the specific sentence of a refusal it knows", () => {
     expect(describeLauncherError(withLookup(409, "DESIGN_DRAFT_LIMIT_REACHED"))).toBe(
       "Bạn đã có 50 bản nháp. Hãy xoá bớt trước khi tạo bản mới.",
+    );
+  });
+
+  it("says how long to wait on a 429, and reads 'reload the page' nowhere", () => {
+    const limited = new ApiError(429, "RATE_LIMITED", "x", undefined, undefined, undefined, 120);
+    expect(describeLauncherError(limited)).toBe(
+      "Bạn đã thao tác quá nhiều lần; thử lại sau 2 phút.",
+    );
+    const text = describeLauncherError(withLookup(400, "MALFORMED_REQUEST"));
+    expect(text).toBe("Chưa đọc được yêu cầu bắt đầu thiết kế.");
+    expect(text).not.toMatch(/tải lại trang/);
+  });
+
+  it("sends the customer to Sales in words only when the screen offers the chat", () => {
+    const refused = withLookup(400, "VALIDATION_FAILED");
+    expect(describeLauncherError(refused)).not.toMatch(/nhắn Sale/);
+    expect(describeLauncherError(refused, { chat: true })).toMatch(/nhắn Sale/);
+    expect(describeLauncherError(withLookup(400, "MALFORMED_REQUEST"), { chat: true })).toMatch(
+      /nhắn Sale/,
     );
   });
 
@@ -342,6 +361,9 @@ describe("the launcher's words when a design cannot be started", () => {
     expect(isFutileToRetry(apiError(503, "SERVER_ERROR"))).toBe(false);
     expect(isFutileToRetry(apiError(429, "RATE_LIMITED"))).toBe(false);
     expect(isFutileToRetry(apiError(422, "IDEMPOTENCY_KEY_REUSED"))).toBe(false);
+    // The create is still running (create-key.ts keeps it retryable with the same key): waiting and trying again works.
+    expect(isFutileToRetry(apiError(409, "IDEMPOTENT_REQUEST_IN_PROGRESS"))).toBe(false);
+    expect(isFutileToRetry(apiError(401, "UNAUTHORIZED"))).toBe(false);
     expect(isFutileToRetry(new Error("x"))).toBe(false);
   });
 });

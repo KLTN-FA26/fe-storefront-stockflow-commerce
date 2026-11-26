@@ -43,7 +43,7 @@ export function ProjectDesigns({
       <p className="text-ink-tertiary text-xs">{COLOR_DISCLAIMER}</p>
       <ul
         aria-label="Các bản trong dự án"
-        className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3"
+        className="grid items-start gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3"
       >
         {designs.map((design) => (
           <li key={design.id}>

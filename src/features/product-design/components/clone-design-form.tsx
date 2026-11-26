@@ -142,12 +142,6 @@ export function CloneForm({
         </div>
       ) : null}
 
-      {ready && loaded.targets.length > 0 && sku === null ? (
-        <p role="status" className="text-ink-secondary text-sm">
-          Chọn quy cách mới để tiếp tục
-        </p>
-      ) : null}
-
       <DialogFooter className="gap-2">
         <Button
           type="button"
@@ -167,6 +161,11 @@ export function CloneForm({
           {busy ? "Đang nhân bản…" : "Nhân bản"}
         </Button>
       </DialogFooter>
+      {ready && loaded.targets.length > 0 && sku === null ? (
+        <p role="status" className="text-ink-secondary -mt-2 text-right text-sm">
+          Chọn quy cách mới để tiếp tục
+        </p>
+      ) : null}
     </>
   );
 }

@@ -13,7 +13,8 @@ export const metadata: Metadata = { title: "Không tìm thấy trang" };
 /**
  * Any address the storefront does not have, and any page that calls `notFound()` (an order, a quote or a return that is
  * missing or belongs to someone else): in Vietnamese, with the site's menu and the way back, instead of the framework's
- * bare English "404" page. It carries the shell itself because the route groups' layouts are replaced when a page throws.
+ * bare English "404" page. The route groups have no not-found file of their own, so this root one renders inside the root
+ * layout alone, which has no header or footer: it brings the storefront shell itself.
  */
 export default function NotFound() {
   return (

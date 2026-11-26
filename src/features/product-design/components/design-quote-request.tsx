@@ -35,7 +35,13 @@ import {
 // (`mayHaveQuoteRequest`): a page of plain drafts costs no request.
 
 /** The facts of a request: cartons, date, its status, the customer's SKU once approved. */
-export function QuoteRequestFacts({ request }: { request: DesignQuoteRequest }) {
+export function QuoteRequestFacts({
+  request,
+  quoteLink = true,
+}: {
+  request: DesignQuoteRequest;
+  quoteLink?: boolean;
+}) {
   const open = request.status === "OPEN";
   // The request stays open when the reviewer (Production Coordinator) returns the design (BE B40): the design is a
   // DRAFT again, with the reason it came back for.
@@ -64,7 +70,7 @@ export function QuoteRequestFacts({ request }: { request: DesignQuoteRequest }) 
           </>
         ) : null}
       </dl>
-      <AnsweringQuoteLink request={request} />
+      <AnsweringQuoteLink request={request} link={quoteLink} />
       {returned ? (
         <p className="text-ink-tertiary text-xs">
           Thiết kế bị trả lại. Sửa theo lý do trả lại rồi gửi duyệt lại; Sale sẽ báo giá khi bản
@@ -81,7 +87,14 @@ export function QuoteRequestFacts({ request }: { request: DesignQuoteRequest }) 
 }
 
 /** The card's line: the request open now (else the latest), a placeholder while it is read. */
-export function DesignQuoteSummary({ design }: { design: Design }) {
+export function DesignQuoteSummary({
+  design,
+  quoteLink = true,
+}: {
+  design: Design;
+  /** False when the card's own primary button already links to the answering quote. */
+  quoteLink?: boolean;
+}) {
   const enabled = mayHaveQuoteRequest(design);
   const requests = useDesignQuoteRequests(design.id, enabled, CARD_QUOTE_REQUESTS);
   if (!enabled) return null;
@@ -104,7 +117,7 @@ export function DesignQuoteSummary({ design }: { design: Design }) {
     );
   }
   const request = currentQuoteRequest(requests.data);
-  return request ? <QuoteRequestFacts request={request} /> : null;
+  return request ? <QuoteRequestFacts request={request} quoteLink={quoteLink} /> : null;
 }
 
 /**

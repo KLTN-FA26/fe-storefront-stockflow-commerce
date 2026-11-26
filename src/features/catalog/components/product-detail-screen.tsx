@@ -38,7 +38,7 @@ export function ProductDetailScreen({
 }: {
   slug: string;
   /** The design feature's entry for a SKU, composed by the page: catalog never imports design. */
-  renderDesignEntry?: (sku: string) => ReactNode;
+  renderDesignEntry?: (sku: string, productId: string) => ReactNode;
 }) {
   const signedIn = useSignedIn();
   const enabled = signedIn === true;
@@ -153,7 +153,9 @@ export function ProductDetailScreen({
               sku={sku}
               onSkuChange={setPicked}
               availabilityOf={availabilityOf}
-              designEntry={data.kind === "CUSTOMIZABLE" ? renderDesignEntry?.(sku) : undefined}
+              designEntry={
+                data.kind === "CUSTOMIZABLE" ? renderDesignEntry?.(sku, data.productId) : undefined
+              }
               chatHref={STORE_ROUTES.chat.about("PRODUCT", data.productId)}
             />
           )}

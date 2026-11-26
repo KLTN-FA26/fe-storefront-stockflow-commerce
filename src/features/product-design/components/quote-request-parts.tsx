@@ -75,9 +75,23 @@ export function QuoteRequestStatusBadge({ request }: { request: ClosedOutcome })
  * "QT-… → Xem báo giá" beside the "Đã có báo giá" badge of a request Sales answered (SF-UX-10): a
  * closed request read alone looks refused. Nothing when the BE does not name the quote.
  */
-export function AnsweringQuoteLink({ request }: { request: ClosedOutcome }) {
+export function AnsweringQuoteLink({
+  request,
+  link = true,
+}: {
+  request: ClosedOutcome;
+  /** False where the page already has a "Xem báo giá" button (the design card's primary action): only the number is shown. */
+  link?: boolean;
+}) {
   const quote = answeringQuote(request);
   if (!quote) return null;
+  if (!link) {
+    return quote.number ? (
+      <p className="text-ink-secondary text-sm">
+        Báo giá <span className="text-ink-primary font-mono">{quote.number}</span>
+      </p>
+    ) : null;
+  }
   return (
     <p className="text-ink-secondary flex flex-wrap items-center gap-x-2 text-sm">
       {quote.number ? <span className="text-ink-primary font-mono">{quote.number}</span> : null}

@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import { parseAsInteger, parseAsStringLiteral, useQueryStates } from "nuqs";
 
 import { PageHeader } from "@/components/shared";
-import { FillViewportScroll } from "@/components/shared/FillViewportScroll";
 import { ListPagination } from "@/components/storefront/list-pagination";
 import { Button } from "@/components/ui/button";
 import { SelectOption, TitledSelectContent } from "@/components/shared/TitledSelect";
@@ -107,15 +106,15 @@ export function QuotesScreen() {
                 retrying={isFetching}
               />
             )}
-            <FillViewportScroll label="Danh sách báo giá">
-              <ul className="space-y-3" aria-busy={isPlaceholderData}>
-                {data.items.map((quote) => (
-                  <li key={quote.id}>
-                    <QuoteRowCard quote={quote} />
-                  </li>
-                ))}
-              </ul>
-            </FillViewportScroll>
+            {/* The list runs at full length in the page column (which scrolls): no second scroll box inside it. */}
+            <ul className="space-y-3" aria-busy={isPlaceholderData}>
+              {data.items.map((quote) => (
+                <li key={quote.id}>
+                  <QuoteRowCard quote={quote} />
+                </li>
+              ))}
+            </ul>
+
             <ListPagination
               label="Phân trang báo giá"
               page={data.page}

@@ -52,6 +52,18 @@ function backend({
       if (installments) return { data: installments };
       throw new ApiError(404, "INSTALLMENT_NOT_FOUND", "none");
     }
+    if (url === `/fulfillment/orders/me/${orderId}/vehicles`) {
+      return {
+        data: [
+          {
+            loadCode: "LD-20261110-0001",
+            carrierName: "Vận tải Minh Phát",
+            waybillNo: "MP-998877",
+            vehiclePlate: "51C-123.45",
+          },
+        ],
+      };
+    }
     if (url.endsWith("/transfer-instructions")) {
       return {
         data: {
@@ -77,6 +89,32 @@ beforeEach(() => signIn());
 afterEach(() => {
   vi.restoreAllMocks();
   signOut();
+});
+
+describe("delivery tracking under the status step (17 §5.2, BR-27)", () => {
+  it("shows 'Theo dõi giao hàng' from the shipping step on, and asks for the vehicles only then", async () => {
+    const get = backend({ order: { ...beOrder, status: "SHIPPED", statusGroup: "SHIPPING" } });
+    renderWithProviders(<OrderDetailScreen orderId={orderId} />);
+
+    expect(await screen.findByRole("heading", { name: "Theo dõi giao hàng" })).toBeInTheDocument();
+    expect(await screen.findByText("Vận tải Minh Phát")).toBeInTheDocument();
+    expect(get.mock.calls.map(([url]) => url)).toContain(
+      `/fulfillment/orders/me/${orderId}/vehicles`,
+    );
+  });
+
+  it("neither shows nor reads it before the goods are on a vehicle", async () => {
+    const get = backend({
+      order: { ...beOrder, status: "PENDING_PAYMENT", statusGroup: "AWAITING_PAYMENT" },
+    });
+    renderWithProviders(<OrderDetailScreen orderId={orderId} />);
+
+    await screen.findByRole("region", { name: "Chờ thanh toán" });
+    expect(screen.queryByRole("heading", { name: "Theo dõi giao hàng" })).not.toBeInTheDocument();
+    expect(get.mock.calls.map(([url]) => url)).not.toContain(
+      `/fulfillment/orders/me/${orderId}/vehicles`,
+    );
+  });
 });
 
 describe("order status hero — the next step (SF-UX-29)", () => {

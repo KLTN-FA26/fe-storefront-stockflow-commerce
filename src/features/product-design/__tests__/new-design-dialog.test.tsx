@@ -201,6 +201,36 @@ describe("NewDesignDialog", () => {
     expect(await screen.findByText("Chọn quy cách để tiếp tục")).toBeInTheDocument();
   });
 
+  it("puts the missing step under the Bắt đầu button, and says nothing while the variants are being checked", async () => {
+    open();
+    const start = screen.getByRole("button", { name: "Bắt đầu" });
+    const hint = screen.getByText("Chọn sản phẩm và quy cách để tiếp tục");
+    expect(start.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await pickProduct("Túi giấy kraft quai xoắn");
+    // The checks of its two variants run first: no "Chọn quy cách" yet.
+    expect(screen.queryByText("Chọn quy cách để tiếp tục")).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("Chọn quy cách để tiếp tục", undefined, WAIT),
+    ).toBeInTheDocument();
+  });
+
+  it("says the product has no variant that takes designs, instead of asking for a choice", async () => {
+    open();
+    await pickProduct("Ly giấy kraft 16oz");
+
+    expect(
+      await screen.findByText("Sản phẩm này chưa có quy cách nhận thiết kế", undefined, WAIT),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Chọn quy cách để tiếp tục")).not.toBeInTheDocument();
+  });
+
+  it("shows no search box while the catalogue loads, so it does not flicker in and out for a short list", () => {
+    open({ status: "loading", onSearch: vi.fn() });
+
+    expect(screen.queryByRole("searchbox", { name: "Tìm sản phẩm" })).not.toBeInTheDocument();
+  });
+
   it("says when no product matches", () => {
     open(ready([]));
 

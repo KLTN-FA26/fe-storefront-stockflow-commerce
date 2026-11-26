@@ -13,8 +13,8 @@ export function ProductWithDesign({ slug }: { slug: string }) {
   return (
     <ProductDetailScreen
       slug={slug}
-      renderDesignEntry={(sku) => (
-        <DesignEntry productSlug={slug} sku={sku} withSalesChat={false} />
+      renderDesignEntry={(sku, productId) => (
+        <DesignEntry productSlug={slug} productId={productId} sku={sku} withSalesChat={false} />
       )}
     />
   );

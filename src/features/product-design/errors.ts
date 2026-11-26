@@ -125,30 +125,43 @@ export function describeDesignError(error: unknown): string {
   return describeWait(error) ?? describeApiError(error, MESSAGE_BY_CODE);
 }
 
+/** The answers a retry can get past: wait, a new key, a request still in progress, or signing in again. */
+const RETRYABLE_CODES = [
+  "RATE_LIMITED",
+  "IDEMPOTENCY_KEY_REUSED",
+  "IDEMPOTENT_REQUEST_IN_PROGRESS",
+  "UNAUTHORIZED",
+];
+
 /**
- * A refusal the BE answers the same on every try (a 4xx that is not "wait" or "new key"): trying again cannot help,
- * the launcher offers Sales instead of a retry that loops.
+ * A refusal the BE answers the same on every try (a 4xx that is not one of `RETRYABLE_CODES`): trying again cannot
+ * help, the launcher offers Sales instead of a retry that loops.
  */
 export const isFutileToRetry = (error: unknown) =>
-  error instanceof ApiError &&
-  error.isClientError &&
-  !["RATE_LIMITED", "IDEMPOTENCY_KEY_REUSED", "UNAUTHORIZED"].includes(error.code);
+  error instanceof ApiError && error.isClientError && !RETRYABLE_CODES.includes(error.code);
+
+/** Codes whose table sentence says "reload the page" or names the design screens, not the launcher's. */
+const LAUNCHER_OWN_WORDS = ["CONFLICT", "NOT_FOUND", "FORBIDDEN", "MALFORMED_REQUEST"];
 
 /**
  * What the launcher says when a design could not be started. The customer cannot act on a lookup id or on "reload the
- * page", so neither is shown: a refusal the table knows says why, any other refusal (the BE's generic 400/409/422)
- * says what to do next, and only a failure a retry can get past (network, 5xx) invites one.
+ * page", so neither is shown: a wait (429) says how long, a refusal the table knows says why, any other refusal (the
+ * BE's generic 400/409/422) says what happened, and only a failure a retry can get past (network, 5xx) invites one.
+ * `chat` is whether the screen offers "Chat với Sale": only then does the text send the customer there.
  */
-export function describeLauncherError(error: unknown): string {
+export function describeLauncherError(error: unknown, { chat = false } = {}): string {
+  const wait = describeWait(error);
+  if (wait) return wait;
   if (error instanceof ApiError && error.status !== 0) {
-    if (
-      BE_MESSAGE_BY_CODE[error.code] &&
-      !["CONFLICT", "NOT_FOUND", "FORBIDDEN"].includes(error.code)
-    ) {
+    if (BE_MESSAGE_BY_CODE[error.code] && !LAUNCHER_OWN_WORDS.includes(error.code)) {
       return BE_MESSAGE_BY_CODE[error.code]!;
     }
-    if (error.isClientError && error.code !== "RATE_LIMITED" && error.code !== "UNAUTHORIZED") {
-      return "Chưa bắt đầu được thiết kế cho quy cách này. Bạn nhắn Sale để được hỗ trợ ngay nhé.";
+    if (error.isClientError && !RETRYABLE_CODES.includes(error.code)) {
+      const what =
+        error.code === "MALFORMED_REQUEST"
+          ? "Chưa đọc được yêu cầu bắt đầu thiết kế."
+          : "Chưa bắt đầu được thiết kế cho quy cách này.";
+      return chat ? `${what} Bạn nhắn Sale để được hỗ trợ ngay nhé.` : what;
     }
   }
   return describeDesignError(error).replace(/\s*\(Mã tra cứu: [^)]*\)/, "");
