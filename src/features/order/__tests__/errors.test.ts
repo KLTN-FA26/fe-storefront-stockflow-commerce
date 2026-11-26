@@ -56,7 +56,7 @@ describe("order error helpers", () => {
     ["ORDER_NOT_CANCELLABLE", "Nếu cần trả hàng"],
     ["CANCELLATION_NEEDS_STAFF", "chỉ nhân viên mới quyết định"],
     ["ORDER_CANCELLED", "đã được huỷ"],
-    ["ORDER_CANCELLATION_REQUEST_PENDING", "đang chờ Sales xem xét"],
+    ["ORDER_CANCELLATION_REQUEST_PENDING", "đang chờ Sale xem xét"],
   ])(
     "explains the BE cancellation code %s in Vietnamese, never its English message",
     (code, text) => {

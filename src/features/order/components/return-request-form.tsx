@@ -293,7 +293,7 @@ export function ReturnRequestForm({
               maxBytes={RETURN_PHOTO_MAX_BYTES}
               accept={RETURN_PHOTO_TYPES}
               label="Ảnh chụp lỗi hoặc hư hỏng"
-              hint="Sales duyệt dựa trên ảnh. JPEG, PNG hoặc WebP, mỗi ảnh tối đa 15 MB."
+              hint="Sale duyệt dựa trên ảnh. JPEG, PNG hoặc WebP, mỗi ảnh tối đa 15 MB."
               disabled={pending}
               error={errors.photos?.message}
             />
@@ -307,9 +307,9 @@ export function ReturnRequestForm({
         </Alert>
       ) : null}
       <Alert tone="info" title="Sau khi gửi">
-        Sales xem ảnh và quyết định trong giờ làm việc. Nếu được duyệt, bạn gửi số hàng được duyệt
-        về kho trong 14 ngày, ghi số RMA trên kiện hàng. Giá trị hàng trả được trừ vào các đợt còn
-        nợ; phần đã thanh toán được chuyển khoản lại.
+        Sale xem ảnh và quyết định trong giờ làm việc. Nếu được duyệt, bạn gửi số hàng được duyệt về
+        kho trong 14 ngày, ghi số RMA trên kiện hàng. Giá trị hàng trả được trừ vào các đợt còn nợ;
+        phần đã thanh toán được chuyển khoản lại.
       </Alert>
       <Button
         type="submit"

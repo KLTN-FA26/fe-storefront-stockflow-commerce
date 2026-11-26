@@ -36,10 +36,10 @@ const CLOSED_TEXT: Record<ReturnClosedReason, (days: number) => string> = {
   NOT_DELIVERED: () =>
     "Chỉ gửi được yêu cầu trả hàng cho hàng đã giao tới bạn. Khi một lần giao của đơn đã đến, bạn có thể yêu cầu trả hàng của lần giao đó.",
   WINDOW_CLOSED: (days) =>
-    `Đã quá hạn đổi / trả ${days} ngày kể từ ngày giao. Nếu hàng có lỗi phát hiện muộn, hãy chat với Sales.`,
+    `Đã quá hạn đổi / trả ${days} ngày kể từ ngày giao. Nếu hàng có lỗi phát hiện muộn, hãy chat với Sale.`,
   // Every delivered unit is claimed by a return (open or settled, WF-05 Q-15), or the order is closed.
   NOT_RETURNABLE: () =>
-    "Hiện không còn sản phẩm nào của đơn trả được qua cổng: hàng đã có yêu cầu trả hàng đang xử lý hoặc đã được xử lý, hoặc đơn đã đóng. Theo dõi các yêu cầu ở mục Trả hàng, hoặc chat với Sales nếu bạn cần trả thêm.",
+    "Hiện không còn sản phẩm nào của đơn trả được qua cổng: hàng đã có yêu cầu trả hàng đang xử lý hoặc đã được xử lý, hoặc đơn đã đóng. Theo dõi các yêu cầu ở mục Trả hàng, hoặc chat với Sale nếu bạn cần trả thêm.",
 };
 
 /**
@@ -168,7 +168,7 @@ export function ReturnRequestScreen({ orderId: raw }: { orderId: string }) {
         `${failed} ảnh chưa tải được — hãy thêm lại ở trang yêu cầu.`,
       );
     } else {
-      toast.success(`Đã gửi yêu cầu ${opened.rmaNumber}`, "Sales sẽ xem xét và phản hồi bạn.");
+      toast.success(`Đã gửi yêu cầu ${opened.rmaNumber}`, "Sale sẽ xem xét và phản hồi bạn.");
     }
     router.push(STORE_ROUTES.account.returns.detail(opened.id));
   };
@@ -199,7 +199,7 @@ export function ReturnRequestScreen({ orderId: raw }: { orderId: string }) {
       <div className="space-y-5">
         {header}
         <Closed orderId={current.orderId}>
-          Tài khoản của bạn hiện không tự gửi được yêu cầu trả hàng. Hãy chat với Sales để được hỗ
+          Tài khoản của bạn hiện không tự gửi được yêu cầu trả hàng. Hãy chat với Sale để được hỗ
           trợ.
         </Closed>
       </div>

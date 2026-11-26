@@ -54,7 +54,9 @@ function LineItem({ line, markUnsellable }: { line: QuoteLine; markUnsellable: b
         <Fact label="MOQ">{moq == null ? "—" : `${formatNumber(moq)} thùng`}</Fact>
         <Fact label="Đơn giá / cái">{money(shown.unitPrice)}</Fact>
         <Fact label="Thành tiền">{money(shown.lineTotal)}</Fact>
-        <Fact label={`Thuế VAT${line.taxRate != null ? ` ${ratePercent(line.taxRate)}` : ""}`}>
+        <Fact
+          label={`Thuế GTGT (VAT)${line.taxRate != null ? ` ${ratePercent(line.taxRate)}` : ""}`}
+        >
           {money(shown.tax)}
         </Fact>
       </dl>

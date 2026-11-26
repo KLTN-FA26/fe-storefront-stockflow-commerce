@@ -509,7 +509,7 @@ describe("OrderDetailScreen: asking Sales to cancel (202)", () => {
     await userEvent.click(await request());
 
     const dialog = screen.getByRole("dialog", { name: "Gửi yêu cầu huỷ đơn" });
-    expect(within(dialog).getByText(/Sales xem xét/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Sale xem xét/)).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole("radio", { name: "Tôi đặt trùng đơn" }));
     await userEvent.type(within(dialog).getByLabelText(/Ghi chú/), "Đã đặt lại ở đơn khác");
     await userEvent.click(within(dialog).getByRole("button", { name: "Gửi yêu cầu huỷ" }));
@@ -749,7 +749,7 @@ describe("OrderDetailScreen: a cancellation request that is no longer waiting", 
       "section",
     )!;
     expect(within(card).getByText("Đã đóng")).toBeInTheDocument();
-    expect(card).toHaveTextContent(/trước khi Sales kịp quyết định/);
+    expect(card).toHaveTextContent(/trước khi Sale kịp quyết định/);
     expect(card).toHaveTextContent(/Tôi muốn đổi địa chỉ nhận hàng/);
     expect(card).toHaveTextContent(/Đóng lúc/);
     expect(document.body.textContent).not.toMatch(/Closed: the order is/);
@@ -767,7 +767,7 @@ describe("OrderDetailScreen: a cancellation request that is no longer waiting", 
       "section",
     )!;
     expect(within(card).getByText("Không được chấp nhận")).toBeInTheDocument();
-    expect(card).toHaveTextContent("Phản hồi từ Sales: Đơn đã in xong, không huỷ được.");
+    expect(card).toHaveTextContent("Phản hồi từ Sale: Đơn đã in xong, không huỷ được.");
     expect(
       await screen.findByRole("button", { name: /Gửi yêu cầu huỷ đơn hàng/ }),
     ).toBeInTheDocument();
