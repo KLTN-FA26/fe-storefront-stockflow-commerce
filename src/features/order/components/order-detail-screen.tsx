@@ -169,6 +169,8 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
               />
             }
           />
+          {/* Right under the step: who carries the goods, the waybill and plate (17 BR-27), without scrolling to the rail. */}
+          <OrderVehiclesCard orderId={order.orderId} />
           {paymentFirst ? payment : null}
           <OrderCompletionHint order={order} windowDays={returnWindow.days} />
           <OrderLinesCard order={order} />
@@ -182,7 +184,6 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
           <OrderRefundCard order={order} />
           <OrderReturnsCard order={order} />
           <OrderDeliveryCard order={order} />
-          <OrderVehiclesCard orderId={order.orderId} />
           {order.cancellationRequest && order.cancellationRequest.status !== "PENDING" ? (
             <OrderCancellationCard request={order.cancellationRequest} />
           ) : null}

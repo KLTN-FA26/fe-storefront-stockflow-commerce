@@ -162,7 +162,7 @@ describe("StorefrontShell", () => {
   });
 
   it("keeps room under the page on a phone so the floating button covers no content", () => {
-    navigation.pathname = "/account/orders/o1";
+    navigation.pathname = "/catalog";
     const { container } = render(
       <StorefrontShell>
         <p>Nội dung</p>
@@ -177,6 +177,19 @@ describe("StorefrontShell", () => {
     );
     // The last thing on the page, after the footer: nothing scrolls past it.
     expect(space?.previousElementSibling?.tagName).toBe("FOOTER");
+  });
+
+  it("leaves the floating button to phones and tablets in the account area, whose rail links to the chat", () => {
+    navigation.pathname = "/account/orders/o1";
+    const { container } = render(
+      <StorefrontShell footer={false}>
+        <p>Nội dung</p>
+      </StorefrontShell>,
+    );
+    const space = container.querySelector("[data-chat-fab-space]");
+    expect(space?.className.split(" ")).toContain("lg:hidden");
+    expect(space?.className.split(" ")).not.toContain("md:hidden");
+    expect(space?.nextElementSibling?.className.split(" ")).toContain("lg:hidden");
   });
 
   it("keeps no room on the chat thread, where the button is hidden", () => {

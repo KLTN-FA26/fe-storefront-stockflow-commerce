@@ -99,7 +99,10 @@ export function AccountSidebar() {
                       />
                     ) : null}
                     <Icon
-                      className={cn("size-4 shrink-0", active ? "text-accent" : "text-ink-tertiary")}
+                      className={cn(
+                        "size-4 shrink-0",
+                        active ? "text-accent" : "text-ink-tertiary",
+                      )}
                       aria-hidden="true"
                     />
                     <span className="min-w-0 flex-1 truncate">{item.label}</span>
@@ -155,7 +158,7 @@ function AccountFooter() {
           {name || "Tài khoản"}
         </p>
         {email ? (
-          <p className="text-ink-tertiary truncate text-xs" title={email}>
+          <p className="text-ink-tertiary text-xs break-all" title={email}>
             {email}
           </p>
         ) : null}

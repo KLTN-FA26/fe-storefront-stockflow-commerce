@@ -216,6 +216,32 @@ describe("accepting a quote on its card (C10)", () => {
     expect(within(dialog).getByText(/76\.140\.000/)).toBeInTheDocument();
   });
 
+  it("names each line by its design, with the picture, once the quote is read (SF#67), the SKU until then", async () => {
+    const user = userEvent.setup();
+    const pricing = quotePricingJson();
+    vi.spyOn(api, "get").mockResolvedValue({
+      data: {
+        ...pricing,
+        lines: [
+          {
+            ...pricing.lines[0],
+            designName: "Ly giấy Lẩu Thái Siam",
+            previewUrl: "https://media.example.test/preview.png",
+          },
+        ],
+      },
+    });
+    open();
+    await user.click(screen.getByRole("button", { name: "Chấp nhận" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText("Ly giấy Lẩu Thái Siam")).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("link", { name: /Xem ảnh thiết kế Ly giấy Lẩu Thái Siam/ }),
+    ).toBeInTheDocument();
+    // The SKU stays beside the name, small.
+    expect(within(dialog).getByText("LY-GIAY-DEMO-12OZ-XANH")).toBeInTheDocument();
+  });
+
   it("WF-02 audit item 4: below the MOQ is refused in the dialog before anything is sent", async () => {
     const user = userEvent.setup();
     vi.spyOn(api, "get").mockResolvedValue({ data: quotePricingJson() });
