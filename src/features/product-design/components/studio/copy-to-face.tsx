@@ -35,8 +35,10 @@ export function CopyToFace({ compact = false }: { compact?: boolean }) {
   const [open, setOpen] = useState(false);
 
   if (surfaces.order.length < 2) return null;
+  // A face the template does not name reads "Mặt 2", never its internal code (UX audit S08-13)
   const nameOf = (code: PrintAreaCode) =>
-    template.printAreas.find((area) => area.code === code)?.name ?? code;
+    template.printAreas.find((area) => area.code === code)?.name ??
+    `Mặt ${surfaces.order.indexOf(code) + 1}`;
   const copyTo = (code: PrintAreaCode) => {
     copyFace(services, active, code);
     announce(STUDIO_ANNOUNCEMENTS.copiedTo(nameOf(code)));

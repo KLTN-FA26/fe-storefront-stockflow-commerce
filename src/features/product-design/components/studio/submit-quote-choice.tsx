@@ -18,11 +18,17 @@ export function SubmitQuoteChoice({
   onWithQuoteChange,
   form,
   disabled = false,
+  unitsPerCarton,
+  cartons,
 }: {
   withQuote: boolean;
   onWithQuoteChange: (withQuote: boolean) => void;
   form: UseFormReturn<QuoteRequestFormValues, unknown, QuoteRequestInput>;
   disabled?: boolean;
+  /** The design's carton spec, when known: "1 thùng = N cái" under the cartons (SF-UX-9). */
+  unitsPerCarton?: number | null | undefined;
+  /** The cartons as typed, for the live count of pieces. */
+  cartons?: string | undefined;
 }) {
   return (
     <div className="grid gap-3">
@@ -53,6 +59,8 @@ export function SubmitQuoteChoice({
           errors={form.formState.errors}
           idPrefix="submit-quote"
           disabled={disabled}
+          unitsPerCarton={unitsPerCarton}
+          cartons={cartons}
         />
       ) : null}
     </div>

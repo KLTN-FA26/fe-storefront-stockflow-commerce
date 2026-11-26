@@ -56,6 +56,16 @@ const FONTS: FontRegistry = {
   ...TEST_FONTS,
   montserrat: { label: "Montserrat", family: "Montserrat", italic: true },
 };
+/** More fonts than fit without a search field (more than 8). */
+const MANY_FONTS: FontRegistry = {
+  ...FONTS,
+  ...Object.fromEntries(
+    Array.from({ length: 8 }, (_, i) => [
+      `extra-${i}`,
+      { label: `Phông ${i + 1}`, family: `Phông ${i + 1}`, italic: false },
+    ]),
+  ),
+};
 
 /** A new 12oz cup draft whose body holds `elements` (bottom first). */
 function cupDraft(studio: DesignMockStore, elements: DesignElement[] = []) {
@@ -550,8 +560,8 @@ describe("text properties", () => {
     expect(screen.getByRole("button", { name: "In nghiêng" })).toBeDisabled();
     await user.click(screen.getByRole("combobox", { name: /^Phông chữ/ }));
     const list = await screen.findByRole("listbox");
-    // The search field is a 44 px touch target (the kit's is 32 px).
-    expect(screen.getByPlaceholderText("Tìm phông chữ…")).toHaveClass("h-11");
+    // A short list needs no search field (UX audit S08-13).
+    expect(screen.queryByPlaceholderText("Tìm phông chữ…")).not.toBeInTheDocument();
     const options = within(list).getAllByRole("option");
     expect(options.map((o) => o.textContent?.trim())).toEqual(["Lobster", "Montserrat"]);
     expect(within(options[1]!).getByText("Montserrat")).toHaveStyle({ fontFamily: "Montserrat" });
@@ -645,13 +655,16 @@ describe("text properties", () => {
   it("filters the fonts as the customer types", async () => {
     const user = userEvent.setup();
     const { store: studio } = await designBackend();
-    await openStudio(await cupDraft(studio, [textEl("hello")]), FONTS);
+    await openStudio(await cupDraft(studio, [textEl("hello")]), MANY_FONTS);
     await showLayers(user);
     await user.click(screen.getByRole("option", { name: /^Chữ/ }));
     await closePanel(user);
 
     await user.click(screen.getByRole("combobox", { name: /^Phông chữ/ }));
-    await user.type(await screen.findByPlaceholderText("Tìm phông chữ…"), "lob");
+    const search = await screen.findByPlaceholderText("Tìm phông chữ…");
+    // The search field is a 44 px touch target (the kit's is 32 px).
+    expect(search).toHaveClass("h-11");
+    await user.type(search, "lob");
 
     const options = within(screen.getByRole("listbox")).getAllByRole("option");
     expect(options.map((o) => o.textContent?.trim())).toEqual(["Lobster"]);
@@ -689,7 +702,7 @@ describe("text properties", () => {
     const { services } = await openWithText(user);
 
     await openMore(user);
-    const spacing = screen.getByLabelText("Giãn chữ (em)");
+    const spacing = screen.getByLabelText("Giãn chữ");
     await user.clear(spacing);
     await user.type(spacing, "0.1");
     const lineHeight = screen.getByLabelText("Giãn dòng");

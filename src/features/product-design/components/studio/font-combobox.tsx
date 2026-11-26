@@ -19,6 +19,8 @@ import type { FontOption } from "./text-actions";
 import { useFontStatus } from "./use-font-status";
 
 const STATUS_NOTES = { loading: "Đang tải…", error: "Không tải được" } as const;
+/** A few fonts are all in view: the search field only earns its place on a longer list (UX audit S08-13). */
+const FONT_SEARCH_MIN = 8;
 const ERROR_HINT = "Không tải được phông này, chữ có thể hiện bằng phông khác.";
 
 /**
@@ -84,14 +86,18 @@ export function FontCombobox({
           className="border-border-default bg-bg-surface text-ink-primary w-(--radix-popover-trigger-width) p-1 shadow-md"
         >
           <Command className="bg-bg-surface text-ink-primary">
-            {/* The kit's search field is 32 px tall: this one is a 44 px touch target. */}
-            <div className="border-border-default focus-within:ring-accent flex min-h-11 items-center gap-2 rounded-[var(--r-md)] border px-3 focus-within:ring-2">
-              <Search aria-hidden className="text-ink-tertiary size-4 shrink-0" />
-              <CommandPrimitive.Input
-                placeholder="Tìm phông chữ…"
-                className="text-ink-primary placeholder:text-ink-tertiary h-11 w-full bg-transparent text-sm outline-none"
-              />
-            </div>
+            {options.length > FONT_SEARCH_MIN ? (
+              <>
+                {/* The kit's search field is 32 px tall: this one is a 44 px touch target. */}
+                <div className="border-border-default focus-within:ring-accent flex min-h-11 items-center gap-2 rounded-[var(--r-md)] border px-3 focus-within:ring-2">
+                  <Search aria-hidden className="text-ink-tertiary size-4 shrink-0" />
+                  <CommandPrimitive.Input
+                    placeholder="Tìm phông chữ…"
+                    className="text-ink-primary placeholder:text-ink-tertiary h-11 w-full bg-transparent text-sm outline-none"
+                  />
+                </div>
+              </>
+            ) : null}
             <CommandList>
               <CommandEmpty className="text-ink-secondary">Không tìm thấy.</CommandEmpty>
               <CommandGroup heading="Phông chữ">

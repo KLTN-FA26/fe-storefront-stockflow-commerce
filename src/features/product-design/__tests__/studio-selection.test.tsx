@@ -146,14 +146,14 @@ describe("selection, layers and properties", () => {
     await user.keyboard("{ArrowDown}");
 
     await openPosition(user);
-    expect(screen.getByLabelText("X (mm)")).toHaveValue(0);
-    expect(screen.getByLabelText("Y (mm)")).toHaveValue(55.5);
+    expect(screen.getByLabelText("Vị trí ngang (mm)")).toHaveValue(0);
+    expect(screen.getByLabelText("Vị trí dọc (mm)")).toHaveValue(55.5);
     await user.keyboard("{Escape}");
     // One history step per key press: the step down, then the press that reached the edge.
     await user.click(undoButton());
     await user.click(undoButton());
     await openPosition(user);
-    expect(numberIn("X (mm)")).toBeCloseTo(once, 1);
+    expect(numberIn("Vị trí ngang (mm)")).toBeCloseTo(once, 1);
   });
 
   it("edits rotation and opacity from the context bar, one undo step per field", async () => {
@@ -238,7 +238,7 @@ describe("selection, layers and properties", () => {
     expect(elementOf(services, "text")!.placement.u).toBe(170);
     expect(option(/Chữ: Cà phê/)).toBeInTheDocument();
     await openPosition(user);
-    expect(screen.getByLabelText("X (mm)")).toBeDisabled();
+    expect(screen.getByLabelText("Vị trí ngang (mm)")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Xoá" })).toBeDisabled();
   });
 

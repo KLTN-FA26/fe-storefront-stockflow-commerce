@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import { useEffect, useEffectEvent, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 
 import {
   Dialog,
@@ -56,6 +56,8 @@ function SubmitBody({
     resolver: zodResolver(quoteRequestFormSchema),
     defaultValues: { cartons: "", desiredDeliveryDate: "" },
   });
+  // The cartons as typed, for the live "1 thùng = N cái · X thùng = Y cái" under the field (S08-9)
+  const cartonsTyped = useWatch({ control: quoteForm.control, name: "cartons" });
   // The BE refused the request sent with the design (400 on `quoteRequest.*`): nothing was
   // submitted; the fields say why, and confirming again sends the files already drawn.
   const quoteErrors = step === "error" ? quoteFieldErrorsOf(error, "quoteRequest.") : null;
@@ -145,6 +147,8 @@ function SubmitBody({
               withQuote={withQuote}
               onWithQuoteChange={setWithQuote}
               form={quoteForm}
+              unitsPerCarton={design.unitsPerCarton}
+              cartons={cartonsTyped}
             />
           ) : null}
         </>

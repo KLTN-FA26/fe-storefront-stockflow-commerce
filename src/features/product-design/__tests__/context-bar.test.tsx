@@ -92,7 +92,7 @@ describe("a text", () => {
     }
     expect(screen.getByRole("radio", { name: "Căn trái" })).toBeInTheDocument();
     expect(screen.getByText("Mặt in")).toBeInTheDocument();
-    expect(screen.queryByRole("spinbutton", { name: "X (mm)" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton", { name: "Vị trí ngang (mm)" })).not.toBeInTheDocument();
   });
 
   it("writes the size, bold, alignment and the colour chosen in the popover to the document", async () => {
@@ -154,7 +154,7 @@ describe("a text", () => {
     expect(textOf(h).outline).toBeDefined();
     expect(screen.getByRole("spinbutton", { name: "Độ dày viền (mm)" })).toBeInTheDocument();
 
-    const spacing = screen.getByRole("spinbutton", { name: "Giãn chữ (em)" });
+    const spacing = screen.getByRole("spinbutton", { name: "Giãn chữ" });
     await user.clear(spacing);
     await user.type(spacing, "0.5");
     expect(textOf(h).letterSpacingEm).toBe(0.5);
@@ -281,7 +281,7 @@ describe("the common controls", () => {
     const user = userEvent.setup();
     const h = renderBar([textEl("t")], { template: bagM });
     await user.click(screen.getByRole("button", { name: "Vị trí" }));
-    const x = await screen.findByRole("spinbutton", { name: "X (mm)" });
+    const x = await screen.findByRole("spinbutton", { name: "Vị trí ngang (mm)" });
     expect(screen.queryByRole("spinbutton", { name: "Độ mờ đục (%)" })).not.toBeInTheDocument();
     await user.clear(x);
     await user.type(x, "50");
@@ -357,7 +357,7 @@ describe("the common controls", () => {
 
 describe("popovers by keyboard", () => {
   it.each([
-    ["Vị trí", "spinbutton", "X (mm)"],
+    ["Vị trí", "spinbutton", "Vị trí ngang (mm)"],
     ["Độ mờ", "slider", "Độ mờ đục"],
     ["Màu chữ, #000000", "button", "Đỏ #DC2626"],
   ] as const)(
