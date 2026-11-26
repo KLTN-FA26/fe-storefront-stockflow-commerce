@@ -7,6 +7,8 @@ import {
   describeDesignError,
   describeFileDownloadError,
   describeFileRefusal,
+  describeLauncherError,
+  isFutileToRetry,
   describeLibraryUploadError,
   describeProjectError,
   isDesignConflict,
@@ -308,5 +310,38 @@ describe("outdatedRolesOf and the file errors", () => {
     expect(describeFileDownloadError(apiError(404, "NOT_FOUND"))).toBe(
       describeDesignError(apiError(404, "NOT_FOUND")),
     );
+  });
+});
+
+describe("the launcher's words when a design cannot be started", () => {
+  const generic =
+    "Chưa bắt đầu được thiết kế cho quy cách này. Bạn nhắn Sale để được hỗ trợ ngay nhé.";
+  const withLookup = (status: number, code: string) =>
+    new ApiError(status, code, "dev text", undefined, "6f23cf84-7f4b-4e07-91f1-eef9e1f8e1e3");
+
+  it("never shows the lookup id, and a generic 400 says what to do instead of 'reload the page'", () => {
+    const text = describeLauncherError(withLookup(400, "VALIDATION_FAILED"));
+    expect(text).toBe(generic);
+    expect(text).not.toMatch(/6f23cf84|Mã tra cứu|tải lại trang/);
+  });
+
+  it("keeps the specific sentence of a refusal it knows", () => {
+    expect(describeLauncherError(withLookup(409, "DESIGN_DRAFT_LIMIT_REACHED"))).toBe(
+      "Bạn đã có 50 bản nháp. Hãy xoá bớt trước khi tạo bản mới.",
+    );
+  });
+
+  it("strips the lookup id from a server failure too, which a retry may get past", () => {
+    const text = describeLauncherError(withLookup(503, "SERVER_ERROR"));
+    expect(text).toBe("Hệ thống đang gặp sự cố. Vui lòng thử lại sau ít phút.");
+  });
+
+  it("calls a retry futile for a 4xx the BE answers the same each time, not for 5xx, 429 or a reused key", () => {
+    expect(isFutileToRetry(apiError(400, "VALIDATION_FAILED"))).toBe(true);
+    expect(isFutileToRetry(apiError(422, "PRINT_CONFIG_NOT_FOUND"))).toBe(true);
+    expect(isFutileToRetry(apiError(503, "SERVER_ERROR"))).toBe(false);
+    expect(isFutileToRetry(apiError(429, "RATE_LIMITED"))).toBe(false);
+    expect(isFutileToRetry(apiError(422, "IDEMPOTENCY_KEY_REUSED"))).toBe(false);
+    expect(isFutileToRetry(new Error("x"))).toBe(false);
   });
 });

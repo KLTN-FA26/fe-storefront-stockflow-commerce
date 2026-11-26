@@ -145,7 +145,10 @@ describe("NewDesignScreen", () => {
     expect(
       await screen.findByText("Quy cách này chưa nhận thiết kế.", undefined, WAIT),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Chat với Sale" })).toHaveAttribute("href", "/chat");
+    expect(screen.getByRole("link", { name: "Chat với Sale" })).toHaveAttribute(
+      "href",
+      "/chat/new",
+    );
     expect(post).not.toHaveBeenCalled();
   });
 

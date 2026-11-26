@@ -40,9 +40,9 @@ function Thumbnail({ src, alt }: { src: string | null; alt: string }) {
     );
   }
   return (
-    <span className="text-ink-tertiary absolute inset-0 flex items-center justify-center">
-      <Palette className="size-8" aria-hidden="true" />
-      <span className="sr-only">Chưa có bản xem trước</span>
+    <span className="text-ink-tertiary flex h-24 flex-col items-center justify-center gap-1 text-xs">
+      <Palette className="size-6" aria-hidden="true" />
+      Chưa có bản xem trước
     </span>
   );
 }
@@ -57,7 +57,7 @@ type DesignCardProps = {
   onDelete?: (design: Design) => void;
   /** "Tạo bản sửa"; the button is left out without it. */
   onRevise?: (design: Design) => void;
-  /** "Nhân bản sang cỡ khác"; the button is left out without it. */
+  /** "Nhân bản sang quy cách khác"; the button is left out without it. */
   onClone?: (design: Design) => void;
   /** A revision of this design is being created. */
   revising?: boolean;
@@ -98,7 +98,14 @@ export function DesignCard({
   const mayChat = useHasPermission(PERM.chatCreate);
   return (
     <article className="bg-bg-surface border-border-default flex h-full flex-col overflow-hidden rounded-[var(--r-lg)] border shadow-[var(--card-shadow)] transition-shadow duration-200 hover:shadow-[var(--sh-md)]">
-      <div className="bg-bg-subtle relative aspect-[4/3] overflow-hidden">
+      {/* A design with a preview shows it large; one without gets a short band, not a grey 4:3 box with an icon. */}
+      <div
+        className={
+          previewUrl
+            ? "bg-bg-subtle relative aspect-[4/3] overflow-hidden"
+            : "bg-bg-subtle relative overflow-hidden"
+        }
+      >
         <Thumbnail src={previewUrl} alt={`Bản xem trước ${title}`} />
         {selection ? <div className="absolute top-1 left-1">{selection}</div> : null}
       </div>
@@ -182,11 +189,11 @@ export function DesignCard({
               {onClone ? (
                 <DropdownMenuItem
                   className={MENU_ITEM}
-                  aria-label={`Nhân bản ${title} sang cỡ khác`}
+                  aria-label={`Nhân bản ${title} sang quy cách khác`}
                   onSelect={() => onClone(design)}
                 >
                   <Copy aria-hidden />
-                  Nhân bản sang cỡ khác
+                  Nhân bản sang quy cách khác
                 </DropdownMenuItem>
               ) : null}
               {/* Any design can be talked over in chat (PO 2026-11-22, Q7: as the BE — Sale sees its

@@ -45,10 +45,12 @@ afterEach(() => {
   signOut();
 });
 
-async function open(id: string) {
+/** The card starts folded into its 3D pill; most of these tests are about the open card, so `open` unfolds it. */
+async function open(id: string, { unfold = true } = {}) {
   await designBackend();
   renderWithProviders(<DesignStudio designId={id} fonts={TEST_FONTS} />);
   await screen.findByRole("img", { name: /Mô hình 3D của sản phẩm/ }, OPENED);
+  if (unfold) await userEvent.click(screen.getByRole("button", { name: "Mở lại bản xem trước" }));
 }
 const viewer = () => screen.getByRole("region", { name: "Xem trước sản phẩm" });
 const stage = () => screen.getByRole("region", { name: "Khung thiết kế" });
@@ -56,6 +58,14 @@ const swapButton = () => screen.getByRole("button", { name: "Đổi chỗ 2D và
 const minimiseButton = () => screen.getByRole("button", { name: "Thu nhỏ bản xem trước" });
 
 describe("the 3D corner card", () => {
+  it("starts folded into its 3D pill, so it covers no corner of the drawing area until it is asked for", async () => {
+    await open(MOCK_DESIGN_IDS.draft, { unfold: false });
+
+    expect(screen.getByRole("button", { name: "Mở lại bản xem trước" })).toHaveTextContent("3D");
+    expect(viewer()).toHaveClass("hidden");
+    expect(viewer()).toBeInTheDocument(); // still mounted: the WebGL view is not rebuilt when it opens
+  });
+
   it("shows Xem 3D with Đổi chỗ and Thu nhỏ, each named and 44 px, with one tooltip", async () => {
     await open(MOCK_DESIGN_IDS.draft);
 
@@ -247,20 +257,22 @@ describe("the 3D corner card", () => {
     expect(sheetNode).not.toHaveAttribute("data-card");
     expect(screen.queryByRole("button", { name: /^Mở lại/ })).toBeNull();
 
-    // The review returns it: a draft again, with the 3D view as the open corner card.
+    // The review returns it: a draft again, with the 3D view folded into its pill like any draft.
     settle(await store.simulateReturn(id, { reason: "Logo quá nhỏ" }));
     await act(() => client.invalidateQueries({ queryKey: designKeys.detail(id) }));
     await screen.findByRole("group", { name: "Công cụ" }, OPENED);
 
     expect(viewer()).toBe(viewerNode);
-    expect(viewerNode).toHaveClass("right-3", "bottom-3");
-    expect(viewerNode).not.toHaveClass("hidden");
+    expect(viewerNode).toHaveClass("hidden");
+    expect(screen.getByRole("button", { name: "Mở lại bản xem trước" })).toBeInTheDocument();
     expect(sheetNode).not.toHaveAttribute("data-card");
     expect(screen.getByRole("img", { name: /Mô hình 3D/ })).toBe(model);
+    await user.click(screen.getByRole("button", { name: "Mở lại bản xem trước" }));
+    expect(viewerNode).toHaveClass("right-3", "bottom-3");
   });
 
   it("read-only: no card, no swap, no minimise", async () => {
-    await open(MOCK_DESIGN_IDS.approved);
+    await open(MOCK_DESIGN_IDS.approved, { unfold: false });
 
     expect(screen.queryByRole("button", { name: "Đổi chỗ 2D và 3D" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Thu nhỏ bản xem trước" })).toBeNull();

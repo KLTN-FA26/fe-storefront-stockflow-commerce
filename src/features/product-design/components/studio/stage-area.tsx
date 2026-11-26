@@ -48,7 +48,7 @@ function leaveFullscreen() {
  * stage keeps its zoom and selection). Thu nhỏ folds the card into a pill and keeps it mounted,
  * hidden by class. Both flags are local UI state, not persisted. Read-only: no card; the stage,
  * with the print-area switcher above it (a bag has four faces), and the preview side by side; the
- * flags go back to "not swapped, not minimised", so a design returned as a draft starts there. A
+ * flags go back to "not swapped, folded", so a design returned as a draft starts there. A
  * draft also hears an image pasted on the stage while the image options are closed (`ImagePaste`).
  */
 export function StageArea({
@@ -59,10 +59,12 @@ export function StageArea({
   readOnly: boolean;
 }) {
   const [swapped, setSwapped] = useState(false);
-  const [minimised, setMinimised] = useState(false);
-  if (readOnly && (swapped || minimised)) {
+  // The 3D card starts folded into its "3D" pill: it covered a corner of the drawing area on every visit (it is one
+  // click away, and a design returned as a draft starts folded too).
+  const [minimised, setMinimised] = useState(true);
+  if (readOnly && (swapped || !minimised)) {
     setSwapped(false);
-    setMinimised(false);
+    setMinimised(true);
   }
   const areaRef = useRef<HTMLDivElement>(null);
   const focusNext = useRef<string | null>(null);
@@ -115,7 +117,7 @@ export function StageArea({
         card={readOnly || swapped ? null : controls}
         className={readOnly ? "min-h-[18rem]" : swapped ? FILL : cardClass}
       />
-      {minimised && <PreviewPill kind={swapped ? "2D" : "3D"} onRestore={restore} />}
+      {minimised && !readOnly && <PreviewPill kind={swapped ? "2D" : "3D"} onRestore={restore} />}
       {readOnly ? null : <ImagePaste />}
     </div>
   );

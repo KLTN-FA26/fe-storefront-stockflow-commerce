@@ -7,7 +7,7 @@ import { STORE_ROUTES } from "@/constants";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 
 import { createKeyFor, forgetCreateKey, isRetryableWithSameKey } from "../create-key";
-import { describeDesignError, isProjectRefusal } from "../errors";
+import { describeLauncherError, isFutileToRetry, isProjectRefusal } from "../errors";
 import { useCreateDesign } from "../mutations";
 import { useDraftCount, usePrintConfig } from "../queries";
 import { defaultDesignName, isPrintConfigUsable } from "../selectors";
@@ -98,20 +98,30 @@ export function NewDesignScreen({ product, sku }: { product: string; sku: string
         : () => void (configFailed ? config.refetch() : count.refetch());
       // The project refused the design (full, closed): trying again cannot help, the page can.
       const refused = create.isError && projectId !== undefined && isProjectRefusal(create.error);
+      // A 4xx the BE stores for the key is answered the same on every try: no retry, Sales is the way on.
+      const hopeless = create.isError && isFutileToRetry(create.error);
       return (
         <LauncherError
           title="Không bắt đầu được thiết kế"
-          message={describeDesignError(create.error ?? (configFailed ? config.error : count.error))}
-          {...(refused ? {} : { onRetry: retry })}
+          message={describeLauncherError(
+            create.error ?? (configFailed ? config.error : count.error),
+          )}
+          {...(refused || hopeless ? {} : { onRetry: retry })}
           retrying={create.isPending || config.isFetching || count.isFetching}
           backHref={refused ? STORE_ROUTES.design.project(projectId) : productHref}
-          {...(refused ? { backLabel: "Về dự án" } : {})}
+          {...(refused ? { backLabel: "Về dự án" } : { chatProductSlug: product })}
         />
       );
     }
     if (config.isPending) return <LauncherLoading label="Đang kiểm tra quy cách…" />;
     if (printable === null) {
-      return <LauncherNoPrintConfig backHref={productHref} unavailable={config.data !== null} />;
+      return (
+        <LauncherNoPrintConfig
+          backHref={productHref}
+          unavailable={config.data !== null}
+          productSlug={product}
+        />
+      );
     }
     if (create.isIdle && full && limit !== undefined) return <LauncherDraftLimit limit={limit} />;
     if (create.isSuccess) return <LauncherLoading label="Đang mở trình thiết kế…" />;

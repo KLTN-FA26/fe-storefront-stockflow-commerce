@@ -18,7 +18,7 @@ type CloneDesignDialogProps = {
 };
 
 /**
- * "Nhân bản sang cỡ khác" (spec 2026-11-12 §7): the other variants of the design product that
+ * "Nhân bản sang quy cách khác" (spec 2026-11-12 §7): the other variants of the design product that
  * take designs; the layout is re-fitted to the one picked and the server makes the copy. While a
  * copy is being made the dialog cannot be closed, so the customer always reaches it.
  */

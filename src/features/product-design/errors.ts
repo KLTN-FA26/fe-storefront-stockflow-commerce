@@ -125,6 +125,35 @@ export function describeDesignError(error: unknown): string {
   return describeWait(error) ?? describeApiError(error, MESSAGE_BY_CODE);
 }
 
+/**
+ * A refusal the BE answers the same on every try (a 4xx that is not "wait" or "new key"): trying again cannot help,
+ * the launcher offers Sales instead of a retry that loops.
+ */
+export const isFutileToRetry = (error: unknown) =>
+  error instanceof ApiError &&
+  error.isClientError &&
+  !["RATE_LIMITED", "IDEMPOTENCY_KEY_REUSED", "UNAUTHORIZED"].includes(error.code);
+
+/**
+ * What the launcher says when a design could not be started. The customer cannot act on a lookup id or on "reload the
+ * page", so neither is shown: a refusal the table knows says why, any other refusal (the BE's generic 400/409/422)
+ * says what to do next, and only a failure a retry can get past (network, 5xx) invites one.
+ */
+export function describeLauncherError(error: unknown): string {
+  if (error instanceof ApiError && error.status !== 0) {
+    if (
+      BE_MESSAGE_BY_CODE[error.code] &&
+      !["CONFLICT", "NOT_FOUND", "FORBIDDEN"].includes(error.code)
+    ) {
+      return BE_MESSAGE_BY_CODE[error.code]!;
+    }
+    if (error.isClientError && error.code !== "RATE_LIMITED" && error.code !== "UNAUTHORIZED") {
+      return "Chưa bắt đầu được thiết kế cho quy cách này. Bạn nhắn Sale để được hỗ trợ ngay nhé.";
+    }
+  }
+  return describeDesignError(error).replace(/\s*\(Mã tra cứu: [^)]*\)/, "");
+}
+
 const PROJECT_MESSAGE_BY_CODE: Record<string, string> = {
   ...MESSAGE_BY_CODE,
   CONFLICT: "Dự án đã thay đổi, hãy tải lại.", // a stale project version

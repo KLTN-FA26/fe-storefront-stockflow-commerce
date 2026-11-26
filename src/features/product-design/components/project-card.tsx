@@ -66,7 +66,7 @@ export function ProjectCard({ project }: { project: ProjectSummary }) {
             </p>
           ) : null}
           <p className="text-ink-tertiary text-xs tabular-nums">
-            {project.designCount}/{PROJECT_DESIGN_LIMIT} bản
+            {project.designCount} bản thiết kế (tối đa {PROJECT_DESIGN_LIMIT})
           </p>
           <p className="text-ink-secondary text-sm tabular-nums">
             Tạo lúc {formatDateTime(project.createdAt)}

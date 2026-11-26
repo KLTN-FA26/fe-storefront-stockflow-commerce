@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { RotateCw } from "lucide-react";
 import { useState } from "react";
 
+import { STORE_ROUTES } from "@/constants";
 import { Skeleton } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { PERM } from "@/lib/auth/permission-codes";
@@ -22,6 +24,7 @@ import { QuoteRequestDialog } from "./quote-request-dialog";
 import {
   ACTION_BUTTON,
   AnsweringQuoteLink,
+  answeringQuote,
   QuoteRequestStatusBadge,
   cartonsLabel,
   desiredDateLabel,
@@ -123,12 +126,26 @@ export function RequestQuoteButton({
   const [open, setOpen] = useState(false);
   if (!offered) return null;
   const current = openQuoteRequest(requests.data);
+  // Sales already answered with a quote: its page is the next step, so it is the primary button and asking again
+  // steps back to an outline one (SF-UX-7).
+  const latest = currentQuoteRequest(requests.data);
+  const answer = !current && latest ? answeringQuote(latest) : null;
   const label = current ? "Sửa yêu cầu báo giá" : "Yêu cầu báo giá";
   return (
     <>
+      {answer ? (
+        <Button asChild className={cn(ACTION_BUTTON, className)}>
+          <Link
+            href={STORE_ROUTES.account.quotes.detail(answer.id)}
+            aria-label={`Xem báo giá ${design.name}`}
+          >
+            Xem báo giá
+          </Link>
+        </Button>
+      ) : null}
       <Button
         type="button"
-        variant={current ? "outline" : "default"}
+        variant={current || answer ? "outline" : "default"}
         className={cn(ACTION_BUTTON, className)}
         aria-label={`${label} ${design.name}`}
         onClick={() => setOpen(true)}

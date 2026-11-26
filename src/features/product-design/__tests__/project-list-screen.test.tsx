@@ -77,7 +77,7 @@ describe("ProjectListScreen", () => {
     const item = within(within(list).getByRole("listitem"));
     expect(item.getByRole("heading", { name: "Dự án 1" })).toBeInTheDocument();
     expect(item.getByText("Bộ ly")).toBeInTheDocument();
-    expect(item.getByText("0/20 bản")).toBeInTheDocument();
+    expect(item.getByText("0 bản thiết kế (tối đa 20)")).toBeInTheDocument();
     expect(item.getByText("Đang dùng")).toBeInTheDocument();
     expect(item.getByText(/^Tạo lúc \d/)).toBeInTheDocument();
     const id = (created as { data: { id: string } }).data.id;

@@ -1,4 +1,5 @@
 import { formatDateTime } from "@/lib/format";
+import { variantLabel } from "@/lib/catalog/variant-label";
 
 import type { CustomizationTemplate } from "./engine/template/schema";
 import { isReturned } from "./lifecycle";
@@ -45,9 +46,16 @@ export type DesignCardView = {
 
 /** What a design card shows (spec §6.3). */
 export function designCardView(design: Design): DesignCardView {
+  const variant = variantLabel(
+    { sku: design.variant.sku, name: design.variant.label },
+    design.product.title,
+  );
+  // A design still named after its product ("Ly giấy 12oz · …") says the product in its title: the line under it only
+  // adds the variant, instead of repeating the product a second time.
+  const named = design.name.toLowerCase().includes(design.product.title.toLowerCase());
   return {
     title: design.name,
-    subtitle: `${design.product.title} · ${design.variant.label}`,
+    subtitle: named ? `Quy cách: ${variant}` : `${design.product.title} · ${variant}`,
     updatedLabel: readableDateTime(design.updatedAt),
     status: design.status,
     returnReason: isReturned(design) ? (design.lastReturn?.reason ?? null) : null,
