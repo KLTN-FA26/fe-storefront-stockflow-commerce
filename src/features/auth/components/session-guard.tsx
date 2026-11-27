@@ -3,13 +3,17 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
+import { APP_ROUTES } from "@/constants";
 import { loginUrl } from "@/lib/auth/safe-next";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 
 import type { ReactNode } from "react";
 
-/** Pages a visitor sees without signing in: the home page only (the catalog, prices and stock are for customers). */
-const PUBLIC_PATHS: ReadonlySet<string> = new Set(["/"]);
+/**
+ * Pages a visitor sees without signing in: the home page, and the request for a business account (a business that is
+ * not a customer has no login). The catalog, prices and stock are for customers.
+ */
+const PUBLIC_PATHS: ReadonlySet<string> = new Set([APP_ROUTES.home, APP_ROUTES.openAccount]);
 
 /**
  * The gate in front of every customer page: a visitor who is not signed in is sent to `/login?next=<this page>` (the
