@@ -51,7 +51,7 @@ function LineItem({ line, markUnsellable }: { line: QuoteLine; markUnsellable: b
       {markUnsellable && isUnsellable(line.purchasability) ? <UnsellableTag /> : null}
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Fact label="Số lượng">{cartonsText(shown.cartons, shown.units)}</Fact>
-        <Fact label="MOQ">{moq == null ? "—" : `${formatNumber(moq)} thùng`}</Fact>
+        <Fact label="Số thùng tối thiểu">{moq == null ? "—" : `${formatNumber(moq)} thùng`}</Fact>
         <Fact label="Đơn giá / cái">{money(shown.unitPrice)}</Fact>
         <Fact label="Thành tiền">{money(shown.lineTotal)}</Fact>
         <Fact
