@@ -45,7 +45,7 @@ describe("ProductDetailScreen — no price, no cart (kltn-docs 13 BR-04, 14 BR-0
     renderWithProviders(<ProductDetailScreen slug="ly-giay-2-lop-8oz" />);
     expect(await ready("Ly giấy 2 lớp 8oz")).toHaveAttribute("href", "/chat");
     expect(await screen.findByText("Còn hàng")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "CUP-PAPER-8OZ-KRAFT" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Kraft" })).toBeInTheDocument();
     expect(screen.getByText(/Giá không hiển thị trên sàn/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Thêm vào giỏ/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Số lượng" })).not.toBeInTheDocument();
@@ -57,7 +57,7 @@ describe("ProductDetailScreen — no price, no cart (kltn-docs 13 BR-04, 14 BR-0
     renderWithProviders(<ProductDetailScreen slug="ly-giay-2-lop-8oz" />);
     await ready("Ly giấy 2 lớp 8oz");
     expect(await screen.findByText("Còn hàng")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "CUP-PAPER-8OZ-KRAFT" }));
+    await userEvent.click(screen.getByRole("button", { name: "Kraft" }));
     expect(await screen.findByText("Sắp hết")).toBeInTheDocument();
   });
 
@@ -113,18 +113,51 @@ describe("ProductDetailScreen — no price, no cart (kltn-docs 13 BR-04, 14 BR-0
     );
   });
 
-  it("renders the BE description as text, never as HTML", async () => {
+  it("renders the BE description as cleaned HTML: formatting kept, script and handlers dropped", async () => {
     const real = vi.mocked(api.get).getMockImplementation()!;
     vi.mocked(api.get).mockImplementation(async (url, config) => {
-      const result = (await real(url, config)) as { data: { description?: string } };
+      const result = (await real(url, config)) as {
+        data: { description?: string; variants?: Array<Record<string, unknown>> };
+      };
       if (url === "/catalog/products/ly-giay-2-lop-8oz") {
-        return { data: { ...result.data, description: "<img src=x onerror=alert(1)>Ly" } };
+        const hostile =
+          '<p onclick="alert(1)">Ly <strong>bền</strong></p><script>alert(2)</script>' +
+          '<img src="javascript:alert(3)" onerror="alert(4)"><a href="javascript:alert(5)">xem</a>';
+        return {
+          data: {
+            ...result.data,
+            description: hostile,
+            variants: result.data.variants?.map(
+              ({ descriptionHtml: _d, ownDescription: _o, ...v }) => v,
+            ),
+          },
+        };
       }
       return result;
     });
     const { container } = renderWithProviders(<ProductDetailScreen slug="ly-giay-2-lop-8oz" />);
-    expect(await screen.findByText(/<img src=x/)).toBeInTheDocument();
-    expect(container.querySelector("img[src='x']")).toBeNull();
+    expect(await screen.findByText("bền")).toBeInTheDocument();
+    expect(screen.getByText("bền").tagName).toBe("STRONG");
+    expect(container.querySelector("script")).toBeNull();
+    expect(container.querySelector("[onclick], [onerror]")).toBeNull();
+    expect(container.querySelector("img[src^='javascript']")).toBeNull();
+    expect(container.querySelector("a[href^='javascript']")).toBeNull();
+  });
+
+  it("shows brand, category and descriptive attributes, and the chosen variant's own description", async () => {
+    renderWithProviders(<ProductDetailScreen slug="ly-giay-2-lop-8oz" />);
+    await ready("Ly giấy 2 lớp 8oz");
+    expect(screen.getAllByText("StockFlow Pack").length).toBeGreaterThan(0);
+    const facts = screen.getByRole("region", { name: "Thông số sản phẩm" });
+    expect(facts).toHaveTextContent("Ly giấy");
+    expect(facts).toHaveTextContent("Chất liệu");
+    expect(facts).toHaveTextContent("Giấy");
+    expect(facts).toHaveTextContent("2 lớp");
+    // The white cup has no description of its own: the product's shows.
+    expect(screen.getByText("hai lớp").tagName).toBe("STRONG");
+    await userEvent.click(screen.getByRole("button", { name: "Kraft" }));
+    expect(await screen.findByText("kraft")).toBeInTheDocument();
+    expect(screen.queryByText("hai lớp")).not.toBeInTheDocument();
   });
 
   it("says a product the BE refuses to show (409 PRICE_NOT_AVAILABLE) is not on sale yet, with Sales", async () => {
@@ -145,7 +178,7 @@ describe("ProductDetailScreen design entry (kltn-docs 12, 13 §4)", () => {
     );
     expect(await ready("Ly giấy 2 lớp 8oz")).toHaveAttribute("href", "/chat");
     expect(screen.getByText("design entry for CUP-PAPER-8OZ-WHT")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "CUP-PAPER-8OZ-KRAFT" }));
+    await userEvent.click(screen.getByRole("button", { name: "Kraft" }));
     expect(screen.getByText("design entry for CUP-PAPER-8OZ-KRAFT")).toBeInTheDocument();
     // A design is quoted from the approved design (13 §4 step 1), never put in a basket.
     expect(screen.getByText(/gửi yêu cầu báo giá/)).toBeInTheDocument();

@@ -72,6 +72,40 @@ describe("catalogue schemas follow the BE DTOs", () => {
     expect(parsed.variants).toHaveLength(2);
   });
 
+  it("reads brand, category, attributes and each variant's name, options and description (BE #493)", () => {
+    const parsed = catalogProductDtoSchema.parse({
+      ...beProduct,
+      description: "<p>Ly <strong>bền</strong></p>",
+      brand: { id: "7c1f0a00-0000-4000-8000-000000000901", name: "StockFlow Pack", slug: "sfp" },
+      category: { id: "7c1f0a00-0000-4000-8000-000000000902", name: "Ly giấy" },
+      attributes: [
+        { code: "MATERIAL", name: "Chất liệu", dataType: "SELECT", values: ["Giấy"] },
+        { code: "VOL", name: "Dung tích", dataType: "NUMBER", number: 240, unit: "ml" },
+      ],
+      variants: [
+        {
+          ...beProduct.variants[0],
+          variantId: "7c1f0a00-0000-4000-8000-000000000903",
+          name: "Ly 8oz trắng",
+          descriptionHtml: "<p>Trắng</p>",
+          ownDescription: true,
+          options: [{ axisCode: "COLOR", axisName: "Màu", valueCode: "WHITE", label: "Trắng" }],
+        },
+      ],
+    });
+    expect(parsed.brand?.name).toBe("StockFlow Pack");
+    expect(parsed.category?.slug).toBeUndefined();
+    expect(parsed.attributes?.[1]).toMatchObject({ number: 240, unit: "ml" });
+    expect(parsed.variants[0]).toMatchObject({ name: "Ly 8oz trắng", ownDescription: true });
+    expect(parsed.variants[0]?.options?.[0]?.label).toBe("Trắng");
+  });
+
+  it("parses a BE that sends none of the BE #493 fields", () => {
+    const parsed = catalogProductDtoSchema.parse(beProduct);
+    expect(parsed.brand ?? parsed.category ?? parsed.attributes).toBeFalsy();
+    expect(parsed.variants[0]?.options).toBeFalsy();
+  });
+
   it("reads the proposed `kind` on a product and a card, and parses a BE that sends none", () => {
     expect(catalogProductDtoSchema.parse({ ...beProduct, kind: "CUSTOMIZABLE" }).kind).toBe(
       "CUSTOMIZABLE",
