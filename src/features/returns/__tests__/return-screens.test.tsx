@@ -275,7 +275,7 @@ describe("ReturnDetailScreen (kltn-docs 17 §4.10)", () => {
   it.each([
     ["SEND_BACK", /kho sẽ gửi trả hàng bạn đã gửi về, phí vận chuyển do bạn chịu/],
     ["DESTROY_ON_BEHALF", /đồng ý để công ty huỷ hộ/],
-    ["SOMETHING_NEW", /Sales đã ghi lựa chọn của bạn/],
+    ["SOMETHING_NEW", /Sale đã ghi lựa chọn của bạn/],
   ])("shows the recorded custody choice %s", async (custodyChoice, text) => {
     vi.spyOn(api, "get").mockResolvedValue({
       data: beReturn({
@@ -296,7 +296,7 @@ describe("ReturnDetailScreen (kltn-docs 17 §4.10)", () => {
       "[role=status]",
     )!;
     expect(status).toHaveTextContent(text);
-    expect(status).not.toHaveTextContent(/Sales sẽ liên hệ để thống nhất/);
+    expect(status).not.toHaveTextContent(/Sale sẽ liên hệ để thống nhất/);
   });
 
   it("reads a return closed at 0 by an older BE (no outcome) as not refunded", async () => {

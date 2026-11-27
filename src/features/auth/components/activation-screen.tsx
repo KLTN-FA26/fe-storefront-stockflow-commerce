@@ -61,7 +61,7 @@ export function ActivationScreen() {
     return (
       <Panel
         title="Link kích hoạt không dùng được"
-        body="Link không hợp lệ, đã hết hạn (sau 72 giờ) hoặc đã được dùng. Vui lòng liên hệ Sales của StockFlow để được gửi link mới."
+        body="Link không hợp lệ, đã hết hạn (sau 72 giờ) hoặc đã được dùng. Vui lòng liên hệ Sale của StockFlow để được gửi link mới."
       >
         <LoginButton label="Về trang đăng nhập" />
       </Panel>
@@ -82,7 +82,7 @@ export function ActivationScreen() {
   return (
     <Panel
       title="Kích hoạt tài khoản"
-      body="Đặt mật khẩu cho tài khoản StockFlow mà Sales đã tạo cho doanh nghiệp của bạn. Sau đó bạn đăng nhập bằng email nhận được lời mời."
+      body="Đặt mật khẩu cho tài khoản StockFlow mà Sale đã tạo cho doanh nghiệp của bạn. Sau đó bạn đăng nhập bằng email nhận được lời mời."
     >
       <ActivationForm token={token} onActivated={onActivated} onInvalidLink={() => setOutcome("invalid")} />
     </Panel>

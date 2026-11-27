@@ -271,7 +271,7 @@ describe("thread header (SF-UX-22, -26, -27)", () => {
 });
 
 describe("SF-UX-24: the signed copy sent in the thread", () => {
-  it("the SENT contract card says when the copy was sent and that Sales must confirm it", async () => {
+  it("the SENT contract card says when the copy was sent and that Sale must confirm it", async () => {
     const contract = cardMessageJson(
       "CONTRACT",
       { contractId: CONTRACT_ID, number: "HD-1", orderId: ORDER_ID, status: "SENT" },

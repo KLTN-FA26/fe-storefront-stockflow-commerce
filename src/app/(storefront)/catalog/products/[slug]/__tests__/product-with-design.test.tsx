@@ -23,7 +23,7 @@ afterEach(() => {
 
 /** The product page as the route composes it: the catalog screen with the design feature's entry. */
 describe("the product page of a customizable product", () => {
-  it("offers 'Thiết kế' for a variant with a print configuration, beside the Sales chat", async () => {
+  it("offers 'Thiết kế' for a variant with a print configuration, beside the Sale chat", async () => {
     await designBackend();
     renderWithProviders(<ProductWithDesign slug={CUP} />);
 
@@ -34,7 +34,7 @@ describe("the product page of a customizable product", () => {
     expect(screen.getAllByRole("link", { name: "Chat với Sale" })).toHaveLength(1);
   });
 
-  it("offers the Sales chat once for a variant without one, and says why it takes no design", async () => {
+  it("offers the Sale chat once for a variant without one, and says why it takes no design", async () => {
     await designBackend({
       printConfigFor: (slug, sku) => (sku === CUP_SKU ? null : printConfigFor(slug, sku)),
     });

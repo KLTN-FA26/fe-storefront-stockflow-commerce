@@ -73,7 +73,7 @@ export function CreditCard() {
         <div role="status">
           <Alert tone="warning" title="Hạn mức công nợ của bạn là 0 ₫.">
             Hợp đồng có đợt thanh toán sau giao hàng sẽ chờ kế toán duyệt công nợ khi ký. Vui lòng
-            liên hệ Sales nếu cần thêm hạn mức.
+            liên hệ Sale nếu cần thêm hạn mức.
           </Alert>
         </div>
       ) : null}
@@ -95,7 +95,7 @@ export function CreditCard() {
                 }. `
               : ""}
             Hợp đồng mới sẽ chờ kế toán duyệt cho đến khi khoản quá hạn được thanh toán. Vui lòng
-            liên hệ Sales nếu cần hỗ trợ.
+            liên hệ Sale nếu cần hỗ trợ.
           </Alert>
         </div>
       ) : null}

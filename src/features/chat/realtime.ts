@@ -80,7 +80,7 @@ export function applyConversationEvent(client: QueryClient, raw: unknown): strin
       refresh(client, chatKeys.lists());
       return type;
     default:
-      return "ignored"; // typing, Sales' read markers: nothing the customer is shown
+      return "ignored"; // typing, Sale's read markers: nothing the customer is shown
   }
 }
 

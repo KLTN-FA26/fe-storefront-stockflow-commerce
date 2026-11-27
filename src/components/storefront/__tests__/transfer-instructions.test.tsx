@@ -102,7 +102,7 @@ describe("InstallmentTransferSection", () => {
     );
   });
 
-  it("tells the customer to ask Sales when the shop has no account set up (503)", async () => {
+  it("tells the customer to ask Sale when the shop has no account set up (503)", async () => {
     vi.spyOn(api, "get").mockRejectedValue(
       new ApiError(503, "TRANSFER_INSTRUCTIONS_UNAVAILABLE", "unavailable"),
     );

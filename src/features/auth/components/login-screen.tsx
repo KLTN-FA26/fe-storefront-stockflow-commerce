@@ -133,8 +133,8 @@ export function LoginScreen() {
         <p className="flex gap-2">
           <ShieldCheck aria-hidden className="text-positive mt-0.5 size-4 shrink-0" />
           <span>
-            Chưa có tài khoản hoặc quên mật khẩu? Tài khoản khách hàng do Sales cấp, vui lòng liên
-            hệ Sales của StockFlow để được hỗ trợ.
+            Chưa có tài khoản hoặc quên mật khẩu? Tài khoản khách hàng do Sale cấp, vui lòng liên
+            hệ Sale của StockFlow để được hỗ trợ.
           </span>
         </p>
       </div>

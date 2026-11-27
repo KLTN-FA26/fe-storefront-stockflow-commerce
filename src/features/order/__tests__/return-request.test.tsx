@@ -255,7 +255,7 @@ describe("ReturnRequestScreen — an order delivered in several shipments (WF-05
     expect(screen.queryByRole("radio", { name: /Lần giao/ })).toBeNull();
   });
 
-  it("sends the customer to Sales when the deliveries carry no id", async () => {
+  it("sends the customer to Sale when the deliveries carry no id", async () => {
     backend({ ...delivered(), shipments: [shipment(null, 1, 2), shipment(null, 2, 1)] });
     renderWithProviders(<ReturnRequestScreen orderId={orderId} />);
     expect(await screen.findByText(/Vui lòng liên hệ Sale/)).toBeInTheDocument();

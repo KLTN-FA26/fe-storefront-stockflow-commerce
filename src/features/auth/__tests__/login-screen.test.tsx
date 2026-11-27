@@ -141,9 +141,9 @@ describe("LoginScreen", () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/account/orders"));
   });
 
-  it("does not invent account recovery: no reset link, only Sales", () => {
+  it("does not invent account recovery: no reset link, only Sale", () => {
     renderWithProviders(<LoginScreen />);
     expect(screen.queryByRole("link", { name: /quên mật khẩu/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/do Sales cấp/)).toBeInTheDocument();
+    expect(screen.getByText(/do Sale cấp/)).toBeInTheDocument();
   });
 });

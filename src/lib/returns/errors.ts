@@ -9,12 +9,12 @@ const RETURN_MESSAGES: Record<string, string> = {
   RETURN_ORDER_NOT_DELIVERED: "Đơn chưa giao xong nên chưa thể yêu cầu trả hàng.",
   // Since WF-05 Q-15 the BE sends this only for a closed order; an older BE also for one settled by a return.
   RETURN_ORDER_NOT_RETURNABLE:
-    "Đơn này đã đóng hoặc đã được tất toán nên không nhận thêm yêu cầu trả hàng qua cổng. Hãy chat với Sales nếu bạn cần trả thêm.",
+    "Đơn này đã đóng hoặc đã được tất toán nên không nhận thêm yêu cầu trả hàng qua cổng. Hãy chat với Sale nếu bạn cần trả thêm.",
   // WF-05 Q-15: the delivery chosen was already settled by a return (a refund was made on it).
   RETURN_SHIPMENT_NOT_RETURNABLE:
-    "Hàng của lần giao này đã được xử lý trả hàng và hoàn tiền nên không mở thêm yêu cầu được. Hãy chọn lần giao khác, hoặc chat với Sales nếu bạn cần hỗ trợ.",
+    "Hàng của lần giao này đã được xử lý trả hàng và hoàn tiền nên không mở thêm yêu cầu được. Hãy chọn lần giao khác, hoặc chat với Sale nếu bạn cần hỗ trợ.",
   RETURN_WINDOW_CLOSED:
-    "Đã quá hạn đổi / trả kể từ ngày giao của lần giao này. Hãy chat với Sales nếu hàng có lỗi phát hiện muộn.",
+    "Đã quá hạn đổi / trả kể từ ngày giao của lần giao này. Hãy chat với Sale nếu hàng có lỗi phát hiện muộn.",
   // WF-05 TH-1: đơn giao nhiều lần — mỗi yêu cầu trả hàng gắn với một lần giao đã đến.
   RETURN_SHIPMENT_REQUIRED:
     "Đơn này được giao làm nhiều lần — hãy chọn lần giao có hàng muốn trả. Không thấy lần giao đó? Vui lòng liên hệ Sale.",
@@ -22,9 +22,9 @@ const RETURN_MESSAGES: Record<string, string> = {
     "Lần giao bạn chọn chưa giao thành công nên chưa thể trả hàng của lần giao đó. Hãy chọn lần giao đã nhận hàng.",
   // WF-05 BE-23: a parcel of it is being counted at the warehouse; that is goods back already.
   RETURN_RECEIPT_DRAFT_OPEN:
-    "Kho đang kiểm đếm một kiện hàng trả của yêu cầu này nên chưa rút được yêu cầu. Hãy đợi kho xác nhận, hoặc chat với Sales nếu bạn cần hỗ trợ.",
+    "Kho đang kiểm đếm một kiện hàng trả của yêu cầu này nên chưa rút được yêu cầu. Hãy đợi kho xác nhận, hoặc chat với Sale nếu bạn cần hỗ trợ.",
   RETURN_GOODS_PARTLY_RECEIVED:
-    "Kho đã nhận một phần hàng trả về nên không thể rút yêu cầu nữa. Sales sẽ hoàn tiền theo số hàng đã nhận — hãy chat với Sales nếu cần.",
+    "Kho đã nhận một phần hàng trả về nên không thể rút yêu cầu nữa. Sale sẽ hoàn tiền theo số hàng đã nhận — hãy chat với Sale nếu cần.",
   RETURN_LINE_ALREADY_OPEN:
     "Một sản phẩm bạn chọn đang có yêu cầu trả hàng khác chưa xong. Hãy theo dõi yêu cầu đó.",
   RETURN_QUANTITY_EXCEEDED: "Số lượng trả vượt quá số đã giao còn lại của sản phẩm.",
@@ -32,9 +32,9 @@ const RETURN_MESSAGES: Record<string, string> = {
   RETURN_CUSTOM_ITEM_NOT_DEFECTIVE:
     "Hàng in theo thiết kế của bạn chỉ được trả khi có lỗi (lỗi in, sai mẫu, hỏng khi vận chuyển, giao sai).",
   RETURN_REASON_NOT_ACCEPTED:
-    "Lý do này không được nhận trả hàng. Hãy chọn lý do khác hoặc chat với Sales.",
+    "Lý do này không được nhận trả hàng. Hãy chọn lý do khác hoặc chat với Sale.",
   RETURN_CUSTOMER_NOT_ACTIVE:
-    "Tài khoản của bạn chưa ở trạng thái hoạt động. Hãy chat với Sales để được mở yêu cầu trả hàng.",
+    "Tài khoản của bạn chưa ở trạng thái hoạt động. Hãy chat với Sale để được mở yêu cầu trả hàng.",
   RETURN_INVALID_TRANSITION:
     "Yêu cầu trả hàng vừa chuyển sang bước khác nên không thực hiện được. Trang đã được cập nhật.",
   RETURN_EVIDENCE_LIMIT_REACHED: "Yêu cầu đã có đủ số ảnh tối đa.",
