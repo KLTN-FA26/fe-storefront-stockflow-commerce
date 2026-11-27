@@ -140,4 +140,22 @@ describe("CONVERTED hint", () => {
     expect(quoteListHint("CONVERTED", {})).toMatch(/Sale đang lập hợp đồng/);
     expect(quoteListHint("SENT")).toBe(QUOTE_STATUS_META.SENT.hint);
   });
+
+  it("a list row follows the order's real status when the BE sends it (BE PR #497)", () => {
+    const row = { convertedOrderNumber: "SO-20260910-900001" };
+    expect(quoteListHint("CONVERTED", { ...row, convertedOrderStatus: "PENDING_CONTRACT" })).toBe(
+      "Đơn SO-20260910-900001 đang ở trạng thái “Chờ ký hợp đồng”.",
+    );
+    expect(quoteListHint("CONVERTED", { ...row, convertedOrderStatus: "SHIPPED" })).toMatch(
+      /“Đang giao hàng”/,
+    );
+    // A status newer than this FE still reads as an order under way.
+    expect(quoteListHint("CONVERTED", { ...row, convertedOrderStatus: "NEW_ONE" })).toMatch(
+      /“Đang xử lý”/,
+    );
+    // Null (older BE): where to follow the order, as before.
+    expect(quoteListHint("CONVERTED", { ...row, convertedOrderStatus: null })).toMatch(
+      /^Đã tạo đơn SO-20260910-900001; theo dõi/,
+    );
+  });
 });

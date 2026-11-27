@@ -111,12 +111,18 @@ describe("OrdersScreen", () => {
     expect(screen.getByRole("button", { name: "Trang trước" })).toBeDisabled();
   });
 
-  it("shows each card's line count and says what happens next", async () => {
+  it("shows each card's first item and how many more, and says what happens next", async () => {
     renderWithProviders(<OrdersScreen />);
     const pending = seeded("PENDING_PAYMENT");
     const card = (await screen.findByText(pending.orderNumber)).closest("article")!;
 
-    expect(within(card).getByText(`${pending.lines.length} mặt hàng`)).toBeInTheDocument();
+    // The mock sends the first line's SKU as firstItemName, as the BE does for a line with no design.
+    const [first, ...others] = pending.lines;
+    expect(
+      within(card).getByText(
+        others.length > 0 ? `${first!.sku} và ${others.length} sản phẩm khác` : first!.sku,
+      ),
+    ).toBeInTheDocument();
     expect(
       within(card).getByText(
         "Hệ thống tự xác nhận khoản chuyển vài giây sau khi tiền về, rồi đơn được xử lý tiếp.",

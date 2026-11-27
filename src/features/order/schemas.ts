@@ -178,6 +178,9 @@ export const orderCardDtoSchema = z.object({
   placedAt: instantSchema,
   lineCount: z.number().int().nonnegative(),
   deliveryState: deliveryStateSchema.nullish(),
+  // BE PR #497, optional until it ships: the first line's design name, else its SKU; null for an
+  // order with no line.
+  firstItemName: z.string().nullish(),
 });
 
 export const orderLineDtoSchema = z.object({

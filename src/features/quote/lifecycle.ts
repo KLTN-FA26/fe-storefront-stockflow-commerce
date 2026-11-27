@@ -144,15 +144,17 @@ export function quoteStatusHint(
 
 /**
  * The hint on a list row. The row names the order only once its contract was sent
- * (`convertedOrderNumber`, BE QuoteRowResponse), not its status: it says where to follow the order
- * instead of promising a contract that may long be signed (UI/UX 27/11, sf-04).
+ * (`convertedOrderNumber`, BE QuoteRowResponse). With the order's status (`convertedOrderStatus`,
+ * BE PR #497) it says where the order stands, as the quote page does; without it, where to follow
+ * the order instead of promising a contract that may long be signed (UI/UX 27/11, sf-04).
  */
 export function quoteListHint(
   status: QuoteStatus,
-  row?: Pick<QuoteRow, "convertedOrderNumber">,
+  row?: Pick<QuoteRow, "convertedOrderNumber" | "convertedOrderStatus">,
 ): string {
   if (status !== "CONVERTED") return QUOTE_STATUS_META[status].hint;
-  return row?.convertedOrderNumber
-    ? `Đã tạo đơn ${row.convertedOrderNumber}; theo dõi hợp đồng, thanh toán và giao hàng ở trang đơn.`
-    : CONTRACT_BEING_DRAWN;
+  if (!row?.convertedOrderNumber) return CONTRACT_BEING_DRAWN;
+  return row.convertedOrderStatus
+    ? `Đơn ${row.convertedOrderNumber} đang ở trạng thái “${convertedOrderStatusLabel(row.convertedOrderStatus)}”.`
+    : `Đã tạo đơn ${row.convertedOrderNumber}; theo dõi hợp đồng, thanh toán và giao hàng ở trang đơn.`;
 }
