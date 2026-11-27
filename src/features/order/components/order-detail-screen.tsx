@@ -15,6 +15,7 @@ import { returnEligibility } from "@/lib/returns";
 import { useMyOrderContract, useReturnWindowDays } from "../contract-queries";
 import { describeCancelError, isNotFound } from "../errors";
 import { displayGroup, isOrderTerminal, orderProgress } from "../lifecycle";
+import { useLivePayment } from "../live-payment";
 import { useCancelMyOrder } from "../mutations";
 import { useKnownCancellationRequest, useOrder } from "../queries";
 import { isValidOrderId } from "../schemas";
@@ -73,6 +74,14 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
   const mayCancel = useHasPermission("sales-orders:UPDATE");
   const mayReturn = useHasPermission(RETURN_CREATE_PERMISSION);
   const returnWindow = useReturnWindowDays(orderId);
+  // A transfer just made is recorded by the bank feed in seconds: while money is due, the page asks
+  // again so the order moves on without a reload, and says when the money arrived.
+  useLivePayment(
+    orderId,
+    isValidOrderId(orderId) &&
+      (nextPayable(installments.data) !== null || order?.status === "PENDING_PAYMENT"),
+    installments.data?.installments,
+  );
 
   // Not a UUID: the BE would answer 400 UNSUPPORTED_PARAMETER, and to the customer it is simply an
   // order that does not exist. The query is disabled for it, so nothing is sent.
