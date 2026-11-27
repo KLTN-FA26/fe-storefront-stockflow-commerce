@@ -32,7 +32,6 @@ function ProductSkeleton() {
   );
 }
 
-
 export function ProductDetailScreen({
   slug,
   renderDesignEntry,
@@ -132,7 +131,7 @@ export function ProductDetailScreen({
     <PageShell>
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-10">
         <div className="lg:sticky lg:top-[var(--sticky-top)] lg:self-start">
-          <ImageGallery key={sku} images={images} />
+          <ImageGallery key={sku} images={images} productName={data.title} />
         </div>
         <div className="min-w-0 space-y-5">
           <div className="space-y-3">

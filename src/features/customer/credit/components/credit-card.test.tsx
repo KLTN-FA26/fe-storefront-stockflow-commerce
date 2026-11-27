@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error";
+import { beInstallment } from "@/lib/installments/__tests__/fixtures";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { CreditRequestSection } from "../../credit-request";
@@ -53,9 +54,13 @@ describe("CreditCard (account page, SFCREDIT; kltn-docs 15 §4.3)", () => {
 
     expect(await screen.findByRole("heading", { name: "Công nợ" })).toBeInTheDocument();
     const value = (label: string) => screen.getByText(label).nextElementSibling;
-    expect(value("Hạn mức")).toHaveTextContent(/50\.000\.000/);
-    expect(value("Dư nợ")).toHaveTextContent(/12\.000\.000/);
-    expect(value("Còn lại")).toHaveTextContent(/38\.000\.000/);
+    expect(value("Dư nợ trả sau giao hàng")).toHaveTextContent(/12\.000\.000/);
+    // The limit and what is left of it, under the owed figure.
+    expect(value("Dư nợ trả sau giao hàng")?.nextElementSibling).toHaveTextContent(
+      /Hạn mức 50\.000\.000.*còn dùng được 38\.000\.000/,
+    );
+    expect(value("Quá hạn")).toHaveTextContent(/^0/);
+    expect(screen.getByText("Không có khoản quá hạn")).toBeInTheDocument();
     expect(screen.getByText(/Kỳ hạn thanh toán/)).toHaveTextContent("30 ngày");
     expect(screen.getByRole("img", { name: "Đã dùng 24% hạn mức" })).toBeInTheDocument();
     expect(screen.queryByText("Bạn có khoản công nợ quá hạn.")).not.toBeInTheDocument();
@@ -78,6 +83,66 @@ describe("CreditCard (account page, SFCREDIT; kltn-docs 15 §4.3)", () => {
     expect(await screen.findByText("Bạn có khoản công nợ quá hạn.")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(/Còn 400\.000.*quá hạn/);
     expect(screen.getByRole("alert")).toHaveTextContent(/2026|01\/10|1 thg 10/);
+    // No internal step (who approves) is told to the customer, and the way to pay is one tap away.
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/kế toán/);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Hợp đồng mới sẽ được gửi sau khi khoản quá hạn được thanh toán.",
+    );
+    expect(screen.getByRole("link", { name: "Thanh toán ngay" })).toHaveAttribute(
+      "href",
+      "/account/payments",
+    );
+    expect(screen.getByText("Quá hạn").nextElementSibling).toHaveTextContent(/400\.000/);
+  });
+
+  it("shows what is due now, on-signing installments included, next to an exposure of 0 (sf-03)", async () => {
+    vi.spyOn(api, "get").mockImplementation(async (url: string) => {
+      if (url === "/credit-requests/mine") return { data: EMPTY_PAGE };
+      if (url === "/identity/me/permissions") {
+        return {
+          data: {
+            roles: ["CUSTOMER"],
+            permissions: ["payment-installments:READ"],
+            dataScope: "OWN",
+          },
+        };
+      }
+      if (url === "/installments/me") {
+        const items = [
+          beInstallment({
+            seq: 1,
+            name: "Đặt cọc",
+            milestone: "ON_SIGNING",
+            status: "DUE",
+            overdue: true,
+            paidAmount: 0,
+            outstanding: 7_048_620,
+            dueDate: "2026-11-17",
+          }),
+        ];
+        return { data: { ...EMPTY_PAGE, size: 200, items, totalElements: 1, totalPages: 1 } };
+      }
+      return {
+        data: position({
+          exposure: 0,
+          availableCredit: 50_000_000,
+          hasOverdue: true,
+          overdueAmount: 7_048_620,
+          oldestOverdueDueDate: "2026-11-17",
+        }),
+      };
+    });
+    renderWithProviders(<CreditCard />);
+
+    const value = (label: string) => screen.getByText(label).nextElementSibling;
+    expect(await screen.findByText("Cần thanh toán ngay")).toBeInTheDocument();
+    expect(value("Cần thanh toán ngay")).toHaveTextContent(/7\.048\.620/);
+    expect(screen.getByText("1 đợt, gồm cả đợt thanh toán khi ký hợp đồng")).toBeInTheDocument();
+    expect(value("Dư nợ trả sau giao hàng")).toHaveTextContent(/^0/);
+    expect(value("Quá hạn")).toHaveTextContent(/7\.048\.620/);
+    expect(
+      screen.getByText(/không nằm trong dư nợ mà nằm trong Cần thanh toán ngay/),
+    ).toBeInTheDocument();
   });
 
   it("a customer with neither credit nor anything owed sees only the way to ask for credit (handoff A3)", async () => {
@@ -88,7 +153,7 @@ describe("CreditCard (account page, SFCREDIT; kltn-docs 15 §4.3)", () => {
     expect(
       await screen.findByRole("button", { name: "Gửi đề nghị cấp hạn mức" }),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Dư nợ")).not.toBeInTheDocument();
+    expect(screen.queryByText("Dư nợ trả sau giao hàng")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
@@ -97,9 +162,12 @@ describe("CreditCard (account page, SFCREDIT; kltn-docs 15 §4.3)", () => {
     answer({ ...rest, exposure: 250_000 });
     renderWithProviders(<CreditCard />);
 
-    expect(await screen.findByText("Dư nợ")).toBeInTheDocument();
-    expect(screen.getByText("Dư nợ").nextElementSibling).toHaveTextContent(/250\.000/);
-    expect(screen.queryByText("Hạn mức")).not.toBeInTheDocument();
+    expect(await screen.findByText("Dư nợ trả sau giao hàng")).toBeInTheDocument();
+    expect(screen.getByText("Dư nợ trả sau giao hàng").nextElementSibling).toHaveTextContent(
+      /250\.000/,
+    );
+    expect(screen.getByText("Bạn chưa có hạn mức công nợ")).toBeInTheDocument();
+    expect(screen.queryByText(/còn dùng được/)).not.toBeInTheDocument();
     expect(screen.queryByText("Hạn mức công nợ của bạn là 0 ₫.")).not.toBeInTheDocument();
   });
 
@@ -109,6 +177,7 @@ describe("CreditCard (account page, SFCREDIT; kltn-docs 15 §4.3)", () => {
 
     expect(await screen.findByText("Hạn mức công nợ của bạn là 0 ₫.")).toBeInTheDocument();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).not.toHaveTextContent(/kế toán|Sale gửi/);
   });
 
   it("explains what the owed figure counts", async () => {

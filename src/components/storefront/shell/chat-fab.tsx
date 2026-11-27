@@ -20,8 +20,27 @@ interface ChatFabProps {
 }
 
 /**
- * Floating shortcut to sales chat, with the unread badge; hidden on chat pages, where it would
- * cover the composer.
+ * Pages that carry their own way to chat, where a floating button would be a third entry and cover
+ * content (UI/UX 27/11, sf-02, sf-04, sf-10, sf-12): the chat itself (it would cover the composer);
+ * the account area, whose rail and phone tab strip hold "Chat với Sale" (the pager's "Sau", the
+ * contract steps sat under the button); a design project, with its own "Chat với Sale" and a sticky
+ * bar at the bottom.
+ */
+export function hidesChatFab(pathname: string | null | undefined): boolean {
+  if (!pathname) return false;
+  const under = (root: string) => pathname === root || pathname.startsWith(`${root}/`);
+  return (
+    under(STORE_ROUTES.chat.list) ||
+    under(STORE_ROUTES.account.home) ||
+    under("/credit-requests") ||
+    // One project, not the list of projects.
+    pathname.startsWith(`${STORE_ROUTES.design.projects}/`)
+  );
+}
+
+/**
+ * Floating shortcut to sales chat, with the unread badge; hidden where the page has its own chat
+ * entry ({@link hidesChatFab}).
  *
  * On a phone the button sits over the right edge of the content (an order line's amount on a
  * 375px screen), so the page ends with as much room as the button takes (48px + its 20px offset,
@@ -30,7 +49,7 @@ interface ChatFabProps {
  */
 export function ChatFab({ spaceClassName }: ChatFabProps) {
   const pathname = usePathname();
-  if (pathname?.startsWith(STORE_ROUTES.chat.list)) return null;
+  if (hidesChatFab(pathname)) return null;
 
   return (
     <>

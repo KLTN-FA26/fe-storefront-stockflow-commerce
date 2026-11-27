@@ -6,7 +6,11 @@ import { Alert } from "@/components/shared";
 
 import type { FontRegistry } from "../engine";
 import type { useProjectDesigns } from "../queries";
-import { projectActions, type Gate, type ProjectActions } from "../project-rules";
+import { PERM } from "@/lib/auth/permission-codes";
+import { useHasPermission } from "@/lib/auth/my-permissions";
+
+import { projectActions, projectStage, type Gate, type ProjectActions } from "../project-rules";
+import { currentQuoteRequest, useProjectQuoteRequests } from "../quote-request-queries";
 import type { Design, DesignProject } from "../types";
 import { MockReviewPanel } from "./mock-review-panel";
 import { AddDesignsDialog } from "./add-designs-dialog";
@@ -19,6 +23,8 @@ import { ProjectDesigns } from "./project-designs";
 import { ProjectHeader } from "./project-header";
 import { ProjectLibrary } from "./project-library";
 import { ProjectQuoteSection } from "./project-quote-section";
+import { ProjectSteps } from "./project-steps";
+import { useCreateGate } from "./project-header";
 import { SubmitSetBar } from "./submit-set-bar";
 
 /** Until the designs are read nothing can be asked of the project: every gate is shut. */
@@ -43,7 +49,10 @@ export function ProjectBody({ project, designs, catalogue, loadFonts }: BodyProp
   const [viewing, setViewing] = useState<Design | null>(null);
   const [cloning, setCloning] = useState<Design | null>(null);
   const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
+  const [askingQuote, setAskingQuote] = useState(false);
   const open = project.status === "ACTIVE";
+  const quoteRequests = useProjectQuoteRequests(project.id);
+  const mayAskQuote = useHasPermission(PERM.designQuoteRequest) && open;
   const items = designs.data;
   const actions = items ? projectActions(project, items) : WAITING_ACTIONS;
   // A design that stopped being a draft (submitted elsewhere) drops out of the choice.
@@ -58,13 +67,19 @@ export function ProjectBody({ project, designs, catalogue, loadFonts }: BodyProp
       return next;
     });
 
-  const barShown = open && items !== undefined && items.some((d) => d.status === "DRAFT");
+  const createGate = useCreateGate(actions);
+  const stage = projectStage((items ?? []).filter((design) => design.status !== "ARCHIVED"));
+  // The selection bar comes with a selection: with nothing chosen it would only sit over the designs
+  // with a locked button (UI/UX 27/11, sf-12); the steps above say how to start one.
+  const barShown = open && chosenIds.length > 0;
 
   return (
     <div className="space-y-6">
       <ProjectHeader
         project={project}
         actions={actions}
+        createGate={createGate}
+        primaryCreate={stage === "design"}
         onCreate={() => setCreating(true)}
         onAdd={() => setAdding(true)}
       />
@@ -73,8 +88,23 @@ export function ProjectBody({ project, designs, catalogue, loadFonts }: BodyProp
           Các bản bên trong vẫn mở và dùng riêng lẻ được.
         </Alert>
       )}
+      {open && items ? (
+        <ProjectSteps
+          stage={stage}
+          designs={items}
+          createGate={createGate}
+          quoteRequest={currentQuoteRequest(quoteRequests.data)}
+          mayAskQuote={mayAskQuote}
+          onAskQuote={() => setAskingQuote(true)}
+        />
+      ) : null}
       <OpenRoundBanner round={project.openRound} designs={items} />
-      <ProjectQuoteSection project={project} designs={items} />
+      <ProjectQuoteSection
+        project={project}
+        designs={items}
+        asking={askingQuote}
+        onAskingChange={setAskingQuote}
+      />
       {items ? (
         <ProjectDesigns
           designs={items}

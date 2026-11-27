@@ -750,6 +750,9 @@ export function createMockOrderBook(
         currency: installment.currency,
         reference: installment.transferReference,
         ...(installment.dueDate ? { dueDate: installment.dueDate } : {}),
+        // R5-9: the BE draws up a VietQR for the transfer; a stand-in payload, so the mock shows the
+        // QR beside the account details as the real page does. Not a payable code.
+        vietQr: `MOCK-VIETQR|${MOCK_COMPANY_BANK.accountNumber}|${installment.outstanding}|${installment.transferReference ?? ""}`,
       });
     },
 

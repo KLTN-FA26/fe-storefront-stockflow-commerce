@@ -80,6 +80,10 @@ describe("ProjectListScreen", () => {
     expect(item.getByText("0/20 bản")).toBeInTheDocument();
     expect(item.getByText("Đang dùng")).toBeInTheDocument();
     expect(item.getByText(/^Tạo lúc \d/)).toBeInTheDocument();
+    // Whether a quote was asked for the project (UI/UX 27/11, sf-11).
+    expect(
+      await item.findByText("Chưa yêu cầu báo giá", undefined, FIRST_READ),
+    ).toBeInTheDocument();
     const id = (created as { data: { id: string } }).data.id;
     expect(item.getByRole("link", { name: "Mở dự án Dự án 1" })).toHaveAttribute(
       "href",

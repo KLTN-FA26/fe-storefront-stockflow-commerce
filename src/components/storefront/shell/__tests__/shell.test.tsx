@@ -161,8 +161,22 @@ describe("StorefrontShell", () => {
     expect(screen.getAllByRole("link", { name: "Chat với Sale" })).toHaveLength(2);
   });
 
+  it.each(["/account", "/account/quotes", "/account/orders/o1", "/design/projects/p1"])(
+    "hides the floating button on %s, which has its own chat entry (sf-04, sf-10, sf-12)",
+    (pathname) => {
+      navigation.pathname = pathname;
+      const { container } = render(
+        <StorefrontShell>
+          <p>Nội dung</p>
+        </StorefrontShell>,
+      );
+      expect(screen.getAllByRole("link", { name: "Chat với Sale" })).toHaveLength(2);
+      expect(container.querySelector("[data-chat-fab-space]")).toBeNull();
+    },
+  );
+
   it("keeps room under the page on a phone so the floating button covers no content", () => {
-    navigation.pathname = "/account/orders/o1";
+    navigation.pathname = "/catalog";
     const { container } = render(
       <StorefrontShell>
         <p>Nội dung</p>

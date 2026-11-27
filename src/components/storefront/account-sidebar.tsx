@@ -6,11 +6,12 @@ import { usePathname } from "next/navigation";
 import { MessageCircle } from "lucide-react";
 
 import { cn } from "@/lib/cn";
-import { STORE_ROUTES } from "@/constants";
+import { CHAT_WITH_SALES, STORE_ROUTES } from "@/constants";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { useAuthStore } from "@/lib/auth/auth-store";
 
 import { LogoutButton } from "@/features/auth/components/logout-button";
+import { ChatUnreadBadge } from "@/features/chat/components/chat-entry";
 
 import { accountNavItems, type AccountNavItem } from "./account-nav-items";
 
@@ -20,19 +21,29 @@ function isActive(pathname: string, item: AccountNavItem) {
     : pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
+/**
+ * How far to scroll a horizontal strip so `item` is wholly in view, keeping `edge` px of room: 0 when
+ * it already is, so the strip keeps starting at its first item.
+ */
+export function scrollToReveal(strip: HTMLElement, item: HTMLElement, edge = 16): number {
+  const view = strip.getBoundingClientRect();
+  const box = item.getBoundingClientRect();
+  if (box.left < view.left + edge) return box.left - view.left - edge;
+  if (box.right > view.right - edge) return box.right - view.right + edge;
+  return 0;
+}
+
 export function AccountSidebar() {
   const pathname = usePathname();
   const mobileNavRef = useRef<HTMLElement>(null);
 
-  // Keep the active pill visible when the mobile tab strip overflows.
+  // Keep the active pill visible when the mobile tab strip overflows, scrolling only as far as it
+  // takes: the strip starts at its first tab, and centring an active tab that is already in view
+  // cut the first one off at the left edge (UI/UX 27/11, sf-10).
   useEffect(() => {
     const nav = mobileNavRef.current;
     const active = nav?.querySelector<HTMLElement>('[aria-current="page"]');
-    if (nav && active) {
-      const navRect = nav.getBoundingClientRect();
-      const activeRect = active.getBoundingClientRect();
-      nav.scrollLeft += activeRect.left - navRect.left - (navRect.width - activeRect.width) / 2;
-    }
+    if (nav && active) nav.scrollLeft += scrollToReveal(nav, active);
   }, [pathname]);
 
   return (
@@ -65,6 +76,17 @@ export function AccountSidebar() {
               </li>
             );
           })}
+          {/* The floating chat button is hidden in the account area: chat is a tab here, as in the rail. */}
+          <li className="relative">
+            <Link
+              href={STORE_ROUTES.chat.list}
+              className="border-border-default bg-bg-surface text-ink-secondary hover:text-ink-primary focus-visible:ring-accent inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm font-medium whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:outline-none"
+            >
+              <MessageCircle className="size-4" aria-hidden="true" />
+              {CHAT_WITH_SALES}
+            </Link>
+            <ChatUnreadBadge />
+          </li>
           <li>
             <LogoutButton className="border-border-default bg-bg-surface text-ink-secondary rounded-full border px-4 text-sm whitespace-nowrap" />
           </li>
@@ -99,7 +121,10 @@ export function AccountSidebar() {
                       />
                     ) : null}
                     <Icon
-                      className={cn("size-4 shrink-0", active ? "text-accent" : "text-ink-tertiary")}
+                      className={cn(
+                        "size-4 shrink-0",
+                        active ? "text-accent" : "text-ink-tertiary",
+                      )}
                       aria-hidden="true"
                     />
                     <span className="min-w-0 flex-1 truncate">{item.label}</span>

@@ -80,7 +80,7 @@ afterEach(() => {
 });
 
 describe("order status hero — the next step (SF-UX-29)", () => {
-  it("offers the contract to download and points at the signing steps while it waits", async () => {
+  it("points at the signing steps while it waits, with one download button on the page (sf-07)", async () => {
     backend({
       order: { ...beOrder, status: "PENDING_CONTRACT", statusGroup: "AWAITING_CONTRACT" },
       contract: sentContract,
@@ -89,13 +89,14 @@ describe("order status hero — the next step (SF-UX-29)", () => {
 
     const hero = await screen.findByRole("region", { name: "Chờ ký hợp đồng" });
     expect(
-      await within(hero).findByRole("button", {
-        name: "Tải hợp đồng để ký HD-20260907-000431-1",
-      }),
-    ).toBeInTheDocument();
-    expect(
-      within(hero).getByRole("link", { name: "Xem 3 bước ký và gửi lại hợp đồng" }),
+      await within(hero).findByRole("link", { name: "Ký hợp đồng: xem 3 bước" }),
     ).toHaveAttribute("href", "#hop-dong");
+    expect(within(hero).queryByRole("button", { name: /^Tải hợp đồng/ })).not.toBeInTheDocument();
+    // The contract card's step 1 is the one way to download it.
+    expect(
+      await screen.findByRole("button", { name: "Tải hợp đồng HD-20260907-000431-1" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /^Tải hợp đồng/ })).toHaveLength(1);
     expect(within(hero).getByRole("listitem", { current: "step" })).toHaveTextContent("Hợp đồng");
   });
 
@@ -119,7 +120,7 @@ describe("order status hero — the next step (SF-UX-29)", () => {
     renderWithProviders(<OrderDetailScreen orderId={orderId} />);
 
     const hero = await screen.findByRole("region", { name: "Chờ thanh toán" });
-    expect(hero).toHaveTextContent("Đơn được xử lý sau khi kế toán ghi nhận khoản chuyển");
+    expect(hero).toHaveTextContent("Hệ thống tự xác nhận khoản chuyển vài giây sau khi tiền về");
     const pay = await within(hero).findByRole("button", {
       name: /^Thanh toán đợt 1: 152\.100\s₫ trước 26\/11$/,
     });

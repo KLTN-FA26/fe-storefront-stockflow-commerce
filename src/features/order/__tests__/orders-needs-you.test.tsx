@@ -61,10 +61,12 @@ describe("orders list — Cần xử lý (SF-UX-28)", () => {
     renderWithProviders(<OrdersScreen />, { onUrlUpdate });
 
     await screen.findByText(awaitingContract.orderNumber);
-    await user.click(screen.getByRole("button", { name: "Cần xử lý" }));
+    // The tab counts what waits on the customer: the order to sign, and the other order whose
+    // installment is overdue (UI/UX 27/11, sf-06).
+    await user.click(await screen.findByRole("button", { name: "Cần xử lý (2)" }));
 
     expect(
-      await screen.findByRole("button", { name: "Cần xử lý", pressed: true }),
+      await screen.findByRole("button", { name: "Cần xử lý (2)", pressed: true }),
     ).toBeInTheDocument();
     expect(get).toHaveBeenCalledWith(
       "/orders/me",
@@ -72,7 +74,7 @@ describe("orders list — Cần xử lý (SF-UX-28)", () => {
         params: { page: 0, size: 10, status: ["PENDING_CONTRACT", "PENDING_PAYMENT"] },
       }),
     );
-    expect(screen.getByRole("button", { name: "Cần xử lý" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: /^Cần xử lý/ })).toHaveAttribute(
       "aria-pressed",
       "true",
     );

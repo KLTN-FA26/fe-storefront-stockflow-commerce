@@ -5,6 +5,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
 import type { Gate, ProjectActions } from "../project-rules";
+
+const ACTION = "min-h-11 rounded-[var(--r-md)] px-4";
 import { PROJECT_DESIGN_LIMIT } from "../project-schemas";
 import type { DesignProject } from "../types";
 import { ChatAboutButton } from "./chat-about-button";
@@ -17,60 +19,47 @@ import { ProjectTitle } from "./project-title";
 type Props = {
   project: DesignProject;
   actions: ProjectActions;
+  /** `useCreateGate(actions)`: creating, the device included. */
+  createGate: Gate;
+  /** "Tạo bản mới" is the page's primary action while the project is at its design step. */
+  primaryCreate: boolean;
   onCreate: () => void;
   onAdd: () => void;
 };
 
-/** A button that stays visible when it is locked, with the reason written under it. */
-function GatedButton({
-  gate,
-  label,
-  reasonId,
-  onClick,
-  variant = "default",
-}: {
-  gate: Gate;
-  label: string;
-  reasonId: string;
-  onClick: () => void;
-  variant?: "default" | "outline";
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <Button
-        type="button"
-        variant={variant}
-        className="min-h-11 rounded-[var(--r-md)] px-4"
-        disabled={!gate.allowed}
-        aria-describedby={gate.allowed ? undefined : reasonId}
-        onClick={onClick}
-      >
-        {label}
-      </Button>
-      {gate.allowed ? null : (
-        <span id={reasonId} className="text-ink-secondary text-xs">
-          {gate.reason}
-        </span>
-      )}
-    </div>
-  );
+/**
+ * Creating a design in the project: the project's own gate, and a computer, since a new design
+ * opens the studio (SF-UX-8): a phone or tablet is told here, before the product dialog.
+ */
+export function useCreateGate(actions: ProjectActions): Gate {
+  const unsupported = useDeviceFit() === "unsupported";
+  return unsupported && actions.createDesign.allowed
+    ? { allowed: false, reason: DESIGN_NEEDS_COMPUTER }
+    : actions.createDesign;
 }
+
+/** The reasons of the actions not offered now, once each (two locked buttons give one line). */
+const reasonsOf = (...gates: Gate[]) => [
+  ...new Set(gates.flatMap((gate) => (!gate.allowed && gate.reason ? [gate.reason] : []))),
+];
 
 /**
  * The top of the project page (spec 2026-11-12 §5): the name (renamed in place), the description,
- * the status and how full the project is; while it is open, the buttons that grow or close it.
- * A closed project has none: it is for reading.
+ * the status and how full the project is; while it is open, the buttons that grow or close it -
+ * only those it allows now, an action it does not allow being left out with its reason said once
+ * (UI/UX 27/11, sf-12) rather than shown locked. A closed project has none: it is for reading.
  */
-export function ProjectHeader({ project, actions, onCreate, onAdd }: Props) {
+export function ProjectHeader({
+  project,
+  actions,
+  createGate,
+  primaryCreate,
+  onCreate,
+  onAdd,
+}: Props) {
   const [closing, setClosing] = useState(false);
-  // A new design opens the studio, which needs a computer: a phone or tablet is told here, before
-  // the product dialog (SF-UX-8), not after choosing a product.
-  const unsupported = useDeviceFit() === "unsupported";
-  const createGate: Gate =
-    unsupported && actions.createDesign.allowed
-      ? { allowed: false, reason: DESIGN_NEEDS_COMPUTER }
-      : actions.createDesign;
   const open = project.status === "ACTIVE";
+  const reasons = reasonsOf(createGate, actions.addDesign);
   return (
     <header className="space-y-4">
       <div className="space-y-2">
@@ -89,27 +78,38 @@ export function ProjectHeader({ project, actions, onCreate, onAdd }: Props) {
         </div>
       </div>
       {open ? (
-        <div className="flex flex-wrap items-start gap-3">
-          <GatedButton
-            gate={createGate}
-            label="Tạo bản mới trong dự án"
-            reasonId="project-create-reason"
-            onClick={onCreate}
-          />
-          <GatedButton
-            gate={actions.addDesign}
-            label="Thêm bản sẵn có"
-            reasonId="project-add-reason"
-            variant="outline"
-            onClick={onAdd}
-          />
-          <GatedButton
-            gate={actions.archive}
-            label="Đóng dự án"
-            reasonId="project-close-reason"
-            variant="outline"
-            onClick={() => setClosing(true)}
-          />
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            {createGate.allowed ? (
+              <Button
+                type="button"
+                variant={primaryCreate ? "default" : "outline"}
+                className={ACTION}
+                onClick={onCreate}
+              >
+                Tạo bản mới trong dự án
+              </Button>
+            ) : null}
+            {actions.addDesign.allowed ? (
+              <Button type="button" variant="outline" className={ACTION} onClick={onAdd}>
+                Thêm bản sẵn có
+              </Button>
+            ) : null}
+            {/* Closing is the rare move: quiet, and only offered with no design under review. */}
+            {actions.archive.allowed ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className={ACTION}
+                onClick={() => setClosing(true)}
+              >
+                Đóng dự án
+              </Button>
+            ) : null}
+          </div>
+          {reasons.length > 0 ? (
+            <p className="text-ink-secondary text-sm">{reasons.join(". ")}.</p>
+          ) : null}
         </div>
       ) : null}
       {open ? (

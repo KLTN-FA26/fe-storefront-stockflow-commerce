@@ -144,7 +144,7 @@ describe("CustomerProfileForm", () => {
     const { queryClient } = renderProfile();
     render(<ToastProvider />);
 
-    const fullName = await screen.findByRole("textbox", { name: "Họ và tên" });
+    const fullName = await screen.findByRole("textbox", { name: "Tên khách hàng" });
     await waitFor(() => expect(fullName).toHaveValue(profile.fullName));
     await user.clear(fullName);
     await user.type(fullName, "Bản nháp cục bộ");
@@ -184,9 +184,11 @@ describe("CustomerProfileForm", () => {
     // A failed refetch retains the last successful data. Keep this real cache behavior
     // so treating stale result.data as a successful reload cannot pass this test.
     expect(queryClient.getQueryData(customerProfileKeys.profile())).toEqual(profile);
-    expect.soft(screen.getByRole("textbox", { name: "Họ và tên" })).toHaveValue("Bản nháp cục bộ");
     expect
-      .soft(screen.getByRole("textbox", { name: "Họ và tên" }))
+      .soft(screen.getByRole("textbox", { name: "Tên khách hàng" }))
+      .toHaveValue("Bản nháp cục bộ");
+    expect
+      .soft(screen.getByRole("textbox", { name: "Tên khách hàng" }))
       .not.toHaveValue(profile.fullName);
     expect.soft(screen.queryByText(/thông tin đã thay đổi ở nơi khác/i)).toBeVisible();
     expect.soft(screen.getByRole("button", { name: "Lưu thay đổi" })).toBeDisabled();
@@ -298,12 +300,12 @@ describe("CustomerProfileForm", () => {
 
     expect.soft(form).toBeInTheDocument();
     expect
-      .soft(screen.queryByRole("textbox", { name: "Họ và tên" }))
+      .soft(screen.queryByRole("textbox", { name: "Tên khách hàng" }))
       .toHaveValue("Bản nháp cục bộ");
     // Also check the original input: replacing it with a new form must not hide a reset.
     expect.soft(fullName).toHaveValue("Bản nháp cục bộ");
     expect.soft(screen.queryByText("Chưa có hồ sơ khách hàng")).not.toBeInTheDocument();
-    expect.soft(screen.queryByRole("textbox", { name: "Họ và tên" })).toBeInTheDocument();
+    expect.soft(screen.queryByRole("textbox", { name: "Tên khách hàng" })).toBeInTheDocument();
     expect.soft(screen.queryByRole("textbox", { name: "Số điện thoại" })).toBeInTheDocument();
   });
 
@@ -468,7 +470,7 @@ describe("CustomerProfileForm", () => {
     );
     renderProfile();
     expect(await screen.findByText(/chưa có hồ sơ khách hàng/i)).toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "Họ và tên" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Tên khách hàng" })).not.toBeInTheDocument();
   });
 
   it("keeps a generic fetch failure at page level", async () => {
@@ -476,6 +478,6 @@ describe("CustomerProfileForm", () => {
     renderProfile();
 
     expect(await screen.findByText(/không tải được thông tin tài khoản/i)).toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "Họ và tên" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Tên khách hàng" })).not.toBeInTheDocument();
   });
 });
