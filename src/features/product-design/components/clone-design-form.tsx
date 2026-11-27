@@ -162,7 +162,7 @@ export function CloneForm({
         </Button>
       </DialogFooter>
       {ready && loaded.targets.length > 0 && sku === null ? (
-        <p role="status" className="text-ink-secondary -mt-2 text-right text-sm">
+        <p role="status" className="text-ink-secondary text-right text-sm">
           Chọn quy cách mới để tiếp tục
         </p>
       ) : null}

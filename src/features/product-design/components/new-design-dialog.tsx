@@ -202,7 +202,7 @@ function NewDesignForm({
         </Button>
       </DialogFooter>
       {missing ? (
-        <p role="status" className="text-ink-secondary -mt-2 text-right text-sm">
+        <p role="status" className="text-ink-secondary text-right text-sm">
           {missing}
         </p>
       ) : null}
