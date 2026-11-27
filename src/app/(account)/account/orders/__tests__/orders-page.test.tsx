@@ -153,7 +153,8 @@ describe("OrdersScreen", () => {
   it("never sends a negative page for ?page=0", async () => {
     renderWithProviders(<OrdersScreen />, { searchParams: "?page=0" });
     expect(await screen.findByText("Trang 1 / 3")).toBeInTheDocument();
-    for (const [, config] of vi.mocked(api.get).mock.calls) {
+    for (const [url, config] of vi.mocked(api.get).mock.calls) {
+      if (url !== "/orders/me") continue;
       expect((config?.params as { page: number }).page).toBeGreaterThanOrEqual(0);
     }
   });

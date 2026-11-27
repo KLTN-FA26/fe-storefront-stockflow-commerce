@@ -53,10 +53,15 @@ export function OrdersScreen() {
 
   return (
     <>
-      <PageHeader titleHidden title="Đơn hàng của tôi" subtitle="Theo dõi trạng thái và giao hàng." />
+      <PageHeader
+        titleHidden
+        title="Đơn hàng của tôi"
+        subtitle="Theo dõi trạng thái và giao hàng."
+      />
       <div className="space-y-4">
         <OrderViewTabs
           view={view}
+          countNeedsYou={data !== undefined}
           onChange={(next) => {
             // A new view starts from its first page.
             void setPage(null);
