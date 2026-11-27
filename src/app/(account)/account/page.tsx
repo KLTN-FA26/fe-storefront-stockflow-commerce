@@ -1,4 +1,5 @@
 import { CreditCard } from "@/features/customer/credit";
+import { CreditRequestSection } from "@/features/customer/credit-request";
 import { LegalProfileCard } from "@/features/customer/legal-profile";
 import { CustomerProfileForm } from "@/features/customer/profile/components/customer-profile-form";
 import { AccountTodo } from "@/features/customer/todo";
@@ -18,7 +19,7 @@ export default function AccountPage() {
         <AccountTodo />
         <CustomerProfileForm />
         <LegalProfileCard />
-        <CreditCard />
+        <CreditCard requests={<CreditRequestSection enabled />} />
       </div>
     </div>
   );
