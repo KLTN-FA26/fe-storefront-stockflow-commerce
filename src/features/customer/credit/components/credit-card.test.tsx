@@ -5,6 +5,7 @@ import { api } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/error";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
+import { CreditRequestSection } from "../../credit-request";
 import { CreditCard } from "./credit-card";
 
 const CUSTOMER_ID = "5a1f6f0e-3c36-4e0e-9a43-2b0f0d6a1c33";
@@ -82,7 +83,7 @@ describe("CreditCard (account page, SFCREDIT; kltn-docs 15 §4.3)", () => {
   it("a customer with neither credit nor anything owed sees only the way to ask for credit (handoff A3)", async () => {
     const { creditLimit: _l, creditTermDays: _d, availableCredit: _a, ...rest } = position();
     answer({ ...rest, exposure: 0 });
-    renderWithProviders(<CreditCard />);
+    renderWithProviders(<CreditCard requests={<CreditRequestSection enabled />} />);
 
     expect(
       await screen.findByRole("button", { name: "Gửi đề nghị cấp hạn mức" }),

@@ -7,16 +7,16 @@ import { creditSummary, useMyCreditPosition } from "@/lib/credit-position";
 import { formatDate } from "@/lib/format/date";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 
-import { CreditRequestSection } from "../../credit-request";
+import type { ReactNode } from "react";
 
 /**
  * The customer's own credit position on the account page (SFCREDIT; kltn-docs 15 §4.3, 18 §2): limit,
  * what the installments paid after delivery still owe, what is left, the days to pay and a warning
  * while an installment is overdue. Read from GET /orders/credit-position/me. Nothing is shown while the position
  * is not loaded. A customer with neither credit nor anything owed sees only the way to ask for credit (BE PR #490,
- * handoff A3): the card's "Đề nghị cấp hạn mức" section, there for every loaded customer.
+ * handoff A3): `requests`, the "Đề nghị cấp hạn mức" section the page passes in, shown to every loaded customer.
  */
-export function CreditCard() {
+export function CreditCard({ requests }: { requests?: ReactNode } = {}) {
   const signedIn = useSignedIn();
   const query = useMyCreditPosition(signedIn === true);
   const credit = query.data ? creditSummary(query.data) : undefined;
@@ -36,7 +36,7 @@ export function CreditCard() {
         <p className="text-ink-secondary text-sm">
           Bạn chưa có hạn mức công nợ: đơn hàng thanh toán trước khi giao.
         </p>
-        <CreditRequestSection enabled />
+        {requests}
       </SurfaceCard>
     );
   }
@@ -111,7 +111,7 @@ export function CreditCard() {
           </Alert>
         </div>
       ) : null}
-      <CreditRequestSection enabled />
+      {requests}
     </SurfaceCard>
   );
 }
