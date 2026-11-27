@@ -320,6 +320,8 @@ const toCard = (order: MockOrder) => ({
   placedAt: order.placedAt,
   lineCount: order.lines.length,
   deliveryState: deliveryState(order.status),
+  // BE: the first line's design name, else its SKU (the mock lines carry no design name).
+  firstItemName: order.lines[0]?.sku ?? null,
 });
 
 /** What the detail needs beyond the order: the clock and what the customer's returns hold. */
@@ -357,7 +359,7 @@ function toShipment(order: MockOrder, shipment: MockShipment, context: DetailCon
 
 /** CustomerOrderDetailResponse: no reservations, checksums, actors or contact block. */
 const toDetail = (order: MockOrder, context: DetailContext) => {
-  const { lineCount: _lineCount, ...card } = toCard(order);
+  const { lineCount: _lineCount, firstItemName: _firstItemName, ...card } = toCard(order);
   return {
     ...card,
     // Set only while ON_HOLD: a credit hold waits for an approver, any other is a plain review.

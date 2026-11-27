@@ -12,6 +12,7 @@ import { formatDate } from "@/lib/format/date";
 
 import { ORDER_DISPLAY_META, displayGroup } from "../lifecycle";
 import { ORDER_PAGE_SIZE, useMyOrders } from "../queries";
+import { orderItemsSummary } from "../selectors";
 import { OrderStatusBadge } from "./order-status-badge";
 import {
   NEEDS_CUSTOMER_STATUSES,
@@ -124,10 +125,7 @@ export function OrdersScreen() {
                     total={order.total}
                     currency={order.currency}
                     createdAt={formatDate(order.placedAt)}
-                    preview={
-                      // A "mặt hàng" is an order line (one SKU), same wording as the detail.
-                      <p className="tabular-nums">{order.lineCount} mặt hàng</p>
-                    }
+                    preview={<p className="tabular-nums">{orderItemsSummary(order)}</p>}
                     hint={ORDER_DISPLAY_META[displayGroup(order)].hint}
                   />
                 </li>

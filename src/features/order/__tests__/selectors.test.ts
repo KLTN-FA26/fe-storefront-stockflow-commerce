@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { customerTimeline } from "../selectors";
+import { customerTimeline, orderItemsSummary } from "../selectors";
 import type { OrderTimelineEntry } from "../types";
 
 const at = (hour: number) => `2026-10-07T0${hour}:00:00Z`;
@@ -60,5 +60,22 @@ describe("customerTimeline", () => {
   it("is empty without a timeline (NON_NULL omits it)", () => {
     expect(customerTimeline(undefined)).toEqual([]);
     expect(customerTimeline(null)).toEqual([]);
+  });
+});
+
+describe("orderItemsSummary (UI/UX 27/11 sf-06)", () => {
+  it("names the first item and how many more", () => {
+    expect(orderItemsSummary({ firstItemName: "Ly giấy in logo", lineCount: 1 })).toBe(
+      "Ly giấy in logo",
+    );
+    expect(orderItemsSummary({ firstItemName: "Ly giấy in logo", lineCount: 3 })).toBe(
+      "Ly giấy in logo và 2 sản phẩm khác",
+    );
+  });
+
+  it("falls back to the line count while the BE sends no first item", () => {
+    expect(orderItemsSummary({ lineCount: 2 })).toBe("2 mặt hàng");
+    expect(orderItemsSummary({ firstItemName: null, lineCount: 2 })).toBe("2 mặt hàng");
+    expect(orderItemsSummary({ firstItemName: "  ", lineCount: 1 })).toBe("1 mặt hàng");
   });
 });
