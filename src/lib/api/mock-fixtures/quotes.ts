@@ -262,6 +262,10 @@ const toRow = (quote: MockQuote, now: Date) => ({
   validUntil: quote.validUntil,
   ...(quote.sentAt ? { sentAt: quote.sentAt } : {}),
   ...(quote.convertedOrder ? { convertedOrderId: quote.convertedOrder.orderId } : {}),
+  // BE QuoteRowResponse: the order's number, left out on the customer's copy while it is a DRAFT.
+  ...(quote.convertedOrder && quote.convertedOrder.status !== "DRAFT"
+    ? { convertedOrderNumber: quote.convertedOrder.orderNumber }
+    : {}),
   createdAt: quote.createdAt,
   version: quote.version,
 });
