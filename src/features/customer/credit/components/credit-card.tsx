@@ -108,7 +108,7 @@ export function CreditCard({ requests }: { requests?: ReactNode } = {}) {
                 }. `
               : ""}
             Hợp đồng mới cần kế toán duyệt trước khi gửi cho bạn, cho đến khi khoản quá hạn được
-            thanh toán. Vui lòng liên hệ Sales nếu cần hỗ trợ.
+            thanh toán. Vui lòng liên hệ Sale nếu cần hỗ trợ.
           </Alert>
         </div>
       ) : null}
