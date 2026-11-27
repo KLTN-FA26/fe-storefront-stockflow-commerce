@@ -164,7 +164,9 @@ export function CustomerProfileForm() {
     <section className="bg-bg-surface border-border-default rounded-[var(--r-lg)] border p-[var(--card-pad)] shadow-[var(--card-shadow)]">
       <div className="mb-4">
         <h2 className="font-display text-ink-primary text-base font-semibold">Thông tin liên hệ</h2>
-        <p className="text-ink-secondary mt-0.5 text-sm">Người đặt hàng và số điện thoại Sale gọi khi cần.</p>
+        <p className="text-ink-secondary mt-0.5 text-sm">
+          Người đặt hàng và số điện thoại Sale gọi khi cần.
+        </p>
       </div>
 
       {conflict && (
@@ -210,17 +212,25 @@ export function CustomerProfileForm() {
       <form onSubmit={onSubmit} noValidate className="space-y-5">
         <div className="grid gap-5 lg:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="customer-profile-full-name">Họ và tên</Label>
+            {/* BE Customer.fullName: for a business the shop onboarded it is the business name (the
+                contact's own name stays on their login account, Customer.onboard), so it is not
+                "Họ và tên" (UI/UX 27/11, sf-02). */}
+            <Label htmlFor="customer-profile-full-name">Tên khách hàng</Label>
             <Input
               id="customer-profile-full-name"
               className="h-11"
-              autoComplete="name"
+              autoComplete="organization"
               aria-invalid={Boolean(form.formState.errors.fullName)}
               aria-describedby={
-                form.formState.errors.fullName ? "customer-profile-full-name-error" : undefined
+                form.formState.errors.fullName
+                  ? "customer-profile-full-name-hint customer-profile-full-name-error"
+                  : "customer-profile-full-name-hint"
               }
               {...form.register("fullName")}
             />
+            <p id="customer-profile-full-name-hint" className="text-ink-tertiary text-xs">
+              Tên công ty, cửa hàng hoặc tên của bạn, hiện trên báo giá và đơn hàng.
+            </p>
             {form.formState.errors.fullName?.message && (
               <p id="customer-profile-full-name-error" className="text-danger text-sm" role="alert">
                 {form.formState.errors.fullName.message}
