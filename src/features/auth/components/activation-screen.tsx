@@ -14,6 +14,7 @@ import { useHydrated } from "@/hooks/use-hydrated";
 import { signInCustomer } from "@/lib/auth/customer-session";
 
 import { ActivationForm } from "./activation-form";
+import { ContactSalesLink } from "./contact-sales-link";
 
 /**
  * The invitation token, from the link's fragment (`#token=…`): a fragment never reaches a server or an access log.
@@ -64,6 +65,9 @@ export function ActivationScreen() {
         body="Link không hợp lệ, đã hết hạn (sau 72 giờ) hoặc đã được dùng. Vui lòng liên hệ Sales của StockFlow để được gửi link mới."
       >
         <LoginButton label="Về trang đăng nhập" />
+        <div className="flex justify-center">
+          <ContactSalesLink />
+        </div>
       </Panel>
     );
   }

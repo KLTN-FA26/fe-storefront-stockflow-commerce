@@ -6,7 +6,7 @@ import { api } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/auth/auth-store";
 import { signIn, signOut } from "@/test/render";
 
-import { HeaderAccountLink } from "../components/header-account-link";
+import { HeaderAccountLink, HeaderOpenAccountLink } from "../components/header-account-link";
 import { LogoutButton } from "../components/logout-button";
 
 const replace = vi.fn();
@@ -46,5 +46,20 @@ describe("HeaderAccountLink", () => {
       "href",
       "/login",
     );
+  });
+});
+
+describe("HeaderOpenAccountLink (KE-HOACH sales owner §10.7)", () => {
+  it("offers the request form to a visitor only", async () => {
+    signOut();
+    const { rerender } = render(<HeaderOpenAccountLink className="x" />);
+    expect(await screen.findByRole("link", { name: "Mở tài khoản" })).toHaveAttribute(
+      "href",
+      "/mo-tai-khoan",
+    );
+
+    signIn();
+    rerender(<HeaderOpenAccountLink className="x" />);
+    expect(screen.queryByRole("link", { name: "Mở tài khoản" })).not.toBeInTheDocument();
   });
 });

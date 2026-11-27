@@ -98,6 +98,11 @@ describe("ProductDetailScreen — no price, no cart (kltn-docs 13 BR-04, 14 BR-0
       "href",
       "/login?next=%2Fcatalog%2Fproducts%2Fly-giay-2-lop-8oz",
     );
+    // A business with no account is led to the request form (KE-HOACH sales owner §10.7).
+    expect(screen.getByRole("link", { name: "Gửi yêu cầu mở tài khoản" })).toHaveAttribute(
+      "href",
+      "/mo-tai-khoan",
+    );
     expect(api.get).not.toHaveBeenCalled();
   });
 

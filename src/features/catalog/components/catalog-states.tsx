@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 
-import { CHAT_WITH_SALES, STORE_ROUTES } from "@/constants";
+import { APP_ROUTES, CHAT_WITH_SALES, STORE_ROUTES } from "@/constants";
 import { loginUrl } from "@/lib/auth/safe-next";
 import { Alert, EmptyState, Skeleton } from "@/components/shared";
 import { Button } from "@/components/ui/button";
@@ -34,9 +34,15 @@ export function SignInRequired({ from }: { from?: string | undefined }) {
       title="Đăng nhập để xem sản phẩm"
       description="Cổng khách hàng chỉ dành cho khách sỉ đã được cấp tài khoản. Đăng nhập để xem sản phẩm, tình trạng còn hàng và tự thiết kế."
       action={
-        <Button asChild className="min-h-11 rounded-[var(--r-md)] px-5">
-          <Link href={loginUrl(from)}>Đăng nhập</Link>
-        </Button>
+        <div className="flex flex-wrap justify-center gap-3">
+          <Button asChild className="min-h-11 rounded-[var(--r-md)] px-5">
+            <Link href={loginUrl(from)}>Đăng nhập</Link>
+          </Button>
+          {/* A business with no account asks for one (KE-HOACH sales owner §10.7). */}
+          <Button asChild variant="outline" className="min-h-11 rounded-[var(--r-md)] px-5">
+            <Link href={APP_ROUTES.openAccount}>Gửi yêu cầu mở tài khoản</Link>
+          </Button>
+        </div>
       }
     />
   );
