@@ -5,6 +5,7 @@ import { api } from "@/lib/api/client";
 import { renderWithProviders } from "@/test/render";
 
 import { ChatListScreen } from "../components/chat-list-screen";
+import { conversationJson } from "./fixtures";
 
 const PERMISSIONS = {
   roles: ["CUSTOMER"],
@@ -34,5 +35,25 @@ describe("ChatListScreen with no conversation yet (a phone shows only this list)
     const links = screen.getAllByRole("link", { name: "Nhắn cho Sale" });
     expect(links).toHaveLength(2);
     for (const link of links) expect(link).toHaveAttribute("href", "/chat/new");
+  });
+
+  it("lets a long conversation title run to two lines instead of cutting it at one (S04-5)", async () => {
+    const title = "Xác nhận địa chỉ nhận hàng của đơn SO-20261124-000007 giao đợt 2";
+    vi.spyOn(api, "get").mockImplementation(async (url: string) => ({
+      data:
+        url === "/identity/me/permissions"
+          ? PERMISSIONS
+          : {
+              ...EMPTY_PAGE,
+              items: [conversationJson({ subject: title })],
+              totalElements: 1,
+              totalPages: 1,
+            },
+    }));
+    renderWithProviders(<ChatListScreen />);
+
+    const heading = await screen.findByRole("heading", { name: title });
+    expect(heading).toHaveClass("line-clamp-2");
+    expect(heading).not.toHaveClass("truncate");
   });
 });

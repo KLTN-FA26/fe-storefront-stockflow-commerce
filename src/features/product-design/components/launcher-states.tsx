@@ -133,6 +133,46 @@ export function LauncherNoPrintConfig({
   );
 }
 
+/**
+ * A draft of this variant that nobody has drawn on is already there: ask whether to go on with it instead of adding
+ * another to the 50-draft limit (S08-11).
+ */
+export function LauncherResume({
+  name,
+  onContinue,
+  onNew,
+}: {
+  name: string;
+  onContinue: () => void;
+  onNew: () => void;
+}) {
+  return (
+    <EmptyState
+      title="Tiếp tục bản nháp gần nhất?"
+      description={`Bạn đã có bản nháp “${name}” của quy cách này, chưa chỉnh sửa gì. Tiếp tục bản đó hay tạo bản mới?`}
+      action={
+        <div className="flex flex-wrap justify-center gap-3">
+          <Button
+            type="button"
+            className="min-h-11 rounded-[var(--r-md)] px-5"
+            onClick={onContinue}
+          >
+            Tiếp tục bản nháp
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 rounded-[var(--r-md)] px-5"
+            onClick={onNew}
+          >
+            Tạo bản mới
+          </Button>
+        </div>
+      }
+    />
+  );
+}
+
 /** The customer already holds the most drafts a customer may (docs 12 B37). */
 export function LauncherDraftLimit({ limit }: { limit: number }) {
   return (
@@ -198,17 +238,35 @@ export function LauncherError({
   );
 }
 
-/** `/design/new` without a product and variant to design. */
-export function LauncherMissingProduct() {
+/**
+ * `/design/new` without a product and variant to design. The page opens the "Thiết kế mới" dialog over it (S08-11); this
+ * is what stays behind when it is closed: say what is missing and offer to choose again, or to look at the products.
+ */
+export function LauncherMissingProduct({ onChoose }: { onChoose?: () => void }) {
   return (
     <LauncherFrame>
       <EmptyState
         title="Chưa chọn quy cách để thiết kế"
-        description="Hãy mở một sản phẩm in được, chọn quy cách và bấm “Thiết kế”."
+        description="Hãy chọn một sản phẩm in được và quy cách bạn muốn thiết kế."
         action={
-          <Button asChild className="min-h-11 rounded-[var(--r-md)] px-5">
-            <Link href={STORE_ROUTES.catalog.list}>Xem sản phẩm</Link>
-          </Button>
+          <div className="flex flex-wrap justify-center gap-3">
+            {onChoose ? (
+              <Button
+                type="button"
+                className="min-h-11 rounded-[var(--r-md)] px-5"
+                onClick={onChoose}
+              >
+                Chọn sản phẩm
+              </Button>
+            ) : null}
+            <Button
+              asChild
+              variant={onChoose ? "outline" : "default"}
+              className="min-h-11 rounded-[var(--r-md)] px-5"
+            >
+              <Link href={STORE_ROUTES.catalog.list}>Xem sản phẩm</Link>
+            </Button>
+          </div>
         }
       />
     </LauncherFrame>

@@ -32,7 +32,9 @@ import {
 } from "./api";
 import type { Design, DesignListParams, DownloadLink, PrintConfig } from "./types";
 
+import { DRAFT_LIMIT } from "./design-mappers";
 import { DESIGN_POLL_MS, projectQuery } from "./project-queries";
+import { isUntouchedDocument } from "./selectors";
 
 export * from "./project-queries"; // the projects' keys and queries live in their own file
 
@@ -122,6 +124,38 @@ export function useDesignFontCodes() {
     staleTime: Infinity,
     gcTime: QUERY_TIMES.master.gcTime,
   });
+}
+
+/**
+ * The newest draft of this variant (in this project, or in none) that nobody has drawn on yet, for "Tiếp tục bản nháp
+ * gần nhất?" (S08-11). Read fresh every time the launcher opens: a stale list could offer a draft that was edited since.
+ * `pending` while it is being found out; any read that fails is "none": the launcher then just makes the design.
+ */
+export function useResumableDraft(sku: string, projectId: string | undefined, enabled: boolean) {
+  const drafts = useQuery({
+    queryKey: designKeys.list({ page: 1, size: DRAFT_LIMIT, status: "DRAFT" }),
+    queryFn: ({ signal }) => listDesigns({ page: 1, size: DRAFT_LIMIT, status: "DRAFT" }, signal),
+    enabled,
+    staleTime: 0,
+    refetchOnMount: "always",
+    retry: retryTransient,
+  });
+  const newest = (drafts.data?.items ?? [])
+    .filter((draft) => draft.variant.sku === sku && (draft.projectId ?? undefined) === projectId)
+    .toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0];
+  const record = useQuery({
+    ...designDocumentQuery(newest?.id ?? ""),
+    enabled: enabled && newest !== undefined,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+  });
+  if (!enabled) return { status: "none" as const, draft: null };
+  if (drafts.isPending && !drafts.isError) return { status: "pending" as const, draft: null };
+  if (newest === undefined || drafts.isError) return { status: "none" as const, draft: null };
+  if (record.isPending && !record.isError) return { status: "pending" as const, draft: null };
+  return record.data && isUntouchedDocument(record.data.document)
+    ? { status: "found" as const, draft: newest }
+    : { status: "none" as const, draft: null };
 }
 
 /** "x/50 bản nháp" (docs 12 §4.1, B37). */

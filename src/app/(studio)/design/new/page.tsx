@@ -1,5 +1,6 @@
-import { LauncherMissingProduct } from "@/features/product-design/components/launcher-states";
 import { NewDesignScreen } from "@/features/product-design/components/new-design-screen";
+
+import { NewDesignChooser } from "./new-design-chooser";
 
 import type { Metadata } from "next";
 
@@ -21,6 +22,7 @@ export default async function NewDesignPage({
   const params = await searchParams;
   const product = firstParam(params.product);
   const sku = firstParam(params.sku);
-  if (!product || !sku) return <LauncherMissingProduct />;
+  if (!product || !sku)
+    return <NewDesignChooser projectId={firstParam(params.project) ?? undefined} />;
   return <NewDesignScreen product={product} sku={sku} />;
 }

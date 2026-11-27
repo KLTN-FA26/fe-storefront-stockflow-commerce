@@ -6,11 +6,11 @@ import { parseAsInteger, parseAsStringLiteral, useQueryStates } from "nuqs";
 import { PageHeader } from "@/components/shared";
 import { ListPagination } from "@/components/storefront/list-pagination";
 import { Button } from "@/components/ui/button";
-import { SelectOption, TitledSelectContent } from "@/components/shared/TitledSelect";
-import { Select, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FilterPill } from "@/components/storefront/filter-pill";
 
-import { isQuoteStatusFilter, QUOTE_STATUS_FILTERS, QUOTE_STATUS_META } from "../lifecycle";
+import { QUOTE_STATUS_FILTERS } from "../lifecycle";
 import { QUOTE_PAGE_SIZE, useMyQuotes } from "../queries";
+import type { QuoteStatusFilter } from "../types";
 import { QuoteRowCard } from "./quote-row-card";
 import {
   NoQuotesForFilter,
@@ -20,13 +20,14 @@ import {
   QuoteStaleNotice,
 } from "./quote-states";
 
-const ALL = "ALL";
+/** "Cần phản hồi" is the quotes waiting on the customer: sent, not yet accepted or sent back for changes. */
+const NEEDS_REPLY: QuoteStatusFilter = "SENT";
 const urlState = {
   page: parseAsInteger.withDefault(1),
   status: parseAsStringLiteral(QUOTE_STATUS_FILTERS),
 };
 
-/** "Báo giá của tôi" (WF-02 D2): the quotes Sales sent, newest first, filtered by status in the URL. */
+/** "Báo giá của tôi" (WF-02 D2): the quotes Sale sent, newest first, all or the ones waiting on the customer (`?status=SENT`), as the orders list does (S04-9). */
 export function QuotesScreen() {
   const [{ page: urlPage, status }, setUrl] = useQueryStates(urlState, {
     history: "push",
@@ -45,29 +46,28 @@ export function QuotesScreen() {
   }, [urlPage, page, data, isPlaceholderData, setUrl]);
 
   // Changing the filter starts again at page 1 (state-persistence rules).
-  const filter = (value: string) =>
-    void setUrl({ status: isQuoteStatusFilter(value) ? value : null, page: 1 });
+  const filter = (value: QuoteStatusFilter | null) => void setUrl({ status: value, page: 1 });
 
   return (
     <>
       <PageHeader titleHidden title="Báo giá của tôi" subtitle="Báo giá Sale đã gửi cho bạn." />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <Select value={status ?? ALL} onValueChange={filter}>
-          <SelectTrigger
-            aria-label="Lọc theo trạng thái"
-            className="border-border-default bg-bg-surface dark:bg-bg-surface text-ink-primary min-h-11 w-full rounded-[var(--r-md)] sm:w-56"
+        <div role="group" aria-label="Lọc báo giá" className="flex flex-wrap gap-2">
+          <FilterPill
+            active={status === null}
+            aria-pressed={status === null}
+            onClick={() => filter(null)}
           >
-            <SelectValue placeholder="Trạng thái" />
-          </SelectTrigger>
-          <TitledSelectContent title="Trạng thái">
-            <SelectOption value={ALL}>Tất cả trạng thái</SelectOption>
-            {QUOTE_STATUS_FILTERS.map((value) => (
-              <SelectOption key={value} value={value}>
-                {QUOTE_STATUS_META[value].label}
-              </SelectOption>
-            ))}
-          </TitledSelectContent>
-        </Select>
+            Tất cả
+          </FilterPill>
+          <FilterPill
+            active={status === NEEDS_REPLY}
+            aria-pressed={status === NEEDS_REPLY}
+            onClick={() => filter(NEEDS_REPLY)}
+          >
+            Cần phản hồi
+          </FilterPill>
+        </div>
       </div>
       <div className="space-y-4">
         {isPending ? (

@@ -113,6 +113,8 @@ export const cartonsLabel = (cartons: number) => `${formatNumber(cartons)} thùn
 export const desiredDateLabel = (date: string | null | undefined) =>
   date ? formatDate(date) : "Chưa chọn";
 
+/** The red asterisk of a required field, drawn after the label (the label's text stays what the field is called). */
+export const REQUIRED_MARK = "after:text-danger after:ml-1 after:content-['*']";
 export const FIELD_ERROR = "text-danger text-sm";
 export const DIALOG_CONTENT =
   "bg-bg-surface border-border-default max-h-[90dvh] gap-4 overflow-y-auto rounded-[var(--r-xl)] border p-[var(--card-pad)] shadow-[var(--sh-lg)] ring-0";
@@ -183,7 +185,9 @@ export function QuoteRequestFields({
   return (
     <div className="grid gap-4">
       <div className="grid gap-2">
-        <Label htmlFor={cartonsId}>Số thùng mong muốn</Label>
+        <Label htmlFor={cartonsId} className={REQUIRED_MARK}>
+          Số thùng mong muốn
+        </Label>
         <Input
           id={cartonsId}
           type="number"
@@ -193,6 +197,7 @@ export function QuoteRequestFields({
           step={1}
           className="min-h-11 tabular-nums"
           disabled={disabled}
+          aria-required="true"
           aria-invalid={cartonsError ? true : undefined}
           aria-describedby={
             unitsPerCarton

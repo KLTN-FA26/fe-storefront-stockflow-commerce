@@ -165,6 +165,19 @@ describe("ProjectListScreen", () => {
       return screen.findByRole("dialog");
     }
 
+    it("marks the name as required with a red asterisk and the optional description in words (S01-14)", async () => {
+      const dialog = await openDialog();
+      const name = within(dialog).getByLabelText("Tên dự án");
+      expect(name).toHaveAttribute("aria-required", "true");
+      expect(document.querySelector(`label[for="${name.id}"]`)).toHaveClass(
+        "after:content-['*']",
+        "after:text-danger",
+      );
+      expect(within(dialog).getByLabelText("Mô tả (không bắt buộc)")).not.toHaveAttribute(
+        "aria-required",
+      );
+    });
+
     it("refuses an empty name", async () => {
       const dialog = await openDialog();
       await userEvent.click(within(dialog).getByRole("button", { name: "Tạo dự án" }));

@@ -1,15 +1,15 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { STORE_ROUTES } from "@/constants";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 
-import { createKeyFor, forgetCreateKey, isRetryableWithSameKey } from "../create-key";
+import { createKeyFor, forgetCreateKey, hasCreateKey, isRetryableWithSameKey } from "../create-key";
 import { describeLauncherError, isFutileToRetry, isProjectRefusal } from "../errors";
 import { useCreateDesign } from "../mutations";
-import { useDraftCount, usePrintConfig } from "../queries";
+import { useDraftCount, usePrintConfig, useResumableDraft } from "../queries";
 import { defaultDesignName, isPrintConfigUsable } from "../selectors";
 import type { Design } from "../types";
 import {
@@ -18,6 +18,7 @@ import {
   LauncherFrame,
   LauncherLoading,
   LauncherNoPrintConfig,
+  LauncherResume,
   LauncherSignIn,
 } from "./launcher-states";
 
@@ -33,10 +34,21 @@ export function NewDesignScreen({ product, sku }: { product: string; sku: string
   // reads only `product` and `sku`, so the screen reads this one itself.
   const projectId = useSearchParams()?.get("project")?.trim() || undefined;
   const signedIn = useSignedIn();
+  const key = `${product}+${sku}+${projectId ?? ""}`;
+  // "Tạo bản mới" was chosen on the prompt for an untouched draft of this variant (S08-11). A create of this link already
+  // under way in this tab (a reload before the redirect) is never second-guessed: the draft it makes is untouched too.
+  const [fresh, setFresh] = useState(false);
+  const [creating] = useState(() => hasCreateKey(key));
   const config = usePrintConfig(product, sku, signedIn === true);
   const printable = config.data && isPrintConfigUsable(config.data) ? config.data : null;
   const count = useDraftCount(printable !== null);
   const create = useCreateDesign();
+  const resumable = useResumableDraft(
+    sku,
+    projectId,
+    printable !== null && !fresh && !creating && create.isIdle,
+  );
+  const undecided = !fresh && !creating && resumable.status !== "none";
   // The in-flight create of this visit, by link: a re-run effect (StrictMode) reuses it.
   const attempt = useRef<{ key: string; promise: Promise<Design> } | null>(null);
   // A create that lands after the customer left the launcher opens nothing.
@@ -48,13 +60,12 @@ export function NewDesignScreen({ product, sku }: { product: string; sku: string
     };
   }, []);
 
-  const key = `${product}+${sku}+${projectId ?? ""}`;
   const limit = count.data?.limit;
   const full = count.data !== undefined && count.data.drafts >= count.data.limit;
   const { mutateAsync } = create;
   const name = printable ? defaultDesignName(printable.product.title, printable.sku) : null;
   // Decided before the create starts: the create itself fills the 50th slot and refreshes the count.
-  const ready = name !== null && count.data !== undefined && !full;
+  const ready = name !== null && count.data !== undefined && !full && !undecided;
 
   const start = useCallback(
     (force: boolean) => {
@@ -123,6 +134,18 @@ export function NewDesignScreen({ product, sku }: { product: string; sku: string
           productSlug={product}
         />
       );
+    }
+    if (create.isIdle && undecided) {
+      if (resumable.status === "found") {
+        return (
+          <LauncherResume
+            name={resumable.draft.name}
+            onContinue={() => replace(STORE_ROUTES.design.detail(resumable.draft.id))}
+            onNew={() => setFresh(true)}
+          />
+        );
+      }
+      return <LauncherLoading label="Đang kiểm tra bản nháp…" />;
     }
     if (create.isIdle && full && limit !== undefined) return <LauncherDraftLimit limit={limit} />;
     if (create.isSuccess) return <LauncherLoading label="Đang mở trình thiết kế…" />;

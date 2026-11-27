@@ -1,6 +1,7 @@
 import { formatDateTime } from "@/lib/format";
 import { variantLabel } from "@/lib/catalog/variant-label";
 
+import type { DesignDocument } from "./engine/document/schema";
 import type { CustomizationTemplate } from "./engine/template/schema";
 import { isReturned } from "./lifecycle";
 import { describeRecordedFailure } from "./preflight-messages";
@@ -61,6 +62,16 @@ export function designCardView(design: Design): DesignCardView {
     returnReason: isReturned(design) ? (design.lastReturn?.reason ?? null) : null,
     previewUrl: design.previewUrl,
   };
+}
+
+/**
+ * A document nobody has drawn on: no element on any face and no background chosen. The launcher offers to go on with
+ * such a draft instead of making another one for the same variant (S08-11).
+ */
+export function isUntouchedDocument(document: DesignDocument): boolean {
+  return Object.values(document.surfaces).every(
+    (face) => face === undefined || (face.elements.length === 0 && face.background.kind === "none"),
+  );
 }
 
 /** docs 12 §3: a design name has at most 200 characters. */

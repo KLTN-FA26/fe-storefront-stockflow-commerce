@@ -103,7 +103,7 @@ export function AcceptQuoteDialog({
         belowMoq = true;
         setError(`lines.${i}.cartons`, {
           type: "moq",
-          message: `Dòng ${line.lineNo}: tối thiểu ${formatNumber(entry.moq)} thùng (MOQ).`,
+          message: `Dòng ${line.lineNo}: số thùng tối thiểu là ${formatNumber(entry.moq)} thùng.`,
         });
       });
       if (belowMoq) return;
@@ -118,7 +118,7 @@ export function AcceptQuoteDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Chấp nhận báo giá"
-      description="Kiểm tra số thùng từng dòng. Số thùng phải đạt số lượng đặt tối thiểu (MOQ) của sản phẩm; đơn giá theo bậc số lượng do hệ thống tính lại."
+      description="Kiểm tra số thùng từng dòng. Số thùng phải đạt mức tối thiểu của sản phẩm; đơn giá theo bậc số lượng do hệ thống tính lại."
       confirm="Chấp nhận báo giá"
       pending={pending}
       confirmDisabled={unsellable || (!pricing && !pricingFailed)}
@@ -181,7 +181,7 @@ export function AcceptQuoteDialog({
             {tiers ? <PriceTierList tiers={tiers} applied={linePreview?.tier ?? null} /> : null}
             {linePreview ? (
               <dl className="text-ink-secondary grid grid-cols-2 gap-x-3 gap-y-0.5 text-sm tabular-nums">
-                <dt>MOQ</dt>
+                <dt>Số thùng tối thiểu</dt>
                 <dd className="text-ink-primary text-right">
                   {linePreview.moq == null ? "—" : `${formatNumber(linePreview.moq)} thùng`}
                 </dd>
@@ -223,8 +223,8 @@ export function AcceptQuoteDialog({
       ) : (
         <p className="text-ink-secondary text-sm" role="status">
           {pricingFailed
-            ? "Chưa tải được MOQ và giá tạm tính. Hệ thống vẫn kiểm MOQ khi bạn chấp nhận."
-            : "Đang tải MOQ và giá tạm tính…"}
+            ? "Chưa tải được số thùng tối thiểu và giá tạm tính. Hệ thống vẫn kiểm số thùng tối thiểu khi bạn chấp nhận."
+            : "Đang tải số thùng tối thiểu và giá tạm tính…"}
         </p>
       )}
     </CardDialog>

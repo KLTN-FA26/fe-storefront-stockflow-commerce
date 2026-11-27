@@ -91,6 +91,35 @@ describe("QuotesScreen", () => {
     );
   });
 
+  it("filters with two buttons, Tất cả and Cần phản hồi (the quotes waiting on the customer), as the orders list does", async () => {
+    const get = vi.spyOn(api, "get").mockResolvedValue({ data: bePage([beQuoteRow]) });
+    const user = userEvent.setup();
+    renderWithProviders(<QuotesScreen />);
+
+    const group = await screen.findByRole("group", { name: "Lọc báo giá" });
+    expect(within(group).getByRole("button", { name: "Tất cả" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.queryByRole("combobox", { name: "Lọc theo trạng thái" })).not.toBeInTheDocument();
+
+    await user.click(within(group).getByRole("button", { name: "Cần phản hồi" }));
+    expect(within(group).getByRole("button", { name: "Cần phản hồi" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(get).toHaveBeenLastCalledWith(
+      "/quotes",
+      expect.objectContaining({ params: { page: 0, size: 10, status: "SENT" } }),
+    );
+
+    await user.click(within(group).getByRole("button", { name: "Tất cả" }));
+    expect(get).toHaveBeenLastCalledWith(
+      "/quotes",
+      expect.objectContaining({ params: { page: 0, size: 10 } }),
+    );
+  });
+
   it("says there is no quote yet when the customer has none", async () => {
     vi.spyOn(api, "get").mockResolvedValue({ data: bePage([]) });
     renderWithProviders(<QuotesScreen />);

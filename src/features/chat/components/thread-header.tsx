@@ -50,8 +50,8 @@ export function ThreadHeader({ conversation, contractOrders = {} }: ThreadHeader
       </Link>
       <div className="min-w-0 flex-1 space-y-0.5">
         {/* The status reads as part of the title line, as a messaging app marks a thread. */}
-        <div className="flex min-w-0 items-center gap-2">
-          <h1 className="font-display text-ink-primary min-w-0 truncate text-base font-semibold sm:text-lg">
+        <div className="flex min-w-0 items-start gap-2">
+          <h1 className="font-display text-ink-primary line-clamp-2 min-w-0 text-base font-semibold break-words sm:text-lg">
             {conversationTitle(conversation)}
           </h1>
           <span className="shrink-0">
