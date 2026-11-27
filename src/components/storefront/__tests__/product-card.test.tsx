@@ -23,11 +23,23 @@ describe("ProductCard", () => {
     expect(screen.getByRole("link")).toHaveAttribute("href", "/catalog/ly");
   });
 
-  it("says there is no picture instead of a broken one", () => {
+  it("draws its kind instead of a broken picture when there is none", () => {
     render(<ProductCard href="/catalog/ly" name="Ly giấy" />);
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
-    expect(screen.getByText("Chưa có hình ảnh")).toBeInTheDocument();
+    expect(screen.getByText("Chưa có ảnh sản phẩm")).toBeInTheDocument();
     expect(screen.queryByText(/₫/)).not.toBeInTheDocument();
+  });
+
+  it("treats a placehold.co box with the SKU on it as no picture (sf-01)", () => {
+    render(
+      <ProductCard
+        href="/catalog/hop"
+        name="Hộp giấy đựng bánh in logo"
+        imageSrc="https://placehold.co/800x600?text=HOP-BANH-M"
+      />,
+    );
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(screen.getByText("Chưa có ảnh sản phẩm")).toBeInTheDocument();
   });
 });
 
