@@ -1,8 +1,8 @@
 import { hasUnsellableLine } from "@/lib/domain/quote-purchasability";
-import { QUOTE_STATUS } from "@/lib/domain/status-map";
+import { ORDER_STATUS, QUOTE_STATUS, type OrderDisplayGroupKey } from "@/lib/domain/status-map";
 import type { SemanticTone } from "@/lib/domain/types";
 
-import type { Quote, QuoteLine, QuoteStatus, QuoteStatusFilter } from "./types";
+import type { Quote, QuoteLine, QuoteRow, QuoteStatus, QuoteStatusFilter } from "./types";
 
 // Quote lifecycle as the customer meets it (kltn-docs 14 §5.1): Sales draft, the customer answers
 // a SENT quote within its validity, Sales take it from there. A customer never sees a DRAFT.
@@ -89,27 +89,70 @@ export const isQuoteStatusFilter = (value: string | null | undefined): value is 
   value != null && (QUOTE_STATUS_FILTERS as readonly string[]).includes(value);
 
 /**
+ * The order's own status (BE QuoteResponse.Order#status) as the customer reads it: the label of
+ * its status group (lib/domain ORDER_STATUS), so the quote and the order page agree. A status this
+ * FE does not know reads "Đang xử lý".
+ */
+const ORDER_GROUP_OF_STATUS: Readonly<Record<string, OrderDisplayGroupKey>> = {
+  PENDING_CONTRACT: "AWAITING_CONTRACT",
+  PENDING_PAYMENT: "AWAITING_PAYMENT",
+  ON_HOLD: "UNDER_REVIEW",
+  CONFIRMED: "CONFIRMED",
+  AWAITING_STOCK: "AWAITING_STOCK",
+  IN_PRODUCTION: "IN_PRODUCTION",
+  READY_TO_FULFILL: "PREPARING",
+  PICKING: "PREPARING",
+  PACKED: "PREPARING",
+  PARTIALLY_FULFILLED: "PREPARING",
+  IN_FULFILMENT: "PREPARING",
+  SHIPPED: "SHIPPING",
+  DELIVERY_FAILED: "SHIPPING",
+  DELIVERED: "DELIVERED",
+  RETURN_REQUESTED: "RETURN_REQUESTED",
+  RETURNED: "RETURNED",
+  REFUNDED: "RETURNED",
+  PARTIALLY_REFUNDED: "PARTIALLY_RETURNED",
+  COMPLETED: "COMPLETED",
+  CANCELLED: "CANCELLED",
+  CLOSED: "CLOSED",
+};
+
+export const convertedOrderStatusLabel = (status: string): string =>
+  ORDER_STATUS[ORDER_GROUP_OF_STATUS[status] ?? "UNKNOWN"].label;
+
+/** No order shown yet: the BE hides a DRAFT order, whose contract Sales are still drawing up. */
+const CONTRACT_BEING_DRAWN =
+  "Sale đang lập hợp đồng; bạn sẽ nhận hợp đồng để ký trong mục Chat và trang đơn hàng.";
+
+/**
  * The hint under a quote's status on its page. A CONVERTED quote's order only reaches the customer
  * once the contract is sent (BE QuoteService.view hides a DRAFT order), so no `convertedOrder` means
- * Sale is still drawing the contract up.
+ * Sale is still drawing the contract up; with it, the order's real status (UI/UX 27/11, sf-05).
  */
 export function quoteStatusHint(
   status: QuoteStatus,
   quote?: Pick<Quote, "convertedOrder">,
 ): string {
   if (status === "CONVERTED") {
-    return quote?.convertedOrder
-      ? `Đơn hàng ${quote.convertedOrder.orderNumber} đã được tạo. Xem hợp đồng và thanh toán ở trang đơn.`
-      : "Sale đang lập hợp đồng; bạn sẽ nhận hợp đồng để ký trong mục Chat và trang đơn hàng.";
+    const order = quote?.convertedOrder;
+    return order
+      ? `Đơn ${order.orderNumber} đang ở trạng thái “${convertedOrderStatusLabel(order.status)}”. Xem hợp đồng, thanh toán và giao hàng ở trang đơn.`
+      : CONTRACT_BEING_DRAWN;
   }
   return QUOTE_STATUS_META[status].hint;
 }
 
 /**
- * The hint on a list row. The list's `convertedOrderId` is not filtered the way the page's order is,
- * so a row cannot tell a draft order from a sent one: CONVERTED gets the general sentence.
+ * The hint on a list row. The row names the order only once its contract was sent
+ * (`convertedOrderNumber`, BE QuoteRowResponse), not its status: it says where to follow the order
+ * instead of promising a contract that may long be signed (UI/UX 27/11, sf-04).
  */
-export const quoteListHint = (status: QuoteStatus): string =>
-  status === "CONVERTED"
-    ? "Đơn hàng đã được tạo; Sale sẽ gửi hợp đồng để bạn ký."
-    : QUOTE_STATUS_META[status].hint;
+export function quoteListHint(
+  status: QuoteStatus,
+  row?: Pick<QuoteRow, "convertedOrderNumber">,
+): string {
+  if (status !== "CONVERTED") return QUOTE_STATUS_META[status].hint;
+  return row?.convertedOrderNumber
+    ? `Đã tạo đơn ${row.convertedOrderNumber}; theo dõi hợp đồng, thanh toán và giao hàng ở trang đơn.`
+    : CONTRACT_BEING_DRAWN;
+}

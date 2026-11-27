@@ -113,20 +113,31 @@ describe("CONVERTED hint", () => {
     );
   });
 
-  it("CONVERTED có đơn: nêu số đơn", () => {
+  it("CONVERTED có đơn: nêu số đơn và trạng thái thật của đơn (sf-05)", () => {
     const convertedOrder = {
       orderId: "0c0e0000-0000-4000-8000-000000000001",
       orderNumber: "SO-20260910-900001",
-      status: "PENDING_CONTRACT",
+      status: "COMPLETED",
       total: 1,
     };
-    expect(quoteStatusHint("CONVERTED", { convertedOrder })).toMatch(/SO-20260910-900001/);
+    const hint = quoteStatusHint("CONVERTED", { convertedOrder });
+    expect(hint).toMatch(/SO-20260910-900001/);
+    expect(hint).toMatch(/“Hoàn tất”/);
+    expect(hint).not.toMatch(/gửi hợp đồng/);
+    expect(
+      quoteStatusHint("CONVERTED", { convertedOrder: { ...convertedOrder, status: "SHIPPED" } }),
+    ).toMatch(/“Đang giao hàng”/);
+    expect(
+      quoteStatusHint("CONVERTED", { convertedOrder: { ...convertedOrder, status: "NEW_ONE" } }),
+    ).toMatch(/“Đang xử lý”/);
   });
 
-  it("the list uses one general sentence, since its order id is not filtered", () => {
-    expect(quoteListHint("CONVERTED")).toBe(
-      "Đơn hàng đã được tạo; Sale sẽ gửi hợp đồng để bạn ký.",
+  it("a list row names the order once the BE does, never promising a contract (sf-04)", () => {
+    expect(quoteListHint("CONVERTED", { convertedOrderNumber: "SO-20260910-900001" })).toBe(
+      "Đã tạo đơn SO-20260910-900001; theo dõi hợp đồng, thanh toán và giao hàng ở trang đơn.",
     );
+    // Its order is still a draft: Sales are drawing the contract up.
+    expect(quoteListHint("CONVERTED", {})).toMatch(/Sale đang lập hợp đồng/);
     expect(quoteListHint("SENT")).toBe(QUOTE_STATUS_META.SENT.hint);
   });
 });

@@ -122,10 +122,12 @@ export function QuoteAcceptForm({
             <dt className="text-ink-secondary">Tiền hàng</dt>
             <dd className="text-ink-primary tabular-nums">{money(preview.subtotal)}</dd>
           </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-ink-secondary">Phí</dt>
-            <dd className="text-ink-primary tabular-nums">{money(preview.fees)}</dd>
-          </div>
+          {preview.fees === 0 ? null : (
+            <div className="flex justify-between gap-4">
+              <dt className="text-ink-secondary">Phí</dt>
+              <dd className="text-ink-primary tabular-nums">{money(preview.fees)}</dd>
+            </div>
+          )}
           <div className="flex justify-between gap-4">
             <dt className="text-ink-secondary">Thuế VAT</dt>
             <dd className="text-ink-primary tabular-nums">{money(preview.tax)}</dd>

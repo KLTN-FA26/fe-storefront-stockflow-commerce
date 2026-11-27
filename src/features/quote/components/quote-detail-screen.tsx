@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, MessageCircle } from "lucide-react";
+import { ArrowRight, ChevronLeft, MessageCircle } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
 import { Alert } from "@/components/shared";
@@ -112,6 +112,18 @@ export function QuoteDetailScreen({ quoteId: rawQuoteId }: { quoteId: string }) 
             {status === "SENT" ? <ValidityHint validUntil={quote.validUntil} /> : null}
           </div>
           <div className="flex flex-wrap items-start gap-2">
+            {quote.convertedOrder ? (
+              // The order made from it comes first: that is where the customer goes on (sf-05).
+              <Button asChild className="min-h-11 rounded-[var(--r-md)] px-4">
+                <Link href={STORE_ROUTES.account.orders.detail(quote.convertedOrder.orderId)}>
+                  Xem đơn{" "}
+                  <span className="ml-1 font-mono tabular-nums">
+                    {quote.convertedOrder.orderNumber}
+                  </span>
+                  <ArrowRight aria-hidden className="ml-2 size-4" />
+                </Link>
+              </Button>
+            ) : null}
             <QuoteDocumentButton quoteId={quote.id} quoteNumber={quote.quoteNumber} />
             <Button asChild variant="outline" className="min-h-11 rounded-[var(--r-md)] px-4">
               <Link href={STORE_ROUTES.chat.about("QUOTE", quote.id)}>

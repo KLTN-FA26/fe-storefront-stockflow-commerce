@@ -278,13 +278,30 @@ describe("QuoteDetailScreen — read only (TC-F03-03)", () => {
     });
     renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
 
-    expect(
-      await screen.findByRole("link", { name: "Xem đơn hàng SO-20260910-900001" }),
-    ).toHaveAttribute("href", "/account/orders/0c0e0000-0000-4000-8000-000000000001");
+    expect(await screen.findByRole("link", { name: "Xem đơn SO-20260910-900001" })).toHaveAttribute(
+      "href",
+      "/account/orders/0c0e0000-0000-4000-8000-000000000001",
+    );
+    // One link to the order on the page, and the hint follows the order's own status.
+    expect(screen.getAllByRole("link", { name: /SO-20260910-900001/ })).toHaveLength(1);
+    expect(screen.getByText(/đang ở trạng thái “Chờ ký hợp đồng”/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Chat với Sale" })).toHaveAttribute(
       "href",
       `/chat/new?kind=QUOTE&id=${quoteId}`,
     );
+  });
+
+  it("leaves out the fee line of a quote without fees (sf-05)", async () => {
+    backend({
+      ...beSentQuote,
+      fees: [],
+      proposed: { subtotal: 69000000, fees: 0, tax: 5520000, total: 74520000 },
+    });
+    renderWithProviders(<QuoteDetailScreen quoteId={quoteId} />);
+
+    const totals = await screen.findByRole("region", { name: "Tổng báo giá" });
+    expect(within(totals).getByText("Tiền hàng")).toBeInTheDocument();
+    expect(within(totals).queryByText("Phí")).not.toBeInTheDocument();
   });
 
   it("renders not-found for a quote the BE hides (404)", async () => {

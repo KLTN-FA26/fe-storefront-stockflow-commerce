@@ -1,6 +1,3 @@
-import Link from "next/link";
-
-import { STORE_ROUTES } from "@/constants";
 import { formatDate, formatDateTime } from "@/lib/format/date";
 import { formatMoney } from "@/lib/format/money";
 
@@ -41,7 +38,8 @@ export function QuoteTotalsCard({ quote }: { quote: Pick<Quote, "accepted" | "pr
       </h2>
       <dl className="space-y-2 text-sm">
         <Row label="Tiền hàng">{money(totals?.subtotal)}</Row>
-        <Row label="Phí">{money(totals?.fees)}</Row>
+        {/* No fee on the quote: no "Phí 0 ₫" line (sf-05). Unknown (absent) still shows "—". */}
+        {totals?.fees === 0 ? null : <Row label="Phí">{money(totals?.fees)}</Row>}
         <Row label="Thuế VAT">{money(totals?.tax)}</Row>
         <Row label="Tổng có VAT" strong>
           {money(totals?.total)}
@@ -51,7 +49,10 @@ export function QuoteTotalsCard({ quote }: { quote: Pick<Quote, "accepted" | "pr
   );
 }
 
-/** Validity, requested delivery date, terms; what the customer asked, why Sales cancelled; the order. */
+/**
+ * Validity, requested delivery date, terms; what the customer asked, why Sales cancelled. The order
+ * made from the quote is linked from the page header.
+ */
 export function QuoteInfoCard({ quote, status }: { quote: Quote; status: QuoteStatus }) {
   return (
     <section className={`${QUOTE_CARD} space-y-3`} aria-labelledby="quote-info-heading">
@@ -90,14 +91,6 @@ export function QuoteInfoCard({ quote, status }: { quote: Quote; status: QuoteSt
           <h3 className="text-ink-tertiary text-xs">Lý do huỷ</h3>
           <p className="text-ink-primary text-sm">{quote.cancellationReason}</p>
         </div>
-      ) : null}
-      {quote.convertedOrder ? (
-        <Link
-          href={STORE_ROUTES.account.orders.detail(quote.convertedOrder.orderId)}
-          className="text-accent focus-visible:ring-accent inline-flex min-h-11 items-center rounded-[var(--r-sm)] text-sm font-semibold underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none"
-        >
-          Xem đơn hàng {quote.convertedOrder.orderNumber}
-        </Link>
       ) : null}
     </section>
   );
