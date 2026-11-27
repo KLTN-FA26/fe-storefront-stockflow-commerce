@@ -6,7 +6,8 @@ import { api } from "@/lib/api/client";
 import { beInstallment } from "@/lib/installments/__tests__/fixtures";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
-import { paymentRows } from "../filters";
+import { paymentRows, paymentsTotals } from "../filters";
+import { PAYMENTS_POLL_MS } from "../live";
 import { PaymentsScreen } from "./payments-screen";
 
 const id = (n: number) => `6c7d8e9f-0000-4000-8000-00000000000${n}`;
@@ -127,10 +128,63 @@ describe("PaymentsScreen (SF-UX-39)", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("sums what is due now and what is overdue at the top", async () => {
+    backend();
+    renderWithProviders(<PaymentsScreen />);
+
+    const summary = await screen.findByLabelText("Tổng cần thanh toán");
+    // Due now: the DUE one (300.000) and the overdue one (254.900); the NOT_DUE and PAID ones are not.
+    expect(within(summary).getByText("Cần thanh toán ngay").nextElementSibling).toHaveTextContent(
+      /554\.900/,
+    );
+    expect(within(summary).getByText("Quá hạn").nextElementSibling).toHaveTextContent(/254\.900/);
+    expect(
+      within(summary).getByText("2 đợt, gồm cả đợt thanh toán khi ký hợp đồng"),
+    ).toBeInTheDocument();
+  });
+
+  it("asks again every few seconds while money is due, so a transfer shows without a reload", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const get = backend();
+      renderWithProviders(<PaymentsScreen />);
+      await screen.findByLabelText("Tổng cần thanh toán");
+      const reads = () => get.mock.calls.filter(([url]) => url === "/installments/me").length;
+      const before = reads();
+      await vi.advanceTimersByTimeAsync(PAYMENTS_POLL_MS + 100);
+      expect(reads()).toBeGreaterThan(before);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("says so when the account cannot read installments", async () => {
     backend([]);
     renderWithProviders(<PaymentsScreen />);
     expect(await screen.findByText("Tài khoản chưa xem được lịch thanh toán.")).toBeInTheDocument();
+  });
+});
+
+/** The BE fixtures with their status narrowed, as the zod schema gives them to the page. */
+const typed = (rows: ReturnType<typeof beInstallment>[]) =>
+  rows.map((row) => ({
+    ...row,
+    status: row.status as "PAID" | "NOT_DUE" | "DUE" | "PARTIALLY_PAID",
+    dueDate: row.dueDate ?? null,
+  }));
+
+describe("paymentsTotals", () => {
+  it("counts on-signing and overdue installments as due now, and overdue apart", () => {
+    const totals = paymentsTotals(typed([paid, notDue, due, overdue]));
+    expect(totals.dueNow).toEqual({ amount: 554_900, count: 2 });
+    expect(totals.overdue).toEqual({ amount: 254_900, count: 1 });
+  });
+
+  it("is zero when nothing is owed", () => {
+    expect(paymentsTotals(typed([paid, notDue]))).toEqual({
+      dueNow: { amount: 0, count: 0 },
+      overdue: { amount: 0, count: 0 },
+    });
   });
 });
 

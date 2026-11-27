@@ -49,17 +49,31 @@ function Field({ label, value, copyName, copyValue, emphasis = false }: FieldPro
   );
 }
 
-/** What happens after the transfer (SF-UX-37): a person matches it, so it is not instant. */
+/**
+ * What happens after the transfer (SF-UX-37). The bank feed (SePay webhook) records a transfer whose
+ * content names the installment within seconds of the money arriving, so it is automatic, not a
+ * person matching the statement in office hours.
+ */
 export const AFTER_TRANSFER_TEXT =
-  "Sau khi chuyển, kế toán đối chiếu sao kê và ghi nhận khoản tiền trong giờ làm việc; trạng thái đợt sẽ chuyển sang Đã thanh toán. Bạn không cần gửi lại chứng từ.";
+  "Hệ thống tự xác nhận khoản tiền vài giây sau khi tiền về tài khoản và chuyển đợt sang Đã thanh toán. Bạn không cần gửi lại chứng từ.";
+
+/** Said only where the page re-reads the installment by itself while money is due. */
+export const LIVE_PAGE_TEXT = "Trang này tự cập nhật, không cần tải lại.";
 
 /**
  * How to pay one installment by bank transfer (kltn-docs 15 §4.2 step 5): the VietQR the BE drew up
  * when it sends one (R5-9), the shop's account, what the installment still owes — the amount
  * copyable as digits for a bank app — and the transfer content (contract number + installment) the
- * accountant matches the bank statement line against; then what happens next.
+ * bank feed matches the transfer against; then what happens next.
  */
-export function TransferInstructionsBlock({ transfer }: { transfer: InstallmentTransfer }) {
+export function TransferInstructionsBlock({
+  transfer,
+  live = false,
+}: {
+  transfer: InstallmentTransfer;
+  /** The page re-reads the installment by itself (order page, payments page): it says so. */
+  live?: boolean;
+}) {
   const headingId = `transfer-${transfer.installmentId}`;
   return (
     <section
@@ -69,37 +83,49 @@ export function TransferInstructionsBlock({ transfer }: { transfer: InstallmentT
       <h3 id={headingId} className="text-ink-primary text-sm font-semibold">
         Thông tin chuyển khoản
       </h3>
-      {transfer.vietQr ? <VietQrCode payload={transfer.vietQr} /> : null}
-      <dl className="space-y-1 text-sm">
-        <Field label="Ngân hàng" value={transfer.bankName} />
-        <Field
-          label="Số tài khoản"
-          value={transfer.accountNumber}
-          copyName="số tài khoản"
-          emphasis
-        />
-        <Field label="Chủ tài khoản" value={transfer.accountName} />
-        <Field
-          label="Nội dung chuyển khoản"
-          value={transfer.reference}
-          copyName="nội dung chuyển khoản"
-          emphasis
-        />
-        <Field
-          label="Số tiền cần chuyển"
-          value={formatMoney(transfer.amountDue, transfer.currency)}
-          copyName="số tiền"
-          copyValue={String(Math.round(transfer.amountDue))}
-          emphasis
-        />
-        {transfer.dueDate ? (
-          <Field label="Hạn thanh toán" value={formatDate(transfer.dueDate)} />
-        ) : null}
-      </dl>
+      {/* From sm up the QR sits left of the account details, so the white plate is no wider than the code;
+          on a phone they stack. */}
+      <div
+        className={
+          transfer.vietQr
+            ? "space-y-3 sm:grid sm:grid-cols-[auto_minmax(0,1fr)] sm:items-start sm:gap-4 sm:space-y-0"
+            : undefined
+        }
+      >
+        {transfer.vietQr ? <VietQrCode payload={transfer.vietQr} /> : null}
+        <dl className="space-y-1 text-sm">
+          <Field label="Ngân hàng" value={transfer.bankName} />
+          <Field
+            label="Số tài khoản"
+            value={transfer.accountNumber}
+            copyName="số tài khoản"
+            emphasis
+          />
+          <Field label="Chủ tài khoản" value={transfer.accountName} />
+          <Field
+            label="Nội dung chuyển khoản"
+            value={transfer.reference}
+            copyName="nội dung chuyển khoản"
+            emphasis
+          />
+          <Field
+            label="Số tiền cần chuyển"
+            value={formatMoney(transfer.amountDue, transfer.currency)}
+            copyName="số tiền"
+            copyValue={String(Math.round(transfer.amountDue))}
+            emphasis
+          />
+          {transfer.dueDate ? (
+            <Field label="Hạn thanh toán" value={formatDate(transfer.dueDate)} />
+          ) : null}
+        </dl>
+      </div>
       <p className="text-ink-tertiary text-xs">
-        Hãy ghi đúng nội dung chuyển khoản để kế toán đối chiếu khoản tiền với đúng đợt thanh toán.
+        Hãy ghi đúng nội dung chuyển khoản để hệ thống nhận ra đúng đợt thanh toán.
       </p>
-      <p className="text-ink-secondary text-xs">{AFTER_TRANSFER_TEXT}</p>
+      <p className="text-ink-secondary text-xs">
+        {live ? `${AFTER_TRANSFER_TEXT} ${LIVE_PAGE_TEXT}` : AFTER_TRANSFER_TEXT}
+      </p>
     </section>
   );
 }
@@ -156,5 +182,6 @@ export function InstallmentTransferSection({ installmentId }: { installmentId: s
       </div>
     );
   }
-  return query.data ? <TransferInstructionsBlock transfer={query.data} /> : null;
+  // Both pages that open it (the order, "Thanh toán") re-read what is due while money is owed.
+  return query.data ? <TransferInstructionsBlock transfer={query.data} live /> : null;
 }

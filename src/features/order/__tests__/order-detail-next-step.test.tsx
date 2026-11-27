@@ -119,7 +119,7 @@ describe("order status hero — the next step (SF-UX-29)", () => {
     renderWithProviders(<OrderDetailScreen orderId={orderId} />);
 
     const hero = await screen.findByRole("region", { name: "Chờ thanh toán" });
-    expect(hero).toHaveTextContent("Đơn được xử lý sau khi kế toán ghi nhận khoản chuyển");
+    expect(hero).toHaveTextContent("Hệ thống tự xác nhận khoản chuyển vài giây sau khi tiền về");
     const pay = await within(hero).findByRole("button", {
       name: /^Thanh toán đợt 1: 152\.100\s₫ trước 26\/11$/,
     });
