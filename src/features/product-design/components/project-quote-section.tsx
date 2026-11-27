@@ -52,31 +52,38 @@ function ProjectQuoteFacts({ request }: { request: ProjectQuoteRequest }) {
   );
 }
 
-const NO_APPROVED = "Cần ít nhất một bản đã duyệt trong dự án.";
-
 /**
  * The project's quote request on its page (docs 12 §4.11): the one open now (else the latest), and
- * "Yêu cầu báo giá cả dự án" while the project is open, for a customer who may ask. A closed project
- * offers no ask (the BE answers 409 `DESIGN_PROJECT_ARCHIVED`) but still shows its request.
+ * "Yêu cầu báo giá cả dự án" while the project is open, for a customer who may ask, once a design is
+ * approved. Before that, with nothing asked, it is not shown: the page's steps say what comes first
+ * (UI/UX 27/11, sf-12). A closed project offers no ask (the BE answers 409
+ * `DESIGN_PROJECT_ARCHIVED`) but still shows its request.
  */
 export function ProjectQuoteSection({
   project,
   designs,
+  asking: askingProp,
+  onAskingChange,
 }: {
   project: DesignProject;
   /** Undefined while the designs are read. */
   designs: readonly Design[] | undefined;
+  /** The ask dialog is open; the page's step bar opens it too. Its own state when not given. */
+  asking?: boolean;
+  onAskingChange?: (open: boolean) => void;
 }) {
   const requests = useProjectQuoteRequests(project.id);
   const allowed = useHasPermission(PERM.designQuoteRequest);
-  const [asking, setAsking] = useState(false);
+  const [askingOwn, setAskingOwn] = useState(false);
+  const asking = askingProp ?? askingOwn;
+  const setAsking = onAskingChange ?? setAskingOwn;
   const approved = (designs ?? []).filter((design) => design.status === "APPROVED");
   const offered = allowed && project.status === "ACTIVE";
   const current = currentQuoteRequest(requests.data);
   const open = openQuoteRequest(requests.data);
-  if (!offered && !current) return null;
-
-  const locked = designs !== undefined && approved.length === 0;
+  const locked = designs === undefined || approved.length === 0;
+  // Nothing to ask over yet and nothing asked: the page's steps say what comes first (sf-12).
+  if (!current && (!offered || locked)) return null;
   return (
     <section
       aria-labelledby="project-quote-title"
@@ -92,25 +99,16 @@ export function ProjectQuoteSection({
             bộ.
           </p>
         </div>
-        {offered ? (
-          <div className="flex flex-col gap-1">
-            {/* An open request is changed by a new ask, never doubled (as on a design's card). */}
-            <Button
-              type="button"
-              variant={open ? "outline" : "default"}
-              className={ACTION_BUTTON}
-              disabled={designs === undefined || locked}
-              aria-describedby={locked ? "project-quote-reason" : undefined}
-              onClick={() => setAsking(true)}
-            >
-              {open ? "Sửa yêu cầu báo giá cả dự án" : "Yêu cầu báo giá cả dự án"}
-            </Button>
-            {locked ? (
-              <span id="project-quote-reason" className="text-ink-secondary text-xs">
-                {NO_APPROVED}
-              </span>
-            ) : null}
-          </div>
+        {offered && !locked ? (
+          // An open request is changed by a new ask, never doubled (as on a design's card).
+          <Button
+            type="button"
+            variant="outline"
+            className={ACTION_BUTTON}
+            onClick={() => setAsking(true)}
+          >
+            {open ? "Sửa yêu cầu báo giá cả dự án" : "Yêu cầu báo giá cả dự án"}
+          </Button>
         ) : null}
       </div>
       {requests.isPending ? (

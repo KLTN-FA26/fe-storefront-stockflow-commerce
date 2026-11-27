@@ -154,16 +154,17 @@ describe("ProjectQuoteSection", () => {
     expect(within(dialog).getByText("Số thùng từ 1 đến 1.000.000.")).toBeInTheDocument();
   });
 
-  it("offers no ask on a project without an approved design, and says why", async () => {
+  it("is not shown on a project without an approved design and nothing asked (sf-12)", async () => {
     const { id } = await projectWith(draft);
     await renderSection(id);
-    const button = await screen.findByRole(
-      "button",
-      { name: "Yêu cầu báo giá cả dự án" },
-      FIRST_READ,
+    // Its requests are read, then nothing: the page's steps say a design must be approved first.
+    await waitFor(() =>
+      expect(backend.get.mock.calls.some(([url]) => String(url).includes("quote-requests"))).toBe(
+        true,
+      ),
     );
-    expect(button).toBeDisabled();
-    expect(button).toHaveAccessibleDescription("Cần ít nhất một bản đã duyệt trong dự án.");
+    expect(screen.queryByRole("button", { name: "Yêu cầu báo giá cả dự án" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Báo giá cả dự án" })).toBeNull();
   });
 
   it("offers no ask on a closed project, but still shows its request", async () => {

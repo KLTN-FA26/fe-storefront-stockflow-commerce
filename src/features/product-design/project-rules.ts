@@ -62,3 +62,23 @@ export function canRemoveFromProject(design: Pick<Design, "status" | "project">)
   if (design.project?.status === "ARCHIVED") return refuse(REASONS.closed);
   return design.status === "PENDING_REVIEW" ? refuse(REASONS.designPending) : ALLOWED;
 }
+
+/**
+ * Where an open project stands on its way to a quote (UI/UX 27/11, sf-12): "design" while its
+ * designs are being made (drafts, or none yet), "review" while some wait on the shop's review
+ * (docs 12 BR-19), "quote" once one is approved, which is what a project quote is asked over
+ * (docs 12 §4.11). An approved design wins over one still under review: the customer can ask now.
+ */
+export type ProjectStage = "design" | "review" | "quote";
+
+export const PROJECT_STAGES: readonly { id: ProjectStage; label: string }[] = [
+  { id: "design", label: "Thiết kế" },
+  { id: "review", label: "Duyệt" },
+  { id: "quote", label: "Báo giá" },
+];
+
+export function projectStage(designs: readonly Pick<Design, "status">[]): ProjectStage {
+  if (designs.some((design) => design.status === "APPROVED")) return "quote";
+  if (designs.some((design) => design.status === "PENDING_REVIEW")) return "review";
+  return "design";
+}

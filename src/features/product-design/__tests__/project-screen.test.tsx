@@ -131,12 +131,20 @@ describe("ProjectScreen", () => {
     expect(await screen.findByText("1/20 bản", undefined, WAIT)).toBeInTheDocument();
   });
 
-  it("locks 'Đóng dự án' while a design is under review, and says why", async () => {
+  it("leaves 'Đóng dự án' out while a design is under review, at the Duyệt step (sf-12)", async () => {
     const project = await projectWith(draft, pending);
     show(project.id);
-    const close = await screen.findByRole("button", { name: "Đóng dự án" }, WAIT);
-    expect(close).toBeDisabled();
-    expect(screen.getByText("Còn bản đang chờ duyệt")).toBeInTheDocument();
+    const steps = await screen.findByRole("region", { name: "Các bước của dự án" }, WAIT);
+    expect(within(steps).getByRole("listitem", { current: "step" })).toHaveTextContent("Duyệt");
+    expect(screen.queryByRole("button", { name: "Đóng dự án" })).toBeNull();
+    // Creating is still offered, no longer the page's primary action.
+    expect(screen.getByRole("button", { name: "Tạo bản mới trong dự án" })).toBeInTheDocument();
+  });
+
+  it("offers 'Đóng dự án' when no design is under review", async () => {
+    const project = await projectWith(draft);
+    show(project.id);
+    expect(await screen.findByRole("button", { name: "Đóng dự án" }, WAIT)).toBeEnabled();
   });
 
   it("closes the project after a confirmation, and the page turns read-only", async () => {
@@ -262,11 +270,10 @@ describe("ProjectScreen", () => {
       );
     }
     show(project.id);
-    expect(
-      await screen.findByRole("button", { name: "Tạo bản mới trong dự án" }, WAIT),
-    ).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Thêm bản sẵn có" })).toBeDisabled();
-    expect(screen.getAllByText("Dự án đã đủ 20 bản").length).toBeGreaterThan(0);
+    // Left out with the reason said once, not two locked buttons (sf-12).
+    expect(await screen.findByText("Dự án đã đủ 20 bản.", undefined, WAIT)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tạo bản mới trong dự án" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Thêm bản sẵn có" })).toBeNull();
   }, 60000);
 
   it("hides every add, create and submit control in a closed project", async () => {
@@ -297,14 +304,17 @@ describe("ProjectScreen", () => {
     ).toBeInTheDocument();
   });
 
-  it("locks 'Gửi duyệt cả bộ' with its reason while fewer than 2 drafts are chosen", async () => {
+  it("shows the selection bar once a draft is chosen, locked with its reason below 2", async () => {
     const project = await projectWith(draft, returned);
     const n = await names();
     show(project.id);
 
-    const send = await screen.findByRole("button", { name: "Gửi duyệt cả bộ" }, WAIT);
-    expect(screen.getByText("Đã chọn 0 bản nháp")).toBeInTheDocument();
-    expect(send).toBeDisabled();
+    // Nothing chosen: no bar over the designs, the steps say how to send the set (sf-12).
+    expect(
+      await screen.findByText(/bấm “Gửi duyệt cả bộ” ở cuối trang/, undefined, WAIT),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Đã chọn 0 bản nháp")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Gửi duyệt cả bộ" })).toBeNull();
 
     await userEvent.click(within(await cardOf(n.draft)).getByRole("checkbox"));
     expect(screen.getByText("Đã chọn 1 bản nháp")).toBeInTheDocument();
@@ -556,7 +566,10 @@ describe("MockReviewPanel on the project page", () => {
         loadFonts={async () => TEST_FONTS}
       />,
     );
-    await screen.findByText("Đã chọn 0 bản nháp", undefined, WAIT);
+    await userEvent.click(
+      within(await cardOf(await nameOf(draft))).getByRole("checkbox", undefined),
+    );
+    await screen.findByText("Đã chọn 1 bản nháp", undefined, WAIT);
     const trigger = await screen.findByRole(
       "button",
       { name: "Giả lập người duyệt thiết kế" },
