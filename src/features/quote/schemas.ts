@@ -170,6 +170,9 @@ export const quoteRowDtoSchema = z.object({
   // The number of the order `convertedOrderId` names; absent on the customer's copy while that order
   // is still a DRAFT (its contract not yet sent, 17 §5.2).
   convertedOrderNumber: z.string().min(1).nullish(),
+  // BE PR #497, optional until it ships: that order's status now (an OrderStatus name, parsed
+  // tolerantly); null exactly when convertedOrderNumber is.
+  convertedOrderStatus: z.string().min(1).nullish(),
 });
 
 export const quotePageDtoSchema = pageResponseSchema(quoteRowDtoSchema);
