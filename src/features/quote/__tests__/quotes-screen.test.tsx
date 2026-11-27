@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -108,15 +108,24 @@ describe("QuotesScreen", () => {
       "aria-pressed",
       "true",
     );
-    expect(get).toHaveBeenLastCalledWith(
-      "/quotes",
-      expect.objectContaining({ params: { page: 0, size: 10, status: "SENT" } }),
+    await waitFor(() =>
+      expect(get).toHaveBeenLastCalledWith(
+        "/quotes",
+        expect.objectContaining({ params: { page: 0, size: 10, status: "SENT" } }),
+      ),
     );
 
+    // Back to all: its list is already cached, so what shows is the filter, not a new request.
     await user.click(within(group).getByRole("button", { name: "Tất cả" }));
-    expect(get).toHaveBeenLastCalledWith(
-      "/quotes",
-      expect.objectContaining({ params: { page: 0, size: 10 } }),
+    await waitFor(() =>
+      expect(within(group).getByRole("button", { name: "Tất cả" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
+    );
+    expect(within(group).getByRole("button", { name: "Cần phản hồi" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
     );
   });
 
