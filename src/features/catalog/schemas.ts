@@ -41,15 +41,65 @@ export const catalogCardDtoSchema = z.object({
 });
 export const catalogPageDtoSchema = pageResponseSchema(catalogCardDtoSchema);
 
-export const catalogVariantDtoSchema = z.object({
-  sku: z.string().min(1),
-  // BE CatalogProductResponse.VariantResponse carries the SKU only: no price on the portal and no
-  // stock (kltn-docs 13 BR-04, BR-11) - the indicator is GET /catalog/products/availability.
-  // An older BE sent one; read it when present.
-  availability: availabilitySchema.nullish(),
+/** One axis value of a variant, e.g. axis "Dung tích" = "12oz" (BE CatalogProductResponse.Option). */
+export const catalogVariantOptionDtoSchema = z.object({
+  axisCode: z.string().min(1),
+  axisName: z.string().min(1),
+  valueCode: z.string().min(1),
+  label: z.string().min(1),
 });
 
-/** GET /catalog/products/{slug} (CatalogProductResponse). */
+/**
+ * A variant (quy cách) of the product page (BE CatalogProductResponse.VariantResponse). No price on the portal and no
+ * stock (kltn-docs 13 BR-04, BR-11): the indicator is GET /catalog/products/availability; an older BE sent one, read it
+ * when present. Since BE #493 (ADR-0013) it also carries its id, name, axis values and description - all optional so
+ * an older BE keeps working.
+ */
+export const catalogVariantDtoSchema = z.object({
+  sku: z.string().min(1),
+  availability: availabilitySchema.nullish(),
+  variantId: beId().nullish(),
+  name: z.string().nullish(),
+  /** The variant's own description, else the product's: HTML the BE cleaned to its allow-list. */
+  descriptionHtml: z.string().nullish(),
+  /** Whether `descriptionHtml` is the variant's own rather than the product's. */
+  ownDescription: z.boolean().nullish(),
+  options: z.array(catalogVariantOptionDtoSchema).nullish(),
+});
+
+export const catalogBrandDtoSchema = z.object({
+  id: beId(),
+  name: z.string().min(1),
+  slug: z.string().nullish(),
+  logoUrl: z.string().nullish(),
+});
+
+export const catalogCategoryDtoSchema = z.object({
+  id: beId(),
+  name: z.string().min(1),
+  slug: z.string().nullish(),
+});
+
+/**
+ * A descriptive attribute of the product (BE CatalogProductResponse.Attribute): its value as its data type holds it -
+ * `values` (labels) for a choice, else `text`, `number` (in `unit`) or `bool`.
+ */
+export const catalogAttributeDtoSchema = z.object({
+  code: z.string().min(1),
+  name: z.string().min(1),
+  dataType: z.string().nullish(),
+  unit: z.string().nullish(),
+  values: z.array(z.string()).nullish(),
+  text: z.string().nullish(),
+  number: z.number().nullish(),
+  bool: z.boolean().nullish(),
+});
+
+/**
+ * GET /catalog/products/{slug} (CatalogProductResponse). `description` is HTML since BE #493 (Tiptap, cleaned by the BE
+ * to an allow-list - ADR-0013); render it through `RichTextView`, never as text. `brand`, `category` and `attributes`
+ * came with it, optional for an older BE.
+ */
 export const catalogProductDtoSchema = z.object({
   productId: beId(),
   slug: z.string().min(1),
@@ -58,6 +108,9 @@ export const catalogProductDtoSchema = z.object({
   description: z.string().nullish(),
   seoTitle: z.string().nullish(),
   seoDescription: z.string().nullish(),
+  brand: catalogBrandDtoSchema.nullish(),
+  category: catalogCategoryDtoSchema.nullish(),
+  attributes: z.array(catalogAttributeDtoSchema).nullish(),
   variants: z.array(catalogVariantDtoSchema),
   galleryUrl: z.string().nullish(),
 });

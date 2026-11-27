@@ -28,6 +28,10 @@ export interface MockPriceTier {
 
 export interface MockVariant {
   sku: string;
+  /** BE #493: the variant's name, axis values and own description (HTML); absent on most seed rows. */
+  name?: string;
+  options?: Array<{ axisCode: string; axisName: string; valueCode: string; label: string }>;
+  description?: string;
   /** Units available to promise. */
   stock: number;
   /** The customer's price list; absent = no price (left out of /prices). */
@@ -47,6 +51,16 @@ export interface MockProduct {
   kind: MockProductKind;
   description?: string;
   seoTitle?: string;
+  /** BE #493 (ADR-0013): brand, primary category and descriptive attributes of the product page. */
+  brand?: { id: string; name: string; slug: string };
+  category?: { id: string; name: string; slug: string };
+  attributes?: Array<{
+    code: string;
+    name: string;
+    dataType: string;
+    values?: string[];
+    text?: string;
+  }>;
   /** Position in the "newest" order: higher = listed more recently. */
   listedOrder: number;
   /** Not published: invisible everywhere. */
@@ -223,11 +237,24 @@ export function createMockCatalog(
         kind: product.kind,
         ...(product.description ? { description: product.description } : {}),
         ...(product.seoTitle ? { seoTitle: product.seoTitle } : {}),
+        // BE #493: absent fields are left out, not null (Jackson non_null).
+        ...(product.brand ? { brand: product.brand } : {}),
+        ...(product.category ? { category: product.category } : {}),
+        ...(product.attributes ? { attributes: product.attributes } : {}),
         variants: product.variants.map((v) => ({
           sku: v.sku,
           price: v.listPrice ?? 0,
           currency: "VND",
           availability: v.stock > 0 ? "IN_STOCK" : "OUT_OF_STOCK",
+          ...(v.name ? { name: v.name } : {}),
+          ...(v.options ? { options: v.options } : {}),
+          // The variant's own description, else the product's - as the BE answers it.
+          ...((v.description ?? product.description)
+            ? {
+                descriptionHtml: v.description ?? product.description,
+                ownDescription: v.description !== undefined,
+              }
+            : {}),
         })),
         galleryUrl: `/api/v1/catalog/products/${product.slug}/gallery`,
       });
@@ -561,6 +588,10 @@ const SPECS: Spec[] = [
 ];
 
 export function seedMockCatalog(): MockProduct[] {
+  return enrichPaperCup(seedFromSpecs());
+}
+
+function seedFromSpecs(): MockProduct[] {
   return SPECS.map((spec, index) => ({
     productId: id(index + 1),
     slug: spec.slug,
@@ -589,4 +620,41 @@ export function seedMockCatalog(): MockProduct[] {
       ...spec.variants.map((v) => ({ sku: v.sku, url: LOGO, altText: `${spec.title} · ${v.sku}` })),
     ],
   }));
+}
+
+const CUP_COLOR = (valueCode: string, label: string) => [
+  { axisCode: "COLOR", axisName: "Màu", valueCode, label },
+];
+
+/**
+ * The 8oz paper cup carries what the product page shows since BE #493: an HTML description, brand, category,
+ * descriptive attributes, and two variants on a colour axis - the kraft one with its own description.
+ */
+function enrichPaperCup(products: MockProduct[]): MockProduct[] {
+  return products.map((product) =>
+    product.slug !== "ly-giay-2-lop-8oz"
+      ? product
+      : {
+          ...product,
+          description:
+            "<p>Ly giấy <strong>hai lớp</strong> cách nhiệt, miệng 80 mm, đóng thùng 1.000 cái.</p>" +
+            "<ul><li><p>Cà phê mang đi</p></li><li><p>Đồ uống nóng</p></li></ul>",
+          brand: { id: id(901), name: "StockFlow Pack", slug: "stockflow-pack" },
+          category: { id: id(902), name: "Ly giấy", slug: "ly-giay" },
+          attributes: [
+            { code: "MATERIAL", name: "Chất liệu", dataType: "SELECT", values: ["Giấy"] },
+            { code: "WALL", name: "Số lớp", dataType: "TEXT", text: "2 lớp" },
+          ],
+          variants: product.variants.map((variant) =>
+            variant.sku === "CUP-PAPER-8OZ-KRAFT"
+              ? {
+                  ...variant,
+                  name: "Ly 8oz kraft",
+                  options: CUP_COLOR("KRAFT", "Kraft"),
+                  description: "<p>Giấy <em>kraft</em> nâu tự nhiên, hợp quán phong cách mộc.</p>",
+                }
+              : { ...variant, name: "Ly 8oz trắng", options: CUP_COLOR("WHITE", "Trắng") },
+          ),
+        },
+  );
 }

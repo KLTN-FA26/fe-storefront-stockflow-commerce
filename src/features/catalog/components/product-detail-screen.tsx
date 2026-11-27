@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
 
 import { CHAT_WITH_SALES, STORE_ROUTES } from "@/constants";
-import { EmptyState, Skeleton } from "@/components/shared";
+import { EmptyState, RichTextView, Skeleton } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { ImageGallery } from "@/components/storefront/image-gallery";
 import { PageShell } from "@/components/storefront/layout";
@@ -17,6 +17,7 @@ import { isPriceUnavailable, isProductNotFound } from "../errors";
 import { useCatalogGallery, useCatalogProduct } from "../queries";
 import { imageFor, sortedImages } from "../selectors";
 import { CatalogLoadError, SignInRequired } from "./catalog-states";
+import { ProductFacts } from "./product-facts";
 import { ProductPurchasePanel } from "./product-purchase-panel";
 
 function ProductSkeleton() {
@@ -121,6 +122,10 @@ export function ProductDetailScreen({
     variants.find((variant) => availabilityOf(variant.sku) !== "OUT_OF_STOCK")?.sku ??
     variants[0]?.sku ??
     "";
+  // The chosen variant's own description, else the product's (BE #493 sends the fallback already; an older BE sends
+  // neither on the variant, so the product's is read here too). HTML: RichTextView cleans it before rendering.
+  const chosen = variants.find((variant) => normalizeSku(variant.sku) === normalizeSku(sku));
+  const description = chosen?.descriptionHtml ?? data.description;
   // The chosen SKU's own picture leads; the rest follow in the BE's order.
   const lead = imageFor(gallery.data, sku);
   const images = [lead, ...sortedImages(gallery.data).filter((image) => image !== lead)]
@@ -135,14 +140,13 @@ export function ProductDetailScreen({
         </div>
         <div className="min-w-0 space-y-5">
           <div className="space-y-3">
+            {data.brand ? (
+              <p className="text-ink-tertiary text-sm font-medium">{data.brand.name}</p>
+            ) : null}
             <h1 className="font-display text-ink-primary text-2xl font-bold tracking-tight sm:text-3xl">
               {data.title}
             </h1>
-            {data.description ? (
-              <p className="text-ink-secondary text-sm whitespace-pre-line sm:text-base">
-                {data.description}
-              </p>
-            ) : null}
+            <RichTextView html={description} className="text-sm sm:text-base" />
           </div>
           {variants.length === 0 ? (
             <EmptyState title="Sản phẩm chưa có phiên bản để đặt" />
@@ -156,6 +160,7 @@ export function ProductDetailScreen({
               chatHref={STORE_ROUTES.chat.list}
             />
           )}
+          <ProductFacts product={data} />
         </div>
       </section>
     </PageShell>
