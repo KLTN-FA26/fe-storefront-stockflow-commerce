@@ -141,6 +141,23 @@ describe("ProjectScreen", () => {
     expect(screen.getByRole("button", { name: "Tạo bản mới trong dự án" })).toBeInTheDocument();
   });
 
+  it("reaches Báo giá with an approved design: one ask, from the steps, opening its dialog", async () => {
+    const project = await projectWith(draft, approved);
+    show(project.id);
+    const steps = await screen.findByRole("region", { name: "Các bước của dự án" }, WAIT);
+    expect(await within(steps).findByRole("listitem", { current: "step" }, WAIT)).toHaveTextContent(
+      "Báo giá",
+    );
+    const ask = await within(steps).findByRole(
+      "button",
+      { name: "Yêu cầu báo giá cả dự án" },
+      WAIT,
+    );
+    expect(screen.getAllByRole("button", { name: "Yêu cầu báo giá cả dự án" })).toHaveLength(1);
+    await userEvent.click(ask);
+    expect(await screen.findByRole("dialog", undefined, WAIT)).toBeInTheDocument();
+  });
+
   it("offers 'Đóng dự án' when no design is under review", async () => {
     const project = await projectWith(draft);
     show(project.id);

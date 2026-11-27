@@ -82,8 +82,20 @@ export function ProjectQuoteSection({
   const current = currentQuoteRequest(requests.data);
   const open = openQuoteRequest(requests.data);
   const locked = designs === undefined || approved.length === 0;
+  const dialog = offered ? (
+    <ProjectQuoteDialog
+      project={project}
+      designs={approved}
+      current={open}
+      open={asking}
+      onOpenChange={setAsking}
+    />
+  ) : null;
   // Nothing to ask over yet and nothing asked: the page's steps say what comes first (sf-12).
   if (!current && (!offered || locked)) return null;
+  // Nothing asked yet on a page whose steps hold the ask: no second "Yêu cầu báo giá" card, only
+  // the dialog those steps open.
+  if (!current && onAskingChange) return dialog;
   return (
     <section
       aria-labelledby="project-quote-title"
@@ -132,15 +144,7 @@ export function ProjectQuoteSection({
       ) : (
         <p className="text-ink-tertiary text-sm">Dự án chưa có yêu cầu báo giá nào.</p>
       )}
-      {offered ? (
-        <ProjectQuoteDialog
-          project={project}
-          designs={approved}
-          current={open}
-          open={asking}
-          onOpenChange={setAsking}
-        />
-      ) : null}
+      {dialog}
     </section>
   );
 }
