@@ -84,8 +84,9 @@ export function CreditCard({ requests }: { requests?: ReactNode } = {}) {
       {credit.hasCredit && credit.limit <= 0 ? (
         <div role="status">
           <Alert tone="warning" title="Hạn mức công nợ của bạn là 0 ₫.">
-            Hợp đồng có đợt thanh toán sau giao hàng sẽ chờ kế toán duyệt công nợ khi ký. Vui lòng
-            liên hệ Sales nếu cần thêm hạn mức.
+            {/* 15 BR-11 (BE PR #486): kế toán duyệt TRƯỚC khi Sale gửi hợp đồng, không còn chờ đến lúc ký. */}
+            Hợp đồng có đợt thanh toán sau giao hàng cần kế toán duyệt công nợ trước khi Sale gửi
+            cho bạn. Bạn có thể gửi đề nghị cấp hạn mức bên dưới.
           </Alert>
         </div>
       ) : null}
@@ -106,8 +107,8 @@ export function CreditCard({ requests }: { requests?: ReactNode } = {}) {
                     : ""
                 }. `
               : ""}
-            Hợp đồng mới sẽ chờ kế toán duyệt cho đến khi khoản quá hạn được thanh toán. Vui lòng
-            liên hệ Sales nếu cần hỗ trợ.
+            Hợp đồng mới cần kế toán duyệt trước khi gửi cho bạn, cho đến khi khoản quá hạn được
+            thanh toán. Vui lòng liên hệ Sales nếu cần hỗ trợ.
           </Alert>
         </div>
       ) : null}
