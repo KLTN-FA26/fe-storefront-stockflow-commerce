@@ -86,18 +86,21 @@ export function FontCombobox({
           className="border-border-default bg-bg-surface text-ink-primary w-(--radix-popover-trigger-width) p-1 shadow-md"
         >
           <Command className="bg-bg-surface text-ink-primary">
-            {options.length > FONT_SEARCH_MIN ? (
-              <>
-                {/* The kit's search field is 32 px tall: this one is a 44 px touch target. */}
-                <div className="border-border-default focus-within:ring-accent flex min-h-11 items-center gap-2 rounded-[var(--r-md)] border px-3 focus-within:ring-2">
-                  <Search aria-hidden className="text-ink-tertiary size-4 shrink-0" />
-                  <CommandPrimitive.Input
-                    placeholder="Tìm phông chữ…"
-                    className="text-ink-primary placeholder:text-ink-tertiary h-11 w-full bg-transparent text-sm outline-none"
-                  />
-                </div>
-              </>
-            ) : null}
+            {/* The kit's search field is 32 px tall: this one is a 44 px touch target. With a few fonts it is
+                kept for the keyboard (↑ ↓ Enter, typing a name) but hidden: the whole list is in view. */}
+            <div
+              className={cn(
+                "border-border-default focus-within:ring-accent flex min-h-11 items-center gap-2 rounded-[var(--r-md)] border px-3 focus-within:ring-2",
+                options.length <= FONT_SEARCH_MIN && "sr-only",
+              )}
+            >
+              <Search aria-hidden className="text-ink-tertiary size-4 shrink-0" />
+              <CommandPrimitive.Input
+                placeholder="Tìm phông chữ…"
+                aria-label="Tìm phông chữ"
+                className="text-ink-primary placeholder:text-ink-tertiary h-11 w-full bg-transparent text-sm outline-none"
+              />
+            </div>
             <CommandList>
               <CommandEmpty className="text-ink-secondary">Không tìm thấy.</CommandEmpty>
               <CommandGroup heading="Phông chữ">

@@ -560,8 +560,8 @@ describe("text properties", () => {
     expect(screen.getByRole("button", { name: "In nghiêng" })).toBeDisabled();
     await user.click(screen.getByRole("combobox", { name: /^Phông chữ/ }));
     const list = await screen.findByRole("listbox");
-    // A short list needs no search field (UX audit S08-13).
-    expect(screen.queryByPlaceholderText("Tìm phông chữ…")).not.toBeInTheDocument();
+    // A short list needs no visible search field (UX audit S08-13); it stays for the keyboard.
+    expect(screen.getByPlaceholderText("Tìm phông chữ…").closest("div")).toHaveClass("sr-only");
     const options = within(list).getAllByRole("option");
     expect(options.map((o) => o.textContent?.trim())).toEqual(["Lobster", "Montserrat"]);
     expect(within(options[1]!).getByText("Montserrat")).toHaveStyle({ fontFamily: "Montserrat" });

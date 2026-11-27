@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { describe, expect, it } from "vitest";
 
 import { SubmitQuoteChoice } from "../components/studio/submit-quote-choice";
@@ -13,14 +13,12 @@ function Harness({ unitsPerCarton }: { unitsPerCarton?: number }) {
     resolver: zodResolver(quoteRequestFormSchema),
     defaultValues: { cartons: "", desiredDeliveryDate: "" },
   });
-  const cartons = useWatch({ control: form.control, name: "cartons" });
   return (
     <SubmitQuoteChoice
       withQuote
       onWithQuoteChange={() => undefined}
       form={form}
       unitsPerCarton={unitsPerCarton}
-      cartons={cartons}
     />
   );
 }

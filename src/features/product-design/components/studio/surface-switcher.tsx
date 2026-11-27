@@ -7,6 +7,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { PrintAreaCode } from "../../engine";
 import { BAR_HIT } from "./bar-controls";
 import { useEditorState, useStudio } from "./studio-context";
+import { faceName } from "./face-name";
 
 /**
  * The print areas of the template ("Thân ly"; a bag's four faces), in template order, at the end
@@ -19,10 +20,7 @@ import { useEditorState, useStudio } from "./studio-context";
 export function SurfaceSwitcher() {
   const { editor, surfaces, template } = useStudio();
   const active = useEditorState((s) => s.activeSurface);
-  // A face the template does not name reads "Mặt 2", never its internal code (UX audit S08-13)
-  const nameOf = (code: PrintAreaCode) =>
-    template.printAreas.find((area) => area.code === code)?.name ??
-    `Mặt ${surfaces.order.indexOf(code) + 1}`;
+  const nameOf = (code: PrintAreaCode) => faceName(template.printAreas, surfaces.order, code);
 
   if (surfaces.order.length === 1) {
     return (
