@@ -1,7 +1,5 @@
 "use client";
 
-
-
 import { Alert, Skeleton } from "@/components/shared";
 import { SurfaceCard } from "@/components/storefront/layout";
 import { formatMoney } from "@/lib/format/money";
@@ -9,13 +7,16 @@ import { creditSummary, useMyCreditPosition } from "@/lib/credit-position";
 import { formatDate } from "@/lib/format/date";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 
+import type { ReactNode } from "react";
+
 /**
  * The customer's own credit position on the account page (SFCREDIT; kltn-docs 15 §4.3, 18 §2): limit,
  * what the installments paid after delivery still owe, what is left, the days to pay and a warning
- * while an installment is overdue. Read from GET /orders/credit-position/me. A customer with neither
- * credit nor anything owed sees nothing; nothing is shown while the position is not loaded.
+ * while an installment is overdue. Read from GET /orders/credit-position/me. Nothing is shown while the position
+ * is not loaded. A customer with neither credit nor anything owed sees only the way to ask for credit (BE PR #490,
+ * handoff A3): `requests`, the "Đề nghị cấp hạn mức" section the page passes in, shown to every loaded customer.
  */
-export function CreditCard() {
+export function CreditCard({ requests }: { requests?: ReactNode } = {}) {
   const signedIn = useSignedIn();
   const query = useMyCreditPosition(signedIn === true);
   const credit = query.data ? creditSummary(query.data) : undefined;
@@ -27,7 +28,18 @@ export function CreditCard() {
   }
   // Not loaded: whether credit matters to this customer is unknown, and a customer without credit
   // must not be shown a credit warning.
-  if (!credit) return null;
+  if (!query.isSuccess) return null;
+  if (!credit) {
+    return (
+      <SurfaceCard className="space-y-4">
+        <Heading />
+        <p className="text-ink-secondary text-sm">
+          Bạn chưa có hạn mức công nợ: đơn hàng thanh toán trước khi giao.
+        </p>
+        {requests}
+      </SurfaceCard>
+    );
+  }
 
   const money = (amount: number) => formatMoney(amount, credit.currency);
   const usedPercent =
@@ -72,8 +84,9 @@ export function CreditCard() {
       {credit.hasCredit && credit.limit <= 0 ? (
         <div role="status">
           <Alert tone="warning" title="Hạn mức công nợ của bạn là 0 ₫.">
-            Hợp đồng có đợt thanh toán sau giao hàng sẽ chờ kế toán duyệt công nợ khi ký. Vui lòng
-            liên hệ Sale nếu cần thêm hạn mức.
+            {/* 15 BR-11 (BE PR #486): kế toán duyệt TRƯỚC khi Sale gửi hợp đồng, không còn chờ đến lúc ký. */}
+            Hợp đồng có đợt thanh toán sau giao hàng cần kế toán duyệt công nợ trước khi Sale gửi
+            cho bạn. Bạn có thể gửi đề nghị cấp hạn mức bên dưới.
           </Alert>
         </div>
       ) : null}
@@ -94,11 +107,12 @@ export function CreditCard() {
                     : ""
                 }. `
               : ""}
-            Hợp đồng mới sẽ chờ kế toán duyệt cho đến khi khoản quá hạn được thanh toán. Vui lòng
-            liên hệ Sale nếu cần hỗ trợ.
+            Hợp đồng mới cần kế toán duyệt trước khi gửi cho bạn, cho đến khi khoản quá hạn được
+            thanh toán. Vui lòng liên hệ Sales nếu cần hỗ trợ.
           </Alert>
         </div>
       ) : null}
+      {requests}
     </SurfaceCard>
   );
 }

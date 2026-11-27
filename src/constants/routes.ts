@@ -75,6 +75,11 @@ export const STORE_ROUTES = {
     },
     /** The customer's installments to pay, overdue and due first (SF-UX-39). */
     payments: "/account/payments",
+    /**
+     * The customer's credit requests (BE PR #490). The detail is `/credit-requests/{id}` — the link the "đề nghị đã có
+     * kết quả" notification carries; change it together with the BE.
+     */
+    creditRequest: (id: string) => `/credit-requests/${encodeURIComponent(id)}`,
     addresses: "/account/addresses",
     security: "/account/security",
   },
