@@ -20,7 +20,24 @@ const position = (over: Record<string, unknown> = {}) => ({
   overdueAmount: 0,
   ...over,
 });
-const answer = (data: unknown) => vi.spyOn(api, "get").mockResolvedValue({ data });
+const EMPTY_PAGE = {
+  items: [],
+  page: 0,
+  size: 10,
+  totalElements: 0,
+  totalPages: 0,
+  hasNext: false,
+  hasPrevious: false,
+};
+/** The position at GET /orders/credit-position/me; the card's credit requests (BE PR #490) answer an empty page. */
+const answer = (data: unknown) =>
+  vi
+    .spyOn(api, "get")
+    .mockImplementation(async (url: string) =>
+      url === "/credit-requests/mine" ? { data: EMPTY_PAGE } : { data },
+    );
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 beforeEach(() => signIn());
 afterEach(() => {
@@ -62,13 +79,16 @@ describe("CreditCard (account page, SFCREDIT; kltn-docs 15 §4.3)", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(/2026|01\/10|1 thg 10/);
   });
 
-  it("shows nothing to a customer with neither credit nor anything owed", async () => {
+  it("a customer with neither credit nor anything owed sees only the way to ask for credit (handoff A3)", async () => {
     const { creditLimit: _l, creditTermDays: _d, availableCredit: _a, ...rest } = position();
     answer({ ...rest, exposure: 0 });
-    const { container } = renderWithProviders(<CreditCard />);
+    renderWithProviders(<CreditCard />);
 
-    await vi.waitFor(() => expect(api.get).toHaveBeenCalled());
-    await vi.waitFor(() => expect(container).toBeEmptyDOMElement());
+    expect(
+      await screen.findByRole("button", { name: "Gửi đề nghị cấp hạn mức" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Dư nợ")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("shows what a customer without credit still owes, without a limit or a zero-limit warning", async () => {

@@ -1,7 +1,5 @@
 "use client";
 
-
-
 import { Alert, Skeleton } from "@/components/shared";
 import { SurfaceCard } from "@/components/storefront/layout";
 import { formatMoney } from "@/lib/format/money";
@@ -9,11 +7,14 @@ import { creditSummary, useMyCreditPosition } from "@/lib/credit-position";
 import { formatDate } from "@/lib/format/date";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 
+import { CreditRequestSection } from "../../credit-request";
+
 /**
  * The customer's own credit position on the account page (SFCREDIT; kltn-docs 15 §4.3, 18 §2): limit,
  * what the installments paid after delivery still owe, what is left, the days to pay and a warning
- * while an installment is overdue. Read from GET /orders/credit-position/me. A customer with neither
- * credit nor anything owed sees nothing; nothing is shown while the position is not loaded.
+ * while an installment is overdue. Read from GET /orders/credit-position/me. Nothing is shown while the position
+ * is not loaded. A customer with neither credit nor anything owed sees only the way to ask for credit (BE PR #490,
+ * handoff A3): the card's "Đề nghị cấp hạn mức" section, there for every loaded customer.
  */
 export function CreditCard() {
   const signedIn = useSignedIn();
@@ -27,7 +28,18 @@ export function CreditCard() {
   }
   // Not loaded: whether credit matters to this customer is unknown, and a customer without credit
   // must not be shown a credit warning.
-  if (!credit) return null;
+  if (!query.isSuccess) return null;
+  if (!credit) {
+    return (
+      <SurfaceCard className="space-y-4">
+        <Heading />
+        <p className="text-ink-secondary text-sm">
+          Bạn chưa có hạn mức công nợ: đơn hàng thanh toán trước khi giao.
+        </p>
+        <CreditRequestSection enabled />
+      </SurfaceCard>
+    );
+  }
 
   const money = (amount: number) => formatMoney(amount, credit.currency);
   const usedPercent =
@@ -99,6 +111,7 @@ export function CreditCard() {
           </Alert>
         </div>
       ) : null}
+      <CreditRequestSection enabled />
     </SurfaceCard>
   );
 }
