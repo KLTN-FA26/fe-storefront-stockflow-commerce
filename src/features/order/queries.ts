@@ -16,6 +16,9 @@ export const orderKeys = {
   details: () => [...orderKeys.all, "detail"] as const,
   detail: (orderId: string) => [...orderKeys.details(), orderId] as const,
   vehicles: (orderId: string) => [...orderKeys.all, "vehicles", orderId.toLowerCase()] as const,
+  /** The order's delivery schedule in force (contract-queries.ts). */
+  deliverySchedule: (orderId: string) =>
+    [...orderKeys.all, "delivery-schedule", orderId.toLowerCase()] as const,
   /** The order's sales contract, as the customer reads it (contract-queries.ts). */
   contract: (orderId: string) => [...orderKeys.all, "contract", orderId.toLowerCase()] as const,
   cancellationRequest: (orderId: string) =>

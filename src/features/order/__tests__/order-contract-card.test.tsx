@@ -235,6 +235,137 @@ describe("OrderContractCard — signing and terms (SF-UX-24, SF-UX-36, L-9)", ()
   });
 });
 
+/**
+ * The customer sees the delivery schedule in force (17 §5.2, BR-28): the window Sales moved to, a
+ * "Đã dời" mark with the contract's original window and why, and nothing internal (no note, no
+ * evidence, no staff). BE `GET /orders/me/{id}/delivery-batches`, customer view.
+ */
+describe("OrderContractCard — the window in force (kltn-docs 17 BR-28)", () => {
+  const signed = { ...beContract, status: "SIGNED", signedOn: "2026-11-18" };
+  const SCHEDULE_PATH = `/orders/me/${orderId}/delivery-batches`;
+  const batch = (seq: number, window: [string, string], contractWindow: [string, string]) => ({
+    batchId: `b-${seq}`,
+    seq,
+    contractWindowStart: contractWindow[0],
+    contractWindowEnd: contractWindow[1],
+    windowStart: window[0],
+    windowEnd: window[1],
+    state: "AWAITING_STOCK",
+    late: false,
+    lines: [],
+  });
+  /** Batch 1 as signed; batch 2 moved from 23/12 to 28/12 – 30/12 at the customer's request. */
+  const movedSchedule = (reason = "CUSTOMER_REQUEST") => ({
+    orderId,
+    orderNumber: "SO-20260910-900001",
+    contractNumber: "HD-20260910-900001-1",
+    batches: [
+      {
+        ...batch(1, ["2026-12-09", "2026-12-11"], ["2026-12-09", "2026-12-11"]),
+        windowChanges: [],
+      },
+      {
+        ...batch(2, ["2026-12-28", "2026-12-30"], ["2026-12-23", "2026-12-23"]),
+        windowChanges: [
+          {
+            id: "w-1",
+            oldStart: "2026-12-23",
+            oldEnd: "2026-12-23",
+            newStart: "2026-12-28",
+            newEnd: "2026-12-30",
+            reason,
+            changedAt: "2026-11-28T03:00:00Z",
+          },
+        ],
+      },
+    ],
+  });
+  const answer = (schedule: () => unknown) =>
+    vi.spyOn(api, "get").mockImplementation(async (url: string) => {
+      if (url === SCHEDULE_PATH) {
+        const data = schedule();
+        if (data instanceof Error) throw data;
+        return { data };
+      }
+      return { data: signed };
+    });
+
+  const scheduleList = () => screen.getByRole("list", { name: "Lịch giao" });
+
+  it("asks for the schedule in force and shows the window in force with a 'Đã dời' mark, the contract's window and why", async () => {
+    const get = answer(() => movedSchedule());
+    renderWithProviders(<OrderContractCard orderId={orderId} />);
+
+    expect(await screen.findByText("Đã dời")).toBeInTheDocument();
+    expect(get).toHaveBeenCalledWith(SCHEDULE_PATH, expect.anything());
+    const items = within(scheduleList()).getAllByRole("listitem", { name: "" });
+    const second = items.find((item) => /Đợt 2/.test(item.textContent ?? ""));
+    expect(second).toBeDefined();
+    expect(second).toHaveTextContent("28/12/2026 – 30/12/2026");
+    expect(second).toHaveTextContent("Lịch ban đầu theo hợp đồng: 23/12/2026");
+    expect(second).toHaveTextContent("Theo đề nghị của quý khách");
+    expect(second).toHaveTextContent("dời ngày 28/11/2026");
+    // The batch that did not move is as signed, with no mark
+    const first = items.find((item) => /Đợt 1/.test(item.textContent ?? ""));
+    expect(first).toHaveTextContent("09/12/2026 – 11/12/2026");
+    expect(first).not.toHaveTextContent("Đã dời");
+    expect(screen.getAllByText("Đã dời")).toHaveLength(1);
+  });
+
+  it("says the seller was late when the reason is SELLER_DELAY", async () => {
+    answer(() => movedSchedule("SELLER_DELAY"));
+    renderWithProviders(<OrderContractCard orderId={orderId} />);
+    expect(await screen.findByText(/Do bên bán giao trễ so với lịch/)).toBeInTheDocument();
+  });
+
+  it("never shows the Sales note, the consent evidence or who moved it, even if the BE sent them", async () => {
+    const schedule = movedSchedule();
+    const change = schedule.batches[1]?.windowChanges[0] as Record<string, unknown>;
+    Object.assign(change, {
+      note: "Khách xin dời vì kẹt kho, đã chốt qua điện thoại",
+      evidenceMessageId: "3f6c9a52-8a63-4f1c-9d3a-6f4f2a1b7c10",
+      evidenceFileName: "xac-nhan-noi-bo.pdf",
+      changedBy: "5b1c0a52-9d3e-4a54-8f1f-0d6f7b8a9c01",
+      changedByName: "Nguyễn Hải Yến",
+    });
+    answer(() => schedule);
+    const { container } = renderWithProviders(<OrderContractCard orderId={orderId} />);
+    await screen.findByText("Đã dời");
+    for (const internal of [
+      "kẹt kho",
+      "3f6c9a52",
+      "xac-nhan-noi-bo",
+      "5b1c0a52",
+      "Nguyễn Hải Yến",
+    ]) {
+      expect(container.textContent).not.toContain(internal);
+    }
+  });
+
+  it("a batch never moved shows its window as signed, with no 'Đã dời'", async () => {
+    answer(() => ({
+      ...movedSchedule(),
+      batches: movedSchedule().batches.map((b) => ({ ...b, windowChanges: [] })),
+    }));
+    renderWithProviders(<OrderContractCard orderId={orderId} />);
+    await waitFor(() => expect(scheduleList()).toBeInTheDocument());
+    expect(screen.queryByText("Đã dời")).not.toBeInTheDocument();
+  });
+
+  it("keeps the contract's windows, with no error shown, while the schedule cannot be read", async () => {
+    answer(() => new ApiError(500, "INTERNAL_ERROR", "Boom"));
+    const { container } = renderWithProviders(<OrderContractCard orderId={orderId} />);
+    expect(await screen.findByText("HD-20260910-900001-1")).toBeInTheDocument();
+    const second = within(scheduleList())
+      .getAllByRole("listitem")
+      .find((item) => /Đợt 2/.test(item.textContent ?? ""));
+    expect(second).toHaveTextContent("23/12/2026");
+    expect(screen.queryByText("Đã dời")).not.toBeInTheDocument();
+    expect(container.textContent).not.toContain("Boom");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
 describe("OrderReorder (WF-02 D4, SF-UX-35)", () => {
   it("opens a conversation with Sales about a delivered order instead of POST /reorder", () => {
     render(

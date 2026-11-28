@@ -4,8 +4,10 @@ import { ApiError } from "@/lib/api/error";
 import {
   contractDocumentDtoSchema,
   contractDtoSchema,
+  deliveryScheduleDtoSchema,
   type Contract,
   type ContractDocument,
+  type DeliverySchedule,
 } from "./contract-schemas";
 
 // BE CustomerSalesContractController: /api/v1/orders/me/{orderId}/contract (sales-orders:READ, OWN).
@@ -54,4 +56,20 @@ export async function getMyOrderContractDocument(
     copy ? { params: { copy } } : {},
   );
   return contractDocumentDtoSchema.parse(data);
+}
+
+/**
+ * GET /orders/me/{orderId}/delivery-batches (BE DeliveryBatchController#mySchedule, sales-orders:READ,
+ * OWN) — the order's delivery schedule in force: for each batch the window the contract names and the
+ * one in force, with its moves (17 §5.2, BR-28).
+ */
+export async function getMyDeliverySchedule(
+  orderId: string,
+  signal?: AbortSignal,
+): Promise<DeliverySchedule> {
+  const { data } = await api.get<unknown>(
+    `/orders/me/${encodeURIComponent(orderId)}/delivery-batches`,
+    signal ? { signal } : {},
+  );
+  return deliveryScheduleDtoSchema.parse(data);
 }
