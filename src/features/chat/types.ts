@@ -1,5 +1,7 @@
 import type { z } from "zod";
 
+import type { ChooseShortageInput } from "@/lib/domain/shortage";
+
 import type {
   acceptQuoteInputSchema,
   chatAttachmentDtoSchema,
@@ -55,4 +57,5 @@ export type CardActionBody =
   | ({ action: "REQUEST_CHANGES" } & RequestChangesInput)
   | { action: "APPROVE" }
   | ({ action: "REQUEST_REPRINT" } & RequestReprintInput)
-  | ({ action: "RATE" } & RateInput);
+  | ({ action: "RATE" } & RateInput)
+  | ({ action: "CHOOSE" } & ChooseShortageInput);

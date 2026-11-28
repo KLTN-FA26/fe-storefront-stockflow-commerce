@@ -5,6 +5,7 @@ import { QUERY_TIMES } from "@/lib/api/query-client";
 import { ORDERS_QUERY_ROOT } from "@/lib/api/query-keys";
 
 import { getMyOrders, getOrder, getOrderVehicles } from "./api";
+import { getLiveShortageCard } from "./shortage-api";
 import { isApiError } from "./errors";
 import { isValidOrderId } from "./schemas";
 import type { MyOrdersParams } from "./types";
@@ -18,6 +19,8 @@ export const orderKeys = {
   vehicles: (orderId: string) => [...orderKeys.all, "vehicles", orderId.toLowerCase()] as const,
   /** The order's sales contract, as the customer reads it (contract-queries.ts). */
   contract: (orderId: string) => [...orderKeys.all, "contract", orderId.toLowerCase()] as const,
+  /** The shortage choice card still waiting on the order (shortage-api.ts). */
+  shortage: (orderId: string) => [...orderKeys.all, "shortage", orderId.toLowerCase()] as const,
   cancellationRequest: (orderId: string) =>
     [...orderKeys.all, "cancellation-request", orderId.toLowerCase()] as const,
 };
@@ -57,6 +60,20 @@ export function useOrderVehicles(orderId: string, enabled = true) {
   return useQuery({
     queryKey: orderKeys.vehicles(orderId),
     queryFn: ({ signal }) => getOrderVehicles(orderId, signal),
+    enabled: enabled && isValidOrderId(orderId),
+    retry: retryTransient,
+    ...QUERY_TIMES.tracking,
+  });
+}
+
+/**
+ * The order's live shortage card (17 §4.14), or null. Read again while the page is open: Sales carry the choice out
+ * or the warehouse finds the cartons, and the card changes without the customer doing anything.
+ */
+export function useShortageCard(orderId: string, enabled = true) {
+  return useQuery({
+    queryKey: orderKeys.shortage(orderId),
+    queryFn: ({ signal }) => getLiveShortageCard(orderId, signal),
     enabled: enabled && isValidOrderId(orderId),
     retry: retryTransient,
     ...QUERY_TIMES.tracking,

@@ -173,6 +173,8 @@ export function cardActionsOf(card: StoredCard): { customer: string[]; staff: st
       return payload.status === "WAITING"
         ? { customer: ["APPROVE", "REQUEST_REPRINT"], staff: [] }
         : none;
+    case "SHORTAGE_CHOICE":
+      return payload.status === "SENT" ? { customer: ["CHOOSE"], staff: [] } : none;
     case "CSAT_SURVEY":
       return { customer: ["RATE"], staff: [] };
     default:
@@ -1024,6 +1026,24 @@ export function createMockChatStore(deps: MockChatDeps) {
       };
       card.state = "ACTED";
       card.updatedAt = answeredAt;
+      return ok(messageView(message, c.id));
+    }
+    if (card.kind === "SHORTAGE_CHOICE") {
+      // BE ChatCardActions: the customer's one choice, among the ways the card offered, is the consent evidence.
+      const offered = Array.isArray(card.payload.options)
+        ? (card.payload.options as Payload[])
+        : [];
+      if (!offered.some((offer) => offer.option === body.option)) {
+        return fail(409, "SHORTAGE_OPTION_NOT_AVAILABLE", "Hướng này không có trên thẻ.");
+      }
+      const at = now().toISOString();
+      card.payload = {
+        ...card.payload,
+        status: "ANSWERED",
+        version: Number(card.payload.version ?? 0) + 1,
+        chosen: { option: body.option, at, note: isText(body.note) ? body.note.trim() : null },
+      };
+      card.updatedAt = at;
       return ok(messageView(message, c.id));
     }
     if (card.kind !== "QUOTE" || (action !== "ACCEPT" && action !== "REQUEST_CHANGES")) {

@@ -2,9 +2,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { toast } from "@/components/shared/Toast";
 import type { ApiError } from "@/lib/api/error";
+import { CHAT_QUERY_ROOT } from "@/lib/api/query-keys";
 import { myPermissionKeys } from "@/lib/auth/my-permissions";
+import type { ChooseShortageInput, ShortageCard } from "@/lib/domain/shortage";
 
 import { cancelMyOrder } from "./api";
+import { chooseShortageOption } from "./shortage-api";
 import { orderKeys, type KnownCancellationRequest } from "./queries";
 import type { CancelOrderInput, CancellationResult } from "./types";
 
@@ -44,6 +47,28 @@ export function useCancelMyOrder() {
       Promise.all([
         queryClient.invalidateQueries({ queryKey: orderKeys.lists() }),
         queryClient.invalidateQueries({ queryKey: orderKeys.detail(orderId) }),
+        error?.status === 403
+          ? queryClient.invalidateQueries({ queryKey: myPermissionKeys.all })
+          : undefined,
+      ]),
+  });
+}
+
+/**
+ * The customer's choice on the order's shortage card (17 §4.14 step 57). The card comes back `Answered` and replaces
+ * the one shown; the order and the card in the chat thread are read again. A 409 means the card changed meanwhile
+ * (chosen in the chat, replaced, ended): the page reads it again and the BE's own words stay in the dialog.
+ */
+export function useChooseShortage(orderId: string) {
+  const queryClient = useQueryClient();
+  return useMutation<ShortageCard, ApiError, { cardId: string; input: ChooseShortageInput }>({
+    mutationFn: ({ cardId, input }) => chooseShortageOption(orderId, cardId, input),
+    onSuccess: (card) => queryClient.setQueryData(orderKeys.shortage(orderId), card),
+    onSettled: (_data, error) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: orderKeys.shortage(orderId) }),
+        queryClient.invalidateQueries({ queryKey: orderKeys.detail(orderId) }),
+        queryClient.invalidateQueries({ queryKey: CHAT_QUERY_ROOT }),
         error?.status === 403
           ? queryClient.invalidateQueries({ queryKey: myPermissionKeys.all })
           : undefined,

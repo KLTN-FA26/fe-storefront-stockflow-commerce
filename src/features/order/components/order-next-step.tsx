@@ -1,15 +1,17 @@
 "use client";
 
-import { CreditCard, PenLine } from "lucide-react";
+import { CreditCard, PenLine, SplitSquareHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { formatDayMonth } from "@/lib/format/date";
 import { formatMoney } from "@/lib/format/money";
+import { isShortageOpen, type ShortageCard } from "@/lib/domain/shortage";
 import { installmentShortName, type Installment } from "@/lib/installments";
 
 import type { Contract } from "../contract-schemas";
 import type { OrderDisplayGroup } from "../lifecycle";
 import { CONTRACT_SECTION_ID } from "./contract-signing-steps";
+import { SHORTAGE_SECTION_ID } from "./order-shortage-card";
 
 /**
  * "Thanh toán đợt 1: 28.620.000 ₫ trước 26/11", or "… (quá hạn)" once the day has passed. A fee item
@@ -36,13 +38,26 @@ export function OrderNextStep({
   contract,
   payable,
   onPay,
+  shortage,
 }: {
   group: OrderDisplayGroup;
   contract: Contract | null | undefined;
   /** `nextPayable(plan)`: the installment due now, if any. */
   payable: Installment | null;
   onPay: (installmentId: string) => void;
+  /** The order's live shortage card: while it waits for the customer's choice, that is the next step (17 §4.14). */
+  shortage?: ShortageCard | null | undefined;
 }) {
+  if (shortage && isShortageOpen(shortage)) {
+    return (
+      <Button asChild className="min-h-11 w-full rounded-[var(--r-md)] px-4 sm:w-auto">
+        <a href={`#${SHORTAGE_SECTION_ID}`}>
+          <SplitSquareHorizontal aria-hidden className="mr-2 size-4" />
+          Chọn hướng xử lý thiếu thùng
+        </a>
+      </Button>
+    );
+  }
   if (group === "AWAITING_CONTRACT" && contract?.status === "SENT") {
     return (
       <Button asChild className="min-h-11 w-full rounded-[var(--r-md)] px-4 sm:w-auto">

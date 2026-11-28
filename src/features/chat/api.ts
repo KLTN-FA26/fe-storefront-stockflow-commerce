@@ -5,6 +5,7 @@
  */
 
 import { api } from "@/lib/api/client";
+import { chooseShortageInputSchema } from "@/lib/domain/shortage";
 
 import {
   acceptQuoteInputSchema,
@@ -172,6 +173,11 @@ export function cardActionBody(body: CardActionBody): Record<string, unknown> {
     case "RATE": {
       const { score, comment } = rateInputSchema.parse(body);
       return { action: "RATE", score, ...(comment ? { comment } : {}) };
+    }
+    case "CHOOSE": {
+      // 17 §4.14 step 57: the option, the card's version the customer saw, an optional message.
+      const { option, version, note } = chooseShortageInputSchema.parse(body);
+      return { action: "CHOOSE", option, version, ...(note ? { note } : {}) };
     }
   }
 }

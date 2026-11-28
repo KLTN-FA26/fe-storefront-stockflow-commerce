@@ -8,6 +8,7 @@ import { OrderStatusCard } from "./order-status-card";
 import { QuoteCard } from "./quote-card";
 import { DesignQuoteRequestCard, ProjectQuoteRequestCard } from "./quote-request-card";
 import { SampleApprovalCard } from "./sample-approval-card";
+import { ShortageChoiceCard } from "./shortage-choice-card";
 import { TransferCard } from "./transfer-card";
 
 interface CardViewProps {
@@ -70,6 +71,16 @@ export function CardView({
     case "SAMPLE_APPROVAL":
       return (
         <SampleApprovalCard
+          conversationId={conversationId}
+          messageId={messageId}
+          card={card}
+          payload={view.payload}
+          canAct={canAct}
+        />
+      );
+    case "SHORTAGE_CHOICE":
+      return (
+        <ShortageChoiceCard
           conversationId={conversationId}
           messageId={messageId}
           card={card}

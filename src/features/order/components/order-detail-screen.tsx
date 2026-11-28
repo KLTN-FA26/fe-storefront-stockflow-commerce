@@ -17,7 +17,7 @@ import { describeCancelError, isNotFound } from "../errors";
 import { displayGroup, isOrderTerminal, orderProgress } from "../lifecycle";
 import { useLivePayment } from "../live-payment";
 import { useCancelMyOrder } from "../mutations";
-import { useKnownCancellationRequest, useOrder } from "../queries";
+import { useKnownCancellationRequest, useOrder, useShortageCard } from "../queries";
 import { isValidOrderId } from "../schemas";
 import { RETURN_CREATE_PERMISSION } from "../return-form";
 import { firstInstallmentPaid, nextPayable } from "../selectors";
@@ -43,6 +43,7 @@ import {
   OrderStaleNotice,
   OrderWaitingNotice,
 } from "./order-states";
+import { OrderShortageCard } from "./order-shortage-card";
 import { OrderStatusHero } from "./order-status-hero";
 
 function BackToOrders() {
@@ -69,6 +70,8 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
   // Shared with the payment and contract cards (same query keys): one request each.
   const installments = useMyOrderInstallments(orderId, isValidOrderId(orderId));
   const contract = useMyOrderContract(orderId);
+  // Shared with the shortage block (same query key): one request.
+  const shortage = useShortageCard(orderId);
   const cancel = useCancelMyOrder();
   const known = useKnownCancellationRequest(orderId);
   const mayCancel = useHasPermission("sales-orders:UPDATE");
@@ -169,9 +172,16 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
             holdReason={order.holdReasonPublic}
             progress={orderProgress(group, firstInstallmentPaid(installments.data))}
             action={
-              <OrderNextStep group={group} contract={contract.data} payable={payable} onPay={pay} />
+              <OrderNextStep
+                group={group}
+                contract={contract.data}
+                payable={payable}
+                onPay={pay}
+                shortage={shortage.data}
+              />
             }
           />
+          <OrderShortageCard orderId={order.orderId} />
           {paymentFirst ? payment : null}
           <OrderCompletionHint order={order} windowDays={returnWindow.days} />
           <OrderLinesCard order={order} />
