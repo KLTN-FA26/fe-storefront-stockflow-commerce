@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import { createDefaultMockContractBook } from "@/lib/api/mock-contracts";
 import { createMockOrderBook, seedMockOrders } from "@/lib/api/mock-fixtures/orders";
+import { MOCK_CONTRACT_ORDER_IDS } from "@/lib/api/mock-fixtures/wf02";
 
+import { deliveryScheduleDtoSchema } from "../contract-schemas";
 import { orderDtoSchema, orderPageDtoSchema } from "../schemas";
 
 // USE_MOCK must answer what the real BE answers, or the screens are tested against a fiction.
@@ -24,5 +27,25 @@ describe("mock order fixtures satisfy the FE order contract", () => {
         true,
       );
     }
+  });
+});
+
+describe("mock delivery schedule satisfies the FE contract (17 §5.2)", () => {
+  it("answers GET /orders/me/{id}/delivery-batches for an order with a contract, window in force = the contract's", () => {
+    const book = createDefaultMockContractBook();
+    const result = book.schedule(MOCK_CONTRACT_ORDER_IDS.sent);
+    expect(result.status).toBe(200);
+    const schedule = deliveryScheduleDtoSchema.parse(dataOf(result));
+    expect(schedule.batches.length).toBeGreaterThan(0);
+    for (const batch of schedule.batches) {
+      expect(batch.windowStart).toBe(batch.contractWindowStart);
+      expect(batch.windowChanges).toEqual([]);
+    }
+  });
+
+  it("answers 404 for an order with no contract sent, like the contract itself", () => {
+    expect(
+      createDefaultMockContractBook().schedule("0c0e0000-0000-4000-8000-0000000000ff").status,
+    ).toBe(404);
   });
 });

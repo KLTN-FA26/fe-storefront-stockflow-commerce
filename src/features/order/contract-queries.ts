@@ -4,7 +4,7 @@ import { z } from "zod";
 import { QUERY_TIMES } from "@/lib/api/query-client";
 import { RETURN_WINDOW_DAYS } from "@/lib/domain/return-window";
 
-import { getMyOrderContract } from "./contract-api";
+import { getMyDeliverySchedule, getMyOrderContract } from "./contract-api";
 import { isApiError } from "./errors";
 import { orderKeys } from "./queries";
 import { isValidOrderId } from "./schemas";
@@ -18,6 +18,20 @@ export function useMyOrderContract(orderId: string) {
     queryKey: orderKeys.contract(orderId),
     queryFn: ({ signal }) => getMyOrderContract(orderId, signal),
     enabled: isValidOrderId(orderId),
+    retry: retryTransient,
+    ...QUERY_TIMES.detail,
+  });
+}
+
+/**
+ * The order's delivery schedule in force (17 §5.2). It only refines what the contract card already
+ * shows, so a failure is not shown: the card keeps the contract's windows and nothing breaks.
+ */
+export function useMyDeliverySchedule(orderId: string, enabled = true) {
+  return useQuery({
+    queryKey: orderKeys.deliverySchedule(orderId),
+    queryFn: ({ signal }) => getMyDeliverySchedule(orderId, signal),
+    enabled: enabled && isValidOrderId(orderId),
     retry: retryTransient,
     ...QUERY_TIMES.detail,
   });

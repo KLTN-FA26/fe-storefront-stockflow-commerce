@@ -118,3 +118,49 @@ export type ContractInstallment = z.infer<typeof contractInstallmentDtoSchema>;
 /** One order's contract as the customer reads it. */
 export type Contract = z.infer<typeof contractDtoSchema>;
 export type ContractDocument = z.infer<typeof contractDocumentDtoSchema>;
+
+// ── The delivery schedule in force (kltn-docs 17 §5.2, BR-28): BE DeliveryBatchController
+// GET /orders/me/{orderId}/delivery-batches → DeliveryBatchService.Schedule, the customer's view.
+// Each batch carries the window the contract was signed with, the window in force, and — when
+// Sales moved it — the moves with their reason code and time. The customer's copy names no staff
+// member and carries no Sales note or consent evidence (those are internal, 17 §5.2). ──
+
+/** BE WindowChangeReason (17 BR-28). An unknown code is kept so the screen says nothing wrong about it. */
+export const WINDOW_CHANGE_REASONS = ["CUSTOMER_REQUEST", "SELLER_DELAY"] as const;
+export const windowChangeReasonSchema = tolerantEnum(WINDOW_CHANGE_REASONS);
+
+export const deliveryWindowChangeDtoSchema = z.object({
+  id: z.string(),
+  oldStart: isoDate.nullish(),
+  oldEnd: isoDate.nullish(),
+  newStart: isoDate.nullish(),
+  newEnd: isoDate.nullish(),
+  reason: windowChangeReasonSchema,
+  changedAt: instantSchema.nullish(),
+});
+
+export const deliveryBatchViewDtoSchema = z.object({
+  seq: z.number().int().positive(),
+  /** The window the signed contract names: never changes (14 BR-14). */
+  contractWindowStart: isoDate.nullish(),
+  contractWindowEnd: isoDate.nullish(),
+  /** The window in force: the latest move of the batch, else the contract's. */
+  windowStart: isoDate.nullish(),
+  windowEnd: isoDate.nullish(),
+  windowChanges: z
+    .array(deliveryWindowChangeDtoSchema)
+    .nullish()
+    .transform((changes) => changes ?? []),
+});
+
+export const deliveryScheduleDtoSchema = z.object({
+  orderId: beId(),
+  batches: z
+    .array(deliveryBatchViewDtoSchema)
+    .nullish()
+    .transform((batches) => batches ?? []),
+});
+
+export type WindowChangeReason = z.infer<typeof windowChangeReasonSchema>;
+export type DeliveryBatchView = z.infer<typeof deliveryBatchViewDtoSchema>;
+export type DeliverySchedule = z.infer<typeof deliveryScheduleDtoSchema>;

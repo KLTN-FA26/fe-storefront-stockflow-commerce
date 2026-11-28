@@ -250,6 +250,30 @@ export function createMockContractBook(
       });
     },
 
+    /**
+     * GET /orders/me/{orderId}/delivery-batches: the schedule in force of an order with a contract
+     * sent. The mock moves no window after signing (see `appendixAvailable`), so the window in force is
+     * the contract's and no batch has a move.
+     */
+    schedule(orderId: string): MockResult {
+      const contract = own(orderId) ? sent(orderId) : undefined;
+      if (!contract) return refusal(orderId);
+      return ok({
+        orderId: contract.orderId,
+        orderNumber: contract.orderNumber,
+        contractNumber: contract.contractNumber,
+        batches: contract.deliverySchedule.map((batch) => ({
+          batchId: `${contract.orderId}-batch-${batch.seq}`,
+          seq: batch.seq,
+          ...(batch.windowStart ? { contractWindowStart: batch.windowStart } : {}),
+          ...(batch.windowEnd ? { contractWindowEnd: batch.windowEnd } : {}),
+          ...(batch.windowStart ? { windowStart: batch.windowStart } : {}),
+          ...(batch.windowEnd ? { windowEnd: batch.windowEnd } : {}),
+          windowChanges: [],
+        })),
+      });
+    },
+
     /** The CONTRACT card payload (B.7.4); null when the order has no contract sent. */
     cardPayload(orderId: string): Record<string, unknown> | null {
       const contract = own(orderId) ? sent(orderId) : undefined;

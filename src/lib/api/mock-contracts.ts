@@ -1,6 +1,6 @@
 /**
  * Mock routes for the customer's contract of an order: GET /orders/me/{orderId}/contract and
- * GET /orders/me/{orderId}/contract/document (plan Phụ lục A.2, customer view), over one book per
+ * GET /orders/me/{orderId}/delivery-batches (the schedule in force), GET /orders/me/{orderId}/contract/document (plan Phụ lục A.2, customer view), over one book per
  * page (mock-fixtures/contracts.ts) on the seeded orders. The chat mock reads the same book through
  * `mockContractCardPayload` for its CONTRACT cards.
  */
@@ -57,6 +57,9 @@ const copyOf = (config: AxiosRequestConfig): string | undefined => {
 export function registerContractMockRoutes(): void {
   registerMockRoute("GET", "/orders/me/:orderId/contract", (config) =>
     respond(contracts().get(orderIdOf(config))),
+  );
+  registerMockRoute("GET", "/orders/me/:orderId/delivery-batches", (config) =>
+    respond(contracts().schedule(orderIdOf(config))),
   );
   registerMockRoute("GET", "/orders/me/:orderId/contract/document", (config) =>
     respond(contracts().document(orderIdOf(config), copyOf(config))),

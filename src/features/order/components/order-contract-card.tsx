@@ -16,7 +16,7 @@ import { formatNumber } from "@/lib/format/number";
 import { getMyContractAppendix, getMyContractLiquidation } from "@/lib/documents";
 
 import { CONTRACT_STATUS_META } from "../contract-labels";
-import { useMyOrderContract } from "../contract-queries";
+import { useMyDeliverySchedule, useMyOrderContract } from "../contract-queries";
 import type { Contract } from "../contract-schemas";
 import type { OrderStatus } from "../types";
 import { ContractDownloadButton } from "./contract-download-button";
@@ -173,6 +173,8 @@ export function OrderContractCard({
   orderStatus?: OrderStatus;
 }) {
   const query = useMyOrderContract(orderId);
+  // The windows in force refine the contract's schedule; asked once a contract is there to show
+  const schedule = useMyDeliverySchedule(orderId, Boolean(query.data));
   if (query.data === null) return null;
   const contract = query.data;
 
@@ -236,7 +238,7 @@ export function OrderContractCard({
               </span>
             </p>
           ) : null}
-          <ContractDeliverySchedule batches={contract.deliverySchedule} />
+          <ContractDeliverySchedule batches={contract.deliverySchedule} effective={schedule.data} />
           <ContractPaymentPlan plan={contract.paymentPlan} />
           <Terms contract={contract} />
           <Files orderId={orderId} contract={contract} orderStatus={orderStatus} />
