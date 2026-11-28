@@ -25,6 +25,7 @@ import { describeProjectError } from "../errors";
 import { useCreateProject } from "../mutations";
 import { projectCreateInputSchema } from "../project-schemas";
 import type { CreateProjectInput } from "../types";
+import { REQUIRED_MARK } from "./quote-request-parts";
 
 const FIELD_ERROR = "text-danger text-sm";
 
@@ -62,10 +63,13 @@ function CreateProjectForm({ onCancel }: { onCancel: () => void }) {
         </DialogDescription>
       </DialogHeader>
       <div className="grid gap-2">
-        <Label htmlFor="project-name">Tên dự án</Label>
+        <Label htmlFor="project-name" className={REQUIRED_MARK}>
+          Tên dự án
+        </Label>
         <Input
           id="project-name"
           className="min-h-11"
+          aria-required="true"
           aria-invalid={errors.name ? true : undefined}
           aria-describedby={errors.name ? "project-name-error" : undefined}
           {...register("name")}

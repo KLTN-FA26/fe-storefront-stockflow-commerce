@@ -51,6 +51,12 @@ describe("order vehicles API + schema", () => {
 });
 
 describe("OrderVehiclesCard", () => {
+  it("is headed 'Theo dõi giao hàng' (17 BR-27), the words the order page's status step leads to", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ data: [vehicle] });
+    renderWithProviders(<OrderVehiclesCard orderId={orderId} />);
+    expect(await screen.findByRole("heading", { name: "Theo dõi giao hàng" })).toBeInTheDocument();
+  });
+
   it("shows carrier, waybill, plate, milestones and shipment status per vehicle", async () => {
     vi.spyOn(api, "get").mockResolvedValue({
       data: [vehicle, { ...vehicle, loadCode: "LD-2", waybillNo: "MP-2", vehiclePlate: "51D-1" }],

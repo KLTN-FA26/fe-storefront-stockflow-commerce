@@ -35,7 +35,7 @@ export function SignedCopyPrompt({
         onClick={onChoose}
       >
         <Paperclip aria-hidden className="size-4" />
-        Chọn file
+        Chọn file hợp đồng
       </Button>
       <Button
         type="button"

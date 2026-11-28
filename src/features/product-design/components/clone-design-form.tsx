@@ -41,7 +41,11 @@ export function CloneForm({
   const client = useQueryClient();
   const loaded = useCloneTargets(design, skusOf);
   const clone = useCloneDesign(design.id);
-  const [sku, setSku] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string | null>(null);
+  // The only variant to copy to is chosen for the customer (R6).
+  const sku =
+    picked ??
+    (loaded.status === "ready" && loaded.targets.length === 1 ? loaded.targets[0]!.sku : null);
   const [made, setMade] = useState<Made | null>(null);
   const [failure, setFailure] = useState<unknown>(null);
   // One key per variant chosen: a retry after a lost answer is the same request (R-E7). A refusal
@@ -50,7 +54,7 @@ export function CloneForm({
   const open = (id: string) => router.push(STORE_ROUTES.design.detail(id));
 
   function pick(next: string) {
-    setSku(next);
+    setPicked(next);
     setFailure(null);
   }
 
@@ -97,7 +101,7 @@ export function CloneForm({
     <>
       <DialogHeader>
         <DialogTitle className="text-ink-primary text-lg font-semibold">
-          Nhân bản sang cỡ khác
+          Nhân bản sang quy cách khác
         </DialogTitle>
         <DialogDescription className="text-ink-secondary text-sm">
           Tạo một bản nháp mới của “{design.name}” cho quy cách khác của cùng sản phẩm. Bố cục được
@@ -121,7 +125,12 @@ export function CloneForm({
         <Alert tone="info">Sản phẩm này chưa có quy cách khác nhận thiết kế.</Alert>
       ) : null}
       {ready && loaded.targets.length > 0 ? (
-        <TargetChoice targets={loaded.targets} value={sku} onChange={pick} />
+        <TargetChoice
+          targets={loaded.targets}
+          productTitle={design.product.title}
+          value={sku}
+          onChange={pick}
+        />
       ) : null}
 
       {failure ? (
@@ -152,6 +161,11 @@ export function CloneForm({
           {busy ? "Đang nhân bản…" : "Nhân bản"}
         </Button>
       </DialogFooter>
+      {ready && loaded.targets.length > 0 && sku === null ? (
+        <p role="status" className="text-ink-secondary text-right text-sm">
+          Chọn quy cách mới để tiếp tục
+        </p>
+      ) : null}
     </>
   );
 }

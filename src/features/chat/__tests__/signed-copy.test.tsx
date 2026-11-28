@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { STORE_ROUTES } from "@/constants";
 import { api } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/error";
 import { renderWithProviders } from "@/test/render";
 
 import { ChatNewScreen } from "../components/chat-new-screen";
@@ -46,14 +47,30 @@ describe("the signed contract's hand-off from the order page to the chat (attach
     expect(signedCopyIntentOf(undefined, "pdf")).toBeUndefined();
   });
 
-  it("the new-conversation page says what comes next and opens the thread with ?attach=pdf", async () => {
+  it("the new-conversation page opens the contract's conversation at once, without a greeting, and goes to the thread with ?attach=pdf", async () => {
     vi.spyOn(api, "get").mockResolvedValue({ data: PERMISSIONS });
-    vi.spyOn(api, "post").mockResolvedValue({ data: conversationJson({ id: "c-new" }) });
-    const user = userEvent.setup();
+    const post = vi
+      .spyOn(api, "post")
+      .mockResolvedValue({ data: conversationJson({ id: "c-new" }) });
     renderWithProviders(<ChatNewScreen kind="CONTRACT" id={CONTRACT_ID} attach="pdf" />);
     expect(screen.getByText(/chọn file hợp đồng đã ký \(PDF hoặc ảnh\)/)).toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: "Bắt đầu trò chuyện" }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/chat/c-new?attach=pdf"));
+    // One request, with the contract as context and no first message.
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post.mock.calls[0]?.[1]).toMatchObject({
+      contextKind: "CONTRACT",
+      contextId: CONTRACT_ID,
+    });
+    expect(post.mock.calls[0]?.[1]).not.toHaveProperty("text");
+  });
+
+  it("falls back to the usual page, with the reason, when the conversation cannot be opened", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ data: PERMISSIONS });
+    vi.spyOn(api, "post").mockRejectedValue(new ApiError(500, "SERVER_ERROR", "boom"));
+    renderWithProviders(<ChatNewScreen kind="CONTRACT" id={CONTRACT_ID} attach="pdf" />);
+    expect(await screen.findByRole("button", { name: "Bắt đầu trò chuyện" })).toBeInTheDocument();
+    expect(screen.getByText("Không mở được cuộc trò chuyện.")).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it("drops attach for a conversation about anything but a contract", async () => {
@@ -98,7 +115,7 @@ describe("the thread's prompt for the signed contract", () => {
     openThread("?attach=pdf");
     expect(await screen.findByText(PROMPT)).toBeInTheDocument();
     expect(click).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Chọn file" }));
+    await user.click(screen.getByRole("button", { name: "Chọn file hợp đồng" }));
     expect(click).toHaveBeenCalledTimes(1);
     const picker = screen.getByLabelText<HTMLInputElement>("Chọn ảnh hoặc file PDF");
     expect(picker.accept).toContain("application/pdf");

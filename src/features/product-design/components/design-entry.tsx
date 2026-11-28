@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { MessageCircle, Palette, RefreshCw } from "lucide-react";
+import { Palette, RefreshCw } from "lucide-react";
 
 import { Skeleton } from "@/components/shared";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { STORE_ROUTES } from "@/constants";
 
 import { usePrintConfig } from "../queries";
 import { isPrintConfigUsable } from "../selectors";
+import { ProductChatLink } from "./launcher-states";
 
 /**
  * The design button of the product page for the chosen variant (catalog §4.4, BR-14): "Thiết kế"
@@ -18,9 +19,12 @@ import { isPrintConfigUsable } from "../selectors";
 export function DesignEntry({
   productSlug,
   sku,
+  productId,
   withSalesChat = true,
 }: {
   productSlug: string;
+  /** The product's id, when the page has it: the Sales chat is then about this product without reading it again. */
+  productId?: string | undefined;
   sku: string;
   /**
    * Offer "Chat với Sale" beside the reason. false where the page already offers it, so the
@@ -64,12 +68,12 @@ export function DesignEntry({
   return (
     <div className="space-y-2">
       <p className="text-ink-secondary text-sm">Quy cách này chưa nhận thiết kế</p>
-      <Button asChild variant="outline" className="min-h-11 w-full rounded-[var(--r-md)]">
-        <Link href={STORE_ROUTES.chat.list}>
-          <MessageCircle aria-hidden className="size-4" />
-          Chat với Sale
-        </Link>
-      </Button>
+      <ProductChatLink
+        productSlug={productSlug}
+        productId={productId}
+        variant="outline"
+        className="w-full px-0"
+      />
     </div>
   );
 }

@@ -180,7 +180,7 @@ function AccountFooter() {
           {name || "Tài khoản"}
         </p>
         {email ? (
-          <p className="text-ink-tertiary truncate text-xs" title={email}>
+          <p className="text-ink-tertiary text-xs break-all" title={email}>
             {email}
           </p>
         ) : null}

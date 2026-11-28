@@ -39,8 +39,10 @@ function CreateRevision() {
   const revision = useCreateRevision();
   return (
     <>
+      {/* Outline: on an approved design "Yêu cầu báo giá" is the one primary button of the page. */}
       <Button
         type="button"
+        variant="outline"
         className={BUTTON}
         disabled={revision.isPending}
         onClick={() =>

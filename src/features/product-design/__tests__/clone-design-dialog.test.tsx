@@ -35,6 +35,10 @@ function withMoreVariants(slug: string, sku: string): PrintConfigRow | null {
     );
     return { ...base, sku, template: { ...base.template, sku, printAreas } };
   }
+  if (slug === CUP.productSlug && sku === "CUP-PAPER-8OZ-BLACK") {
+    const base = printConfigFor(slug, CUP.sku)!;
+    return { ...base, sku, template: { ...base.template, sku } };
+  }
   if (slug === CUP.productSlug && sku === BLOCKED_CUP) {
     return { ...printConfigFor(slug, CUP.sku)!, sku, variantStatus: "BLOCKED" };
   }
@@ -72,6 +76,17 @@ describe("CloneDesignDialog", () => {
     expect(screen.queryByRole("radio", { name: CUP.sku })).not.toBeInTheDocument();
     expect(screen.queryByRole("radio", { name: BLOCKED_CUP })).not.toBeInTheDocument();
     expect(screen.queryByRole("radio", { name: "CUP-PAPER-8OZ-UNKNOWN" })).not.toBeInTheDocument();
+    // The one variant left to copy to is chosen for the customer.
+    expect(await option("CUP-PAPER-8OZ-KRAFT")).toBeChecked();
+    expect(screen.getByRole("button", { name: "Nhân bản" })).toBeEnabled();
+  });
+
+  it("waits for a choice when there are several variants to copy to, and says so", async () => {
+    const design = await startOf(CUP);
+    show(design, [CUP.sku, "CUP-PAPER-8OZ-KRAFT", "CUP-PAPER-8OZ-BLACK"]);
+
+    expect(await option("CUP-PAPER-8OZ-KRAFT")).not.toBeChecked();
+    expect(screen.getByText("Chọn quy cách mới để tiếp tục")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nhân bản" })).toBeDisabled();
   });
 

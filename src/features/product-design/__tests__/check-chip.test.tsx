@@ -144,11 +144,18 @@ describe("the chip in the studio header", () => {
     expect(layers).toHaveFocus();
   });
 
-  it("is there for a design that is read-only", async () => {
+  it("is there for a design that is read-only and waiting for review", async () => {
     const user = userEvent.setup();
     await designBackend();
-    await openStudio(MOCK_DESIGN_IDS.approved);
+    await openStudio(MOCK_DESIGN_IDS.pending);
     await user.click(await screen.findByRole("button", { name: /^Kiểm tra: / }));
     expect(screen.getByRole("region", { name: "Kiểm tra trước khi in" })).toBeInTheDocument();
+  });
+
+  it('is not beside "Đã duyệt": an approved design shows no red count that contradicts it', async () => {
+    await designBackend();
+    await openStudio(MOCK_DESIGN_IDS.approved);
+    expect(await screen.findByText("Đã duyệt")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Kiểm tra: / })).not.toBeInTheDocument();
   });
 });

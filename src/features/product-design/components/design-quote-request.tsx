@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { RotateCw } from "lucide-react";
 import { useState } from "react";
 
+import { STORE_ROUTES } from "@/constants";
 import { Skeleton } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { PERM } from "@/lib/auth/permission-codes";
@@ -22,6 +24,7 @@ import { QuoteRequestDialog } from "./quote-request-dialog";
 import {
   ACTION_BUTTON,
   AnsweringQuoteLink,
+  answeringQuote,
   QuoteRequestStatusBadge,
   cartonsLabel,
   desiredDateLabel,
@@ -32,7 +35,13 @@ import {
 // (`mayHaveQuoteRequest`): a page of plain drafts costs no request.
 
 /** The facts of a request: cartons, date, its status, the customer's SKU once approved. */
-export function QuoteRequestFacts({ request }: { request: DesignQuoteRequest }) {
+export function QuoteRequestFacts({
+  request,
+  quoteLink = true,
+}: {
+  request: DesignQuoteRequest;
+  quoteLink?: boolean;
+}) {
   const open = request.status === "OPEN";
   // The request stays open when the reviewer (Production Coordinator) returns the design (BE B40): the design is a
   // DRAFT again, with the reason it came back for.
@@ -61,7 +70,7 @@ export function QuoteRequestFacts({ request }: { request: DesignQuoteRequest }) 
           </>
         ) : null}
       </dl>
-      <AnsweringQuoteLink request={request} />
+      <AnsweringQuoteLink request={request} link={quoteLink} />
       {returned ? (
         <p className="text-ink-tertiary text-xs">
           Thiết kế bị trả lại. Sửa theo lý do trả lại rồi gửi duyệt lại; Sale sẽ báo giá khi bản
@@ -78,7 +87,14 @@ export function QuoteRequestFacts({ request }: { request: DesignQuoteRequest }) 
 }
 
 /** The card's line: the request open now (else the latest), a placeholder while it is read. */
-export function DesignQuoteSummary({ design }: { design: Design }) {
+export function DesignQuoteSummary({
+  design,
+  quoteLink = true,
+}: {
+  design: Design;
+  /** False when the card's own primary button already links to the answering quote. */
+  quoteLink?: boolean;
+}) {
   const enabled = mayHaveQuoteRequest(design);
   const requests = useDesignQuoteRequests(design.id, enabled, CARD_QUOTE_REQUESTS);
   if (!enabled) return null;
@@ -101,7 +117,7 @@ export function DesignQuoteSummary({ design }: { design: Design }) {
     );
   }
   const request = currentQuoteRequest(requests.data);
-  return request ? <QuoteRequestFacts request={request} /> : null;
+  return request ? <QuoteRequestFacts request={request} quoteLink={quoteLink} /> : null;
 }
 
 /**
@@ -123,12 +139,26 @@ export function RequestQuoteButton({
   const [open, setOpen] = useState(false);
   if (!offered) return null;
   const current = openQuoteRequest(requests.data);
+  // Sales already answered with a quote: its page is the next step, so it is the primary button and asking again
+  // steps back to an outline one (SF-UX-7).
+  const latest = currentQuoteRequest(requests.data);
+  const answer = !current && latest ? answeringQuote(latest) : null;
   const label = current ? "Sửa yêu cầu báo giá" : "Yêu cầu báo giá";
   return (
     <>
+      {answer ? (
+        <Button asChild className={cn(ACTION_BUTTON, className)}>
+          <Link
+            href={STORE_ROUTES.account.quotes.detail(answer.id)}
+            aria-label={`Xem báo giá ${design.name}`}
+          >
+            Xem báo giá
+          </Link>
+        </Button>
+      ) : null}
       <Button
         type="button"
-        variant={current ? "outline" : "default"}
+        variant={current || answer ? "outline" : "default"}
         className={cn(ACTION_BUTTON, className)}
         aria-label={`${label} ${design.name}`}
         onClick={() => setOpen(true)}

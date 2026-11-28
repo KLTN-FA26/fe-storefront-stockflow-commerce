@@ -34,6 +34,15 @@ export function createKeyFor(scope: string): string {
   return fresh;
 }
 
+/** Whether a create of this link is already under way in this tab (a reload before the redirect replays it). */
+export function hasCreateKey(scope: string): boolean {
+  try {
+    return window.sessionStorage.getItem(PREFIX + scope) !== null;
+  } catch {
+    return false;
+  }
+}
+
 /** Forget the key: after the redirect, or after an answer the BE stores for good (a 4xx). */
 export function forgetCreateKey(scope: string): void {
   try {

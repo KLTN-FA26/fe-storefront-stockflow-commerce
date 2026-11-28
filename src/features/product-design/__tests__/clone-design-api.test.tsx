@@ -170,7 +170,7 @@ describe("clone through the mock", () => {
   });
 });
 
-describe("the card and the list: Nhân bản sang cỡ khác", () => {
+describe("the card and the list: Nhân bản sang quy cách khác", () => {
   it("shows the button only when the page can handle it, and reports the design", async () => {
     const onClone = vi.fn();
     const target = design({ name: "Ly sáng" });
@@ -180,7 +180,7 @@ describe("the card and the list: Nhân bản sang cỡ khác", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: /Thao tác khác/ }));
     expect(await screen.findByRole("menu")).toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: /sang cỡ khác/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /sang quy cách khác/ })).not.toBeInTheDocument();
     first.unmount();
 
     renderWithProviders(
@@ -188,7 +188,7 @@ describe("the card and the list: Nhân bản sang cỡ khác", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: /Thao tác khác/ }));
     await userEvent.click(
-      await screen.findByRole("menuitem", { name: "Nhân bản Ly sáng sang cỡ khác" }),
+      await screen.findByRole("menuitem", { name: "Nhân bản Ly sáng sang quy cách khác" }),
     );
     expect(onClone).toHaveBeenCalledWith(target);
   });
@@ -212,11 +212,13 @@ describe("the card and the list: Nhân bản sang cỡ khác", () => {
       within(heading.closest("li") as HTMLElement).getByRole("button", { name: /Thao tác khác/ }),
     );
     await userEvent.click(
-      await screen.findByRole("menuitem", { name: "Nhân bản Ly cà phê Sáng 8oz sang cỡ khác" }),
+      await screen.findByRole("menuitem", {
+        name: "Nhân bản Ly cà phê Sáng 8oz sang quy cách khác",
+      }),
     );
 
     expect(
-      await screen.findByRole("dialog", { name: "Nhân bản sang cỡ khác" }),
+      await screen.findByRole("dialog", { name: "Nhân bản sang quy cách khác" }),
     ).toBeInTheDocument();
     expect(
       await screen.findByRole("radio", { name: "CUP-PAPER-8OZ-KRAFT" }, { timeout: 4000 }),
