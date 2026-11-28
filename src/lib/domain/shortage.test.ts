@@ -8,6 +8,7 @@ import {
   shortageEffectLines,
   shortageOptionLabel,
   shortageStatusMeta,
+  shortageCardName,
   shortageTitle,
 } from "./shortage";
 
@@ -23,6 +24,16 @@ describe("shortage card payload", () => {
     expect(card.options).toHaveLength(4);
     expect(card.chosen).toBeNull();
     expect(shortageTitle(card)).toBe("Đơn thiếu 2 thùng");
+  });
+
+  it("names the card by its code, else by the sent date, never the id", () => {
+    expect(shortageCardName({ code: "TT-20261128-0001", sentAt: "2026-11-28T03:00:00Z" })).toBe(
+      "TT-20261128-0001",
+    );
+    expect(shortageCardName({ code: null, sentAt: "2026-11-28T03:00:00Z" })).toBe(
+      "Thẻ thiếu thùng ngày 28/11/2026",
+    );
+    expect(shortageCardName({})).toBe("Thẻ thiếu thùng");
   });
 
   it("keeps a way or a status newer than this FE as UNKNOWN instead of failing the card", () => {

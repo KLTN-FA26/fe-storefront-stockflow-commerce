@@ -1,7 +1,7 @@
 "use client";
 
 import { ShortageChoicePanel } from "@/components/storefront/shortage-choice-panel";
-import { shortageStatusMeta, shortageTitle } from "@/lib/domain/shortage";
+import { shortageCardName, shortageStatusMeta, shortageTitle } from "@/lib/domain/shortage";
 
 import type { ShortageCardPayload } from "../../card-payloads";
 import type { ChatCard } from "../../types";
@@ -32,7 +32,7 @@ export function ShortageChoiceCard({
   const action = useCardActionState(conversationId, messageId);
   return (
     <CardFrame
-      eyebrow="Thiếu thùng"
+      eyebrow={shortageCardName(payload)}
       title={shortageTitle(payload)}
       titleMono={false}
       status={shortageStatusMeta(payload.status)}

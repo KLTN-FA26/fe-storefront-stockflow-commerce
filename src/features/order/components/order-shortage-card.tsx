@@ -5,7 +5,7 @@ import { useState } from "react";
 import { ShortageChoicePanel } from "@/components/storefront/shortage-choice-panel";
 import { STORE_ROUTES } from "@/constants";
 import { useHasPermission } from "@/lib/auth/my-permissions";
-import { shortageStatusMeta, shortageTitle } from "@/lib/domain/shortage";
+import { shortageCardName, shortageStatusMeta, shortageTitle } from "@/lib/domain/shortage";
 import { ToneBadge } from "@/components/storefront/tone-badge";
 
 import { describeShortageError } from "../errors";
@@ -36,7 +36,7 @@ export function OrderShortageCard({ orderId }: { orderId: string }) {
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-ink-tertiary text-xs font-medium">Thiếu thùng</p>
+          <p className="text-ink-tertiary text-xs font-medium">{shortageCardName(card)}</p>
           <h2
             id="order-shortage-heading"
             className="font-display text-ink-primary text-base font-semibold"

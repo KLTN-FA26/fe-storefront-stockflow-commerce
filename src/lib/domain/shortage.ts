@@ -62,6 +62,9 @@ const shortageOfferSchema = z.object({
 
 export const shortageCardSchema = z.object({
   cardId: z.string().min(1),
+  /** Short code `TT-yyyyMMdd-NNNN` (BE-3 #513); optional - an older BE omits it. */
+  code: z.string().nullish(),
+  sentAt: z.string().nullish(),
   orderId: z.string().min(1),
   orderNumber: z.string().nullish(),
   status: tolerantEnum(SHORTAGE_STATUSES),
@@ -139,6 +142,12 @@ const STATUS_META: Record<ShortageStatus, StatusMeta> = {
 };
 export const shortageStatusMeta = (status: string): StatusMeta =>
   statusMetaOf(STATUS_META, status, "Thiếu thùng");
+
+/** What the customer calls the card: its code, else "Thẻ thiếu thùng ngày dd/MM/yyyy" - never the card id. */
+export function shortageCardName(card: Pick<ShortageCard, "code" | "sentAt">): string {
+  if (card.code) return card.code;
+  return card.sentAt ? `Thẻ thiếu thùng ngày ${formatDate(card.sentAt)}` : "Thẻ thiếu thùng";
+}
 
 /** The card's title: "Đơn thiếu 2 thùng". */
 export const shortageTitle = (card: Pick<ShortageCard, "missingCartons">): string =>
