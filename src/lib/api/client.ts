@@ -43,7 +43,12 @@ export const api = axios.create({
  * Anonymous BE endpoints. They get no bearer: a stale token on a permitAll route is still run
  * through the resource-server filter, which answers 401 for it before the endpoint is reached.
  */
-const ANONYMOUS_PATHS = ["/identity/auth/login", "/customers/portal-activation"];
+const ANONYMOUS_PATHS = [
+  "/identity/auth/login",
+  "/customers/portal-activation",
+  // The lead form (KE-HOACH sales owner §10.3): a visitor, or a signed-in customer asking for another company.
+  "/public/leads",
+];
 const isAnonymous = (url: string | undefined) =>
   ANONYMOUS_PATHS.some((path) => (url ?? "").split("?")[0] === path);
 

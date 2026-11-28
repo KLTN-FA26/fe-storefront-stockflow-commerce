@@ -9,16 +9,20 @@ import { Button } from "@/components/ui/button";
 import { describeApiError } from "@/lib/api/describe-error";
 import { useHasPermission, useMyPermissions } from "@/lib/auth/my-permissions";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
+import { formatMoney } from "@/lib/format/money";
 import { formatNumber } from "@/lib/format/number";
-import { useMyInstallments } from "@/lib/installments";
+import { useMyInstallments, type Installment } from "@/lib/installments";
+import { MoneyFigures } from "@/components/storefront/money-figures";
 
 import {
   PAYMENT_FILTERS,
   PAYMENT_FILTER_LABEL,
   paymentFilterParser,
   paymentRows,
+  paymentsTotals,
   type PaymentFilter,
 } from "../filters";
+import { useLivePayments } from "../live";
 import { DebtReconciliationCard } from "./debt-reconciliation-card";
 import { INSTALLMENTS_PERMISSION } from "./my-installments";
 import { MyInstallmentRow } from "./my-installment-row";
@@ -33,6 +37,32 @@ const EMPTY: Record<PaymentFilter, string> = {
   "da-tra": "Chưa có đợt nào đã thanh toán.",
   "tat-ca": "Bạn chưa có đợt thanh toán nào. Lịch thanh toán xuất hiện khi hợp đồng được ký.",
 };
+
+const dots = (count: number) => (count > 0 ? `${formatNumber(count)} đợt` : "Không có đợt nào");
+
+/** What is due now and what is overdue, at the top of the page (WF-02 UI/UX 27/11, sf-09). */
+function PaymentsSummary({ installments }: { installments: readonly Installment[] }) {
+  const totals = paymentsTotals(installments);
+  const currency = installments[0]?.currency;
+  return (
+    <MoneyFigures
+      label="Tổng cần thanh toán"
+      figures={[
+        {
+          label: "Cần thanh toán ngay",
+          value: formatMoney(totals.dueNow.amount, currency),
+          note: `${dots(totals.dueNow.count)}, gồm cả đợt thanh toán khi ký hợp đồng`,
+        },
+        {
+          label: "Quá hạn",
+          value: formatMoney(totals.overdue.amount, currency),
+          note: dots(totals.overdue.count),
+          alert: totals.overdue.amount > 0,
+        },
+      ]}
+    />
+  );
+}
 
 /**
  * "Thanh toán" (SF-UX-39): every installment of the customer's contracts, overdue and due first, a
@@ -49,6 +79,8 @@ export function PaymentsScreen() {
   const all = query.data?.items ?? [];
   const rows = paymentRows(all, filter);
   const count = (option: PaymentFilter) => paymentRows(all, option).length;
+  // A transfer is recorded by the bank feed in seconds: while money is due the page asks again.
+  useLivePayments(query.data?.items);
 
   return (
     <>
@@ -64,6 +96,7 @@ export function PaymentsScreen() {
           </Alert>
         ) : (
           <>
+            {query.data ? <PaymentsSummary installments={all} /> : null}
             <div role="group" aria-label="Lọc đợt thanh toán" className="flex flex-wrap gap-2">
               {PAYMENT_FILTERS.map((option) => (
                 <FilterPill

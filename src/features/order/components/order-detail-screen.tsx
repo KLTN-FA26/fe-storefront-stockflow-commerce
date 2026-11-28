@@ -180,13 +180,7 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
             holdReason={order.holdReasonPublic}
             progress={orderProgress(group, firstInstallmentPaid(installments.data))}
             action={
-              <OrderNextStep
-                orderId={order.orderId}
-                group={group}
-                contract={contract.data}
-                payable={payable}
-                onPay={pay}
-              />
+              <OrderNextStep group={group} contract={contract.data} payable={payable} onPay={pay} />
             }
           />
           {/* Right under the step: who carries the goods, the waybill and plate (17 BR-27), without scrolling to the rail. */}

@@ -320,6 +320,8 @@ const toCard = (order: MockOrder) => ({
   placedAt: order.placedAt,
   lineCount: order.lines.length,
   deliveryState: deliveryState(order.status),
+  // BE: the first line's design name, else its SKU (the mock lines carry no design name).
+  firstItemName: order.lines[0]?.sku ?? null,
 });
 
 /** What the detail needs beyond the order: the clock and what the customer's returns hold. */
@@ -357,7 +359,7 @@ function toShipment(order: MockOrder, shipment: MockShipment, context: DetailCon
 
 /** CustomerOrderDetailResponse: no reservations, checksums, actors or contact block. */
 const toDetail = (order: MockOrder, context: DetailContext) => {
-  const { lineCount: _lineCount, ...card } = toCard(order);
+  const { lineCount: _lineCount, firstItemName: _firstItemName, ...card } = toCard(order);
   return {
     ...card,
     // Set only while ON_HOLD: a credit hold waits for an approver, any other is a plain review.
@@ -750,6 +752,9 @@ export function createMockOrderBook(
         currency: installment.currency,
         reference: installment.transferReference,
         ...(installment.dueDate ? { dueDate: installment.dueDate } : {}),
+        // R5-9: the BE draws up a VietQR for the transfer; a stand-in payload, so the mock shows the
+        // QR beside the account details as the real page does. Not a payable code.
+        vietQr: `MOCK-VIETQR|${MOCK_COMPANY_BANK.accountNumber}|${installment.outstanding}|${installment.transferReference ?? ""}`,
       });
     },
 

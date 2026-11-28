@@ -72,7 +72,18 @@ describe("OrderInvoicesCard (kltn-docs 21 §4.3)", () => {
     expect(await screen.findByText(/đang được phát hành/)).toBeInTheDocument();
   });
 
-  it("shows nothing before delivery, or without einvoices:READ", async () => {
+  it("hides the card and its note while the goods have not gone out and nothing is invoiced (sf-07)", async () => {
+    const get = backend(["einvoices:READ"], { "/einvoices/me": () => page([]) });
+    const { container } = renderWithProviders(
+      <OrderInvoicesCard
+        order={order({ status: "PENDING_CONTRACT", statusGroup: "AWAITING_CONTRACT" })}
+      />,
+    );
+    await vi.waitFor(() => expect(get).toHaveBeenCalledWith("/einvoices/me", expect.anything()));
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("shows nothing without einvoices:READ", async () => {
     const get = backend(["sales-orders:READ"], { "/einvoices/me": () => page([beInvoice()]) });
     const { container } = renderWithProviders(
       <OrderInvoicesCard order={order({ deliveryState: "DELIVERED" })} />,

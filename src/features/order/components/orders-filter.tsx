@@ -8,6 +8,7 @@ import { STORE_ROUTES } from "@/constants";
 import { FilterPill } from "@/components/storefront/filter-pill";
 import { useHasPermission } from "@/lib/auth/my-permissions";
 import { formatMoney } from "@/lib/format/money";
+import { formatNumber } from "@/lib/format/number";
 import {
   installmentShortName,
   isPayable,
@@ -15,6 +16,7 @@ import {
   type Installment,
 } from "@/lib/installments";
 
+import { ORDER_PAGE_SIZE, useMyOrders } from "../queries";
 import type { OrderStatus } from "../types";
 
 /** The orders list's views (SF-UX-28): every order, or the ones waiting on the customer. */
@@ -44,9 +46,15 @@ const INSTALLMENTS_PERMISSION = "payment-installments:READ";
 export function OrderViewTabs({
   view,
   onChange,
+  countNeedsYou = false,
 }: {
   view: OrderView;
   onChange: (view: OrderView) => void;
+  /**
+   * Count the orders waiting on the customer on the "Cần xử lý" tab. The page turns it on once its
+   * own list is read, so the count's requests never run ahead of (or instead of) the list's.
+   */
+  countNeedsYou?: boolean;
 }) {
   return (
     <div role="group" aria-label="Lọc đơn hàng" className="flex flex-wrap gap-2">
@@ -57,7 +65,7 @@ export function OrderViewTabs({
           aria-pressed={view === option}
           onClick={() => onChange(option)}
         >
-          {VIEW_LABEL[option]}
+          {option === "can-xu-ly" && countNeedsYou ? <NeedsYouLabel /> : VIEW_LABEL[option]}
         </FilterPill>
       ))}
     </div>
@@ -73,6 +81,31 @@ function overdueByOrder(installments: readonly Installment[]): Installment[] {
     if (!known || installment.seq < known.seq) byOrder.set(installment.orderId, installment);
   }
   return [...byOrder.values()];
+}
+
+/**
+ * The count on the "Cần xử lý" tab (UI/UX 27/11, sf-06): the orders to sign or pay (the same request
+ * as the tab's first page, so the cache serves both) plus those owing an overdue installment that
+ * are not among them. Undefined until the orders are read.
+ */
+function useNeedsYouCount(): number | undefined {
+  const allowed = useHasPermission(INSTALLMENTS_PERMISSION);
+  const orders = useMyOrders({ page: 1, size: ORDER_PAGE_SIZE, statuses: NEEDS_CUSTOMER_STATUSES });
+  const installments = useMyInstallments({ page: 0, size: INSTALLMENTS_SCAN_SIZE }, allowed);
+  if (!orders.data || orders.isPlaceholderData) return undefined;
+  const listed = new Set(orders.data.items.map((order) => order.orderId));
+  const overdueElsewhere = overdueByOrder(installments.data?.items ?? []).filter(
+    (installment) => !listed.has(installment.orderId),
+  ).length;
+  return orders.data.totalElements + overdueElsewhere;
+}
+
+/** "Cần xử lý (3)" once the count is known, "Cần xử lý" until then. */
+function NeedsYouLabel() {
+  const count = useNeedsYouCount();
+  return count === undefined
+    ? VIEW_LABEL["can-xu-ly"]
+    : `${VIEW_LABEL["can-xu-ly"]} (${formatNumber(count)})`;
 }
 
 /**

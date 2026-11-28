@@ -24,3 +24,4 @@ export { PageContainer } from "./PageContainer";
 export { Logo } from "./Logo";
 export { SearchableCombobox, type ComboboxOption } from "./SearchableCombobox";
 export { ScrollAfterItems } from "./ScrollAfterItems";
+export { RichTextView, sanitizeRichText } from "./RichTextView";

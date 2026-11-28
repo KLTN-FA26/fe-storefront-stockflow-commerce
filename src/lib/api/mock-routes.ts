@@ -24,6 +24,7 @@ import { registerOrderMockRoutes } from "./mock-orders";
 import { registerChatMockRoutes } from "./mock-chat";
 import { registerContractMockRoutes } from "./mock-contracts";
 import { registerQuoteMockRoutes } from "./mock-quotes";
+import { registerSalesOwnerMockRoutes } from "./mock-sales-owner";
 
 export function mockPasswordResponse(body: unknown) {
   const request = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
@@ -215,6 +216,8 @@ export function registerAllMockRoutes(): void {
   registerQuoteMockRoutes();
   registerContractMockRoutes();
   registerChatMockRoutes();
+  // The customer's Sales, the change requests and the public lead form (KE-HOACH sales owner §10.3, §10.5).
+  registerSalesOwnerMockRoutes();
 
   /* ====================================================================
    * Module 01 — Products / SKUs / Categories / Suppliers

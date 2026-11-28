@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { canRemoveFromProject, projectActions, PROJECT_DESIGN_LIMIT } from "../project-rules";
+import {
+  canRemoveFromProject,
+  projectActions,
+  projectStage,
+  PROJECT_DESIGN_LIMIT,
+} from "../project-rules";
 import { design } from "./fixtures";
 import { project as projectOf } from "./project-fixtures";
 
@@ -89,5 +94,20 @@ describe("canRemoveFromProject", () => {
       allowed: false,
       reason: "Bản đang chờ duyệt, chưa thể gỡ",
     });
+  });
+});
+
+describe("projectStage (UI/UX 27/11, sf-12)", () => {
+  it("is design while there are only drafts, or none", () => {
+    expect(projectStage([])).toBe("design");
+    expect(projectStage([{ status: "DRAFT" }, { status: "ARCHIVED" }])).toBe("design");
+  });
+
+  it("is review while a design waits on the shop and none is approved", () => {
+    expect(projectStage([{ status: "DRAFT" }, { status: "PENDING_REVIEW" }])).toBe("review");
+  });
+
+  it("is quote once a design is approved, even with others still under review", () => {
+    expect(projectStage([{ status: "PENDING_REVIEW" }, { status: "APPROVED" }])).toBe("quote");
   });
 });

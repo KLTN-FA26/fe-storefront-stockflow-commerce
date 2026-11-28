@@ -6,12 +6,12 @@ import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { AvailabilityBadge } from "@/components/storefront/availability-badge";
-import { VariantSelector } from "@/components/storefront/variant-selector";
 import { badgeStatus } from "@/lib/catalog/selectors";
 import { variantLabel } from "@/lib/catalog/variant-label";
 import type { Availability } from "@/lib/catalog/types";
 
 import type { CatalogVariant } from "../types";
+import { VariantPicker } from "./variant-picker";
 
 interface ProductPurchasePanelProps {
   variants: CatalogVariant[];
@@ -58,18 +58,13 @@ export function ProductPurchasePanel({
         <span className="text-ink-tertiary font-mono text-xs">Mã {sku}</span>
       </div>
 
-      {variants.length > 1 ? (
-        <VariantSelector
-          label="Quy cách"
-          value={sku}
-          onChange={onSkuChange}
-          options={variants.map((variant) => ({
-            id: variant.sku,
-            label: variantLabel(variant, productTitle),
-            disabled: availabilityOf(variant.sku) === "OUT_OF_STOCK" && variant.sku !== sku,
-          }))}
-        />
-      ) : null}
+      <VariantPicker
+        variants={variants}
+        sku={sku}
+        onSkuChange={onSkuChange}
+        availabilityOf={availabilityOf}
+        productTitle={productTitle}
+      />
 
       <div className="space-y-3">
         <div className={designEntry ? "grid gap-3 sm:grid-cols-2" : "grid gap-3"}>

@@ -106,7 +106,8 @@ export function QuotesScreen() {
                 retrying={isFetching}
               />
             )}
-            {/* The list runs at full length in the page column (which scrolls): no second scroll box inside it. */}
+            {/* The list runs at full length in the page column: one scrollbar, not a box scrolling
+                inside the page (UI/UX 27/11, sf-04). */}
             <ul className="space-y-3" aria-busy={isPlaceholderData}>
               {data.items.map((quote) => (
                 <li key={quote.id}>
@@ -114,7 +115,6 @@ export function QuotesScreen() {
                 </li>
               ))}
             </ul>
-
             <ListPagination
               label="Phân trang báo giá"
               page={data.page}

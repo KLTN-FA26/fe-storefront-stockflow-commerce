@@ -1,6 +1,6 @@
 "use client";
 
-import { CreditCard } from "lucide-react";
+import { CreditCard, PenLine } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { formatDayMonth } from "@/lib/format/date";
@@ -9,7 +9,6 @@ import { installmentShortName, type Installment } from "@/lib/installments";
 
 import type { Contract } from "../contract-schemas";
 import type { OrderDisplayGroup } from "../lifecycle";
-import { ContractDownloadButton } from "./contract-download-button";
 import { CONTRACT_SECTION_ID } from "./contract-signing-steps";
 
 /**
@@ -27,18 +26,17 @@ export function payLabel(installment: Installment): string {
 }
 
 /**
- * The status hero's call to action (SF-UX-29): a contract waiting to be signed is downloaded from
- * here, with the way to its three steps; an installment due now is paid from here, which opens its
- * transfer details in the payment card. Nothing when the order waits on no one but the shop.
+ * The status hero's call to action (SF-UX-29): a contract waiting to be signed leads to its three
+ * steps in the contract card, which holds the one "Tải hợp đồng" button of the page (UI/UX 27/11,
+ * sf-07); an installment due now is paid from here, which opens its transfer details in the payment
+ * card. Nothing when the order waits on no one but the shop.
  */
 export function OrderNextStep({
-  orderId,
   group,
   contract,
   payable,
   onPay,
 }: {
-  orderId: string;
   group: OrderDisplayGroup;
   contract: Contract | null | undefined;
   /** `nextPayable(plan)`: the installment due now, if any. */
@@ -47,21 +45,12 @@ export function OrderNextStep({
 }) {
   if (group === "AWAITING_CONTRACT" && contract?.status === "SENT") {
     return (
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <ContractDownloadButton
-          orderId={orderId}
-          contractNumber={contract.contractNumber}
-          label="Tải hợp đồng để ký"
-          variant="default"
-          className="sm:w-auto"
-        />
-        <a
-          href={`#${CONTRACT_SECTION_ID}`}
-          className="text-accent focus-visible:ring-accent inline-flex min-h-11 items-center rounded-[var(--r-sm)] px-1 text-sm font-semibold underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none"
-        >
-          Xem 3 bước ký và gửi lại hợp đồng
+      <Button asChild className="min-h-11 w-full rounded-[var(--r-md)] px-4 sm:w-auto">
+        <a href={`#${CONTRACT_SECTION_ID}`}>
+          <PenLine aria-hidden className="mr-2 size-4" />
+          Ký hợp đồng: xem 3 bước
         </a>
-      </div>
+      </Button>
     );
   }
   if (payable && (group === "AWAITING_PAYMENT" || payable.overdue)) {

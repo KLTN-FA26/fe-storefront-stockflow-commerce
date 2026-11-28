@@ -73,7 +73,7 @@ export const ORDER_STATUS_GROUP_META: Record<
   },
   AWAITING_PAYMENT: {
     ...ORDER_STATUS.AWAITING_PAYMENT,
-    hint: "Đơn được xử lý sau khi kế toán ghi nhận khoản chuyển của bạn.",
+    hint: "Hệ thống tự xác nhận khoản chuyển vài giây sau khi tiền về, rồi đơn được xử lý tiếp.",
   },
   UNDER_REVIEW: {
     ...ORDER_STATUS.UNDER_REVIEW,

@@ -11,8 +11,37 @@ import { isRemoteImage } from "@/lib/remote-image";
 
 import { PROJECT_DESIGN_LIMIT } from "../project-schemas";
 import { useProjectPreviews } from "../queries";
+import {
+  CARD_QUOTE_REQUESTS,
+  currentQuoteRequest,
+  useProjectQuoteRequests,
+} from "../quote-request-queries";
 import type { ProjectSummary } from "../types";
 import { ProjectStatusBadge } from "./project-status-badge";
+import { QuoteRequestStatusBadge, answeringQuote } from "./quote-request-parts";
+
+/**
+ * Whether the project was asked a quote for, and how that stands (UI/UX 27/11, sf-11): the badge of
+ * its request ("Đang chờ báo giá", "Đã có báo giá" with the quote's number), or that none was asked.
+ * Nothing while it is read or when it cannot be.
+ */
+function ProjectQuoteState({ projectId }: { projectId: string }) {
+  const requests = useProjectQuoteRequests(projectId, CARD_QUOTE_REQUESTS);
+  if (!requests.data) return null;
+  const current = currentQuoteRequest(requests.data);
+  if (!current) {
+    return <p className="text-ink-tertiary text-xs">Chưa yêu cầu báo giá</p>;
+  }
+  const quote = answeringQuote(current);
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <QuoteRequestStatusBadge request={current} />
+      {quote?.number ? (
+        <span className="text-ink-secondary font-mono text-xs tabular-nums">{quote.number}</span>
+      ) : null}
+    </div>
+  );
+}
 
 /** Up to four previews in a strip; empty slots stay as quiet tiles so every card keeps its shape. */
 function PreviewStrip({ urls, name }: { urls: readonly string[]; name: string }) {
@@ -47,7 +76,10 @@ function PreviewStrip({ urls, name }: { urls: readonly string[]; name: string })
   );
 }
 
-/** One project (spec 2026-11-12 §5): name, description, previews, "N/20 bản", when, status. */
+/**
+ * One project (spec 2026-11-12 §5): name, description, previews, "N/20 bản", when, status, and how
+ * its quote stands.
+ */
 export function ProjectCard({ project }: { project: ProjectSummary }) {
   const href = STORE_ROUTES.design.project(project.id);
   const previewUrls = useProjectPreviews(project.id);
@@ -71,6 +103,7 @@ export function ProjectCard({ project }: { project: ProjectSummary }) {
           <p className="text-ink-secondary text-sm tabular-nums">
             Tạo lúc {formatDateTime(project.createdAt)}
           </p>
+          <ProjectQuoteState projectId={project.id} />
         </div>
         <div className="mt-auto">
           <Button asChild variant="outline" className="min-h-11 rounded-[var(--r-md)] px-4">
