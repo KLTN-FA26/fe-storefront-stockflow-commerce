@@ -21,12 +21,7 @@ const openAccountLink: NavLink = {
 };
 
 /** The header's main row: the products, then the customer's own work, design to quote. */
-export const mainLinks: NavLink[] = [
-  productsLink,
-  designsLink,
-  projectsLink,
-  quotesLink,
-];
+export const mainLinks: NavLink[] = [productsLink, designsLink, projectsLink, quotesLink];
 
 /** The header's right-hand links on a wide screen; the chat has its own icon link with the badge. */
 export const utilityLinks: NavLink[] = [ordersLink, paymentsLink];

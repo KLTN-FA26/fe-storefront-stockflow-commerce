@@ -28,10 +28,13 @@ import {
   listDesigns,
   printConfigOfSku,
   readProductCustomization,
+  readProductId,
 } from "./api";
 import type { Design, DesignListParams, DownloadLink, PrintConfig } from "./types";
 
+import { DRAFT_LIMIT } from "./design-mappers";
 import { DESIGN_POLL_MS, projectQuery } from "./project-queries";
+import { isUntouchedDocument } from "./selectors";
 
 export * from "./project-queries"; // the projects' keys and queries live in their own file
 
@@ -63,8 +66,10 @@ export const designKeys = {
   /** The latest submission's files, or the approved snapshot's: two reads, two entries. */
   fileList: (id: string, approved: boolean) =>
     [...designKeys.files(id), approved ? "approved" : "latest"] as const,
-  /** The SKUs of a product's variants, read for "Nhân bản sang cỡ khác". */
+  /** The SKUs of a product's variants, read for "Nhân bản sang quy cách khác". */
   variantSkus: (productSlug: string) => [...designKeys.all, "variant-skus", productSlug] as const,
+  /** A product's id by its slug, for the Sales chat about it. */
+  productId: (productSlug: string) => [...designKeys.all, "product-id", productSlug] as const,
   downloadLink: (designId: string, assetId: string) =>
     [...designKeys.all, "download-link", designId, assetId] as const,
 };
@@ -119,6 +124,38 @@ export function useDesignFontCodes() {
     staleTime: Infinity,
     gcTime: QUERY_TIMES.master.gcTime,
   });
+}
+
+/**
+ * The newest draft of this variant (in this project, or in none) that nobody has drawn on yet, for "Tiếp tục bản nháp
+ * gần nhất?" (S08-11). Read fresh every time the launcher opens: a stale list could offer a draft that was edited since.
+ * `pending` while it is being found out; any read that fails is "none": the launcher then just makes the design.
+ */
+export function useResumableDraft(sku: string, projectId: string | undefined, enabled: boolean) {
+  const drafts = useQuery({
+    queryKey: designKeys.list({ page: 1, size: DRAFT_LIMIT, status: "DRAFT" }),
+    queryFn: ({ signal }) => listDesigns({ page: 1, size: DRAFT_LIMIT, status: "DRAFT" }, signal),
+    enabled,
+    staleTime: 0,
+    refetchOnMount: "always",
+    retry: retryTransient,
+  });
+  const newest = (drafts.data?.items ?? [])
+    .filter((draft) => draft.variant.sku === sku && (draft.projectId ?? undefined) === projectId)
+    .toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0];
+  const record = useQuery({
+    ...designDocumentQuery(newest?.id ?? ""),
+    enabled: enabled && newest !== undefined,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+  });
+  if (!enabled) return { status: "none" as const, draft: null };
+  if (drafts.isPending && !drafts.isError) return { status: "pending" as const, draft: null };
+  if (newest === undefined || drafts.isError) return { status: "none" as const, draft: null };
+  if (record.isPending && !record.isError) return { status: "pending" as const, draft: null };
+  return record.data && isUntouchedDocument(record.data.document)
+    ? { status: "found" as const, draft: newest }
+    : { status: "none" as const, draft: null };
 }
 
 /** "x/50 bản nháp" (docs 12 §4.1, B37). */
@@ -298,6 +335,20 @@ export function useDesignPrintConfig(design: Design | undefined) {
     design ?? { id: "", product: { slug: null, title: "" }, variant: { sku: "", label: "" } },
   );
   return useQuery({ ...query, enabled: design !== undefined });
+}
+
+/**
+ * The id of a product by its slug, so a "Chat với Sale" can carry it as context (chat kind PRODUCT). Undefined while it
+ * loads or when it cannot be read: the link then opens the chat without a context instead of failing.
+ */
+export function useProductId(productSlug: string, enabled = true) {
+  return useQuery({
+    queryKey: designKeys.productId(productSlug),
+    queryFn: ({ signal }) => readProductId(productSlug, signal),
+    enabled,
+    retry: retryTransient,
+    ...QUERY_TIMES.detail,
+  }).data;
 }
 
 /** The variant's print configuration, or `null` when it has none (catalog BR-14: no "Thiết kế"). */

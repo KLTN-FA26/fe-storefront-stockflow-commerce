@@ -99,7 +99,7 @@ export function OrderVehiclesCard({ orderId }: { orderId: string }) {
           id="order-vehicles-heading"
           className="font-display text-ink-primary text-base font-semibold"
         >
-          Vận chuyển
+          Theo dõi giao hàng
         </h2>
         <Alert tone="warning" title="Chưa tải được thông tin vận chuyển">
           {describeError(error)}
@@ -124,7 +124,7 @@ export function OrderVehiclesCard({ orderId }: { orderId: string }) {
         id="order-vehicles-heading"
         className="font-display text-ink-primary text-base font-semibold"
       >
-        Vận chuyển
+        Theo dõi giao hàng
       </h2>
       <ul className="space-y-3">
         {data.map((vehicle, index) => (

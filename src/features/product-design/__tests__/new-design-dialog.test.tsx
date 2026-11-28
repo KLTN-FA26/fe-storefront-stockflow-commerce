@@ -39,6 +39,16 @@ const products = [
   { slug: "ly-giay-kraft-16oz", title: "Ly giấy kraft 16oz", skus: [MOCK_BLOCKED_SKU] },
 ];
 
+/** From eight printable products on, the dialog offers the search box; fewer are all in view. */
+const longList: DesignableProduct[] = [
+  ...products,
+  ...Array.from({ length: 5 }, (_, i) => ({
+    slug: `hop-giay-${i + 1}`,
+    title: `Hộp giấy mẫu ${i + 1}`,
+    skus: [`BOX-${i + 1}`],
+  })),
+];
+
 /** The catalogue answered: its products, no further page. */
 const ready = (
   shown: DesignableProduct[] = products,
@@ -53,7 +63,7 @@ const open = (catalogue: DesignableCatalogue = ready()) =>
 function SearchingPage({ onSearch }: { onSearch: (text: string | null) => void }) {
   const [open, setOpen] = useState(true);
   const [text, setText] = useState("");
-  const shown = products.filter((p) => p.title.toLowerCase().includes(text.toLowerCase()));
+  const shown = longList.filter((p) => p.title.toLowerCase().includes(text.toLowerCase()));
   const search = (next: string | null) => {
     onSearch(next);
     setText(next ?? "");
@@ -155,11 +165,70 @@ describe("NewDesignDialog", () => {
   });
 
   it("lists what the catalogue answered, without filtering it again", async () => {
-    open(ready([products[1]!]));
+    open(ready(longList));
     await userEvent.type(searchBox(), "BAG-KRAFT");
 
     // The catalogue matched a SKU, which the title does not show: the dialog does not second-guess it.
     expect(screen.getByRole("button", { name: "Túi giấy kraft quai xoắn" })).toBeInTheDocument();
+  });
+
+  it("shows no search box for a short list: a handful of products is all in view", () => {
+    open();
+
+    expect(screen.queryByRole("searchbox", { name: "Tìm sản phẩm" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ly giấy 2 lớp 12oz" })).toBeInTheDocument();
+  });
+
+  it("shows the search box when the catalogue has further pages to look through", () => {
+    open(ready(products, { onLoad: vi.fn(), loading: false, error: null }));
+
+    expect(searchBox()).toBeInTheDocument();
+  });
+
+  it("chooses the only product and its only variant for the customer, and says what is still missing otherwise", async () => {
+    open(ready([products[0]!]));
+
+    await waitFor(() => expect(variant("CUP-PAPER-12OZ-WHT")).toBeChecked(), WAIT);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Bắt đầu" })).toBeEnabled());
+    expect(screen.queryByText(/để tiếp tục/)).not.toBeInTheDocument();
+  });
+
+  it("names what is missing under a disabled Bắt đầu", async () => {
+    open();
+    expect(screen.getByText("Chọn sản phẩm và quy cách để tiếp tục")).toBeInTheDocument();
+
+    await pickProduct("Túi giấy kraft quai xoắn");
+    expect(await screen.findByText("Chọn quy cách để tiếp tục")).toBeInTheDocument();
+  });
+
+  it("puts the missing step under the Bắt đầu button, and says nothing while the variants are being checked", async () => {
+    open();
+    const start = screen.getByRole("button", { name: "Bắt đầu" });
+    const hint = screen.getByText("Chọn sản phẩm và quy cách để tiếp tục");
+    expect(start.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await pickProduct("Túi giấy kraft quai xoắn");
+    // The checks of its two variants run first: no "Chọn quy cách" yet.
+    expect(screen.queryByText("Chọn quy cách để tiếp tục")).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("Chọn quy cách để tiếp tục", undefined, WAIT),
+    ).toBeInTheDocument();
+  });
+
+  it("says the product has no variant that takes designs, instead of asking for a choice", async () => {
+    open();
+    await pickProduct("Ly giấy kraft 16oz");
+
+    expect(
+      await screen.findByText("Sản phẩm này chưa có quy cách nhận thiết kế", undefined, WAIT),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Chọn quy cách để tiếp tục")).not.toBeInTheDocument();
+  });
+
+  it("shows no search box while the catalogue loads, so it does not flicker in and out for a short list", () => {
+    open({ status: "loading", onSearch: vi.fn() });
+
+    expect(screen.queryByRole("searchbox", { name: "Tìm sản phẩm" })).not.toBeInTheDocument();
   });
 
   it("says when no product matches", () => {

@@ -115,7 +115,9 @@ export function DesignNameField({ editable }: { editable: boolean }) {
   if (editing && editable) return <NameForm onDone={() => setEditing(false)} />;
   return (
     <div className="flex min-w-32 items-center gap-0.5">
-      <h1 className="text-ink-primary truncate text-base font-semibold">{design.name}</h1>
+      <h1 title={design.name} className="text-ink-primary truncate text-base font-semibold">
+        {design.name}
+      </h1>
       {editable ? (
         <StudioIconButton label="Đổi tên thiết kế" onClick={() => setEditing(true)}>
           <Pencil aria-hidden />

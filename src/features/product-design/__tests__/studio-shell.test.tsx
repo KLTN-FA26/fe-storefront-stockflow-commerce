@@ -338,8 +338,14 @@ describe("studio shell: rail, panel, context bar and preview card", () => {
     expect(screen.queryByRole("region", { name: "Lịch sử" })).not.toBeInTheDocument();
   });
 
-  it("the preview is a card at the stage's bottom right, a sibling of the stage", async () => {
+  it("the preview starts folded into its 3D pill, and opens as a card at the stage's bottom right, a sibling of the stage", async () => {
     await openCup();
+
+    expect(screen.getByRole("button", { name: "Mở lại bản xem trước" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Xem trước sản phẩm", hidden: true })).toHaveClass(
+      "hidden",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Mở lại bản xem trước" }));
 
     const card = screen.getByRole("region", { name: "Xem trước sản phẩm" });
     const sheet = screen.getByRole("region", { name: "Khung thiết kế" });

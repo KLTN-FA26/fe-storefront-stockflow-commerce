@@ -12,6 +12,7 @@ import { pickDate } from "@/test/date-picker";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
 import { getDesign } from "../api";
+import { DesignCard } from "../components/design-card";
 import { DesignQuoteSummary, RequestQuoteButton } from "../components/design-quote-request";
 import type { Design } from "../types";
 import { designBackend, type DesignBackend } from "./design-backend";
@@ -283,6 +284,47 @@ describe("an approved design's quote request", () => {
       FIRST_READ,
     );
     expect(button).toHaveAttribute("data-variant", "default");
+  });
+
+  it("once Sales answered with a quote, the card has one 'Xem báo giá' (the primary button), the number beside the badge, and asking again as an outline button", async () => {
+    const design = await getDesign(approved);
+    // The mock backend already spies on `api.get`: answer this one list, hand every other read to it.
+    const original = backend.get.getMockImplementation()!;
+    backend.get.mockImplementation(async (url, ...rest) =>
+      url === `/designs/${approved}/quote-requests`
+        ? {
+            data: [
+              {
+                id: "7d51f000-0000-4000-8000-0000000000b1",
+                designId: approved,
+                designName: "Ly",
+                designStatus: "APPROVED",
+                cartons: 10,
+                status: "CLOSED",
+                requestedAt: "2026-11-01T00:00:00Z",
+                closedAt: "2026-11-02T00:00:00Z",
+                closedOutcome: "QUOTED",
+                quoteId: "01a2043f-3d65-706a-9d7b-dcc7bff017d6",
+                quoteNumber: "QT-20261123-0001",
+              },
+            ],
+          }
+        : original(url, ...rest),
+    );
+    renderWithProviders(<DesignCard design={design} />);
+
+    const primary = await screen.findByRole(
+      "link",
+      { name: `Xem báo giá ${design.name}` },
+      FIRST_READ,
+    );
+    expect(primary).toHaveAttribute("href", "/account/quotes/01a2043f-3d65-706a-9d7b-dcc7bff017d6");
+    expect(screen.getAllByRole("link", { name: /Xem báo giá/ })).toHaveLength(1);
+    expect(screen.getByText("QT-20261123-0001")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Yêu cầu báo giá ${design.name}` })).toHaveAttribute(
+      "data-variant",
+      "outline",
+    );
   });
 
   it("is not offered without design-quote-requests:CREATE", async () => {

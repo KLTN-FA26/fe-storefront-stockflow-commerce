@@ -77,7 +77,7 @@ describe("ProjectListScreen", () => {
     const item = within(within(list).getByRole("listitem"));
     expect(item.getByRole("heading", { name: "Dự án 1" })).toBeInTheDocument();
     expect(item.getByText("Bộ ly")).toBeInTheDocument();
-    expect(item.getByText("0/20 bản")).toBeInTheDocument();
+    expect(item.getByText("0 bản thiết kế (tối đa 20)")).toBeInTheDocument();
     expect(item.getByText("Đang dùng")).toBeInTheDocument();
     expect(item.getByText(/^Tạo lúc \d/)).toBeInTheDocument();
     // Whether a quote was asked for the project (UI/UX 27/11, sf-11).
@@ -168,6 +168,19 @@ describe("ProjectListScreen", () => {
       await userEvent.click(await screen.findByRole("button", { name: /Tạo dự án/ }));
       return screen.findByRole("dialog");
     }
+
+    it("marks the name as required with a red asterisk and the optional description in words (S01-14)", async () => {
+      const dialog = await openDialog();
+      const name = within(dialog).getByLabelText("Tên dự án");
+      expect(name).toHaveAttribute("aria-required", "true");
+      expect(document.querySelector(`label[for="${name.id}"]`)).toHaveClass(
+        "after:content-['*']",
+        "after:text-danger",
+      );
+      expect(within(dialog).getByLabelText("Mô tả (không bắt buộc)")).not.toHaveAttribute(
+        "aria-required",
+      );
+    });
 
     it("refuses an empty name", async () => {
       const dialog = await openDialog();

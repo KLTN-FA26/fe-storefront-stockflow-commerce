@@ -172,6 +172,21 @@ describe("an answered quote request (SF-UX-10, R5-5)", () => {
     );
   });
 
+  it("without a link (the card has its own button) it still names the quote", () => {
+    renderWithProviders(
+      <QuoteRequestFacts
+        quoteLink={false}
+        request={closed({
+          closedOutcome: "QUOTED",
+          quoteId: QUOTE_ID,
+          quoteNumber: "QT-20261123-0001",
+        })}
+      />,
+    );
+    expect(screen.getByText("QT-20261123-0001")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Xem báo giá" })).not.toBeInTheDocument();
+  });
+
   it("WF-02 FE-2: closed as QUOTED before the quote is sent reads 'Sale đang soạn báo giá', no link", () => {
     renderWithProviders(<QuoteRequestFacts request={closed({ closedOutcome: "QUOTED" })} />);
     const badge = screen.getByText("Sale đang soạn báo giá");

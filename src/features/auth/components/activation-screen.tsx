@@ -76,7 +76,8 @@ export function ActivationScreen() {
     return (
       <Panel title="Tài khoản đã được kích hoạt">
         <Alert tone="info" title="Bạn có thể đăng nhập ngay.">
-          Tên đăng nhập của bạn là <span className="font-medium break-all">{outcome.activated}</span>.
+          Tên đăng nhập của bạn là{" "}
+          <span className="font-medium break-all">{outcome.activated}</span>.
         </Alert>
         <LoginButton label="Đăng nhập" />
       </Panel>
@@ -88,7 +89,11 @@ export function ActivationScreen() {
       title="Kích hoạt tài khoản"
       body="Đặt mật khẩu cho tài khoản StockFlow mà Sales đã tạo cho doanh nghiệp của bạn. Sau đó bạn đăng nhập bằng email nhận được lời mời."
     >
-      <ActivationForm token={token} onActivated={onActivated} onInvalidLink={() => setOutcome("invalid")} />
+      <ActivationForm
+        token={token}
+        onActivated={onActivated}
+        onInvalidLink={() => setOutcome("invalid")}
+      />
     </Panel>
   );
 }

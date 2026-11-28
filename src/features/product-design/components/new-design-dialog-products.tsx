@@ -1,8 +1,12 @@
 "use client";
 
+import Image from "next/image";
+import { ImageIcon } from "lucide-react";
+
 import { Alert, Skeleton } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
+import { isRemoteImage } from "@/lib/remote-image";
 
 import { describeDesignError } from "../errors";
 import { RetryButton } from "./design-list-states";
@@ -12,6 +16,10 @@ export type DesignableProduct = {
   slug: string;
   title: string;
   skus: string[];
+  /** The variants' names by SKU (volume, material), as the catalogue lists them. */
+  skuNames?: Record<string, string>;
+  /** The product's cover picture, when it has one. */
+  image?: string | null;
 };
 
 /** The catalogue's further pages; `null` at its end. */
@@ -26,11 +34,14 @@ export type MoreProducts = { onLoad: () => void; loading: boolean; error: unknow
 export type DesignableCatalogue = {
   onSearch: (text: string | null) => void;
   /**
-   * The SKUs of one product's variants, read on demand: "Nhân bản sang cỡ khác" offers the other
+   * The SKUs of one product's variants, read on demand: "Nhân bản sang quy cách khác" offers the other
    * variants of a design's product, which the product list above does not cover (it is read only
    * while "Thiết kế mới" is open). Without it nothing is offered.
    */
-  skusOf?: (productSlug: string, signal?: AbortSignal) => Promise<string[]>;
+  skusOf?: (
+    productSlug: string,
+    signal?: AbortSignal,
+  ) => Promise<readonly (string | { sku: string; name?: string | null | undefined })[]>;
 } & (
   | { status: "loading" }
   | { status: "error"; error: unknown; onRetry: () => void; retrying: boolean }
@@ -43,11 +54,31 @@ export type DesignableCatalogue = {
     }
 );
 
+/** The product's cover picture, or a placeholder of the same size. */
+function ProductThumb({ image }: { image: string | null | undefined }) {
+  return (
+    <span className="border-border-default bg-bg-subtle text-ink-tertiary relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-[var(--r-md)] border">
+      {image ? (
+        <Image
+          src={image}
+          alt=""
+          fill
+          sizes="48px"
+          className="object-cover"
+          unoptimized={isRemoteImage(image)}
+        />
+      ) : (
+        <ImageIcon aria-hidden className="size-5" />
+      )}
+    </span>
+  );
+}
+
 function ProductsLoading() {
   return (
     <div role="status" aria-label="Đang tải danh sách sản phẩm" className="space-y-1">
       {[0, 1, 2].map((i) => (
-        <Skeleton key={i} className="h-11 w-full rounded-[var(--r-md)]" />
+        <Skeleton key={i} className="h-16 w-full rounded-[var(--r-md)]" />
       ))}
     </div>
   );
@@ -82,8 +113,8 @@ export function ProductList({
   const { products, stale, more } = catalogue;
   const waiting = products.length === 0 && (stale || more?.loading === true);
   return (
-    // Padded so the focus ring of a row is not cut by the scroll box.
-    <div className="max-h-48 space-y-2 overflow-y-auto p-0.5">
+    // No scroll box of its own: the dialog scrolls, so the list never sits in a second scrolling area.
+    <div className="space-y-2">
       <ul
         aria-label="Sản phẩm in được"
         aria-busy={stale}
@@ -96,13 +127,14 @@ export function ProductList({
               aria-pressed={p.slug === picked}
               onClick={() => onPick(p)}
               className={cn(
-                "text-ink-primary focus-visible:ring-accent min-h-11 w-full rounded-[var(--r-md)] border px-3 text-left text-sm outline-none focus-visible:ring-2",
+                "text-ink-primary focus-visible:ring-accent flex min-h-16 w-full items-center gap-3 rounded-[var(--r-md)] border p-2 text-left text-sm outline-none focus-visible:ring-2",
                 p.slug === picked
                   ? "border-accent bg-bg-muted"
                   : "border-border-default hover:bg-bg-subtle",
               )}
             >
-              {p.title}
+              <ProductThumb image={p.image} />
+              <span className="min-w-0 flex-1 font-medium break-words">{p.title}</span>
             </button>
           </li>
         ))}

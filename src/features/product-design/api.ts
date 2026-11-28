@@ -47,6 +47,7 @@ export {
   getPrintConfig,
   printConfigOfSku,
   readProductCustomization,
+  readProductId,
 } from "./api-print-config";
 export {
   listDesignQuoteRequests,

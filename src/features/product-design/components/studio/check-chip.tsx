@@ -6,6 +6,7 @@ import { cn } from "@/lib/cn";
 
 import type { PreflightReport } from "../../engine";
 import { usePreflightReport } from "./preflight-context";
+import { useStudio } from "./studio-context";
 import { useStudioPanel } from "./studio-panel-context";
 
 type CheckTone = "positive" | "danger" | "warning";
@@ -59,11 +60,14 @@ export function CheckChipView({
 
 /**
  * The header's check chip: the preflight summary, which opens the "Kiểm tra" panel (and keeps it
- * open when it already is); closing the panel gives the chip the focus back. Read-only designs
- * have the panel too, so they have the chip.
+ * open when it already is); closing the panel gives the chip the focus back. A design in review
+ * has the panel too, so it has the chip; an approved one does not: its checks were passed or
+ * accepted when it was approved, and a red "Kiểm tra: 1 lỗi" beside "Đã duyệt" only contradicts it.
  */
 export function CheckChip() {
   const report = usePreflightReport();
   const { open } = useStudioPanel();
+  const { design } = useStudio();
+  if (design.status === "APPROVED") return null;
   return <CheckChipView summary={summarizeCheck(report)} onOpen={(chip) => open("check", chip)} />;
 }

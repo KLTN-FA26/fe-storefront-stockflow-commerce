@@ -17,10 +17,16 @@ export const DESIGNABLE_PAGE_SIZE = 50;
 export const designableSearchText = (raw: string) =>
   [...raw.trim()].slice(0, CATALOG_QUERY_MAX).join("");
 
-/** The SKUs of a product's variants, for "Nhân bản sang cỡ khác" (the catalogue's product detail). */
-export async function productSkusOf(productSlug: string, signal?: AbortSignal): Promise<string[]> {
+/**
+ * The SKUs of a product's variants with their names, for "Nhân bản sang quy cách khác" (the catalogue's product
+ * detail).
+ */
+export async function productSkusOf(
+  productSlug: string,
+  signal?: AbortSignal,
+): Promise<{ sku: string; name?: string | null | undefined }[]> {
   const product = await getCatalogProduct(productSlug, signal);
-  return product.variants.map((variant) => variant.sku);
+  return product.variants.map(({ sku, name }) => ({ sku, name }));
 }
 
 /** The customizable products of a page with their SKUs: what "Thiết kế mới" can start a design on. */
@@ -30,7 +36,17 @@ export const designableOf = (cards: readonly CatalogCard[]): DesignableProduct[]
     .filter((card) => card.kind === undefined || card.kind === "CUSTOMIZABLE")
     .flatMap((card) =>
       card.skus && card.skus.length > 0
-        ? [{ slug: card.slug, title: card.title, skus: card.skus.map(({ sku }) => sku) }]
+        ? [
+            {
+              slug: card.slug,
+              title: card.title,
+              skus: card.skus.map(({ sku }) => sku),
+              skuNames: Object.fromEntries(
+                card.skus.flatMap(({ sku, name }) => (name?.trim() ? [[sku, name.trim()]] : [])),
+              ),
+              image: card.primaryImageUrl ?? null,
+            },
+          ]
         : [],
     );
 

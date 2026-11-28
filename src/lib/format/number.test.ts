@@ -4,8 +4,9 @@ import { formatFileSize } from "./number";
 
 describe("formatFileSize", () => {
   it.each([
-    [0, "0 B"],
-    [820, "820 B"],
+    [0, "0 KB"],
+    [774, "0,8 KB"],
+    [820, "0,8 KB"],
     [1_024, "1 KB"],
     [1_536, "1,5 KB"],
     [947_534, "925,3 KB"],

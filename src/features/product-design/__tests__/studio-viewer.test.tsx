@@ -219,7 +219,7 @@ describe("the status line of a .glb model", () => {
     expect(screen.getByText(LOADING)).toBe(previewStatus());
   });
 
-  it("clears the line when the model is ready, says so when it failed, and again when it reloads", async () => {
+  it("clears the line when the model is ready, says nothing when it failed (the code-built model is a preview too), and shows loading again when it reloads", async () => {
     await openCupWithModel();
     const viewer = built.at(-1)!;
 
@@ -229,7 +229,7 @@ describe("the status line of a .glb model", () => {
     expect(screen.queryByText(FAILED)).not.toBeInTheDocument();
 
     act(() => viewer.emit({ status: "failed", code: "LOAD_FAILED" }));
-    expect(previewStatus()).toHaveTextContent(FAILED);
+    expect(previewStatus()).toBeEmptyDOMElement();
     expect(screen.queryByText(LOADING)).not.toBeInTheDocument();
 
     act(() => viewer.emit({ status: "loading" }));
@@ -249,8 +249,8 @@ describe("the status line of a .glb model", () => {
 
   it("does not carry a failure over to a design with no file", async () => {
     const { client, rerender } = await openCupWithModel();
-    act(() => built.at(-1)!.emit({ status: "failed" }));
-    expect(screen.getByText(FAILED)).toBeInTheDocument();
+    act(() => built.at(-1)!.emit({ status: "loading" }));
+    expect(screen.getByText(LOADING)).toBeInTheDocument();
 
     rerender(studioOf(client, MOCK_DESIGN_IDS.draft)); // the bag
     await vi.waitFor(() => expect(screen.queryByText(FAILED)).not.toBeInTheDocument(), OPENED);
@@ -280,7 +280,7 @@ describe("the status line of a .glb model", () => {
 
     expect(screen.getByText(LOADING)).toBeInTheDocument();
     act(() => viewer.emit({ status: "failed" }));
-    expect(screen.getByText(FAILED)).toBeInTheDocument();
+    expect(previewStatus()).toBeEmptyDOMElement();
   });
 
   it("keeps the line through Đổi chỗ, Thu nhỏ and back, on the same viewer", async () => {
@@ -289,14 +289,15 @@ describe("the status line of a .glb model", () => {
     const count = built.length;
     act(() => viewer.emit({ status: "failed" }));
 
+    // The card starts folded: open it, then fold it again.
+    await userEvent.click(screen.getByRole("button", { name: "Mở lại bản xem trước" }));
     await userEvent.click(screen.getByRole("button", { name: "Thu nhỏ bản xem trước" }));
     act(() => viewer.emit({ status: "loading" })); // changes while the card is folded
     await userEvent.click(screen.getByRole("button", { name: "Mở lại bản xem trước" }));
     expect(screen.getByText(LOADING)).toBeInTheDocument();
 
-    act(() => viewer.emit({ status: "failed" }));
     await userEvent.click(screen.getByRole("button", { name: "Đổi chỗ 2D và 3D" }));
-    expect(screen.getByText(FAILED)).toBeInTheDocument();
+    expect(screen.getByText(LOADING)).toBeInTheDocument();
     expect(built).toHaveLength(count);
   });
 

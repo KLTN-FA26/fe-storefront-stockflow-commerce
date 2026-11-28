@@ -8,11 +8,11 @@ import { seedMockCatalog } from "@/lib/api/mock-fixtures/catalog";
 import { MOCK_BLOCKED_SKU, printConfigFor } from "@/lib/api/mock-fixtures/design-print-configs";
 import { renderWithProviders, signIn, signOut } from "@/test/render";
 
-import { createProject, getDesign } from "../api";
+import { createDesign, createProject, getDesign } from "../api";
 
 import { NewDesignScreen } from "../components/new-design-screen";
 import { designKeys } from "../queries";
-import { designBackend } from "./design-backend";
+import { cupWithText, designBackend } from "./design-backend";
 
 // The mock adapter adds latency per request; give multi-request flows headroom under load.
 const WAIT = { timeout: 5000 };
@@ -41,6 +41,8 @@ afterEach(() => {
 
 const CUP = "ly-giay-2-lop-12oz";
 const CUP_SKU = "CUP-PAPER-12OZ-WHT";
+/** Drafts of another variant fill the limit without being offered as the draft to go on with. */
+const OTHER_CUP = { productSlug: "ly-giay-2-lop-8oz", sku: "CUP-PAPER-8OZ-WHT" };
 const NAME = "Ly giấy 2 lớp 12oz · CUP-PAPER-12OZ-WHT";
 // What the BE wants beside the slug and SKU: the product's id and the template's code, read from
 // the product's customization (F-12).
@@ -50,6 +52,44 @@ const KEYED = { headers: { "Idempotency-Key": expect.any(String) } };
 /** The Idempotency-Key of the n-th create the backend spy saw. */
 const keyOf = (post: { mock: { calls: unknown[][] } }, n: number) =>
   (post.mock.calls[n]?.[2] as { headers: Record<string, string> }).headers["Idempotency-Key"];
+
+describe("NewDesignScreen: going on with an untouched draft (S08-11)", () => {
+  it("asks 'Tiếp tục bản nháp gần nhất?' when a draft of this variant has nothing drawn on it, and goes on with it", async () => {
+    const { post } = await designBackend();
+    const draft = await createDesign({ productSlug: CUP, sku: CUP_SKU, name: "Ly khai trương" });
+    const made = post.mock.calls.length; // the draft above
+    renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
+
+    expect(
+      await screen.findByText("Tiếp tục bản nháp gần nhất?", undefined, WAIT),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Ly khai trương/)).toBeInTheDocument();
+    expect(post).toHaveBeenCalledTimes(made);
+
+    await userEvent.click(screen.getByRole("button", { name: "Tiếp tục bản nháp" }));
+    expect(env.replace).toHaveBeenCalledWith(`/design/${draft.id}`);
+    expect(post).toHaveBeenCalledTimes(made);
+  });
+
+  it("makes a new design when 'Tạo bản mới' is chosen", async () => {
+    const { store, post } = await designBackend();
+    await store.create({ productSlug: CUP, sku: CUP_SKU, name: "Ly khai trương" });
+    renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Tạo bản mới" }, WAIT));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1), WAIT);
+  });
+
+  it("does not ask when the draft has been drawn on, or is of another variant: it just makes the design", async () => {
+    const { store, post } = await designBackend();
+    await cupWithText(store); // a draft of the 12oz cup with a text on it
+    await store.create({ ...OTHER_CUP, name: "Ly 8oz" });
+    renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1), WAIT);
+    expect(screen.queryByText("Tiếp tục bản nháp gần nhất?")).not.toBeInTheDocument();
+  });
+});
 
 describe("NewDesignScreen", () => {
   it("creates the design named after the product and variant, and opens its studio", async () => {
@@ -145,7 +185,10 @@ describe("NewDesignScreen", () => {
     expect(
       await screen.findByText("Quy cách này chưa nhận thiết kế.", undefined, WAIT),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Chat với Sale" })).toHaveAttribute("href", "/chat");
+    expect(screen.getByRole("link", { name: "Chat với Sale" })).toHaveAttribute(
+      "href",
+      "/chat/new",
+    );
     expect(post).not.toHaveBeenCalled();
   });
 
@@ -179,7 +222,7 @@ describe("NewDesignScreen", () => {
   it("stops at 50 drafts with a link to the designs of the customer", async () => {
     const { store, post } = await designBackend();
     for (let i = 0; i < 48; i += 1) {
-      await store.create({ productSlug: CUP, sku: CUP_SKU, name: `Ly ${i}` });
+      await store.create({ ...OTHER_CUP, name: `Ly ${i}` });
     }
     renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
 
@@ -195,7 +238,7 @@ describe("NewDesignScreen", () => {
   it("does not flash the limit screen when the create itself makes the 50th draft", async () => {
     const { store } = await designBackend();
     for (let i = 0; i < 47; i += 1) {
-      await store.create({ productSlug: CUP, sku: CUP_SKU, name: `Ly ${i}` });
+      await store.create({ ...OTHER_CUP, name: `Ly ${i}` });
     }
     renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
 
@@ -221,7 +264,7 @@ describe("NewDesignScreen", () => {
   it("keeps its screen when a background re-read fails while it has the answer (L10)", async () => {
     const { store, get } = await designBackend();
     for (let i = 0; i < 48; i += 1) {
-      await store.create({ productSlug: CUP, sku: CUP_SKU, name: `Ly ${i}` });
+      await store.create({ ...OTHER_CUP, name: `Ly ${i}` });
     }
     const { client } = renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
     expect(await screen.findByText("Bạn đã có 50 bản nháp", undefined, WAIT)).toBeInTheDocument();
@@ -256,6 +299,8 @@ describe("NewDesignScreen", () => {
     first.unmount();
 
     renderWithProviders(<NewDesignScreen product={CUP} sku={CUP_SKU} />);
+    // The draft the first visit made is untouched: the prompt offers it; a new design is asked for.
+    await userEvent.click(await screen.findByRole("button", { name: "Tạo bản mới" }, WAIT));
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2), WAIT);
 
     expect(keyOf(post, 1)).not.toBe(keyOf(post, 0));

@@ -140,18 +140,22 @@ export function ThreadComposer({
         pending={pending}
         allowEmpty={file !== null}
         placeholder={file ? "Thêm chú thích (không bắt buộc)..." : "Nhập tin nhắn..."}
+        // While the signed-copy prompt is up its button is the one place to attach: a second paperclip beside the box
+        // only gave two ways to the same file picker.
         leading={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="text-ink-secondary size-11 shrink-0 rounded-full"
-            aria-label="Đính kèm ảnh hoặc PDF"
-            disabled={pending}
-            onClick={() => picker.current?.click()}
-          >
-            <Paperclip aria-hidden className="size-5" />
-          </Button>
+          askSignedCopy ? undefined : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="text-ink-secondary size-11 shrink-0 rounded-full"
+              aria-label="Đính kèm ảnh hoặc PDF"
+              disabled={pending}
+              onClick={() => picker.current?.click()}
+            >
+              <Paperclip aria-hidden className="size-5" />
+            </Button>
+          )
         }
         header={
           file ? (

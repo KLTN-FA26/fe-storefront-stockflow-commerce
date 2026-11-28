@@ -47,5 +47,25 @@ export function useThreadScroll(newest: Newest | null) {
     else setUnseen((count) => count + 1);
   }, [seq, mine, toBottom]);
 
+  // A card that fills in below (its quote, its image), or a banner that grows the footer and shrinks the log, would leave
+  // the last message half under the edge: while the customer is at the end, the end follows (S04-5).
+  useEffect(() => {
+    const element = scroller.current;
+    if (!element) return;
+    const follow = () => {
+      if (atBottom.current) element.scrollTop = element.scrollHeight;
+    };
+    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(follow);
+    resize?.observe(element);
+    const mutate = typeof MutationObserver === "undefined" ? null : new MutationObserver(follow);
+    mutate?.observe(element, { childList: true, subtree: true });
+    element.addEventListener("load", follow, true); // an image's load does not bubble: captured
+    return () => {
+      resize?.disconnect();
+      mutate?.disconnect();
+      element.removeEventListener("load", follow, true);
+    };
+  }, []);
+
   return { scroller, onScroll, unseen, toBottom };
 }

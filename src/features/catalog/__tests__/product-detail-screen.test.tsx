@@ -43,7 +43,10 @@ describe("ProductDetailScreen — no price, no cart (kltn-docs 13 BR-04, 14 BR-0
 
   it("shows the product, its variants and their stock, and sends the customer to Sales", async () => {
     renderWithProviders(<ProductDetailScreen slug="ly-giay-2-lop-8oz" />);
-    expect(await ready("Ly giấy 2 lớp 8oz")).toHaveAttribute("href", "/chat");
+    expect(await ready("Ly giấy 2 lớp 8oz")).toHaveAttribute(
+      "href",
+      "/chat/new?kind=PRODUCT&id=7c1f0a00-0000-4000-8000-000000000001",
+    );
     expect(await screen.findByText("Còn hàng")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Kraft" })).toBeInTheDocument();
     expect(screen.getByText(/Giá không hiển thị trên sàn/)).toBeInTheDocument();
@@ -181,7 +184,10 @@ describe("ProductDetailScreen design entry (kltn-docs 12, 13 §4)", () => {
     renderWithProviders(
       <ProductDetailScreen slug="ly-giay-2-lop-8oz" renderDesignEntry={renderEntry} />,
     );
-    expect(await ready("Ly giấy 2 lớp 8oz")).toHaveAttribute("href", "/chat");
+    expect(await ready("Ly giấy 2 lớp 8oz")).toHaveAttribute(
+      "href",
+      "/chat/new?kind=PRODUCT&id=7c1f0a00-0000-4000-8000-000000000001",
+    );
     expect(screen.getByText("design entry for CUP-PAPER-8OZ-WHT")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Kraft" }));
     expect(screen.getByText("design entry for CUP-PAPER-8OZ-KRAFT")).toBeInTheDocument();

@@ -168,7 +168,7 @@ export function useCreateRevision() {
 }
 
 /**
- * "Nhân bản sang cỡ khác" (`mutate({ variantSku, document })`); the caller opens the new draft. The
+ * "Nhân bản sang quy cách khác" (`mutate({ variantSku, document })`); the caller opens the new draft. The
  * copy is a new draft and may join the source's project (A-E3): lists, draft count and projects
  * are re-read. A source another tab deleted or moved on is re-read too.
  */

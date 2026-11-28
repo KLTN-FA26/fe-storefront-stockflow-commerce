@@ -139,7 +139,11 @@ const quotePricingJson = () => ({
 /** SF-UX-21: accepting waits for the pricing; once it failed, the dialog says so and lets the customer accept. */
 const pricingFailed = async () => {
   expect(
-    await screen.findByText(/Chưa tải được MOQ và giá tạm tính/, {}, { timeout: 4000 }),
+    await screen.findByText(
+      /Chưa tải được số thùng tối thiểu và giá tạm tính/,
+      {},
+      { timeout: 4000 },
+    ),
   ).toBeInTheDocument();
 };
 
@@ -210,10 +214,39 @@ describe("accepting a quote on its card (C10)", () => {
     const dialog = await screen.findByRole("dialog");
     expect(get.mock.calls[0]?.[0]).toBe(`/quotes/${QUOTE_ID}`);
     expect(await within(dialog).findByText("20 thùng")).toBeInTheDocument();
+    // The minimum is named in words, never the bare "MOQ" (S04-8).
+    expect(within(dialog).getByText("Số thùng tối thiểu")).toBeInTheDocument();
+    expect(within(dialog).queryByText("MOQ")).not.toBeInTheDocument();
     // 60 cartons × 1.000 × 1.150 = 69.000.000; + plate fee 1.500.000; VAT 5.520.000 + 120.000 → 76.140.000.
     // Line total and goods subtotal.
     expect(within(dialog).getAllByText(/69\.000\.000/)).toHaveLength(2);
     expect(within(dialog).getByText(/76\.140\.000/)).toBeInTheDocument();
+  });
+
+  it("names each line by its design, with the picture, once the quote is read (SF#67), the SKU until then", async () => {
+    const user = userEvent.setup();
+    const pricing = quotePricingJson();
+    vi.spyOn(api, "get").mockResolvedValue({
+      data: {
+        ...pricing,
+        lines: [
+          {
+            ...pricing.lines[0],
+            designName: "Ly giấy Lẩu Thái Siam",
+            previewUrl: "https://media.example.test/preview.png",
+          },
+        ],
+      },
+    });
+    open();
+    await user.click(screen.getByRole("button", { name: "Chấp nhận" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText("Ly giấy Lẩu Thái Siam")).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("link", { name: /Xem ảnh thiết kế Ly giấy Lẩu Thái Siam/ }),
+    ).toBeInTheDocument();
+    // The SKU stays beside the name, small.
+    expect(within(dialog).getByText("LY-GIAY-DEMO-12OZ-XANH")).toBeInTheDocument();
   });
 
   it("WF-02 audit item 4: below the MOQ is refused in the dialog before anything is sent", async () => {
@@ -229,7 +262,7 @@ describe("accepting a quote on its card (C10)", () => {
     await user.type(input, "10");
     await user.click(within(dialog).getByRole("button", { name: "Chấp nhận báo giá" }));
     expect(
-      await within(dialog).findByText("Dòng 1: tối thiểu 20 thùng (MOQ)."),
+      await within(dialog).findByText("Dòng 1: số thùng tối thiểu là 20 thùng."),
     ).toBeInTheDocument();
     expect(post).not.toHaveBeenCalled();
   });
@@ -256,7 +289,9 @@ describe("accepting a quote on its card (C10)", () => {
     open();
     await user.click(screen.getByRole("button", { name: "Chấp nhận" }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText("Đang tải MOQ và giá tạm tính…")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("Đang tải số thùng tối thiểu và giá tạm tính…"),
+    ).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Chấp nhận báo giá" })).toBeDisabled();
   });
 

@@ -17,7 +17,13 @@ import {
   type SurfaceContent,
   type VectorPage,
 } from "../../engine";
-import { canvasOf, EXPORT_MESSAGES as MESSAGES, ExportError, pngOf } from "./export-canvas";
+import {
+  canvasOf,
+  describeImageLoadFailure,
+  EXPORT_MESSAGES as MESSAGES,
+  ExportError,
+  pngOf,
+} from "./export-canvas";
 import { renderDesignBrief } from "./brief-render";
 import { exportPreview, type PreviewDeps } from "./preview-export";
 import { printVectorArt, rasterSheetArt, type SheetPlacement } from "./print-vector";
@@ -128,8 +134,8 @@ export function createCanvasExportRenderer(deps: RendererDeps): ExportRenderer {
           await cache.load(assetId, blob, "full");
         }),
       );
-    } catch {
-      throw new ExportError(MESSAGES.image);
+    } catch (error) {
+      throw new ExportError(describeImageLoadFailure(error));
     }
     return cache;
   }
