@@ -20,6 +20,8 @@ const STALE_CODES = new Set([
   "CHAT_CARD_ACTION_NOT_ALLOWED",
   "SAMPLE_ROUND_ANSWERED",
   "PRODUCTION_ORDER_STATUS_INVALID",
+  // 17 §5.6: the shortage card was chosen on, replaced or ended meanwhile, or its version is stale.
+  "SHORTAGE_CARD_STATE_CONFLICT",
 ]);
 
 /**

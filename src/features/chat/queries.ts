@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 
 import { QUERY_TIMES } from "@/lib/api/query-client";
+import { CHAT_QUERY_ROOT } from "@/lib/api/query-keys";
 import { useRealtimeConnected } from "@/lib/realtime";
 
 import {
@@ -20,7 +21,7 @@ import { newestSeqOf, upsertMessages, type MessagePages } from "./selectors";
 import type { ChatListParams, ChatMessage } from "./types";
 
 export const chatKeys = {
-  all: ["chat", "me"] as const,
+  all: CHAT_QUERY_ROOT,
   lists: () => [...chatKeys.all, "list"] as const,
   list: (params: ChatListParams) => [...chatKeys.lists(), params] as const,
   details: () => [...chatKeys.all, "detail"] as const,

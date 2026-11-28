@@ -7,6 +7,8 @@
 
 import { z } from "zod";
 
+import { shortageCardSchema, type ShortageCard } from "@/lib/domain/shortage";
+
 const id = z.string().min(1);
 const text = z.string().nullish();
 const count = z.number().int().nullish();
@@ -205,6 +207,9 @@ export const sampleCardPayloadSchema = z.object({
     .transform((media) => media ?? []),
 });
 
+/** B.7.10 SHORTAGE_CHOICE (`ShortageCardMessages.payload`): "Đơn thiếu N thùng" with its ways on (17 §4.14, BR-33). */
+export type ShortageCardPayload = ShortageCard;
+
 export type DesignQuoteRequestPayload = z.infer<typeof designQuoteRequestPayloadSchema>;
 export type ProjectQuoteRequestPayload = z.infer<typeof projectQuoteRequestPayloadSchema>;
 export type QuoteCardPayload = z.infer<typeof quoteCardPayloadSchema>;
@@ -226,6 +231,7 @@ export type ChatCardView =
   | { type: "ORDER_STATUS"; payload: OrderStatusCardPayload }
   | { type: "INVOICE"; payload: InvoiceCardPayload }
   | { type: "SAMPLE_APPROVAL"; payload: SampleCardPayload }
+  | { type: "SHORTAGE_CHOICE"; payload: ShortageCardPayload }
   | { type: "UNKNOWN" };
 
 const UNKNOWN: ChatCardView = { type: "UNKNOWN" };
@@ -274,6 +280,10 @@ export function cardViewOf(kind: string, payload: unknown): ChatCardView {
     case "SAMPLE_APPROVAL": {
       const parsed = sampleCardPayloadSchema.safeParse(payload);
       return parsed.success ? { type: "SAMPLE_APPROVAL", payload: parsed.data } : UNKNOWN;
+    }
+    case "SHORTAGE_CHOICE": {
+      const parsed = shortageCardSchema.safeParse(payload);
+      return parsed.success ? { type: "SHORTAGE_CHOICE", payload: parsed.data } : UNKNOWN;
     }
     default:
       return UNKNOWN;

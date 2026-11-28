@@ -75,3 +75,25 @@ export function describeCancelError(error: unknown): string {
   }
   return describeError(error);
 }
+
+/**
+ * Failures of the customer's choice on a shortage card (17 §4.14, §5.6): the card changed meanwhile (chosen in the
+ * chat, replaced, ended: 409) or the way is not on it. The page reads the card again, so it already shows the new state.
+ */
+export function describeShortageError(error: unknown): string {
+  if (isApiError(error)) {
+    if (error.code === "SHORTAGE_CARD_STATE_CONFLICT") {
+      return withLookup(
+        "Thẻ đã có lựa chọn hoặc không còn hiệu lực — trạng thái mới nhất đã được cập nhật.",
+        error,
+      );
+    }
+    if (error.code === "SHORTAGE_OPTION_NOT_AVAILABLE") {
+      return withLookup("Hướng này không còn trên thẻ. Vui lòng chọn hướng khác.", error);
+    }
+    if (error.code === "SHORTAGE_CARD_NOT_FOUND" || error.code === "NOT_FOUND") {
+      return withLookup("Không tìm thấy thẻ này trong tài khoản của bạn.", error);
+    }
+  }
+  return describeError(error);
+}
