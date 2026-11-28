@@ -46,7 +46,7 @@ export function ConversationRow({ conversation }: { conversation: ChatConversati
         <div className="flex items-start justify-between gap-2">
           <h2
             className={cn(
-              "truncate text-sm",
+              "line-clamp-2 text-sm break-words",
               unread > 0 ? "text-ink-primary font-bold" : "text-ink-primary font-semibold",
             )}
           >

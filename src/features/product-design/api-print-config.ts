@@ -5,6 +5,7 @@ import { ApiError } from "@/lib/api/error";
 import { designPath, withSignal } from "./api-request";
 import {
   customizationDtoSchema,
+  productIdDtoSchema,
   productTitleDtoSchema,
   templateDtoSchema,
   type CustomizationDto,
@@ -54,6 +55,15 @@ async function readProductTitle(slug: string, signal?: AbortSignal): Promise<str
     console.warn(`The title of product ${slug} could not be read; its slug stands in.`, error);
     return slug;
   }
+}
+
+/**
+ * The product's id, for "Chat với Sale" about it (16 BR-02: the chat's context is named by id, kind PRODUCT). The
+ * launcher knows the product only by its slug.
+ */
+export async function readProductId(slug: string, signal?: AbortSignal): Promise<string> {
+  const { data } = await api.get<unknown>(productPath(slug), withSignal(signal));
+  return productIdDtoSchema.parse(data).productId;
 }
 
 /**

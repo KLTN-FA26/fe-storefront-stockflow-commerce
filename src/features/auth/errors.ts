@@ -31,7 +31,11 @@ export const isWrongCredentials = (error: unknown) => hasErrorCode(error, "UNAUT
  * (`/mo-tai-khoan`). For a company that is already a customer the BE passes the request to its own Sales
  * (KE-HOACH sales owner §10.7), so it is the right door for a locked or unlinked account too.
  */
-const CONTACT_SALES_CODES = ["ACCOUNT_NOT_ACTIVE", "CUSTOMER_NOT_FOUND", "PORTAL_INVITATION_INVALID"];
+const CONTACT_SALES_CODES = [
+  "ACCOUNT_NOT_ACTIVE",
+  "CUSTOMER_NOT_FOUND",
+  "PORTAL_INVITATION_INVALID",
+];
 
 export const asksToContactSales = (error: unknown) =>
   CONTACT_SALES_CODES.some((code) => hasErrorCode(error, code));
@@ -47,8 +51,7 @@ export const CONTACT_SALES_LINK = "Gửi yêu cầu liên hệ Sales";
 const ACTIVATION_MESSAGE_BY_CODE: Record<string, string> = {
   PORTAL_INVITATION_INVALID:
     "Link kích hoạt không hợp lệ, đã hết hạn hoặc đã được dùng. Vui lòng liên hệ Sales để nhận link mới.",
-  VALIDATION_FAILED:
-    "Mật khẩu chưa đạt yêu cầu: 10–72 ký tự, có chữ hoa, chữ thường và chữ số.",
+  VALIDATION_FAILED: "Mật khẩu chưa đạt yêu cầu: 10–72 ký tự, có chữ hoa, chữ thường và chữ số.",
   // 10 activations a minute per IP.
   RATE_LIMITED: "Bạn thử quá nhanh. Vui lòng đợi khoảng một phút rồi thử lại.",
 };

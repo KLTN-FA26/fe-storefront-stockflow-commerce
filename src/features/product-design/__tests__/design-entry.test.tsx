@@ -31,7 +31,10 @@ describe("DesignEntry", () => {
     renderWithProviders(<DesignEntry productSlug="tui-giay-kraft" sku="BAG-KRAFT-L" />);
 
     expect(await screen.findByText("Quy cách này chưa nhận thiết kế")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Chat với Sale" })).toHaveAttribute("href", "/chat");
+    expect(screen.getByRole("link", { name: "Chat với Sale" })).toHaveAttribute(
+      "href",
+      "/chat/new",
+    );
     expect(screen.queryByRole("link", { name: "Thiết kế" })).not.toBeInTheDocument();
   });
 

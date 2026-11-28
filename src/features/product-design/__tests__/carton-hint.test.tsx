@@ -42,6 +42,17 @@ describe("the quote request's cartons in pieces (SF-UX-9)", () => {
     expect(screen.getByText("1 thùng = 1.000 cái · 50 thùng = 50.000 cái")).toBeInTheDocument();
   });
 
+  it("marks the cartons as required with a red asterisk and the date as optional in words (S01-14)", () => {
+    renderDialog(1000);
+    const cartons = screen.getByLabelText("Số thùng mong muốn");
+    expect(cartons).toHaveAttribute("aria-required", "true");
+    expect(document.querySelector(`label[for="${cartons.id}"]`)).toHaveClass(
+      "after:content-['*']",
+      "after:text-danger",
+    );
+    expect(screen.getByText("Ngày giao mong muốn (không bắt buộc)")).toBeInTheDocument();
+  });
+
   it("says nothing of pieces without the carton spec", () => {
     renderDialog();
     expect(screen.queryByText(/1 thùng =/)).not.toBeInTheDocument();

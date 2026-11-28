@@ -14,7 +14,7 @@ import { returnEligibility } from "@/lib/returns";
 
 import { useMyOrderContract, useReturnWindowDays } from "../contract-queries";
 import { describeCancelError, isNotFound } from "../errors";
-import { displayGroup, isOrderTerminal, orderProgress } from "../lifecycle";
+import { displayGroup, isOrderTerminal, orderProgress, type OrderDisplayGroup } from "../lifecycle";
 import { useLivePayment } from "../live-payment";
 import { useCancelMyOrder } from "../mutations";
 import { useKnownCancellationRequest, useOrder, useShortageCard } from "../queries";
@@ -45,6 +45,17 @@ import {
 } from "./order-states";
 import { OrderShortageCard } from "./order-shortage-card";
 import { OrderStatusHero } from "./order-status-hero";
+
+/** From the Shipped step on the goods are on vehicles (17 §4.9): before it there is nothing to track, so nothing is asked. */
+const TRACKED_GROUPS: ReadonlySet<OrderDisplayGroup> = new Set([
+  "SHIPPING",
+  "DELIVERED",
+  "RETURN_REQUESTED",
+  "COMPLETED",
+  "RETURNED",
+  "PARTIALLY_RETURNED",
+  "CLOSED",
+]);
 
 function BackToOrders() {
   return (
@@ -182,6 +193,8 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
             }
           />
           <OrderShortageCard orderId={order.orderId} />
+          {/* Right under the step: who carries the goods, the waybill and plate (17 BR-27), without scrolling to the rail. */}
+          {TRACKED_GROUPS.has(group) ? <OrderVehiclesCard orderId={order.orderId} /> : null}
           {paymentFirst ? payment : null}
           <OrderCompletionHint order={order} windowDays={returnWindow.days} />
           <OrderLinesCard order={order} />
@@ -195,7 +208,6 @@ export function OrderDetailScreen({ orderId: rawOrderId }: { orderId: string }) 
           <OrderRefundCard order={order} />
           <OrderReturnsCard order={order} />
           <OrderDeliveryCard order={order} />
-          <OrderVehiclesCard orderId={order.orderId} />
           {order.cancellationRequest && order.cancellationRequest.status !== "PENDING" ? (
             <OrderCancellationCard request={order.cancellationRequest} />
           ) : null}

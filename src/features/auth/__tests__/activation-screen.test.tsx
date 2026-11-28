@@ -29,7 +29,8 @@ function backend(opts: { activationError?: ApiError; loginError?: ApiError } = {
     return { data: undefined };
   });
   vi.spyOn(api, "get").mockImplementation(async (url) => {
-    if (url === "/identity/me") return { data: { userId: "u-1", email: EMAIL, mustChangePassword: false } };
+    if (url === "/identity/me")
+      return { data: { userId: "u-1", email: EMAIL, mustChangePassword: false } };
     if (url === "/identity/me/permissions") {
       return { data: { roles: [], permissions: STOREFRONT_PERMISSIONS, dataScope: "OWN" } };
     }
@@ -64,9 +65,15 @@ describe("ActivationScreen", () => {
 
     await fill(STRONG);
 
-    expect(post).toHaveBeenCalledWith("/customers/portal-activation", { token: TOKEN, password: STRONG });
+    expect(post).toHaveBeenCalledWith("/customers/portal-activation", {
+      token: TOKEN,
+      password: STRONG,
+    });
     // The account signs in with the e-mail the BE answers: it is also the username.
-    expect(post).toHaveBeenCalledWith("/identity/auth/login", { username: EMAIL, password: STRONG });
+    expect(post).toHaveBeenCalledWith("/identity/auth/login", {
+      username: EMAIL,
+      password: STRONG,
+    });
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
   });
 
@@ -84,7 +91,9 @@ describe("ActivationScreen", () => {
     openLink("");
     renderWithProviders(<ActivationScreen />);
 
-    expect(screen.getByRole("heading", { name: "Link kích hoạt không dùng được" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Link kích hoạt không dùng được" }),
+    ).toBeInTheDocument();
     expect(screen.queryByLabelText("Mật khẩu mới")).not.toBeInTheDocument();
   });
 
@@ -112,7 +121,11 @@ describe("ActivationScreen", () => {
 
   it("turns to the dead-link notice when the BE refuses the invitation", async () => {
     backend({
-      activationError: new ApiError(400, "PORTAL_INVITATION_INVALID", "This portal invitation is invalid"),
+      activationError: new ApiError(
+        400,
+        "PORTAL_INVITATION_INVALID",
+        "This portal invitation is invalid",
+      ),
     });
     openLink(`#token=${TOKEN}`);
     renderWithProviders(<ActivationScreen />);
@@ -136,7 +149,9 @@ describe("ActivationScreen", () => {
 
     await fill(STRONG);
 
-    expect(await screen.findByRole("heading", { name: "Tài khoản đã được kích hoạt" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Tài khoản đã được kích hoạt" }),
+    ).toBeInTheDocument();
     expect(screen.getByText(EMAIL)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Đăng nhập" })).toHaveAttribute("href", "/login");
     expect(replace).not.toHaveBeenCalled();

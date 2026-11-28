@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -132,6 +132,44 @@ describe("QuotesScreen", () => {
     expect(get).toHaveBeenLastCalledWith(
       "/quotes",
       expect.objectContaining({ params: { page: 0, size: 10 } }),
+    );
+  });
+
+  it("filters with two buttons, Tất cả and Cần phản hồi (the quotes waiting on the customer), as the orders list does", async () => {
+    const get = vi.spyOn(api, "get").mockResolvedValue({ data: bePage([beQuoteRow]) });
+    const user = userEvent.setup();
+    renderWithProviders(<QuotesScreen />);
+
+    const group = await screen.findByRole("group", { name: "Lọc báo giá" });
+    expect(within(group).getByRole("button", { name: "Tất cả" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.queryByRole("combobox", { name: "Lọc theo trạng thái" })).not.toBeInTheDocument();
+
+    await user.click(within(group).getByRole("button", { name: "Cần phản hồi" }));
+    expect(within(group).getByRole("button", { name: "Cần phản hồi" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await waitFor(() =>
+      expect(get).toHaveBeenLastCalledWith(
+        "/quotes",
+        expect.objectContaining({ params: { page: 0, size: 10, status: "SENT" } }),
+      ),
+    );
+
+    // Back to all: its list is already cached, so what shows is the filter, not a new request.
+    await user.click(within(group).getByRole("button", { name: "Tất cả" }));
+    await waitFor(() =>
+      expect(within(group).getByRole("button", { name: "Tất cả" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
+    );
+    expect(within(group).getByRole("button", { name: "Cần phản hồi" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
     );
   });
 

@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
-import { ChevronLeft, MessagesSquare, SendHorizontal } from "lucide-react";
+import { ChevronLeft, Loader2, MessagesSquare, SendHorizontal } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
@@ -62,9 +62,8 @@ export function ChatNewScreen({ kind, id, attach }: ChatNewScreenProps) {
     defaultValues: { text: "" },
   });
 
-  const submit = handleSubmit(({ text }) => {
+  const openConversation = (first: string) => {
     setRefusal(null);
-    const first = text.trim();
     const input: OpenConversationInput = {
       ...(context ?? {}),
       ...(first ? { text: first, clientMessageId } : {}),
@@ -78,8 +77,40 @@ export function ChatNewScreen({ kind, id, attach }: ChatNewScreenProps) {
           contextMissing: hasErrorCode(failure, "CHAT_CONTEXT_NOT_FOUND"),
         }),
     });
-  });
+  };
+  const submit = handleSubmit(({ text }) => openConversation(text.trim()));
+
+  // "Gửi bản đã ký" has one thing to say: the file. The contract's conversation is opened (or the open one reused, C1)
+  // straight away and the thread asks for the file, so the customer neither meets an empty page nor sends a greeting
+  // before the file. If opening fails the page below stays, with the reason and the usual way to try again.
+  const autoOpened = useRef(false);
+  const autoOpen = attachIntent !== undefined && canCreate && refusal === null;
+  const openForFile = useEffectEvent(() => openConversation(""));
+  useEffect(() => {
+    // Once per visit of this page.
+    if (!autoOpen || autoOpened.current) return;
+    autoOpened.current = true;
+    openForFile();
+  }, [autoOpen]);
   const textError = formState.errors.text?.message;
+
+  if (autoOpen) {
+    return (
+      <section
+        aria-labelledby="chat-new-title"
+        role="status"
+        className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-4 py-12 text-center"
+      >
+        <Loader2 aria-hidden className="text-accent size-6 animate-spin" />
+        <h1 id="chat-new-title" className="text-ink-primary text-base font-semibold">
+          Đang mở cuộc trò chuyện về hợp đồng…
+        </h1>
+        <p className="text-ink-secondary max-w-[46ch] text-sm">
+          Xong bạn chọn file hợp đồng đã ký (PDF hoặc ảnh) để gửi cho Sale.
+        </p>
+      </section>
+    );
+  }
 
   return (
     <section aria-labelledby="chat-new-title" className="flex min-h-0 flex-1 flex-col">

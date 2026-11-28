@@ -4,10 +4,13 @@ import { useCallback, useState } from "react";
 
 import type { EditorController, Model3dRef } from "../../engine";
 
-/** What the quiet line says while a `.glb` loads or fell back to the code-built model. */
+/**
+ * What the quiet line says while a `.glb` loads. When it fails the viewer shows the code-built model, which is a
+ * preview too: no sentence about a "replacement model" (the customer cannot act on it), nothing is said.
+ */
 export const MODEL3D_MESSAGES = {
   loading: "Đang tải mô hình 3D…",
-  failed: "Không tải được mô hình 3D, đang dùng mẫu thay thế",
+  failed: null,
 } as const;
 
 type Model3dStatus = "loading" | "ready" | "failed";

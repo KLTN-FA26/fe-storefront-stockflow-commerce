@@ -19,17 +19,24 @@ import { ResponseExpectation } from "./response-expectation";
 
 const pageParser = parseAsInteger.withDefault(1).withOptions({ history: "push", scroll: false });
 
-/** The list's way to a new conversation: an icon at the top right of the column. */
-function NewChatButton() {
+/**
+ * The list's way to a new conversation, in words: on a phone the list is the whole screen and an icon alone was the only
+ * way to start one (nothing in the empty state).
+ */
+function NewChatButton({ variant = "ghost" }: { variant?: "ghost" | "default" }) {
   return (
     <Button
       asChild
-      variant="ghost"
-      className="text-accent hover:text-accent size-11 rounded-full p-0"
-      title="Cuộc trò chuyện mới"
+      variant={variant}
+      className={
+        variant === "ghost"
+          ? "text-accent hover:text-accent min-h-11 rounded-[var(--r-md)] px-3"
+          : "min-h-11 rounded-[var(--r-md)] px-5"
+      }
     >
-      <Link href={STORE_ROUTES.chat.new} aria-label="Cuộc trò chuyện mới với Sale">
+      <Link href={STORE_ROUTES.chat.new}>
         <MessageCirclePlus aria-hidden className="size-5" />
+        Nhắn cho Sale
       </Link>
     </Button>
   );
@@ -78,6 +85,7 @@ export function ChatListScreen() {
           <EmptyState
             title="Bạn chưa có cuộc trò chuyện nào"
             description="Nhắn cho Sale để hỏi hàng, yêu cầu báo giá hoặc hỗ trợ đơn hàng."
+            action={canCreate ? <NewChatButton variant="default" /> : undefined}
           />
         ) : (
           <>

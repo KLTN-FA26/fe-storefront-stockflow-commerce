@@ -62,3 +62,6 @@ export type CustomizationDto = z.infer<typeof customizationDtoSchema>;
 
 /** `GET /catalog/products/{slug}`, as far as the print configuration needs it: the title (F-7). */
 export const productTitleDtoSchema = z.object({ title: z.string().min(1) });
+
+/** `GET /catalog/products/{slug}`, as far as the Sales chat needs it: the product's id (BE `CatalogProductResponse`). */
+export const productIdDtoSchema = z.object({ productId: beId() });

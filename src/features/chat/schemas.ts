@@ -209,6 +209,10 @@ export const quotePricingDtoSchema = z.object({
       id,
       lineNo: z.number().int(),
       sku: z.string(),
+      // The design printed on the goods and its preview image, as on the quote page (SF#67): the card payload has
+      // only the SKU, so the acceptance dialog names the line from here.
+      designName: z.string().nullish(),
+      previewUrl: z.string().nullish(),
       cartons: z.number().int().nullish(),
       unitsPerCarton: z.number().int().nullish(),
       moq: z.number().int().nullish(),

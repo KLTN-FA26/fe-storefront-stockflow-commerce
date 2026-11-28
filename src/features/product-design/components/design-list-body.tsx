@@ -79,7 +79,7 @@ export function DesignListBody({
         aria-label="Danh sách thiết kế"
         aria-busy={isPlaceholderData}
         className={cn(
-          "grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3",
+          "grid items-start gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3",
           isPlaceholderData && "opacity-60",
         )}
       >
