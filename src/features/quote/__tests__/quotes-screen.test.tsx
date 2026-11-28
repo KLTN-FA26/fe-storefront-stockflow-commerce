@@ -66,6 +66,50 @@ describe("QuotesScreen", () => {
     expect(within(card).getByText(/^Còn [12] ngày$/)).toBeInTheDocument();
   });
 
+  it("links a quote turned into an order to that order, and says where to follow it (sf-04)", async () => {
+    const orderId = "0c0e0000-0000-4000-8000-000000000001";
+    vi.spyOn(api, "get").mockResolvedValue({
+      data: bePage([
+        {
+          ...beQuoteRow,
+          status: "CONVERTED",
+          convertedOrderId: orderId,
+          convertedOrderNumber: "SO-20261121-700057",
+        },
+      ]),
+    });
+    renderWithProviders(<QuotesScreen />);
+
+    const card = (await screen.findByText("QT-20261120-9001")).closest("article")!;
+    expect(within(card).getByRole("link", { name: "Xem đơn SO-20261121-700057" })).toHaveAttribute(
+      "href",
+      `/account/orders/${orderId}`,
+    );
+    expect(within(card).getByText(/^Đã tạo đơn SO-20261121-700057; theo dõi/)).toBeInTheDocument();
+    expect(within(card).queryByText(/Sale sẽ gửi hợp đồng/)).not.toBeInTheDocument();
+  });
+
+  it("says where a converted quote's order stands once the BE sends its status (sf-04)", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({
+      data: bePage([
+        {
+          ...beQuoteRow,
+          status: "CONVERTED",
+          convertedOrderId: "0c0e0000-0000-4000-8000-000000000001",
+          convertedOrderNumber: "SO-20261121-700057",
+          convertedOrderStatus: "CANCELLED",
+        },
+      ]),
+    });
+    renderWithProviders(<QuotesScreen />);
+
+    const card = (await screen.findByText("QT-20261120-9001")).closest("article")!;
+    expect(
+      within(card).getByText("Đơn SO-20261121-700057 đang ở trạng thái “Đã huỷ”."),
+    ).toBeInTheDocument();
+    expect(within(card).queryByText(/theo dõi hợp đồng/)).not.toBeInTheDocument();
+  });
+
   it("leaves the expiry chip off a quote far from its deadline or not waiting on the customer", async () => {
     vi.spyOn(api, "get").mockResolvedValue({ data: bePage([beQuoteRow]) });
     renderWithProviders(<QuotesScreen />);

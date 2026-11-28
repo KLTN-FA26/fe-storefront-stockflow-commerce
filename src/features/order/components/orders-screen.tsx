@@ -5,7 +5,6 @@ import { parseAsInteger, useQueryState } from "nuqs";
 
 import { STORE_ROUTES } from "@/constants";
 import { PageHeader } from "@/components/shared";
-import { FillViewportScroll } from "@/components/shared/FillViewportScroll";
 import { Button } from "@/components/ui/button";
 import { ListPagination } from "@/components/storefront/list-pagination";
 import { OrderCard } from "@/components/storefront/order-card";
@@ -13,6 +12,7 @@ import { formatDate } from "@/lib/format/date";
 
 import { ORDER_DISPLAY_META, displayGroup } from "../lifecycle";
 import { ORDER_PAGE_SIZE, useMyOrders } from "../queries";
+import { orderItemsSummary } from "../selectors";
 import { OrderStatusBadge } from "./order-status-badge";
 import {
   NEEDS_CUSTOMER_STATUSES,
@@ -53,10 +53,15 @@ export function OrdersScreen() {
 
   return (
     <>
-      <PageHeader titleHidden title="Đơn hàng của tôi" subtitle="Theo dõi trạng thái và giao hàng." />
+      <PageHeader
+        titleHidden
+        title="Đơn hàng của tôi"
+        subtitle="Theo dõi trạng thái và giao hàng."
+      />
       <div className="space-y-4">
         <OrderViewTabs
           view={view}
+          countNeedsYou={data !== undefined}
           onChange={(next) => {
             // A new view starts from its first page.
             void setPage(null);
@@ -107,29 +112,25 @@ export function OrdersScreen() {
                 retrying={isFetching}
               />
             )}
-            <FillViewportScroll label="Danh sách đơn hàng">
-              <ul className="space-y-3" aria-busy={isPlaceholderData}>
-                {data.items.map((order) => (
-                  <li key={order.orderId}>
-                    <OrderCard
-                      href={STORE_ROUTES.account.orders.detail(order.orderId)}
-                      orderCode={order.orderNumber}
-                      status={ORDER_DISPLAY_META[displayGroup(order)].label}
-                      statusBadge={<OrderStatusBadge group={displayGroup(order)} />}
-                      itemCount={order.lineCount}
-                      total={order.total}
-                      currency={order.currency}
-                      createdAt={formatDate(order.placedAt)}
-                      preview={
-                        // A "mặt hàng" is an order line (one SKU), same wording as the detail.
-                        <p className="tabular-nums">{order.lineCount} mặt hàng</p>
-                      }
-                      hint={ORDER_DISPLAY_META[displayGroup(order)].hint}
-                    />
-                  </li>
-                ))}
-              </ul>
-            </FillViewportScroll>
+            {/* Full length in the page column: one scrollbar (UI/UX 27/11). */}
+            <ul className="space-y-3" aria-busy={isPlaceholderData}>
+              {data.items.map((order) => (
+                <li key={order.orderId}>
+                  <OrderCard
+                    href={STORE_ROUTES.account.orders.detail(order.orderId)}
+                    orderCode={order.orderNumber}
+                    status={ORDER_DISPLAY_META[displayGroup(order)].label}
+                    statusBadge={<OrderStatusBadge group={displayGroup(order)} />}
+                    itemCount={order.lineCount}
+                    total={order.total}
+                    currency={order.currency}
+                    createdAt={formatDate(order.placedAt)}
+                    preview={<p className="tabular-nums">{orderItemsSummary(order)}</p>}
+                    hint={ORDER_DISPLAY_META[displayGroup(order)].hint}
+                  />
+                </li>
+              ))}
+            </ul>
             <ListPagination
               label="Phân trang đơn hàng"
               page={data.page}

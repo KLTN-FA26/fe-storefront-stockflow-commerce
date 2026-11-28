@@ -1,4 +1,4 @@
-import { CHAT_WITH_SALES, STORE_ROUTES } from "@/constants";
+import { APP_ROUTES, CHAT_WITH_SALES, STORE_ROUTES } from "@/constants";
 
 export type NavLink = { href: string; label: string; highlight?: boolean };
 export type FooterColumn = { title: string; links: NavLink[] };
@@ -14,14 +14,14 @@ const quotesLink: NavLink = { href: STORE_ROUTES.account.quotes.list, label: "B�
 const ordersLink: NavLink = { href: STORE_ROUTES.account.orders.list, label: "Đơn hàng" };
 const paymentsLink: NavLink = { href: STORE_ROUTES.account.payments, label: "Thanh toán" };
 const chatLink: NavLink = { href: STORE_ROUTES.chat.list, label: CHAT_WITH_SALES };
+/** A business that is not a customer yet asks Sales for an account (KE-HOACH sales owner §10.3). */
+const openAccountLink: NavLink = {
+  href: APP_ROUTES.openAccount,
+  label: "Mở tài khoản doanh nghiệp",
+};
 
 /** The header's main row: the products, then the customer's own work, design to quote. */
-export const mainLinks: NavLink[] = [
-  productsLink,
-  designsLink,
-  projectsLink,
-  quotesLink,
-];
+export const mainLinks: NavLink[] = [productsLink, designsLink, projectsLink, quotesLink];
 
 /** The header's right-hand links on a wide screen; the chat has its own icon link with the badge. */
 export const utilityLinks: NavLink[] = [ordersLink, paymentsLink];
@@ -34,7 +34,7 @@ export const accountLinks: NavLink[] = [
 ];
 
 /** The help group of the phone menu. */
-export const supportLinks: NavLink[] = [chatLink];
+export const supportLinks: NavLink[] = [chatLink, openAccountLink];
 
 /** The anchor of the home page's "how ordering works" strip, which the footer links to. */
 export const ORDER_FLOW_ANCHOR = "quy-trinh-dat-in";
@@ -52,7 +52,11 @@ export const footerColumns: FooterColumn[] = [
   },
   {
     title: "Hỗ trợ",
-    links: [chatLink, { href: `/#${ORDER_FLOW_ANCHOR}`, label: "Quy trình đặt in" }],
+    links: [
+      chatLink,
+      { href: `/#${ORDER_FLOW_ANCHOR}`, label: "Quy trình đặt in" },
+      openAccountLink,
+    ],
   },
 ];
 

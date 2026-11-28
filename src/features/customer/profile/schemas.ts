@@ -24,7 +24,10 @@ export const customerProfileSchema = z.object({
 const profilePhoneSchema = vietnamPhone.trim();
 
 export const customerProfileFormSchema = z.object({
-  fullName: requiredString("Họ và tên là bắt buộc").max(200, "Họ và tên tối đa 200 ký tự"),
+  fullName: requiredString("Tên khách hàng là bắt buộc").max(
+    200,
+    "Tên khách hàng tối đa 200 ký tự",
+  ),
   phone: profilePhoneSchema,
 });
 

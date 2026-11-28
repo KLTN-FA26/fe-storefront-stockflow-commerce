@@ -60,7 +60,11 @@ describe("TransferInstructionsBlock", () => {
       />,
     );
     expect(screen.getByRole("img", { name: "Mã VietQR chuyển khoản" })).toBeInTheDocument();
-    expect(screen.getByText(/kế toán đối chiếu sao kê và ghi nhận/)).toBeInTheDocument();
+    // The bank feed records the transfer in seconds (SePay): no "accountant in office hours" any more.
+    expect(screen.getByText(/Hệ thống tự xác nhận khoản tiền vài giây/)).toBeInTheDocument();
+    expect(screen.queryByText(/kế toán/)).not.toBeInTheDocument();
+    // The chat card does not re-read the installment, so it does not promise the page updates.
+    expect(screen.queryByText(/Trang này tự cập nhật/)).not.toBeInTheDocument();
     unmount();
     renderWithProviders(<TransferInstructionsBlock transfer={transfer} />);
     expect(screen.queryByRole("img", { name: "Mã VietQR chuyển khoản" })).not.toBeInTheDocument();
@@ -100,6 +104,8 @@ describe("InstallmentTransferSection", () => {
       `/installments/me/${INSTALLMENT_ID}/transfer-instructions`,
       expect.anything(),
     );
+    // Its pages (order, "Thanh toán") re-read what is due by themselves.
+    expect(screen.getByText(/Trang này tự cập nhật/)).toBeInTheDocument();
   });
 
   it("tells the customer to ask Sale when the shop has no account set up (503)", async () => {

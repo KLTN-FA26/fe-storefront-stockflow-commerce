@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { parseAsString, useQueryState } from "nuqs";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, LockKeyhole, LogIn, MailCheck, ShieldCheck } from "lucide-react";
 
-import { STORE_ROUTES } from "@/constants";
+import { APP_ROUTES, STORE_ROUTES } from "@/constants";
 import { Alert } from "@/components/shared";
 import { PasswordInput } from "@/components/shared/PasswordInput";
 import { AuthHeading } from "@/components/storefront/auth/auth-heading";
@@ -18,7 +19,8 @@ import { signInCustomer } from "@/lib/auth/customer-session";
 import { safeNextPath } from "@/lib/auth/safe-next";
 import { useHasSession } from "@/lib/auth/use-signed-in";
 
-import { describeLoginError } from "../errors";
+import { asksToContactSales, describeLoginError } from "../errors";
+import { ContactSalesLink } from "./contact-sales-link";
 import { loginFormSchema, type LoginFormValues } from "../schemas";
 
 export function LoginScreen() {
@@ -27,7 +29,7 @@ export function LoginScreen() {
   const [rawNext] = useQueryState("next", parseAsString);
   // Only a same-origin path: `?next=https://evil.example` must not make this page a redirector.
   const next = safeNextPath(rawNext);
-  const [error, setError] = useState<string>();
+  const [error, setError] = useState<{ text: string; contactSales: boolean }>();
   const {
     register,
     handleSubmit,
@@ -49,7 +51,7 @@ export function LoginScreen() {
       // A password an administrator set must be replaced before anything else.
       router.replace(mustChangePassword ? STORE_ROUTES.account.security : next);
     } catch (failure) {
-      setError(describeLoginError(failure));
+      setError({ text: describeLoginError(failure), contactSales: asksToContactSales(failure) });
     }
   });
 
@@ -103,8 +105,9 @@ export function LoginScreen() {
         {error ? (
           <div role="alert">
             <Alert tone="danger" title="Không đăng nhập được.">
-              {error}
+              {error.text}
             </Alert>
+            {error.contactSales ? <ContactSalesLink /> : null}
           </div>
         ) : null}
 
@@ -122,6 +125,16 @@ export function LoginScreen() {
         </Button>
       </form>
 
+      <p className="bg-bg-subtle text-ink-secondary rounded-[var(--r-md)] px-4 py-3 text-sm">
+        Chưa có tài khoản doanh nghiệp?{" "}
+        <Link
+          href={APP_ROUTES.openAccount}
+          className="text-accent focus-visible:ring-accent rounded-sm font-medium hover:underline focus-visible:ring-2 focus-visible:outline-none"
+        >
+          Gửi yêu cầu mở tài khoản
+        </Link>
+      </p>
+
       <div className="border-border-default text-ink-tertiary space-y-2.5 border-t pt-5 text-xs leading-5">
         <p className="flex gap-2">
           <MailCheck aria-hidden className="text-accent mt-0.5 size-4 shrink-0" />
@@ -133,8 +146,8 @@ export function LoginScreen() {
         <p className="flex gap-2">
           <ShieldCheck aria-hidden className="text-positive mt-0.5 size-4 shrink-0" />
           <span>
-            Chưa có tài khoản hoặc quên mật khẩu? Tài khoản khách hàng do Sale cấp, vui lòng liên
-            hệ Sale của StockFlow để được hỗ trợ.
+            Chưa có tài khoản hoặc quên mật khẩu? Tài khoản khách hàng do Sale cấp, vui lòng liên hệ
+            Sale của StockFlow để được hỗ trợ.
           </span>
         </p>
       </div>

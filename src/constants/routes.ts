@@ -22,6 +22,11 @@ export const APP_ROUTES = {
   login: "/login",
   /** The invitation e-mail's page (BE `stockflow.customer.portal-activation-url`); the token follows in `#token=`. */
   activate: "/portal/activate",
+  /**
+   * "Mở tài khoản doanh nghiệp / Yêu cầu tư vấn" (KE-HOACH sales owner §10.3, channel B): a business that is not a
+   * customer leaves its details as a lead for Sales. Public: there is no self sign-up.
+   */
+  openAccount: "/mo-tai-khoan",
 } as const;
 
 export const STORE_ROUTES = {

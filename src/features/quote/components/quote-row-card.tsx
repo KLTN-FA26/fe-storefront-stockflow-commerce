@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ArrowRight, ChevronRight } from "lucide-react";
 
 import { STORE_ROUTES } from "@/constants";
 import { ToneBadge } from "@/components/storefront/tone-badge";
@@ -44,7 +44,8 @@ function contentsOf(quote: QuoteRow): string | null {
 /**
  * One quote of the list (BE QuoteRowResponse), as one outlined row like an order: number and sent date, what is quoted,
  * revision and validity, what happens next on the left; status, total with VAT (when the BE sends it) and the way in on
- * the right. A SENT quote about to expire says so. The whole row is one link target.
+ * the right. A SENT quote about to expire says so. The whole row is one link target, apart from the
+ * "Xem đơn SO-…" link of a quote turned into an order (UI/UX 27/11, sf-04).
  */
 export function QuoteRowCard({ quote, now }: { quote: QuoteRow; now?: Date }) {
   const chip = expiryChip(quote, now);
@@ -53,7 +54,9 @@ export function QuoteRowCard({ quote, now }: { quote: QuoteRow; now?: Date }) {
     <article className="bg-bg-surface border-border-default hover:border-border-strong focus-within:ring-accent relative flex flex-col gap-3 rounded-[var(--r-lg)] border px-[var(--card-pad)] py-3.5 transition-colors focus-within:ring-2 sm:flex-row sm:items-center sm:gap-6">
       <div className="min-w-0 flex-1 space-y-1">
         <p className="flex flex-wrap items-baseline gap-x-2 text-sm">
-          <span className="text-ink-primary font-mono font-semibold tabular-nums">{quote.quoteNumber}</span>
+          <span className="text-ink-primary font-mono font-semibold tabular-nums">
+            {quote.quoteNumber}
+          </span>
           {quote.sentAt ? (
             <span className="text-ink-tertiary tabular-nums">{formatDate(quote.sentAt)}</span>
           ) : null}
@@ -65,7 +68,17 @@ export function QuoteRowCard({ quote, now }: { quote: QuoteRow; now?: Date }) {
             <Fact label="Hiệu lực đến">{formatDateTime(quote.validUntil)}</Fact>
           )}
         </dl>
-        <p className="text-ink-tertiary text-xs">{quoteListHint(quote.status)}</p>
+        <p className="text-ink-tertiary text-xs">{quoteListHint(quote.status, quote)}</p>
+        {quote.convertedOrderId && quote.convertedOrderNumber ? (
+          // Above the row's own link (its ::after covers the row), so it opens the order, not the quote.
+          <Link
+            href={STORE_ROUTES.account.orders.detail(quote.convertedOrderId)}
+            className="text-accent focus-visible:ring-accent relative z-10 inline-flex min-h-11 items-center gap-1 rounded-[var(--r-sm)] text-sm font-semibold underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:outline-none"
+          >
+            Xem đơn <span className="font-mono tabular-nums">{quote.convertedOrderNumber}</span>
+            <ArrowRight aria-hidden className="size-4" />
+          </Link>
+        ) : null}
       </div>
 
       <div className="flex shrink-0 items-center justify-between gap-4 sm:justify-end">

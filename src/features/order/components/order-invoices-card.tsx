@@ -19,11 +19,27 @@ export const EINVOICES_PERMISSION = "einvoices:READ";
  * vẫn phải hiện.
  */
 const DELIVERED_STATES = new Set(["DELIVERED", "PARTIALLY_DELIVERED", "PARTIALLY_RETURNED"]);
+/** Goods that never left (or a state the FE does not know): nothing to invoice yet. */
+const NOT_GONE_OUT = new Set(["NOT_SHIPPED", "UNKNOWN", ""]);
+/** A shipment that left the warehouse, delivered or not. */
+const GONE_OUT_SHIPMENTS = new Set(["HANDED_OVER", "DELIVERED", "DELIVERY_FAILED", "RETURNED"]);
+
+/**
+ * The goods went out at least once: from then on the card says when invoices come. Before it (an
+ * order still to sign or pay) the card and its long note are only noise (UI/UX 27/11, sf-07).
+ */
+function hasGoneOut(order: Pick<Order, "deliveryState" | "shipments">): boolean {
+  return (
+    !NOT_GONE_OUT.has(order.deliveryState ?? "") ||
+    (order.shipments ?? []).some((shipment) => GONE_OUT_SHIPMENTS.has(shipment.status))
+  );
+}
 
 /**
  * Hoá đơn điện tử của đơn (kltn-docs 21 §4.3 bước 9, §5.2): mỗi lần giao thành công một hoá đơn, kèm
  * hoá đơn điều chỉnh / thay thế; tải PDF (bản xem) và XML (bản có giá trị pháp lý). Đơn đã giao mà
- * chưa có hoá đơn: báo đang phát hành. Chỉ với tài khoản có `einvoices:READ`.
+ * chưa có hoá đơn: báo đang phát hành. Chỉ với tài khoản có `einvoices:READ`, và chỉ khi hàng đã
+ * rời kho ít nhất một lần hoặc đơn đã có hoá đơn.
  */
 export function OrderInvoicesCard({ order }: { order: Order }) {
   // Không hỏi gì khi danh sách quyền chưa về: tài khoản thiếu quyền không thấy thẻ nháy lên
@@ -39,11 +55,7 @@ export function OrderInvoicesCard({ order }: { order: Order }) {
   const numberOf = (id: string) => numbers.get(id);
   // Until the order is completed, the card says when its invoices come (null once settled).
   const conditions = invoiceConditions(order);
-  if (
-    !allowed ||
-    (!query.isPending && !query.error && invoices.length === 0 && !delivered && !conditions)
-  )
-    return null;
+  if (!allowed || (invoices.length === 0 && !hasGoneOut(order))) return null;
 
   return (
     <section className={`${CARD} space-y-3`} aria-labelledby="order-invoices-heading">

@@ -14,6 +14,7 @@ import { useHydrated } from "@/hooks/use-hydrated";
 import { signInCustomer } from "@/lib/auth/customer-session";
 
 import { ActivationForm } from "./activation-form";
+import { ContactSalesLink } from "./contact-sales-link";
 
 /**
  * The invitation token, from the link's fragment (`#token=…`): a fragment never reaches a server or an access log.
@@ -64,6 +65,9 @@ export function ActivationScreen() {
         body="Link không hợp lệ, đã hết hạn (sau 72 giờ) hoặc đã được dùng. Vui lòng liên hệ Sale của StockFlow để được gửi link mới."
       >
         <LoginButton label="Về trang đăng nhập" />
+        <div className="flex justify-center">
+          <ContactSalesLink />
+        </div>
       </Panel>
     );
   }
@@ -72,7 +76,8 @@ export function ActivationScreen() {
     return (
       <Panel title="Tài khoản đã được kích hoạt">
         <Alert tone="info" title="Bạn có thể đăng nhập ngay.">
-          Tên đăng nhập của bạn là <span className="font-medium break-all">{outcome.activated}</span>.
+          Tên đăng nhập của bạn là{" "}
+          <span className="font-medium break-all">{outcome.activated}</span>.
         </Alert>
         <LoginButton label="Đăng nhập" />
       </Panel>
@@ -84,7 +89,11 @@ export function ActivationScreen() {
       title="Kích hoạt tài khoản"
       body="Đặt mật khẩu cho tài khoản StockFlow mà Sale đã tạo cho doanh nghiệp của bạn. Sau đó bạn đăng nhập bằng email nhận được lời mời."
     >
-      <ActivationForm token={token} onActivated={onActivated} onInvalidLink={() => setOutcome("invalid")} />
+      <ActivationForm
+        token={token}
+        onActivated={onActivated}
+        onInvalidLink={() => setOutcome("invalid")}
+      />
     </Panel>
   );
 }

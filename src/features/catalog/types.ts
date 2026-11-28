@@ -1,12 +1,14 @@
 import type { z } from "zod";
 
 import type {
+  catalogAttributeDtoSchema,
   catalogCardDtoSchema,
   catalogCardSkuDtoSchema,
   catalogGalleryDtoSchema,
   catalogListInputSchema,
   catalogProductDtoSchema,
   catalogVariantDtoSchema,
+  catalogVariantOptionDtoSchema,
   galleryImageDtoSchema,
   searchSuggestionDtoSchema,
 } from "./schemas";
@@ -14,6 +16,8 @@ import type {
 export type CatalogCard = z.infer<typeof catalogCardDtoSchema>;
 export type CatalogCardSku = z.infer<typeof catalogCardSkuDtoSchema>;
 export type CatalogVariant = z.infer<typeof catalogVariantDtoSchema>;
+export type CatalogVariantOption = z.infer<typeof catalogVariantOptionDtoSchema>;
+export type CatalogAttribute = z.infer<typeof catalogAttributeDtoSchema>;
 export type CatalogProduct = z.infer<typeof catalogProductDtoSchema>;
 export type GalleryImage = z.infer<typeof galleryImageDtoSchema>;
 export type CatalogGallery = z.infer<typeof catalogGalleryDtoSchema>;

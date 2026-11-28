@@ -1,6 +1,19 @@
+import { formatNumber } from "@/lib/format";
 import { isPayable, type Installment, type OrderInstallments } from "@/lib/installments";
 
-import type { Order, OrderTimelineEntry } from "./types";
+import type { Order, OrderCard, OrderTimelineEntry } from "./types";
+
+/**
+ * What a list row says the order holds: "<first item>" or "<first item> và N sản phẩm khác"
+ * (BE `firstItemName`, UI/UX 27/11 sf-06); the line count alone while the BE does not send it.
+ * A "mặt hàng"/"sản phẩm" is an order line (one SKU), as on the detail.
+ */
+export function orderItemsSummary(order: Pick<OrderCard, "firstItemName" | "lineCount">): string {
+  const first = order.firstItemName?.trim();
+  if (!first) return `${formatNumber(order.lineCount)} mặt hàng`;
+  const others = order.lineCount - 1;
+  return others > 0 ? `${first} và ${formatNumber(others)} sản phẩm khác` : first;
+}
 
 /**
  * The timeline as the customer reads it: one step per status group. The BE history has a row per

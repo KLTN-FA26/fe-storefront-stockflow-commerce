@@ -40,13 +40,20 @@ export function useDesignQuoteRequests(
   });
 }
 
-/** A project's requests, newest first; a closed project's are readable too. */
-export function useProjectQuoteRequests(projectId: string) {
+/**
+ * A project's requests, newest first; a closed project's are readable too. The list of projects
+ * reads them per card with `CARD_QUOTE_REQUESTS` (UI/UX 27/11, sf-11).
+ */
+export function useProjectQuoteRequests(
+  projectId: string,
+  options: { staleTime: number; refetchOnWindowFocus: false } | undefined = undefined,
+) {
   return useQuery({
     queryKey: projectKeys.quoteRequests(projectId),
     queryFn: ({ signal }) => listProjectQuoteRequests(projectId, signal),
     retry: retryTransient,
     ...QUERY_TIMES.detail,
+    ...options,
   });
 }
 

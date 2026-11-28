@@ -95,3 +95,31 @@ export function paymentRows<T extends Row>(rows: readonly T[], filter: PaymentFi
         a.seq - b.seq,
     );
 }
+
+/** What the customer owes now and how much of it is overdue, summed over their installments. */
+export interface PaymentsTotals {
+  dueNow: { amount: number; count: number };
+  overdue: { amount: number; count: number };
+}
+
+/**
+ * The top of the "Thanh toán" page: what is due now (on-signing installments included — the same
+ * rule as the "Cần thanh toán" filter) and, of it, what is past its due date. Outstanding amounts.
+ */
+export function paymentsTotals(rows: readonly Row[]): PaymentsTotals {
+  const totals: PaymentsTotals = {
+    dueNow: { amount: 0, count: 0 },
+    overdue: { amount: 0, count: 0 },
+  };
+  for (const row of rows) {
+    if (dueNow(row)) {
+      totals.dueNow.amount += row.outstanding;
+      totals.dueNow.count += 1;
+    }
+    if (MATCHES["qua-han"](row)) {
+      totals.overdue.amount += row.outstanding;
+      totals.overdue.count += 1;
+    }
+  }
+  return totals;
+}
