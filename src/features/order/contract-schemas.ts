@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { signatureDtoSchema, signerDtoSchema } from "./contract-signing-schemas";
 
 import { installmentMilestoneSchema } from "@/lib/installments/schemas";
 import { beId, isoDate } from "@/lib/validation/primitives";
@@ -16,6 +17,8 @@ import { tolerantEnum } from "@/lib/validation/tolerant-enum";
 export const CONTRACT_STATUSES = [
   "DRAFT",
   "SENT",
+  "CUSTOMER_SIGNED",
+  "CHANGES_REQUESTED",
   "SIGNED",
   "COMPLETED",
   "LIQUIDATED",
@@ -54,6 +57,8 @@ export const contractBatchDtoSchema = z.object({
       designName: z.string().nullish(),
       previewUrl: z.string().nullish(),
       unitsPerCarton: z.number().int().nullish(),
+      productName: z.string().nullish(),
+      variantName: z.string().nullish(),
     }),
   ),
 });
@@ -67,6 +72,8 @@ export const contractInstallmentDtoSchema = z.object({
   amount: amountSchema,
   dueDays: z.number().int().nullish(),
   deliveryBatchSeq: z.number().int().nullish(),
+  dueDate: isoDate.nullish(),
+  daysOverdue: z.number().int().nullish(),
 });
 
 export const contractDtoSchema = z.object({
@@ -103,6 +110,39 @@ export const contractDtoSchema = z.object({
    * delivery window in force differs from the one signed. Absent (an older BE): no appendix offered.
    */
   appendixAvailable: z.boolean().default(false),
+  revision: z.number().int().positive().nullish(),
+  signBy: isoDate.nullish(),
+  overdueToSign: z.boolean().nullish(),
+  canSign: z.boolean().nullish(),
+  canRequestChanges: z.boolean().nullish(),
+  verificationCode: z.string().nullish(),
+  customerSignature: signatureDtoSchema.nullish(),
+  companySignature: signatureDtoSchema.nullish(),
+  sellerSigner: signerDtoSchema.nullish(),
+  buyerSigner: signerDtoSchema.nullish(),
+  customerSignedAt: instantSchema.nullish(),
+  standardTerms: z
+    .object({
+      penaltyPercent: z.number().int(),
+      quantityTolerancePercent: z.number().int(),
+      warrantyMonths: z.number().int(),
+    })
+    .nullish(),
+  nonStandardTerms: z.boolean().nullish(),
+  termsReview: z.string().nullish(),
+  termsReviewDetail: z
+    .object({
+      note: z.string().nullish(),
+      requestedBy: beId().nullish(),
+      requestedAt: instantSchema.nullish(),
+      decidedBy: beId().nullish(),
+      decidedAt: instantSchema.nullish(),
+    })
+    .nullish(),
+  specialTerms: z.string().nullish(),
+  penaltyPercent: z.number().nullish(),
+  quantityTolerancePercent: z.number().nullish(),
+  warrantyMonths: z.number().nullish(),
   version: z.number().int().nonnegative(),
 });
 

@@ -15,12 +15,13 @@ import { formatMoney } from "@/lib/format/money";
 import { formatNumber } from "@/lib/format/number";
 import { getMyContractAppendix, getMyContractLiquidation } from "@/lib/documents";
 
-import { CONTRACT_STATUS_META } from "../contract-labels";
+import { CONTRACT_SECTION_ID, CONTRACT_STATUS_META } from "../contract-labels";
 import { useMyOrderContract } from "../contract-queries";
 import type { Contract } from "../contract-schemas";
 import type { OrderStatus } from "../types";
 import { ContractDownloadButton } from "./contract-download-button";
-import { CONTRACT_SECTION_ID, ContractSigningSteps } from "./contract-signing-steps";
+import { ContractSigningActions } from "./contract-signing-actions";
+import { ContractEvidence, ContractRevisions } from "./contract-evidence";
 import { ContractDeliverySchedule, ContractPaymentPlan } from "./order-contract-schedule";
 
 const CARD =
@@ -41,6 +42,10 @@ function Term({ label, children }: { label: string; children: React.ReactNode })
  * page; the VAT split is in the order's total card (SF-UX-32).
  */
 function Terms({ contract }: { contract: Contract }) {
+  const penalty = contract.penaltyPercent ?? contract.standardTerms?.penaltyPercent;
+  const tolerance =
+    contract.quantityTolerancePercent ?? contract.standardTerms?.quantityTolerancePercent;
+  const warranty = contract.warrantyMonths ?? contract.standardTerms?.warrantyMonths;
   return (
     <dl className="border-border-default space-y-1.5 border-t pt-3 text-sm">
       {contract.freeSampleRounds != null ? (
@@ -49,6 +54,24 @@ function Terms({ contract }: { contract: Contract }) {
       <Term label="Thời hạn khiếu nại">
         {formatNumber(contract.returnWindowDays ?? RETURN_WINDOW_DAYS)} ngày sau mỗi đợt giao
       </Term>
+      {contract.status !== "CHANGES_REQUESTED" && (
+        <>
+          {contract.nonStandardTerms === true && (
+            <div>
+              <ToneBadge tone="warning" label="Khác chuẩn" />
+            </div>
+          )}
+          {penalty != null && <Term label="Phạt vi phạm">{formatNumber(penalty)}%</Term>}
+          {tolerance != null && <Term label="Dung sai số lượng">{formatNumber(tolerance)}%</Term>}
+          {warranty != null && <Term label="Bảo hành">{formatNumber(warranty)} tháng</Term>}
+          {contract.specialTerms && (
+            <div className="space-y-1">
+              <dt className="text-ink-secondary">Điều khoản riêng</dt>
+              <dd className="break-words whitespace-pre-wrap">{contract.specialTerms}</dd>
+            </div>
+          )}
+        </>
+      )}
       <div className="flex justify-between gap-4">
         <dt className="text-ink-primary font-semibold">Tổng có VAT</dt>
         <dd className="text-ink-primary font-bold tabular-nums">
@@ -123,7 +146,9 @@ function Files({
   contract: Contract;
   orderStatus: OrderStatus | undefined;
 }) {
-  const signed = Boolean(contract.signedOn || contract.signedFileName);
+  const signed =
+    ["SIGNED", "COMPLETED", "LIQUIDATED"].includes(contract.status) ||
+    Boolean(contract.signedOn || contract.signedFileName);
   return (
     <div className="grid gap-2">
       {signed ? (
@@ -140,7 +165,7 @@ function Files({
             label="Tải bản gửi ký"
           />
         </>
-      ) : contract.status === "SENT" ? null : (
+      ) : ["SENT", "CHANGES_REQUESTED"].includes(contract.status) ? null : (
         <ContractDownloadButton
           orderId={orderId}
           contractNumber={contract.contractNumber}
@@ -221,13 +246,15 @@ export function OrderContractCard({
         </div>
       ) : (
         <>
-          {contract.status === "SENT" ? (
-            <ContractSigningSteps
-              orderId={orderId}
-              contractId={contract.id}
-              contractNumber={contract.contractNumber}
-            />
-          ) : null}
+          {contract.status === "CHANGES_REQUESTED" && (
+            <p role="status" className="text-ink-secondary text-sm">
+              Đã gửi yêu cầu chỉnh sửa. Sale đang cập nhật hợp đồng; bạn sẽ nhận phiên bản mới để
+              đọc và ký.
+            </p>
+          )}
+          <ContractSigningActions contract={contract} />
+          <ContractEvidence contract={contract} />
+          <ContractRevisions contract={contract} />
           {contract.signedOn ? (
             <p className="text-ink-secondary text-sm">
               Ngày ký:{" "}
@@ -236,8 +263,12 @@ export function OrderContractCard({
               </span>
             </p>
           ) : null}
-          <ContractDeliverySchedule batches={contract.deliverySchedule} />
-          <ContractPaymentPlan plan={contract.paymentPlan} />
+          {contract.status !== "CHANGES_REQUESTED" && (
+            <>
+              <ContractDeliverySchedule batches={contract.deliverySchedule} />
+              <ContractPaymentPlan plan={contract.paymentPlan} />
+            </>
+          )}
           <Terms contract={contract} />
           <Files orderId={orderId} contract={contract} orderStatus={orderStatus} />
         </>

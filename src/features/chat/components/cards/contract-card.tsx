@@ -23,9 +23,8 @@ interface ContractCardProps {
 }
 
 /**
- * CONTRACT card (plan B.7.4): no action for either side. The customer downloads the contract and
- * sends the signed scan back as a chat file; Sales record the signing on the contract's own page.
- * Once a file is sent, the card says so and that Sales still have to confirm it. A CANCELLED
+ * CONTRACT card: signing happens on the order page with email OTP or a signed PDF upload.
+ * Older chat attachments remain acknowledged for contracts that still await signing. A CANCELLED
  * contract (WF-02 FE-8, Q-12) offers no download: the link fetches the order's live contract, so an
  * old card would hand out the redrawn one, or nothing to sign. Nor "Xem đơn hàng" (owner decision
  * 15): while Sale redraws the contract the order is back in DRAFT and its page answers 404.
@@ -57,8 +56,11 @@ export function ContractCard({ payload, signedCopyAt }: ContractCardProps) {
               <FileDown aria-hidden className="size-4" />
               {download.busy ? "Đang mở..." : "Tải hợp đồng"}
             </Button>
-            <Link href={STORE_ROUTES.account.orders.detail(payload.orderId)} className={CARD_LINK}>
-              Xem đơn hàng
+            <Link
+              href={`${STORE_ROUTES.account.orders.detail(payload.orderId)}#hop-dong`}
+              className={CARD_LINK}
+            >
+              {waiting ? "Ký hợp đồng trên cổng" : "Xem đơn hàng"}
             </Link>
           </>
         )
@@ -121,7 +123,8 @@ export function ContractCard({ payload, signedCopyAt }: ContractCardProps) {
         </p>
       ) : waiting ? (
         <p className="text-ink-secondary">
-          Ký xong, bạn gửi bản scan hoặc PDF có chữ ký vào cuộc trò chuyện này bằng nút đính kèm.
+          Mở hợp đồng trên trang đơn hàng để đọc và ký bằng mã xác thực email, hoặc tải lên bản đã
+          ký.
         </p>
       ) : cancelled ? (
         <p className="text-ink-secondary">
