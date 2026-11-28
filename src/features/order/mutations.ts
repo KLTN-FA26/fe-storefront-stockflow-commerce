@@ -29,7 +29,7 @@ export function useCancelMyOrder() {
     onSuccess: (outcome, { orderId }) => {
       if (outcome.result === "REQUESTED") {
         remember(orderId, { requestId: outcome.requestId ?? null });
-        toast.success("Đã gửi yêu cầu huỷ", "Sales sẽ xem xét và liên hệ với bạn.");
+        toast.success("Đã gửi yêu cầu huỷ", "Sale sẽ xem xét và liên hệ với bạn.");
       } else if (outcome.result === "CANCELLED") {
         toast.success("Đã huỷ đơn hàng");
       } else {

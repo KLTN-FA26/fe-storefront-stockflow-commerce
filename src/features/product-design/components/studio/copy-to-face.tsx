@@ -17,6 +17,7 @@ import { BAR_HIT } from "./bar-controls";
 import { copyFace } from "./element-actions";
 import { STUDIO_ANNOUNCEMENTS } from "./studio-announcer";
 import { useEditorState, useStudio } from "./studio-context";
+import { faceName } from "./face-name";
 
 /**
  * "Sao chép sang mặt khác" (a bag's faces): the active face, background and elements, replaces
@@ -35,8 +36,7 @@ export function CopyToFace({ compact = false }: { compact?: boolean }) {
   const [open, setOpen] = useState(false);
 
   if (surfaces.order.length < 2) return null;
-  const nameOf = (code: PrintAreaCode) =>
-    template.printAreas.find((area) => area.code === code)?.name ?? code;
+  const nameOf = (code: PrintAreaCode) => faceName(template.printAreas, surfaces.order, code);
   const copyTo = (code: PrintAreaCode) => {
     copyFace(services, active, code);
     announce(STUDIO_ANNOUNCEMENTS.copiedTo(nameOf(code)));

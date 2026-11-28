@@ -236,7 +236,7 @@ describe("OrderContractCard — signing and terms (SF-UX-24, SF-UX-36, L-9)", ()
 });
 
 describe("OrderReorder (WF-02 D4, SF-UX-35)", () => {
-  it("opens a conversation with Sales about a delivered order instead of POST /reorder", () => {
+  it("opens a conversation with Sale about a delivered order instead of POST /reorder", () => {
     render(
       <OrderReorder
         order={{

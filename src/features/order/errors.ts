@@ -19,10 +19,10 @@ const MESSAGE_BY_CODE: Record<string, string> = {
   ORDER_NOT_CANCELLABLE:
     "Đơn hàng đã sang bước không thể huỷ. Nếu cần trả hàng, hãy chat với Sale.",
   CANCELLATION_NEEDS_STAFF:
-    "Đơn đang được sản xuất nên chỉ nhân viên mới quyết định được việc huỷ. Hãy chat với Sales.",
+    "Đơn đang được sản xuất nên chỉ nhân viên mới quyết định được việc huỷ. Hãy chat với Sale.",
   ORDER_CANCELLED: "Đơn hàng này đã được huỷ.",
   ORDER_CANCELLATION_REQUEST_PENDING:
-    "Bạn đã gửi yêu cầu huỷ cho đơn này và đang chờ Sales xem xét.",
+    "Bạn đã gửi yêu cầu huỷ cho đơn này và đang chờ Sale xem xét.",
   UNSUPPORTED_PARAMETER: "Yêu cầu không hợp lệ. Vui lòng tải lại trang và thử lại.",
   VALIDATION_FAILED: "Yêu cầu không hợp lệ. Vui lòng tải lại trang và thử lại.",
 };

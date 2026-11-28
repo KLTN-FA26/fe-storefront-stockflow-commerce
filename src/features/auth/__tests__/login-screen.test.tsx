@@ -153,13 +153,13 @@ describe("LoginScreen", () => {
   it.each([
     new ApiError(403, "ACCOUNT_NOT_ACTIVE", "x"),
     new ApiError(404, "CUSTOMER_NOT_FOUND", "x"),
-  ])("a refusal that says 'liên hệ Sales' links to the request form (%#)", async (error) => {
+  ])("a refusal that says 'liên hệ Sale' links to the request form (%#)", async (error) => {
     backend({ loginError: error });
     renderWithProviders(<LoginScreen />);
     await fill("nam@example.vn", "pw");
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("liên hệ Sales");
-    expect(within(alert).getByRole("link", { name: "Gửi yêu cầu liên hệ Sales" })).toHaveAttribute(
+    expect(alert).toHaveTextContent("liên hệ Sale");
+    expect(within(alert).getByRole("link", { name: "Gửi yêu cầu liên hệ Sale" })).toHaveAttribute(
       "href",
       "/mo-tai-khoan",
     );
@@ -173,9 +173,9 @@ describe("LoginScreen", () => {
     expect(within(alert).queryByRole("link")).not.toBeInTheDocument();
   });
 
-  it("does not invent account recovery: no reset link, only Sales", () => {
+  it("does not invent account recovery: no reset link, only Sale", () => {
     renderWithProviders(<LoginScreen />);
     expect(screen.queryByRole("link", { name: /quên mật khẩu/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/do Sales cấp/)).toBeInTheDocument();
+    expect(screen.getByText(/do Sale cấp/)).toBeInTheDocument();
   });
 });

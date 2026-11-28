@@ -1,6 +1,6 @@
 "use client";
 
-import type { UseFormReturn } from "react-hook-form";
+import { useWatch, type UseFormReturn } from "react-hook-form";
 
 import { RadioGroup } from "@/components/ui/radio-group";
 
@@ -18,12 +18,17 @@ export function SubmitQuoteChoice({
   onWithQuoteChange,
   form,
   disabled = false,
+  unitsPerCarton,
 }: {
   withQuote: boolean;
   onWithQuoteChange: (withQuote: boolean) => void;
   form: UseFormReturn<QuoteRequestFormValues, unknown, QuoteRequestInput>;
   disabled?: boolean;
+  /** The design's carton spec, when known: "1 thùng = N cái" under the cartons (SF-UX-9). */
+  unitsPerCarton?: number | null | undefined;
 }) {
+  // The cartons as typed, for the live "1 thùng = N cái · X thùng = Y cái" under the field (S08-9)
+  const cartons = useWatch({ control: form.control, name: "cartons" });
   return (
     <div className="grid gap-3">
       <RadioGroup
@@ -53,6 +58,8 @@ export function SubmitQuoteChoice({
           errors={form.formState.errors}
           idPrefix="submit-quote"
           disabled={disabled}
+          unitsPerCarton={unitsPerCarton}
+          cartons={cartons}
         />
       ) : null}
     </div>

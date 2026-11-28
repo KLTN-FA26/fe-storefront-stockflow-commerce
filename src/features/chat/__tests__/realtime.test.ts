@@ -101,7 +101,7 @@ describe("conversation topic events (STOMP /topic/chat.conversations.{id})", () 
     expect(invalidate.mock.calls[0]?.[0]?.queryKey).toEqual(chatKeys.catchUp(CONVERSATION_ID));
   });
 
-  it("a read marker of the customer (another tab) refreshes the badge; Sales' does not", () => {
+  it("a read marker of the customer (another tab) refreshes the badge; Sale's does not", () => {
     const client = clientWithThread([]);
     const invalidate = vi.spyOn(client, "invalidateQueries");
     expect(applyConversationEvent(client, event("message.read", { side: "AGENT", seq: 4 }))).toBe(
@@ -129,7 +129,7 @@ describe("the customer's own queue (STOMP /user/queue/chat)", () => {
         JSON.stringify(chatKeys.unread()),
     ).length;
 
-  it("a message from Sales refreshes the badge and the list, joining a fetch already running", () => {
+  it("a message from Sale refreshes the badge and the list, joining a fetch already running", () => {
     const client = new QueryClient();
     const invalidate = vi.spyOn(client, "invalidateQueries");
     applyUserQueueEvent(client, event("message.created", messageJson({ senderType: "AGENT" })));

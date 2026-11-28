@@ -112,7 +112,7 @@ describe("QuoteDetailScreen — accepting (TC-F03-01)", () => {
       "li",
     )!;
     expect(within(line).getByText("= 60.000 cái")).toBeInTheDocument();
-    expect(within(line).getByText("MOQ: 20 thùng")).toBeInTheDocument();
+    expect(within(line).getByText("Số thùng tối thiểu: 20 thùng")).toBeInTheDocument();
     expect(
       within(line)
         .getByText(/Từ 50 thùng/)

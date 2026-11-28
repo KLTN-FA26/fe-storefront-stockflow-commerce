@@ -65,7 +65,7 @@ export function TextMoreFields({
       ) : null}
       <div className="grid grid-cols-2 gap-3">
         <NumberField
-          label="Giãn chữ (em)"
+          label="Giãn chữ"
           value={element.letterSpacingEm}
           min={TEXT_LIMITS.letterSpacingEm.min}
           max={TEXT_LIMITS.letterSpacingEm.max}

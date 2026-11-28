@@ -85,28 +85,28 @@ export function requestReason(
 ): { help: string; dialog: string } {
   if (status === "ON_HOLD" && holdReason === "AWAITING_CREDIT_APPROVAL") {
     return {
-      help: `Đơn đang chờ duyệt hạn mức công nợ, chưa chuyển cho sản xuất hoặc kho. ${CREDIT_HOLD_REFUND} Bạn có thể gửi yêu cầu huỷ để Sales xử lý, hoặc chat với Sale.`,
-      dialog: `Đơn đang chờ duyệt hạn mức công nợ và chưa được chuyển cho sản xuất hoặc kho. ${CREDIT_HOLD_REFUND} Yêu cầu huỷ của bạn sẽ được Sales xem xét; đơn giữ nguyên cho đến khi có quyết định.`,
+      help: `Đơn đang chờ duyệt hạn mức công nợ, chưa chuyển cho sản xuất hoặc kho. ${CREDIT_HOLD_REFUND} Bạn có thể gửi yêu cầu huỷ để Sale xử lý, hoặc chat với Sale.`,
+      dialog: `Đơn đang chờ duyệt hạn mức công nợ và chưa được chuyển cho sản xuất hoặc kho. ${CREDIT_HOLD_REFUND} Yêu cầu huỷ của bạn sẽ được Sale xem xét; đơn giữ nguyên cho đến khi có quyết định.`,
     };
   }
   if (status === "ON_HOLD") {
     return {
-      help: "Đơn đang được chúng tôi xem xét. Bạn có thể gửi yêu cầu huỷ để Sales xử lý, hoặc chat với Sale.",
+      help: "Đơn đang được chúng tôi xem xét. Bạn có thể gửi yêu cầu huỷ để Sale xử lý, hoặc chat với Sale.",
       dialog:
-        "Đơn đang được chúng tôi xem xét. Yêu cầu huỷ của bạn sẽ được Sales xem xét theo điều khoản hợp đồng; đơn giữ nguyên cho đến khi có quyết định.",
+        "Đơn đang được chúng tôi xem xét. Yêu cầu huỷ của bạn sẽ được Sale xem xét theo điều khoản hợp đồng; đơn giữ nguyên cho đến khi có quyết định.",
     };
   }
   if (BEFORE_RELEASE.has(status)) {
     return {
-      help: "Đơn chưa chuyển cho kho. Bạn có thể gửi yêu cầu huỷ để Sales xử lý theo hợp đồng, hoặc chat với Sale.",
+      help: "Đơn chưa chuyển cho kho. Bạn có thể gửi yêu cầu huỷ để Sale xử lý theo hợp đồng, hoặc chat với Sale.",
       dialog:
-        "Đơn chưa được chuyển cho kho. Yêu cầu huỷ của bạn sẽ được Sales xem xét theo điều khoản hợp đồng; tiền đã thanh toán (nếu có) được hoàn theo hợp đồng. Đơn giữ nguyên cho đến khi có quyết định.",
+        "Đơn chưa được chuyển cho kho. Yêu cầu huỷ của bạn sẽ được Sale xem xét theo điều khoản hợp đồng; tiền đã thanh toán (nếu có) được hoàn theo hợp đồng. Đơn giữ nguyên cho đến khi có quyết định.",
     };
   }
   return {
-    help: "Đơn đã chuyển cho sản xuất hoặc kho nên cần Sales xem xét việc huỷ. Bạn có thể gửi yêu cầu huỷ hoặc chat với Sale.",
+    help: "Đơn đã chuyển cho sản xuất hoặc kho nên cần Sale xem xét việc huỷ. Bạn có thể gửi yêu cầu huỷ hoặc chat với Sale.",
     dialog:
-      "Đơn đã được chuyển cho sản xuất hoặc kho nên bạn không thể tự huỷ. Yêu cầu của bạn sẽ được Sales xem xét; việc huỷ có thể phát sinh chi phí cho phần việc đã làm. Đơn giữ nguyên cho đến khi có quyết định.",
+      "Đơn đã được chuyển cho sản xuất hoặc kho nên bạn không thể tự huỷ. Yêu cầu của bạn sẽ được Sale xem xét; việc huỷ có thể phát sinh chi phí cho phần việc đã làm. Đơn giữ nguyên cho đến khi có quyết định.",
   };
 }
 
@@ -122,22 +122,22 @@ export const CANCELLATION_REQUEST_META: Record<
   PENDING: {
     label: "Đang chờ xem xét",
     tone: "info",
-    note: "Sales đang xem xét. Đơn giữ nguyên trạng thái cho đến khi có quyết định.",
+    note: "Sale đang xem xét. Đơn giữ nguyên trạng thái cho đến khi có quyết định.",
   },
   APPROVED: {
     label: "Đã chấp nhận",
     tone: "positive",
-    note: "Sales đã chấp nhận yêu cầu huỷ của bạn.",
+    note: "Sale đã chấp nhận yêu cầu huỷ của bạn.",
   },
   REJECTED: {
     label: "Không được chấp nhận",
     tone: "warning",
-    note: "Sales không chấp nhận yêu cầu huỷ nên đơn vẫn được xử lý bình thường.",
+    note: "Sale không chấp nhận yêu cầu huỷ nên đơn vẫn được xử lý bình thường.",
   },
   EXPIRED: {
     label: "Đã đóng",
     tone: "muted",
-    note: "Đơn đã được đóng gói, giao đi, kết thúc hoặc huỷ theo cách khác trước khi Sales kịp quyết định, vì vậy yêu cầu huỷ này đã được đóng. Hãy xem trạng thái hiện tại của đơn; nếu cần hỗ trợ hoặc muốn trả hàng, hãy chat với Sale.",
+    note: "Đơn đã được đóng gói, giao đi, kết thúc hoặc huỷ theo cách khác trước khi Sale kịp quyết định, vì vậy yêu cầu huỷ này đã được đóng. Hãy xem trạng thái hiện tại của đơn; nếu cần hỗ trợ hoặc muốn trả hàng, hãy chat với Sale.",
   },
   UNKNOWN: {
     label: "Đang cập nhật",

@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 describe("LegalProfileCard (SF-UX-40)", () => {
-  it("shows the legal identity read only, and a way to ask Sales for a change", async () => {
+  it("shows the legal identity read only, and a way to ask Sale for a change", async () => {
     const get = vi.spyOn(api, "get").mockResolvedValue({
       data: {
         legalName: "Công ty TNHH Nhà Mình",

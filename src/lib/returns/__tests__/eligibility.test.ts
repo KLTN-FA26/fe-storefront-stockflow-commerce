@@ -86,7 +86,7 @@ describe("returnEligibility (BE ReturnRequest.deliveredShipment + requireReturna
     expect(result.kind === "open" && result.shipments.map((s) => s.lines)).toEqual([lines, null]);
   });
 
-  it("sends the customer to Sales when several deliveries carry no id to name", () => {
+  it("sends the customer to Sale when several deliveries carry no id to name", () => {
     expect(
       returnEligibility(
         { status: "DELIVERED", shipments: [delivered(null, SECOND), delivered(null, SECOND)] },

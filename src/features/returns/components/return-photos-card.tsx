@@ -101,7 +101,7 @@ export function ReturnPhotosCard({ request }: { request: CustomerReturn }) {
         </ul>
       ) : (
         <p className="text-ink-secondary text-sm">
-          Chưa có ảnh nào. Sales cần ít nhất một ảnh của vấn đề để duyệt yêu cầu.
+          Chưa có ảnh nào. Sale cần ít nhất một ảnh của vấn đề để duyệt yêu cầu.
         </p>
       )}
       {canAdd ? (

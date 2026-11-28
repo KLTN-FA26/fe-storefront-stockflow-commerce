@@ -61,7 +61,7 @@ function NotRefunded({ request }: { request: CustomerReturn }) {
         // WF-05 Q-4 (audit r2 returns H1): lựa chọn Sales đã ghi, hoặc Sales sẽ liên hệ
         <span className="mt-1 block">{custodyChoiceText(request)}</span>
       ) : null}
-      <span className="mt-1 block">Nếu cần giải thích thêm, hãy chat với Sales.</span>
+      <span className="mt-1 block">Nếu cần giải thích thêm, hãy chat với Sale.</span>
     </Alert>
   );
 }
@@ -85,7 +85,7 @@ function PartlyNotRefunded({ request }: { request: CustomerReturn }) {
       {request.custodyChoice ? (
         <span className="mt-1 block">{custodyChoiceText(request, true)}</span>
       ) : null}
-      <span className="mt-1 block">Nếu cần giải thích thêm, hãy chat với Sales.</span>
+      <span className="mt-1 block">Nếu cần giải thích thêm, hãy chat với Sale.</span>
     </Alert>
   );
 }

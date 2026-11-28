@@ -120,7 +120,7 @@ export function OrderHelpCard({
         <div role="status">
           <Alert tone="info" title="Đã gửi yêu cầu huỷ.">
             <Hourglass aria-hidden className="mr-1 inline size-3.5" />
-            Sales đang xem xét. Đơn giữ nguyên trạng thái cho đến khi có quyết định, và chúng tôi sẽ
+            Sale đang xem xét. Đơn giữ nguyên trạng thái cho đến khi có quyết định, và chúng tôi sẽ
             liên hệ với bạn.
           </Alert>
         </div>

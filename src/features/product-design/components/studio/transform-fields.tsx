@@ -38,13 +38,13 @@ export function TransformFields({ target }: { target: Selection }) {
     <>
       <div className="grid grid-cols-2 gap-3">
         <NumberField
-          label="X (mm)"
+          label="Vị trí ngang (mm)"
           value={placement.u}
           disabled={locked}
           onChange={(u, s) => place({ u }, s)}
         />
         <NumberField
-          label="Y (mm)"
+          label="Vị trí dọc (mm)"
           value={placement.v}
           disabled={locked}
           onChange={(v, s) => place({ v }, s)}

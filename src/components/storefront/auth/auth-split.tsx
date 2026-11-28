@@ -10,7 +10,7 @@ import type { ReactNode } from "react";
 /** What signing in opens, as short promises under the showcase (kltn-docs 00 §B). */
 const PROMISES = [
   { label: "Tự thiết kế 2D, xem trước 3D", icon: PenTool },
-  { label: "Báo giá riêng từ Sales", icon: FileSignature },
+  { label: "Báo giá riêng từ Sale", icon: FileSignature },
   { label: "Giao theo đợt, theo dõi từng đơn", icon: Truck },
 ] as const;
 

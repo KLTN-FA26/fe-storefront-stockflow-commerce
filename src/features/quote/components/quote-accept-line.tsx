@@ -68,7 +68,7 @@ export function QuoteAcceptLine({ line, preview, field, error, refused }: QuoteA
           = {formatNumber(preview.units)} cái
         </p>
         <p id={`${inputId}-moq`} className="text-ink-secondary pb-2.5 text-sm tabular-nums">
-          MOQ: {preview.moq == null ? "—" : `${formatNumber(preview.moq)} thùng`}
+          Số thùng tối thiểu: {preview.moq == null ? "—" : `${formatNumber(preview.moq)} thùng`}
         </p>
       </div>
       {error ? (

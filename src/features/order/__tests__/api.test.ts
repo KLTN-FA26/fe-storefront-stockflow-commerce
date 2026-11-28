@@ -69,7 +69,7 @@ describe("order API (BE OrderController)", () => {
     });
   });
 
-  it("reads the 202 answer as a request for Sales, with its id", async () => {
+  it("reads the 202 answer as a request for Sale, with its id", async () => {
     const requestId = "c4a1ce11-0000-4000-8000-000000000001";
     vi.spyOn(api, "post").mockResolvedValueOnce({ data: { result: "REQUESTED", requestId } });
     await expect(cancelMyOrder({ orderId })).resolves.toEqual({ result: "REQUESTED", requestId });

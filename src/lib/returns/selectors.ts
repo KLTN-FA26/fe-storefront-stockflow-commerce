@@ -21,7 +21,7 @@ export const RETURN_STATUS_META: Record<
   REQUESTED: {
     label: "Chờ duyệt",
     tone: "neutral",
-    help: "Sales đang xem ảnh và mô tả của bạn để quyết định.",
+    help: "Sale đang xem ảnh và mô tả của bạn để quyết định.",
   },
   AWAITING_RETURN: {
     label: "Chờ gửi hàng về",
@@ -31,7 +31,7 @@ export const RETURN_STATUS_META: Record<
   RECEIVED: {
     label: "Kho đã nhận hàng",
     tone: "info",
-    help: "Kho đã nhận hàng trả về. Sales đang lập đề nghị hoàn tiền.",
+    help: "Kho đã nhận hàng trả về. Sale đang lập đề nghị hoàn tiền.",
   },
   INSPECTED: {
     label: "Đã kiểm hàng",
@@ -201,7 +201,7 @@ export function custodyChoiceText(
       case "DESTROY_ON_BEHALF":
         return "Với phần hàng không được hoàn tiền, bạn đã đồng ý để công ty huỷ hộ (có biên bản).";
       default:
-        return "Sales đã ghi lựa chọn của bạn cho phần hàng không được hoàn tiền. Hãy chat với Sales nếu cần biết thêm.";
+        return "Sale đã ghi lựa chọn của bạn cho phần hàng không được hoàn tiền. Hãy chat với Sale nếu cần biết thêm.";
     }
   }
   switch (request.custodyChoice) {
@@ -210,9 +210,9 @@ export function custodyChoiceText(
     case "DESTROY_ON_BEHALF":
       return "Bạn đã đồng ý để công ty huỷ hộ hàng bạn đã gửi về (có biên bản).";
     case "UNKNOWN":
-      return "Sales đã ghi lựa chọn của bạn cho hàng bạn đã gửi về. Hãy chat với Sales nếu cần biết thêm.";
+      return "Sale đã ghi lựa chọn của bạn cho hàng bạn đã gửi về. Hãy chat với Sale nếu cần biết thêm.";
     default:
-      return "Hàng bạn đã gửi về vẫn thuộc về bạn. Sales sẽ liên hệ để thống nhất gửi trả lại hoặc huỷ hộ (có biên bản).";
+      return "Hàng bạn đã gửi về vẫn thuộc về bạn. Sale sẽ liên hệ để thống nhất gửi trả lại hoặc huỷ hộ (có biên bản).";
   }
 }
 

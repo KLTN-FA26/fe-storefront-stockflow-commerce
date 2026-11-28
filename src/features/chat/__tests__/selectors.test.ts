@@ -194,7 +194,7 @@ describe("SF-UX-24: a signed copy sent after a SENT contract card", () => {
     expect(signedCopiesOf(timeline)).toEqual({ card: "2026-11-20T03:00:00Z" });
   });
 
-  it("ignores files sent before the card, Sales' files, files taken back, and signed contracts", () => {
+  it("ignores files sent before the card, Sale's files, files taken back, and signed contracts", () => {
     expect(signedCopiesOf(parse(file({ seq: 5 }), contract("SENT")))).toEqual({});
     expect(signedCopiesOf(parse(contract("SENT"), file({ seq: 11, senderType: "AGENT" })))).toEqual(
       {},
@@ -216,7 +216,7 @@ describe("message replacement (socket message.updated)", () => {
   });
 });
 
-describe("SF-UX-27: what is promised about Sales' answer", () => {
+describe("SF-UX-27: what is promised about Sale's answer", () => {
   it("'within minutes' only when the BE says it is business hours", () => {
     expect(responseExpectationText({ withinBusinessHours: true })).toMatch(/trong ít phút/);
     expect(responseExpectationText({ withinBusinessHours: null })).toBeNull();

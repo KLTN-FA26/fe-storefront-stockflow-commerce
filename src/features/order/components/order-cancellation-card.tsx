@@ -62,7 +62,7 @@ export function OrderCancellationCard({ request }: { request: CancellationReques
         ) : null}
         {answer ? (
           <div>
-            Phản hồi từ Sales: <dd className="text-ink-primary inline">{answer}</dd>
+            Phản hồi từ Sale: <dd className="text-ink-primary inline">{answer}</dd>
           </div>
         ) : null}
       </dl>

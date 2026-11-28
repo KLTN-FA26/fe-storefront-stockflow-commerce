@@ -5,7 +5,7 @@ import { APP_ROUTES } from "@/constants";
 
 import { CONTACT_SALES_LINK } from "../errors";
 
-/** Under a text that says "liên hệ Sales": the form that reaches them, since a visitor has no other way in. */
+/** Under a text that says "liên hệ Sale": the form that reaches them, since a visitor has no other way in. */
 export function ContactSalesLink() {
   return (
     <Link

@@ -500,7 +500,7 @@ describe("OrderDetailScreen", () => {
   });
 });
 
-describe("OrderDetailScreen: asking Sales to cancel (202)", () => {
+describe("OrderDetailScreen: asking Sale to cancel (202)", () => {
   const request = () => screen.findByRole("button", { name: /Gửi yêu cầu huỷ đơn hàng/ });
 
   it.each(["IN_PRODUCTION", "READY_TO_FULFILL", "IN_FULFILMENT", "ON_HOLD"] as const)(
@@ -512,13 +512,13 @@ describe("OrderDetailScreen: asking Sales to cancel (202)", () => {
     },
   );
 
-  it("sends the reason and note, then shows the request as waiting for Sales", async () => {
+  it("sends the reason and note, then shows the request as waiting for Sale", async () => {
     const order = seeded("IN_PRODUCTION");
     renderWithProviders(<OrderDetailScreen orderId={order.orderId} />);
     await userEvent.click(await request());
 
     const dialog = screen.getByRole("dialog", { name: "Gửi yêu cầu huỷ đơn" });
-    expect(within(dialog).getByText(/Sales xem xét/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Sale xem xét/)).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole("radio", { name: "Tôi đặt trùng đơn" }));
     await userEvent.type(within(dialog).getByLabelText(/Ghi chú/), "Đã đặt lại ở đơn khác");
     await userEvent.click(within(dialog).getByRole("button", { name: "Gửi yêu cầu huỷ" }));
@@ -687,7 +687,7 @@ describe("OrderDetailScreen: what the BE reports about the order", () => {
   });
 });
 
-describe("OrderDetailScreen: asking Sales about an order on hold", () => {
+describe("OrderDetailScreen: asking Sale about an order on hold", () => {
   const held = (term: "PREPAID" | "CREDIT") =>
     seedMockOrders(CUSTOMER).find(
       (o) => o.customerId === CUSTOMER && o.status === "ON_HOLD" && o.paymentTerm === term,
@@ -758,7 +758,7 @@ describe("OrderDetailScreen: a cancellation request that is no longer waiting", 
       "section",
     )!;
     expect(within(card).getByText("Đã đóng")).toBeInTheDocument();
-    expect(card).toHaveTextContent(/trước khi Sales kịp quyết định/);
+    expect(card).toHaveTextContent(/trước khi Sale kịp quyết định/);
     expect(card).toHaveTextContent(/Tôi muốn đổi địa chỉ nhận hàng/);
     expect(card).toHaveTextContent(/Đóng lúc/);
     expect(document.body.textContent).not.toMatch(/Closed: the order is/);
@@ -766,7 +766,7 @@ describe("OrderDetailScreen: a cancellation request that is no longer waiting", 
     expect(screen.queryByText("Đã gửi yêu cầu huỷ.")).not.toBeInTheDocument();
   });
 
-  it("shows a request Sales rejected with the answer they wrote, and lets the customer ask again", async () => {
+  it("shows a request Sale rejected with the answer they wrote, and lets the customer ask again", async () => {
     const order = seeded("IN_PRODUCTION");
     book.cancel(order.orderId, { reasonCode: "CUSTOMER_REQUEST" });
     book.closeCancellationRequest(order.orderId, "REJECTED", "Đơn đã in xong, không huỷ được.");
@@ -776,7 +776,7 @@ describe("OrderDetailScreen: a cancellation request that is no longer waiting", 
       "section",
     )!;
     expect(within(card).getByText("Không được chấp nhận")).toBeInTheDocument();
-    expect(card).toHaveTextContent("Phản hồi từ Sales: Đơn đã in xong, không huỷ được.");
+    expect(card).toHaveTextContent("Phản hồi từ Sale: Đơn đã in xong, không huỷ được.");
     expect(
       await screen.findByRole("button", { name: /Gửi yêu cầu huỷ đơn hàng/ }),
     ).toBeInTheDocument();

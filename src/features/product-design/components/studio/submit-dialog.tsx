@@ -145,6 +145,7 @@ function SubmitBody({
               withQuote={withQuote}
               onWithQuoteChange={setWithQuote}
               form={quoteForm}
+              unitsPerCarton={design.unitsPerCarton}
             />
           ) : null}
         </>
