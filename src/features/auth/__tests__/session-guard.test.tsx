@@ -17,17 +17,20 @@ afterEach(() => {
 });
 
 describe("SessionGuard", () => {
-  it.each(["/", "/mo-tai-khoan"])("lets a visitor see %s without signing in", (pathname) => {
-    signOut();
-    navigation.pathname = pathname;
-    render(
-      <SessionGuard>
-        <p>Trang công khai</p>
-      </SessionGuard>,
-    );
-    expect(screen.getByText("Trang công khai")).toBeInTheDocument();
-    expect(navigation.replace).not.toHaveBeenCalled();
-  });
+  it.each(["/", "/mo-tai-khoan", "/xac-minh-hop-dong/public-code"])(
+    "lets a visitor see %s without signing in",
+    (pathname) => {
+      signOut();
+      navigation.pathname = pathname;
+      render(
+        <SessionGuard>
+          <p>Trang công khai</p>
+        </SessionGuard>,
+      );
+      expect(screen.getByText("Trang công khai")).toBeInTheDocument();
+      expect(navigation.replace).not.toHaveBeenCalled();
+    },
+  );
 
   it("sends a visitor of a customer page to the login page", async () => {
     signOut();

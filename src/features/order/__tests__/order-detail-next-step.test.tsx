@@ -126,9 +126,10 @@ describe("order status hero — the next step (SF-UX-29)", () => {
     renderWithProviders(<OrderDetailScreen orderId={orderId} />);
 
     const hero = await screen.findByRole("region", { name: "Chờ ký hợp đồng" });
-    expect(
-      await within(hero).findByRole("link", { name: "Ký hợp đồng: xem 3 bước" }),
-    ).toHaveAttribute("href", "#hop-dong");
+    expect(await within(hero).findByRole("link", { name: "Xem hợp đồng cần ký" })).toHaveAttribute(
+      "href",
+      "#hop-dong",
+    );
     expect(within(hero).queryByRole("button", { name: /^Tải hợp đồng/ })).not.toBeInTheDocument();
     // The contract card's step 1 is the one way to download it.
     expect(

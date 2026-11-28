@@ -56,11 +56,21 @@ export const QUOTE_STATUS: Readonly<Record<QuoteStatusKey, StatusMeta>> = {
 // ── Sales contract (kltn-docs 14 §5.2) ──
 
 export type ContractStatusKey =
-  "DRAFT" | "SENT" | "SIGNED" | "COMPLETED" | "LIQUIDATED" | "CANCELLED" | "UNKNOWN";
+  | "DRAFT"
+  | "SENT"
+  | "CUSTOMER_SIGNED"
+  | "CHANGES_REQUESTED"
+  | "SIGNED"
+  | "COMPLETED"
+  | "LIQUIDATED"
+  | "CANCELLED"
+  | "UNKNOWN";
 
 export const CONTRACT_STATUS: Readonly<Record<ContractStatusKey, StatusMeta>> = {
   DRAFT: { label: "Nháp", tone: "neutral" },
   SENT: { label: "Chờ bạn ký", tone: "warning" },
+  CHANGES_REQUESTED: { label: "Đã yêu cầu chỉnh sửa", tone: "info" },
+  CUSTOMER_SIGNED: { label: "Đã ký, chờ công ty ký", tone: "info" },
   SIGNED: { label: "Đã ký", tone: "positive" },
   COMPLETED: { label: "Hoàn tất", tone: "muted" },
   // WF-05 Q-6 (14 §5.2): the order ended with nothing delivered (all came back, all lost, cancelled

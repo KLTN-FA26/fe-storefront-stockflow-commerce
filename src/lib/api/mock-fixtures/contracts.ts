@@ -55,7 +55,14 @@ export interface MockContract {
   contractNumber: string;
   orderId: string;
   orderNumber: string;
-  status: "DRAFT" | "SENT" | "SIGNED" | "COMPLETED" | "CANCELLED";
+  status:
+    | "DRAFT"
+    | "CHANGES_REQUESTED"
+    | "SENT"
+    | "CUSTOMER_SIGNED"
+    | "SIGNED"
+    | "COMPLETED"
+    | "CANCELLED";
   seller: { name: string; taxCode?: string; address?: string; representative?: string };
   buyer: { name: string; taxCode?: string; address?: string; representative?: string };
   freeSampleRounds: number;
@@ -70,6 +77,41 @@ export interface MockContract {
   /** BE 81214e74: a delivery window in force differs from the one signed. */
   appendixAvailable: boolean;
   version: number;
+  revision?: number;
+  signBy?: string;
+  canSign?: boolean;
+  canRequestChanges?: boolean;
+  verificationCode?: string;
+  customerSignedAt?: string;
+  specialTerms?: string;
+  penaltyPercent?: number;
+  quantityTolerancePercent?: number;
+  warrantyMonths?: number;
+  nonStandardTerms?: boolean;
+  termsReview?: string;
+  customerSignature?: {
+    method: string;
+    signerName: string;
+    signerTitle: string;
+    email?: string;
+    signedAt: string;
+    otpVerified?: boolean;
+    inspection?: {
+      kind: "SCAN";
+      valid: boolean;
+      coversWholeDocument: false;
+      matchesSentDocument: false;
+      chainChecked: false;
+      signers: [];
+      reason: "NO_DIGITAL_SIGNATURE";
+    };
+  };
+  companySignature?: {
+    signerName: string;
+    signerTitle: string;
+    signedAt: string;
+    testCertificate: boolean;
+  };
 }
 
 const SELLER = {
@@ -114,6 +156,10 @@ export function mockSentContract(order: MockOrder, now: Date): MockContract {
     orderId: order.orderId,
     orderNumber: order.orderNumber,
     status: "SENT",
+    revision: 1,
+    signBy: isoDay(now.getTime() + 7 * DAY),
+    canSign: true,
+    canRequestChanges: true,
     seller: SELLER,
     buyer: BUYER,
     freeSampleRounds: 2,
@@ -142,6 +188,8 @@ export function mockSentContract(order: MockOrder, now: Date): MockContract {
     sentAt: new Date(now.getTime() - DAY).toISOString(),
     returnWindowDays: 7,
     appendixAvailable: false,
+    nonStandardTerms: false,
+    termsReview: "NONE",
     version: 3,
   };
 }
@@ -157,6 +205,22 @@ export function mockSignedContract(order: MockOrder): MockContract {
     orderId: order.orderId,
     orderNumber: order.orderNumber,
     status: "SIGNED",
+    revision: 2,
+    verificationCode: "ABCDEFGHJKMN",
+    customerSignedAt: signedAt,
+    customerSignature: {
+      method: "OTP",
+      signerName: "Nguyễn Hoài Nam",
+      signerTitle: "Giám đốc",
+      signedAt,
+      otpVerified: true,
+    },
+    companySignature: {
+      signerName: "Trần Minh Quân",
+      signerTitle: "Giám đốc",
+      signedAt,
+      testCertificate: true,
+    },
     seller: SELLER,
     buyer: BUYER,
     freeSampleRounds: 2,
@@ -194,6 +258,8 @@ export function mockSignedContract(order: MockOrder): MockContract {
     returnWindowDays: 7,
     // The mock moves no delivery window after signing, so no signed mock contract has an appendix.
     appendixAvailable: false,
+    nonStandardTerms: false,
+    termsReview: "NONE",
     version: 5,
   };
 }
@@ -213,6 +279,20 @@ export function createMockContractBook(
   seed: MockContract[],
 ) {
   const contracts = seed.map((contract) => structuredClone(contract));
+  const otps = new Map<
+    string,
+    { expires: number; resend: number; attempts: number; count: number; hour: number }
+  >();
+  const revisions = new Map<
+    string,
+    Array<{
+      revision: number;
+      sentAt?: string;
+      changeRequestReason?: string;
+      changeRequestedAt?: string;
+      documentAvailable: boolean;
+    }>
+  >();
   const own = (orderId: string) => {
     const order = orderOf(orderId.toLowerCase());
     return order && order.customerId === customerId ? order : undefined;
@@ -234,6 +314,181 @@ export function createMockContractBook(
   };
 
   return {
+    otp(orderId: string): MockResult {
+      const contract = own(orderId) ? sent(orderId) : undefined;
+      if (!contract) return refusal(orderId);
+      if (contract.status !== "SENT") return fail(409, "CONTRACT_NOT_SIGNABLE", "Không thể ký");
+      if (contract.signBy && contract.signBy < isoDay(Date.now() + 7 * 3_600_000))
+        return fail(409, "CONTRACT_SIGN_DEADLINE_PASSED", "Quá hạn");
+      const now = Date.now();
+      const previous = otps.get(orderId);
+      if (
+        previous &&
+        (previous.resend > now || (previous.hour > now - 3_600_000 && previous.count >= 5))
+      )
+        return fail(429, "CONTRACT_OTP_TOO_MANY", "Vui lòng chờ");
+      otps.set(orderId, {
+        expires: now + 600_000,
+        resend: now + 60_000,
+        attempts: 5,
+        count: previous && previous.hour > now - 3_600_000 ? previous.count + 1 : 1,
+        hour: previous?.hour ?? now,
+      });
+      return ok({
+        sentTo: "k***@example.vn",
+        expiresAt: new Date(now + 600_000).toISOString(),
+        resendAfter: new Date(now + 60_000).toISOString(),
+      });
+    },
+    customerSign(
+      orderId: string,
+      input: {
+        version: number;
+        otp?: string;
+        consent?: boolean;
+        signerName: string;
+        signerTitle: string;
+      },
+      upload = false,
+    ): MockResult {
+      const contract = own(orderId) ? sent(orderId) : undefined;
+      if (!contract) return refusal(orderId);
+      if (contract.version !== input.version)
+        return fail(409, "OPTIMISTIC_LOCK", "Hợp đồng đã thay đổi");
+      if (contract.status !== "SENT") return fail(409, "CONTRACT_NOT_SIGNABLE", "Không thể ký");
+      if (contract.signBy && contract.signBy < isoDay(Date.now() + 7 * 3_600_000))
+        return fail(409, "CONTRACT_SIGN_DEADLINE_PASSED", "Quá hạn");
+      if (
+        !input.signerName.trim() ||
+        !input.signerTitle.trim() ||
+        input.signerName.length > 200 ||
+        input.signerTitle.length > 200
+      )
+        return fail(422, "VALIDATION_ERROR", "Kiểm tra người ký");
+      if (!upload) {
+        const otp = otps.get(orderId);
+        if (!otp || otp.expires <= Date.now() || otp.attempts <= 0)
+          return fail(422, "CONTRACT_OTP_EXPIRED", "Mã hết hạn");
+        if (input.otp !== "123456") {
+          otp.attempts -= 1;
+          const result = fail(422, "CONTRACT_OTP_INVALID", "Mã sai");
+          return {
+            ...result,
+            data: {
+              success: false,
+              errorCode: "CONTRACT_OTP_INVALID",
+              details: { attemptsLeft: otp.attempts },
+            },
+          };
+        }
+        if (!input.consent) return fail(422, "VALIDATION_ERROR", "Cần đồng ý ký");
+      }
+      contract.status = "CUSTOMER_SIGNED";
+      contract.version += 1;
+      contract.canSign = false;
+      contract.canRequestChanges = false;
+      contract.customerSignedAt = new Date().toISOString();
+      contract.customerSignature = {
+        method: upload ? "UPLOAD" : "OTP",
+        signerName: input.signerName,
+        signerTitle: input.signerTitle,
+        email: "khach@example.vn",
+        signedAt: contract.customerSignedAt,
+        otpVerified: !upload,
+        ...(upload
+          ? {
+              inspection: {
+                kind: "SCAN",
+                valid: false,
+                coversWholeDocument: false,
+                matchesSentDocument: false,
+                chainChecked: false,
+                signers: [],
+                reason: "NO_DIGITAL_SIGNATURE",
+              } as const,
+            }
+          : {}),
+      };
+      otps.delete(orderId);
+      return ok(contract);
+    },
+    changeRequest(orderId: string, version: number, reason: string): MockResult {
+      const contract = own(orderId) ? sent(orderId) : undefined;
+      if (!contract) return refusal(orderId);
+      if (contract.version !== version) return fail(409, "OPTIMISTIC_LOCK", "Hợp đồng đã thay đổi");
+      if (contract.status !== "SENT")
+        return fail(409, "SALES_CONTRACT_STATUS_INVALID", "Không thể sửa");
+      if (reason.trim().length < 10 || reason.length > 2000)
+        return fail(422, "VALIDATION_ERROR", "Lý do không hợp lệ");
+      revisions.set(orderId, [
+        ...(revisions.get(orderId) ?? []),
+        {
+          revision: contract.revision ?? 1,
+          ...(contract.sentAt ? { sentAt: contract.sentAt } : {}),
+          changeRequestReason: reason,
+          changeRequestedAt: new Date().toISOString(),
+          documentAvailable: true,
+        },
+      ]);
+      contract.revision = (contract.revision ?? 1) + 1;
+      contract.version += 1;
+      contract.status = "CHANGES_REQUESTED";
+      contract.deliverySchedule = [];
+      contract.paymentPlan = [];
+      delete contract.specialTerms;
+      delete contract.penaltyPercent;
+      delete contract.quantityTolerancePercent;
+      delete contract.warrantyMonths;
+      contract.canSign = false;
+      contract.canRequestChanges = false;
+      otps.delete(orderId);
+      return ok(contract);
+    },
+    revisions(orderId: string): MockResult {
+      const contract = own(orderId) ? sent(orderId) : undefined;
+      if (!contract) return refusal(orderId);
+      return ok(
+        revisions.get(orderId) ??
+          (contract.revision === 2
+            ? [
+                {
+                  revision: 1,
+                  changeRequestReason: "Điều chỉnh lịch giao theo yêu cầu của khách hàng.",
+                  documentAvailable: true,
+                },
+              ]
+            : [
+                {
+                  revision: contract.revision ?? 1,
+                  sentAt: contract.sentAt,
+                  documentAvailable: true,
+                },
+              ]),
+      );
+    },
+    verify(code: string): MockResult {
+      const normalized = code.replace(/[\s-]/g, "").toUpperCase();
+      const contract = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{12}$/.test(normalized)
+        ? contracts.find(
+            (item) =>
+              item.verificationCode === normalized &&
+              ["SIGNED", "COMPLETED", "LIQUIDATED"].includes(item.status),
+          )
+        : undefined;
+      if (!contract) return fail(404, "NOT_FOUND", "Không tìm thấy");
+      return ok({
+        contractNumber: contract.contractNumber,
+        revision: contract.revision,
+        sellerName: contract.seller.name,
+        buyerName: contract.buyer.name,
+        status: contract.status,
+        customerSignedAt: contract.customerSignature?.signedAt,
+        companySignedAt: contract.companySignature?.signedAt,
+        // SHA-256 of "%PDF-1.4\n%%EOF", the mock check fixture (not production evidence).
+        documentSha256: "4f1949e95440af0ece666ebd5f399c1d77d22de639950784d349fa5feb47dca5",
+        testCertificate: true,
+      });
+    },
     /** GET /orders/me/{orderId}/contract */
     get(orderId: string): MockResult {
       const contract = own(orderId) ? sent(orderId) : undefined;
@@ -246,6 +501,30 @@ export function createMockContractBook(
       if (!contract) return refusal(orderId);
       return ok({
         url: documentUrl(contract, copy),
+        expiresAt: new Date(Date.now() + 300_000).toISOString(),
+      });
+    },
+
+    signaturePage(orderId: string): MockResult {
+      const contract = own(orderId) ? sent(orderId) : undefined;
+      if (!contract || !["SIGNED", "COMPLETED", "LIQUIDATED"].includes(contract.status))
+        return refusal(orderId);
+      return ok({
+        url: `https://files.example/contracts/${contract.contractNumber}-certificate.pdf`,
+        expiresAt: new Date(Date.now() + 300_000).toISOString(),
+      });
+    },
+    revisionDocument(orderId: string, revision: number): MockResult {
+      const contract = own(orderId) ? sent(orderId) : undefined;
+      if (!contract) return refusal(orderId);
+      const available =
+        revisions
+          .get(orderId)
+          ?.some((item) => item.revision === revision && item.documentAvailable) ??
+        (Number.isInteger(revision) && revision >= 1 && revision <= (contract.revision ?? 1));
+      if (!available) return refusal(orderId);
+      return ok({
+        url: `https://files.example/contracts/${contract.contractNumber}-r${revision}.pdf`,
         expiresAt: new Date(Date.now() + 300_000).toISOString(),
       });
     },

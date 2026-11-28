@@ -116,6 +116,63 @@ describe("OrderContractCard (WF-02 D3)", () => {
     );
   });
 
+  it("shows standard numeric terms, overrides and the backend comparison badge", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({
+      data: {
+        ...beContract,
+        standardTerms: { penaltyPercent: 8, quantityTolerancePercent: 5, warrantyMonths: 6 },
+        penaltyPercent: 0,
+        nonStandardTerms: true,
+        specialTerms: "Giao hàng tại kho khách hàng.",
+      },
+    });
+    renderWithProviders(<OrderContractCard orderId={orderId} />);
+    expect(await screen.findByText("Khác chuẩn")).toBeInTheDocument();
+    expect(screen.getByText("Phạt vi phạm").nextElementSibling).toHaveTextContent("0%");
+    expect(screen.getByText("Dung sai số lượng").nextElementSibling).toHaveTextContent("5%");
+    expect(screen.getByText("Bảo hành").nextElementSibling).toHaveTextContent("6 tháng");
+    expect(screen.getByText("Giao hàng tại kho khách hàng.")).toBeInTheDocument();
+  });
+  it("leaves unavailable default terms out of the portal copy", async () => {
+    vi.spyOn(api, "get").mockResolvedValue({ data: { ...beContract, nonStandardTerms: false } });
+    renderWithProviders(<OrderContractCard orderId={orderId} />);
+    await screen.findByText(beContract.contractNumber);
+    expect(screen.queryByText("Khác chuẩn")).not.toBeInTheDocument();
+    expect(screen.queryByText("Phạt vi phạm")).not.toBeInTheDocument();
+    expect(screen.queryByText("Theo cấu hình hệ thống")).not.toBeInTheDocument();
+  });
+  it("shows changes requested and revision history without draft terms or signing actions", async () => {
+    vi.spyOn(api, "get").mockImplementation(async (url: string) => ({
+      data: url.endsWith("/revisions")
+        ? [
+            {
+              revision: 1,
+              changeRequestReason: "Điều chỉnh lịch giao hàng",
+              documentAvailable: true,
+            },
+          ]
+        : {
+            ...beContract,
+            status: "CHANGES_REQUESTED",
+            revision: 2,
+            deliverySchedule: [],
+            paymentPlan: [],
+          },
+    }));
+    renderWithProviders(<OrderContractCard orderId={orderId} />);
+    expect(await screen.findByText("Đã yêu cầu chỉnh sửa")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Lý do yêu cầu chỉnh sửa: Điều chỉnh lịch giao hàng/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tải phiên bản 1" })).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Lịch giao" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Lịch thanh toán" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ký hợp đồng" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: `Tải hợp đồng ${beContract.contractNumber}` }),
+    ).not.toBeInTheDocument();
+  });
+
   it("is left out while the order has no contract sent (404 SALES_CONTRACT_NOT_FOUND)", async () => {
     const get = vi
       .spyOn(api, "get")
@@ -195,16 +252,15 @@ describe("OrderContractCard downloads (audit item 27)", () => {
 });
 
 describe("OrderContractCard — signing and terms (SF-UX-24, SF-UX-36, L-9)", () => {
-  it("guides a SENT contract in three steps, the last one sending the signed copy in its chat", async () => {
+  it("keeps downloads and chat available when an older backend has no signing capabilities", async () => {
     vi.spyOn(api, "get").mockResolvedValue({ data: beContract });
     const { container } = renderWithProviders(<OrderContractCard orderId={orderId} />);
 
-    const steps = await screen.findByRole("list", { name: "Các bước ký hợp đồng" });
-    expect(within(steps).getAllByRole("listitem")).toHaveLength(3);
-    expect(within(steps).getByText("Ký, đóng dấu")).toBeInTheDocument();
-    expect(within(steps).getByRole("link", { name: "Gửi bản đã ký" })).toHaveAttribute(
+    expect(await screen.findByRole("button", { name: /Tải hợp đồng/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ký hợp đồng" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Chat với Sale" })).toHaveAttribute(
       "href",
-      `/chat/new?kind=CONTRACT&id=${contractId}&attach=pdf`,
+      `/chat/new?kind=CONTRACT&id=${contractId}`,
     );
     // Chat cards link to the section by this anchor.
     expect(container.querySelector("section#hop-dong")).not.toBeNull();

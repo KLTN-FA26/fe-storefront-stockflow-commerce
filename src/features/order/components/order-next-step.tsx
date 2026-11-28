@@ -9,7 +9,7 @@ import { installmentShortName, type Installment } from "@/lib/installments";
 
 import type { Contract } from "../contract-schemas";
 import type { OrderDisplayGroup } from "../lifecycle";
-import { CONTRACT_SECTION_ID } from "./contract-signing-steps";
+import { CONTRACT_SECTION_ID } from "../contract-labels";
 
 /**
  * "Thanh toán đợt 1: 28.620.000 ₫ trước 26/11", or "… (quá hạn)" once the day has passed. A fee item
@@ -48,7 +48,7 @@ export function OrderNextStep({
       <Button asChild className="min-h-11 w-full rounded-[var(--r-md)] px-4 sm:w-auto">
         <a href={`#${CONTRACT_SECTION_ID}`}>
           <PenLine aria-hidden className="mr-2 size-4" />
-          Ký hợp đồng: xem 3 bước
+          Xem hợp đồng cần ký
         </a>
       </Button>
     );

@@ -50,6 +50,7 @@ const ANONYMOUS_PATHS = [
   "/public/leads",
 ];
 const isAnonymous = (url: string | undefined) =>
+  /^\/public\/contract-verifications\/[^/]+(?:\/check)?$/.test((url ?? "").split("?")[0] ?? "") ||
   ANONYMOUS_PATHS.some((path) => (url ?? "").split("?")[0] === path);
 
 api.interceptors.request.use((cfg) => {

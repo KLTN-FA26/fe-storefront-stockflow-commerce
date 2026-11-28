@@ -71,6 +71,26 @@ describe("success envelope without data", () => {
 });
 
 describe("API authentication semantics", () => {
+  it("never sends a bearer or expires the session for public contract verification", async () => {
+    useAuthStore
+      .getState()
+      .login(null, { accessToken: "expired", tokenType: "Bearer", expiresInSeconds: 1 });
+    const headers: unknown[] = [];
+    api.defaults.adapter = async (config) => {
+      headers.push(config.headers.get("Authorization"));
+      return {
+        data: { success: true, data: {} },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config,
+      };
+    };
+    await api.get("/public/contract-verifications/code");
+    await api.post("/public/contract-verifications/code/check", new FormData());
+    expect(headers).toEqual([undefined, undefined]);
+    expect(useAuthStore.getState().isAuthenticated).toBe(true);
+  });
   it("unwraps a successful backend ApiResponse envelope once", async () => {
     api.defaults.adapter = async (config) => ({
       data: {

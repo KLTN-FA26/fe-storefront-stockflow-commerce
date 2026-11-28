@@ -25,7 +25,7 @@ export function SessionGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const signedIn = useSignedIn();
-  const open = PUBLIC_PATHS.has(pathname);
+  const open = PUBLIC_PATHS.has(pathname) || /^\/xac-minh-hop-dong\/[^/]+\/?$/.test(pathname);
 
   useEffect(() => {
     if (open || signedIn !== false) return;

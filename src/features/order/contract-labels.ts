@@ -4,6 +4,9 @@ import { formatDate } from "@/lib/format/date";
 
 import type { ContractBatch, ContractInstallment, ContractStatus } from "./contract-schemas";
 
+/** Stable order-page anchor used by the contract chat card. */
+export const CONTRACT_SECTION_ID = "hop-dong";
+
 /** The contract's status in the customer's words (kltn-docs 14 §5.2): the map chat cards read too. */
 export const CONTRACT_STATUS_META: Readonly<Record<ContractStatus, StatusMeta>> = CONTRACT_STATUS;
 

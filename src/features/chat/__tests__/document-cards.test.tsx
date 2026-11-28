@@ -272,6 +272,18 @@ describe("image attachments (WF-02 item 52)", () => {
 });
 
 describe("CONTRACT card waiting for the signature", () => {
+  it("shows the new customer-signed status without inviting another signature", () => {
+    renderMessage(
+      cardMessageJson("CONTRACT", {
+        contractId: "66666666-6666-4666-8666-666666666666",
+        number: "HD-1",
+        orderId: ORDER_ID,
+        status: "CUSTOMER_SIGNED",
+      }),
+    );
+    expect(screen.getByText("Đã ký, chờ công ty ký")).toBeInTheDocument();
+    expect(screen.queryByText(/ký bằng mã xác thực email/)).not.toBeInTheDocument();
+  });
   it("says it waits for the customer, from their side (SF-UX-2), with how to send it back", () => {
     renderMessage(
       cardMessageJson("CONTRACT", {
@@ -283,7 +295,7 @@ describe("CONTRACT card waiting for the signature", () => {
     );
     const card = screen.getByRole("region", { name: /Hợp đồng mua bán/ });
     expect(within(card).getByText("Chờ bạn ký")).toBeInTheDocument();
-    expect(within(card).getByText(/gửi bản scan hoặc PDF có chữ ký/)).toBeInTheDocument();
+    expect(within(card).getByText(/ký bằng mã xác thực email/)).toBeInTheDocument();
     expect(within(card).queryByText(/Đã gửi bản ký/)).not.toBeInTheDocument();
   });
 });
@@ -320,9 +332,9 @@ describe("WF-02 FE-8: a CANCELLED contract card", () => {
     );
     const card = screen.getByRole("region", { name: /Hợp đồng mua bán/ });
     expect(within(card).getByRole("button", { name: /Tải hợp đồng/ })).toBeEnabled();
-    expect(within(card).getByRole("link", { name: "Xem đơn hàng" })).toHaveAttribute(
+    expect(within(card).getByRole("link", { name: "Ký hợp đồng trên cổng" })).toHaveAttribute(
       "href",
-      `/account/orders/${ORDER_ID}`,
+      `/account/orders/${ORDER_ID}#hop-dong`,
     );
   });
 });
