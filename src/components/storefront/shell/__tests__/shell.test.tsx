@@ -8,7 +8,13 @@ import { StorefrontShell } from "@/components/storefront/storefront-shell";
 import { publishCurrentSearch } from "@/features/catalog/current-search-store";
 
 import { HeaderSearch } from "../header-search";
-import { footerColumns, mainLinks, paymentMethods, utilityLinks } from "../nav-config";
+import {
+  footerColumns,
+  mainLinks,
+  paymentMethods,
+  supportLinks,
+  utilityLinks,
+} from "../nav-config";
 import { SiteFooter } from "../site-footer";
 import { SiteHeader } from "../site-header";
 
@@ -86,6 +92,19 @@ describe("SiteHeader", () => {
     expect(screen.getByRole("link", { name: "Sản phẩm" })).toHaveAttribute("href", "/catalog");
   });
 
+  it("offers a visitor the request for a business account (KE-HOACH sales owner §10.7)", async () => {
+    render(<SiteHeader />);
+    expect(await screen.findByRole("link", { name: "Mở tài khoản" })).toHaveAttribute(
+      "href",
+      "/mo-tai-khoan",
+    );
+    // The phone menu has it under "Hỗ trợ".
+    expect(supportLinks).toContainEqual({
+      href: "/mo-tai-khoan",
+      label: "Mở tài khoản doanh nghiệp",
+    });
+  });
+
   it("has no cart: the customer does not order on the portal (kltn-docs 14 BR-01)", () => {
     render(<SiteHeader />);
     expect(screen.queryByRole("link", { name: /Giỏ hàng/ })).not.toBeInTheDocument();
@@ -126,6 +145,14 @@ describe("SiteFooter", () => {
       expect(container).not.toHaveTextContent(retail);
     }
     expect(screen.getByRole("link", { name: "Chat với Sale" })).toHaveAttribute("href", "/chat");
+  });
+
+  it("links to the request for a business account (KE-HOACH sales owner §10.7)", () => {
+    render(<SiteFooter />);
+    expect(screen.getByRole("link", { name: "Mở tài khoản doanh nghiệp" })).toHaveAttribute(
+      "href",
+      "/mo-tai-khoan",
+    );
   });
 
   it("links only to pages that exist: no privacy page (it was a 404)", () => {

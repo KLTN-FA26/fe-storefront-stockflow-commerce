@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { LogIn, UserRound } from "lucide-react";
+import { Building2, LogIn, UserRound } from "lucide-react";
 
-import { APP_ROUTES, STORE_ROUTES } from "@/constants";
+import { APP_ROUTES, OPEN_ACCOUNT_LABEL, STORE_ROUTES } from "@/constants";
 import { useSignedIn } from "@/lib/auth/use-signed-in";
 
 /** The header's account entry: the account when signed in, the login page otherwise. */
@@ -21,6 +21,20 @@ export function HeaderAccountLink({ className }: { className: string }) {
       <Icon className="size-5" aria-hidden="true" />
       <span aria-hidden="true" className="hidden lg:inline">
         {label}
+      </span>
+    </Link>
+  );
+}
+
+/** The request for a business account, next to the sign-in link: only a visitor has a use for it. */
+export function HeaderOpenAccountLink({ className }: { className: string }) {
+  const signedIn = useSignedIn();
+  if (signedIn !== false) return null;
+  return (
+    <Link href={APP_ROUTES.openAccount} aria-label={OPEN_ACCOUNT_LABEL} className={className}>
+      <Building2 className="size-5" aria-hidden="true" />
+      <span aria-hidden="true" className="hidden lg:inline">
+        {OPEN_ACCOUNT_LABEL}
       </span>
     </Link>
   );

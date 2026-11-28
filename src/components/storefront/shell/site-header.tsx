@@ -3,7 +3,10 @@ import Link from "next/link";
 import { BRAND } from "@/constants";
 import { cn } from "@/lib/cn";
 
-import { HeaderAccountLink } from "@/features/auth/components/header-account-link";
+import {
+  HeaderAccountLink,
+  HeaderOpenAccountLink,
+} from "@/features/auth/components/header-account-link";
 import { ChatHeaderLink } from "@/features/chat/components/chat-entry";
 import { NotificationBell } from "@/features/notification";
 import { ThemeToggle } from "@/components/storefront/theme-toggle";
@@ -49,6 +52,7 @@ export function SiteHeader() {
           <HeaderSearch className="mx-auto hidden max-w-xl md:flex" />
           <div className="ml-auto flex items-center gap-1 md:ml-0">
             <ChatHeaderLink className={cn(actionLink, "hidden sm:inline-flex")} />
+            <HeaderOpenAccountLink className={cn(actionLink, "hidden sm:inline-flex")} />
             <HeaderAccountLink className={cn(actionLink, "hidden sm:inline-flex")} />
             <NotificationBell />
             <ThemeToggle />

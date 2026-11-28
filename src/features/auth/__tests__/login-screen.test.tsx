@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -139,6 +139,38 @@ describe("LoginScreen", () => {
     signIn();
     renderWithProviders(<LoginScreen />, { searchParams: "?next=%2Faccount%2Forders" });
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/account/orders"));
+  });
+
+  it("leads a business with no account to the request form (KE-HOACH sales owner §10.7)", () => {
+    renderWithProviders(<LoginScreen />);
+    expect(screen.getByText(/Chưa có tài khoản doanh nghiệp\?/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Gửi yêu cầu mở tài khoản" })).toHaveAttribute(
+      "href",
+      "/mo-tai-khoan",
+    );
+  });
+
+  it.each([
+    new ApiError(403, "ACCOUNT_NOT_ACTIVE", "x"),
+    new ApiError(404, "CUSTOMER_NOT_FOUND", "x"),
+  ])("a refusal that says 'liên hệ Sales' links to the request form (%#)", async (error) => {
+    backend({ loginError: error });
+    renderWithProviders(<LoginScreen />);
+    await fill("nam@example.vn", "pw");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("liên hệ Sales");
+    expect(within(alert).getByRole("link", { name: "Gửi yêu cầu liên hệ Sales" })).toHaveAttribute(
+      "href",
+      "/mo-tai-khoan",
+    );
+  });
+
+  it("a wrong password gets no such link", async () => {
+    backend({ loginError: new ApiError(401, "UNAUTHORIZED", "x") });
+    renderWithProviders(<LoginScreen />);
+    await fill("nam@example.vn", "pw");
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).queryByRole("link")).not.toBeInTheDocument();
   });
 
   it("does not invent account recovery: no reset link, only Sales", () => {

@@ -122,6 +122,11 @@ describe("ActivationScreen", () => {
     expect(
       await screen.findByRole("heading", { name: "Link kích hoạt không dùng được" }),
     ).toBeInTheDocument();
+    // "Vui lòng liên hệ Sales" comes with the way to reach them (KE-HOACH sales owner §10.7).
+    expect(screen.getByRole("link", { name: "Gửi yêu cầu liên hệ Sales" })).toHaveAttribute(
+      "href",
+      "/mo-tai-khoan",
+    );
   });
 
   it("says the account is ready and leads to login when signing in afterwards fails", async () => {

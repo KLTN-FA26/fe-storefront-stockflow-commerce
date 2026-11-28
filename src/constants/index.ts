@@ -1,5 +1,5 @@
 export { BRAND, BRAND_ASPECT } from "./brand";
-export { CHAT_WITH_SALES } from "./labels";
+export { CHAT_WITH_SALES, OPEN_ACCOUNT_LABEL } from "./labels";
 export { APP_ROUTES, STORE_ROUTES } from "./routes";
 export { STORAGE_KEYS } from "./storage-keys";
 export {
