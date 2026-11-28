@@ -1,6 +1,6 @@
 "use client";
 
-import { CreditCard, PenLine, SplitSquareHorizontal } from "lucide-react";
+import { CreditCard, PenLine, ListChecks } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { formatDayMonth } from "@/lib/format/date";
@@ -52,7 +52,7 @@ export function OrderNextStep({
     return (
       <Button asChild className="min-h-11 w-full rounded-[var(--r-md)] px-4 sm:w-auto">
         <a href={`#${SHORTAGE_SECTION_ID}`}>
-          <SplitSquareHorizontal aria-hidden className="mr-2 size-4" />
+          <ListChecks aria-hidden className="mr-2 size-4" />
           Chọn hướng xử lý thiếu thùng
         </a>
       </Button>
